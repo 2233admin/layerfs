@@ -14,7 +14,7 @@
   --accent: #007aff; --accent-bg: rgba(0,122,255,.12); --green: #28a745; --orange: #e08600; --red: #ff3b30; --purple: #a347d4;
   --orange-bg: rgba(255,149,0,.14); --purple-bg: rgba(175,82,222,.13); --red-bg: rgba(255,59,48,.12); --green-bg: rgba(52,199,89,.14);
   --term: #ffffff; --term-head: #f5f5f7; --term-border: rgba(0,0,0,.12); --term-text: #1d1d1f; --term-dim: #86868b;
-  --t-blue: #0058d0; --t-green: #1a7f37; --t-orange: #b35c00; --t-red: #d1242f; --t-purple: #8a3ab9;
+  --t-blue: #0058d0; --t-green: #1a7f37; --t-orange: #b35c00; --t-red: #d1242f; --t-purple: #8a3ab9; --t-cyan: #0a7590;
   --t-add-bg: rgba(26,127,55,.08); --t-del-bg: rgba(209,36,47,.08);
   --b0: #0a6cff; --b1: #1f9d55; --b2: #0f8b9a; --b3: #d6336c; --b4: #5856d6; --b5: #8e6e53;
   color-scheme: light;
@@ -25,7 +25,7 @@
   --accent: #0a84ff; --accent-bg: rgba(10,132,255,.18); --green: #30d158; --orange: #ff9f0a; --red: #ff453a; --purple: #bf5af2;
   --orange-bg: rgba(255,159,10,.16); --purple-bg: rgba(191,90,242,.16); --red-bg: rgba(255,69,58,.16); --green-bg: rgba(48,209,88,.16);
   --term: #1c1c1e; --term-head: #252528; --term-border: rgba(255,255,255,.08); --term-text: #e5e5ea; --term-dim: #8e8e93;
-  --t-blue: #64b5ff; --t-green: #5fd97a; --t-orange: #ffb340; --t-red: #ff6b61; --t-purple: #d38cff;
+  --t-blue: #64b5ff; --t-green: #5fd97a; --t-orange: #ffb340; --t-red: #ff6b61; --t-purple: #d38cff; --t-cyan: #64d2ff;
   --t-add-bg: rgba(95,217,122,.1); --t-del-bg: rgba(255,107,97,.1);
   --b0: #4aa3ff; --b1: #3ecf74; --b2: #3cc6d4; --b3: #ff6b9a; --b4: #8e8cff; --b5: #c09a78;
   color-scheme: dark; } }
@@ -35,7 +35,7 @@
   --accent: #0a84ff; --accent-bg: rgba(10,132,255,.18); --green: #30d158; --orange: #ff9f0a; --red: #ff453a; --purple: #bf5af2;
   --orange-bg: rgba(255,159,10,.16); --purple-bg: rgba(191,90,242,.16); --red-bg: rgba(255,69,58,.16); --green-bg: rgba(48,209,88,.16);
   --term: #1c1c1e; --term-head: #252528; --term-border: rgba(255,255,255,.08); --term-text: #e5e5ea; --term-dim: #8e8e93;
-  --t-blue: #64b5ff; --t-green: #5fd97a; --t-orange: #ffb340; --t-red: #ff6b61; --t-purple: #d38cff;
+  --t-blue: #64b5ff; --t-green: #5fd97a; --t-orange: #ffb340; --t-red: #ff6b61; --t-purple: #d38cff; --t-cyan: #64d2ff;
   --t-add-bg: rgba(95,217,122,.1); --t-del-bg: rgba(255,107,97,.1);
   --b0: #4aa3ff; --b1: #3ecf74; --b2: #3cc6d4; --b3: #ff6b9a; --b4: #8e8cff; --b5: #c09a78;
   color-scheme: dark; }
@@ -97,7 +97,7 @@ button { font: inherit; color: inherit; }
 .pill.run { background: var(--green-bg); color: var(--t-green); }
 .agent-tag { display: inline-flex; align-items: center; gap: 4px; font: 600 11px var(--font); color: var(--ac); background: color-mix(in srgb, var(--ac) 14%, transparent); padding: 0 6px 0 3px; border-radius: 4px; height: 17px; }
 .tbody { flex: 1; min-height: 0; overflow: auto; padding: 8px 10px 6px; font: 12px/1.6 var(--mono); color: var(--term-text); white-space: pre-wrap; word-break: break-word; }
-.ln { display: block; }
+.ln { display: block; white-space: pre-wrap; }
 .ln.new { animation: fadein .35s ease-out; }
 .ln .cmd { color: var(--term-text); }
 .ln.dim, .ln.dim .cmd { color: var(--term-dim); }
@@ -144,12 +144,96 @@ svg.graph .rt .hd { font-weight: 700; fill: var(--accent); }
 .bench b { font-weight: 600; letter-spacing: .04em; text-transform: uppercase; font-size: 10px; }
 
 /* branch view */
-.ftree { padding: 8px 10px; font-size: 12px; line-height: 1.75; }
-.frow { display: flex; gap: 6px; align-items: center; }
-.frow .fb { font: 700 10px var(--mono); width: 14px; text-align: center; border-radius: 3px; }
+/* SDK call details on a terminal line (tui.html) */
+.sdkbtn { margin-left: 8px; font: 9.5px var(--mono); padding: 0 4px; border-radius: 3px; border: 1px solid var(--term-border); background: transparent; color: var(--term-dim); cursor: pointer; opacity: 0; vertical-align: 1px; }
+.ln:hover .sdkbtn, .ln.open .sdkbtn, .sdkbtn:focus-visible { opacity: 1; }
+.sdk { display: none; margin: 3px 0 5px; padding: 6px 9px; border-left: 2px solid var(--t-cyan); background: var(--well); border-radius: 0 6px 6px 0; color: var(--term-text); font-size: 11.5px; white-space: normal; }
+.ln.open .sdk { display: block; }
+.sdk .code { color: var(--term-dim); display: block; margin-bottom: 4px; padding: 0; }
+.sdk .code b { color: var(--t-cyan); font-weight: 600; }
+.sdk pre { margin: 0 0 6px; font: inherit; white-space: pre-wrap; }
+.tm { margin-left: 8px; font: 9.5px var(--mono); color: var(--term-dim); vertical-align: 1px; }
+.sdk .tm { margin-left: 6px; font-size: 10.5px; }
+/* Store and overlay footers */
+.store { flex: none; border-top: 1px solid var(--term-border); padding: 3px 10px 4px; font: 10.5px/1.6 var(--mono); color: var(--term-dim); background: var(--well); }
+.store .srow { display: flex; align-items: center; gap: 7px; white-space: nowrap; overflow: hidden; }
+.store .srow > span:not(.sbar):not(.est) { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.store .kind { flex: none; font-weight: 600; font-size: 9px; letter-spacing: .06em; padding: 0; background: none; }
+.store b { color: var(--term-text); font-weight: 600; } .store .est { margin-left: auto; flex: none; font-size: 9.5px; opacity: .8; }
+.store .sbar { flex: none; display: flex; width: 44px; height: 5px; border-radius: 3px; overflow: hidden; background: var(--term-border); }
+.store .sbar i { display: block; } .store .p { background: var(--t-cyan); } .store .m { background: var(--orange); }
+.store .pc { color: var(--t-cyan); } .store .mc { color: var(--orange); }
+/* Files pane (tui.html), stacked for the right column */
+.fsel { font: 11.5px var(--mono); height: 22px; max-width: 200px; min-width: 70px; border: 1px solid var(--term-border); border-radius: 5px; background: var(--term); color: var(--term-text); padding: 0 4px; }
+.sync { font-size: 11px; line-height: 1; flex: none; } .sync.live { color: var(--t-green); } .sync.pinned { color: var(--term-dim); }
+.fbar { flex: none; display: flex; align-items: center; gap: 6px; padding: 4px 8px; background: var(--term-head); border-bottom: 1px solid var(--term-border); font-size: 11.5px; color: var(--term-dim); flex-wrap: wrap; }
+.fbar .segs { display: inline-flex; background: var(--well); border-radius: 6px; padding: 2px; }
+.fbar .fseg { border: 0; background: transparent; padding: 2px 9px; border-radius: 4px; cursor: pointer; font-size: 11.5px; color: var(--term-dim); }
+.fbar .fseg.on { background: var(--card); color: var(--term-text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.fbar .chipb { border: 1px solid var(--term-border); background: transparent; border-radius: 10px; padding: 0 8px; height: 20px; cursor: pointer; font-size: 11px; color: var(--term-dim); }
+.fbar .chipb.on { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.fbar .chk { display: inline-flex; gap: 4px; align-items: center; } .fbar .chk.off { opacity: .45; }
+.fbar .sp { flex: 1; } .fbar .fcount { font: 11px var(--mono); } .fbar .sdkbtn { opacity: 1; margin-left: 0; }
+.fsdk { margin: 0; padding: 6px 10px; background: var(--well); border-bottom: 1px solid var(--term-border); font: 11px/1.5 var(--mono); color: var(--term-text); white-space: pre-wrap; }
+.fbody { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ftree { flex: none; max-height: 40%; overflow: auto; border-bottom: 1px solid var(--term-border); padding: 4px 0; font: 12px/1.5 var(--mono); color: var(--term-text); }
+.frow { display: flex; align-items: center; gap: 4px; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
+.frow:hover { background: var(--well); } .frow.sel { background: var(--accent-bg); }
+.frow.flash { animation: flash 1.2s ease-out; }
+.frow .car { width: 10px; color: var(--term-dim); flex: none; } .frow .nm { overflow: hidden; text-overflow: ellipsis; }
+.frow.gone .nm { text-decoration: line-through; color: var(--term-dim); }
+.frow.flat { padding: 2px 10px; font: 12px var(--mono); }
+.fb { font: 700 9.5px var(--mono); padding: 0 4px; border-radius: 3px; margin-left: auto; flex: none; }
+.frow.flat .fb { margin: 0 6px 0 0; }
 .fb.A { color: var(--t-green); background: var(--t-add-bg); } .fb.M { color: var(--t-blue); background: var(--accent-bg); } .fb.D { color: var(--t-red); background: var(--t-del-bg); }
-.frow.dir { color: var(--term-dim); }
-.frow.flash { animation: flash 1.2s ease-out; border-radius: 3px; }
+.fr { margin-left: auto; font: 10px var(--mono); color: var(--term-dim); flex: none; }
+.fview { flex: 1; min-height: 0; overflow: auto; font: 12px/1.55 var(--mono); color: var(--term-text); }
+.fpath { position: sticky; top: 0; z-index: 1; background: var(--term); padding: 5px 10px; border-bottom: 1px solid var(--term-border); font-weight: 600; }
+.fpath span { font-weight: 400; color: var(--term-dim); }
+.fsum { padding: 6px 10px; color: var(--term-dim); font-size: 11.5px; } .fsum b { color: var(--term-text); font-weight: 600; }
+.fstats { display: flex; flex-wrap: wrap; gap: 3px 14px; padding: 6px 10px; border-bottom: 1px solid var(--term-border); background: var(--well); font-size: 11px; color: var(--term-dim); }
+.fstats b { color: var(--term-text); font-weight: 600; } .fstats .est { margin-left: auto; }
+.frev { width: 100%; border-collapse: collapse; font-size: 11.5px; } .frev th { text-align: left; font-weight: 600; color: var(--term-dim); padding: 4px 6px; border-bottom: 1px solid var(--term-border); }
+.frev td { padding: 3px 6px; border-bottom: 1px solid var(--term-border); white-space: nowrap; } .frev td.n, .frev th.n { text-align: right; } .frev .zero { color: var(--term-dim); }
+.fempty { padding: 18px 12px; color: var(--term-dim); line-height: 1.6; }
+.code { padding: 2px 0 10px; }
+.cl { display: flex; white-space: pre; min-height: 18px; }
+.cl .no { flex: none; width: 34px; padding-right: 8px; text-align: right; color: var(--term-dim); user-select: none; }
+.cl .op { flex: none; width: 14px; color: var(--term-dim); }
+.cl .tx { flex: 1; padding-right: 10px; }
+.cl.add { background: var(--t-add-bg); } .cl.add .op, .cl.add .tx { color: var(--t-green); }
+.cl.del { background: var(--t-del-bg); } .cl.del .op, .cl.del .tx { color: var(--t-red); }
+.bch { flex: none; width: 40px; margin: 0 4px 0 6px; font: 600 10.5px/18px var(--mono); color: var(--bc); border-left: 3px solid var(--bc); padding-left: 5px; cursor: pointer; }
+.bch.cont { opacity: .55; } .bch:hover { background: var(--well); }
+svg.graph .node { cursor: pointer; }
+/* Sandbox / process status bar (tui.html) */
+.statusbar { height: 32px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--chrome); border-top: .5px solid var(--sep); overflow-x: auto; scrollbar-width: none; font-size: 11px; }
+.statusbar .lbl { color: var(--text-3); white-space: nowrap; }
+.statusbar .sp { flex: 1; min-width: 10px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; font: 11px var(--mono); background: var(--card); box-shadow: 0 0 0 .5px var(--sep-strong); white-space: nowrap; }
+.chip .d { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+.chip.closed { opacity: .5; } .chip.closed .d { background: var(--text-3); }
+.chip.proc .d { background: var(--orange); animation: blink 1.2s steps(2) infinite; }
+.chip.enter { animation: grow .3s ease-out; }
+/* Hover card on History nodes (tui.html) */
+.hcard { position: fixed; z-index: 65; width: 290px; background: var(--card); border-radius: 10px; box-shadow: 0 14px 44px rgba(0,0,0,.24), 0 0 0 .5px var(--sep-strong); padding: 8px; display: none; font-size: 12px; }
+.hcard.open { display: block; animation: grow .12s ease-out; }
+.hcard .h { display: flex; align-items: baseline; gap: 6px; margin: 0 4px 2px; }
+.hcard .h b { font: 600 13px var(--mono); }
+.hcard .tag { font: 600 10px var(--font); padding: 1px 6px; border-radius: 4px; background: var(--accent-bg); color: var(--accent); }
+.hcard .meta { margin: 0 4px 6px; color: var(--text-2); font: 11px var(--mono); line-height: 1.5; }
+.hcard .meta b { color: var(--text); }
+.hcard .sec { margin: 6px 4px 3px; font-size: 10.5px; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
+.hcard .ws { width: 100%; display: flex; align-items: center; gap: 6px; padding: 5px 6px; border: 0; background: transparent; border-radius: 6px; cursor: pointer; text-align: left; font: 11.5px var(--mono); color: var(--text); }
+.hcard .ws:hover, .hcard .ws:focus-visible { background: var(--accent-bg); outline: 0; }
+.hcard .ws .d { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); flex: none; }
+.hcard .ws.stale .d { background: var(--red); }
+.hcard .ws small { margin-left: auto; font: 10.5px var(--font); color: var(--text-2); white-space: nowrap; }
+.hcard .ws.stale small { color: var(--red); }
+.hcard .cbtns { display: flex; gap: 6px; margin: 8px 4px 0; }
+.hcard .cbtn { flex: 1; border: 0; border-radius: 6px; padding: 5px 6px; background: var(--well); cursor: pointer; font-size: 11.5px; color: var(--text); }
+.hcard .cbtn:hover { background: var(--accent); color: #fff; }
+.hcard .hint { margin: 6px 4px 0; font-size: 10.5px; color: var(--text-3); }
 .panes { flex: 1; min-height: 0; display: grid; gap: 6px; grid-auto-rows: minmax(0, 1fr); }
 .empty { flex: 1; display: grid; place-items: center; text-align: center; color: var(--text-2); background: var(--term); border-radius: 8px; box-shadow: 0 0 0 1px var(--term-border); padding: 16px; }
 .empty h3 { margin: 0 0 6px; font-size: 14px; color: var(--text); }
@@ -226,6 +310,7 @@ svg.graph .rt .hd { font-weight: 700; fill: var(--accent); }
     <button class="ib" id="theme" title="Toggle light / dark"><svg viewBox="0 0 16 16"><path d="M8 2a6 6 0 100 12V2z" fill="currentColor"/><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
   </header>
   <main class="work" id="work"></main>
+  <div class="statusbar" id="status" aria-label="Sandboxes and processes"></div>
   <footer class="player" aria-label="Story player">
     <div class="ctl">
       <button class="ib" id="p-reset" title="Restart">⏮</button>
@@ -243,11 +328,13 @@ svg.graph .rt .hd { font-weight: 700; fill: var(--accent); }
   </footer>
 </div>
 <div id="crabs" aria-hidden="true"></div>
+<div class="hcard" id="hcard" role="tooltip"></div>
 
 <!-- The engine: the LayerFS SDK simulator and its shell, shared with tui.html. -->
 <script src="simulation_engine/model.js"></script>
 <script src="simulation_engine/files.js"></script>
 <script src="simulation_engine/terminal.js"></script>
+<script src="simulation_engine/backend/sim.js"></script>
 <script src="scenarios.js"></script>
 <script>
 "use strict";
@@ -263,7 +350,11 @@ const SCOUTS = ["#d6336c", "#0f8b9a", "#e08600", "#5856d6", "#8e6e53", "#c2255c"
 const RECENT_S = 90, CAP = { row: 3, term: 3, bench: 6, chip: 1 };
 const BCOL = ["--b0", "--b1", "--b2", "--b3", "--b4", "--b5"];
 const FADE_S = 30, MAX_TABS = 6;
-const M = window.LayerSim, simulateShell = window.LayerTerm.simulateShell;
+const M = window.LayerSim, FM = window.LayerFiles, simulateShell = window.LayerTerm.simulateShell;
+// Compressed sizes are computed asynchronously and shared across rebuilds.
+const PACKED = new Map(), PACKING = new Set();
+let renderSoon = null;
+const rerender = () => { clearTimeout(renderSoon); renderSoon = setTimeout(() => render(), 40); };
 const FIXTURE = window.LAYERFS_SCENARIOS[0].steps[0].args.files;
 
 // ------------------------------------------------------------------ story
@@ -302,8 +393,12 @@ const STORY = [
   { a: "tester", call: "sandbox.commit", args: { message: "resolve headline" },
     cap: "…and commits on the new head." },
   { a: "ui-dev", sh: "npm install && npm test" },
+  { a: "ui-dev", sh: "npm run dev &",
+    cap: "A background dev server. The <b>status bar</b> shows it under ui-dev's Sandbox while it runs." },
   { a: "ui-dev", call: "sandbox.commit", args: { message: "install deps" },
     cap: "ui-dev's Workspace is two Commits behind, but touched other files: the engine merges it cleanly and commits on the head." },
+  { a: "ui-dev", call: "process.cancel", args: {},
+    cap: "The engine refuses to unmount a busy Workspace, so ui-dev stops its server first." },
   { a: "ui-dev", call: "sandbox.unmount", args: {},
     cap: "Unmount closes the pane." },
   { a: "tester", call: "sandbox.unmount", args: {} },
@@ -340,7 +435,9 @@ const STORY = [
 // from the engine state after every step.
 const newAgent = () => ({ lastLoc: { kind: "bench" }, lastT: -99 });
 function fresh() {
-  const W = { sim: new M.Sim(), clock: 0, seq: 0, agents: { main: newAgent() }, panes: {}, fsLog: {}, hist: [], attrib: {}, touched: {},
+  const engine = new window.LayerBackendSim.SimBackend();
+  engine.packed = PACKED; engine.packing = PACKING; engine.onchange = rerender;
+  const W = { engine, sim: engine.sim, clock: 0, seq: 0, agents: { main: newAgent() }, panes: {}, fsLog: {}, hist: [], attrib: {}, touched: {},
     flash: {}, newNodes: new Set(), lastTab: "main", last: null };
   derive(W);
   return W;
@@ -362,13 +459,27 @@ function runStep(W, st) {
   W.flash = changedPaths(W, before, rootsOf(W));
 }
 
+// One SDK call on the engine, timed in the page like SimBackend.run, with the
+// inline Node script an agent would send (model.js scriptFor).
+function sdkCall(W, calls, call, args) {
+  const t0 = performance.now(), o = W.sim.run(call, args);
+  o.timing = { totalMs: performance.now() - t0, simulated: true };
+  calls.push({ call, code: o.code, timing: o.timing, script: M.scriptFor({ call, args }, (W.sim.s.project || {}).name || "website") });
+  return o;
+}
 function runCall(W, st) {
   const n = st.a, A = (W.agents[n] ||= newAgent()), s = W.sim.s, seq = ++W.seq;
   let call = st.call, args = { ...st.args }, shOut = null, o, branch;
+  const calls = [];
   const mine = A.ws && s.sandboxes[A.ws.sandbox].workspaces[A.ws.path], pane = A.ws && `${A.ws.sandbox}:${A.ws.path}`;
-  if (st.sh || call === "sandbox.commit" || call === "sandbox.unmount") { Object.assign(args, A.ws); branch = mine.branch; }
+  const paneCall = !!st.sh || call === "sandbox.commit" || call === "sandbox.unmount" || call === "process.cancel";
+  if (paneCall) { Object.assign(args, A.ws); branch = mine.branch; }
+  if (call === "process.cancel" && !args.process) {
+    const sb = s.sandboxes[A.ws.sandbox], run = sb.procOrder.map((id) => sb.processes[id]).filter((x) => x.path === A.ws.path && x.status === "running");
+    args = { sandbox: A.ws.sandbox, process: run.length ? run[run.length - 1].id : "none" };
+  }
   if (call === "sandbox.mount") {
-    if (!A.sb) A.sb = W.sim.run("sandbox.create").result.id;
+    if (!A.sb) A.sb = sdkCall(W, calls, "sandbox.create", {}).result.id;
     args.sandbox = A.sb; branch = args.branch;
   }
   if (st.sh) {
@@ -376,8 +487,8 @@ function runCall(W, st) {
     const r = simulateShell(st.sh, mine, s.sandboxes[A.ws.sandbox]);
     shOut = r.out;
     o = r.refuse ? { ok: false, code: "ShellRefused", refusal: { message: r.out.map((x) => x.t).join(" ") } }
-      : W.sim.run(call, { ...args, command: st.sh, writes: r.writes, output: r.out.map((x) => x.t).join("\n"), exitCode: r.code });
-  } else o = W.sim.run(call, args);
+      : sdkCall(W, calls, call, { ...args, command: st.sh, writes: r.writes, output: r.out.map((x) => x.t).join("\n"), exitCode: r.code, background: r.background || undefined });
+  } else o = sdkCall(W, calls, call, args);
   const out = outcome(call, o, shOut);
   W.last = { agent: n, call, step: st, o, node: nodeOf(o) };
   if (W.last.node) W.attrib[W.last.node] = n;
@@ -385,30 +496,30 @@ function runCall(W, st) {
 
   if (call.startsWith("fs.")) {
     branch = args.branch || args.ref;
-    (W.fsLog[branch] ||= []).push({ agent: n, text: FS[call](args), out, t: seq, dim: call === "fs.read" });
+    (W.fsLog[branch] ||= []).push({ agent: n, text: FS[call](args), out, t: seq, dim: call === "fs.read", calls });
     A.lastLoc = { kind: "fs", branch };
   } else if (call === "sandbox.mount") {
     if (o.ok) {
       A.ws = { sandbox: o.result.sandbox, path: o.result.path };
       const k = `${A.ws.sandbox}:${A.ws.path}`;
-      W.panes[k] = { agent: n, born: seq, lines: [{ dim: true, text: `mount ${branch}`, out, t: seq }] };
+      W.panes[k] = { agent: n, born: seq, lines: [{ dim: true, text: `mount ${branch}`, out, t: seq, calls }] };
       A.lastLoc = { kind: "ws", branch, ws: k };
-    } else { W.hist.push({ agent: n, text: `mount ${branch}`, out, t: seq }); A.lastLoc = { kind: "hist" }; }
-  } else if (call.startsWith("sandbox.")) {
+    } else { W.hist.push({ agent: n, text: `mount ${branch}`, out, t: seq, calls }); A.lastLoc = { kind: "hist" }; }
+  } else if (paneCall) {
     if (call === "sandbox.unmount" && o.ok) { A.ws = null; A.lastLoc = { kind: "bench" }; A.lastBranch = branch; }
     else {
-      W.panes[pane].lines.push({ text: st.sh || `commit -m "${args.message}"`, out, t: seq });
+      W.panes[pane].lines.push({ text: st.sh || (call === "process.cancel" ? `kill ${args.process}` : `commit -m "${args.message}"`), out, t: seq, calls });
       A.lastLoc = { kind: "ws", branch, ws: pane };
     }
   } else {
-    W.hist.push({ agent: n, text: HIST[call](args), out, t: seq });
+    W.hist.push({ agent: n, text: HIST[call](args), out, t: seq, calls });
     A.lastLoc = { kind: "hist" };
     branch = call === "branch.publish" ? args.branch : args.name;
   }
   A.lastT = W.clock;
   if (A.lastLoc.branch) A.lastBranch = A.lastLoc.branch;
   if (branch && s.branches[branch]) W.touched[branch] = W.clock;
-  W.lastTab = call.startsWith("fs.") || call.startsWith("sandbox.") ? branch : "main";
+  W.lastTab = call.startsWith("fs.") || call.startsWith("sandbox.") || paneCall ? branch : "main";
 }
 // The node a call created, for attribution and the flying block.
 function nodeOf(o) {
@@ -420,7 +531,7 @@ function outcome(call, o, shOut) {
   const L = (t, c = "") => ({ t, c });
   if (shOut) {
     const out = shOut.map((x) => L(x.t, /^(<{7}|={7}|>{7})/.test(x.t) ? "mark" : x.c === "err" ? "bad" : ""));
-    out.push(o.ok ? L(`[exit ${o.result.exitCode}]`, o.result.exitCode ? "bad" : "good") : L(`✕ ${o.code}  ${o.refusal.message}`, "bad"));
+    out.push(!o.ok ? L(`✕ ${o.code}  ${o.refusal.message}`, "bad") : o.result.process ? L(`● running in background as ${o.result.process}`, "good") : L(`[exit ${o.result.exitCode}]`, o.result.exitCode ? "bad" : "good"));
     return out;
   }
   if (!o.ok) return [L(`✕ ${o.code}  ${o.refusal.message}`, "bad"), ...(o.refusal.conflicts || []).map((c) => L(`  conflict ${c.path}`, "mark"))];
@@ -434,6 +545,7 @@ function outcome(call, o, shOut) {
     case "Added": return [L(`Published ${r.source.branch}@${r.source.commit} → main @ ${r.publishedLayer.id}`, "good")];
     case "Mounted": return [L(`mounted ${r.branch}@${r.base} → ${r.sandbox}:${r.path}`)];
     case "Unmounted": return [L("unmounted")];
+    case "Stopped": return [L(`${r.process} ${r.status}`)];
   }
   if (call === "fs.read") return [L(`${r.text.split("\n").length} lines · ${r.snapshot}`)];
   return [L(o.code)];
@@ -446,6 +558,8 @@ function bubbleOf(last) {
   if (o.code === "Added") return [`→ ${r.publishedLayer.id}`, "good"];
   if (o.code === "Forked") return ["fork", ""];
   if (o.code === "Mounted") return ["mount", ""];
+  if (o.code === "running") return ["● dev server", "good"];
+  if (o.code === "Stopped") return ["■ stopped", ""];
   if (o.code.startsWith("exit:")) return r.exitCode ? [`exit ${r.exitCode}`, "bad"] : /npm (test|run test)/.test(last.step.sh || "") ? ["✓ tests", "good"] : null;
   return null;
 }
@@ -477,7 +591,7 @@ function derive(W) {
   for (const id of s.sandboxOrder) for (const p of s.sandboxes[id].wsOrder) {
     const w = s.sandboxes[id].workspaces[p]; if (!w.mounted) continue;
     const k = `${id}:${p}`, pane = W.panes[k] || { lines: [], born: 0 };
-    W.ws[k] = { id: k, agent: pane.agent, branch: w.branch, lines: pane.lines, born: pane.born, bad: W.sim.markersIn(w).length > 0, baseNode: w.baseCommit || "fork:" + w.branch };
+    W.ws[k] = { id: k, agent: pane.agent, branch: w.branch, lines: pane.lines, born: pane.born, bad: W.sim.markersIn(w).length > 0, baseNode: w.baseCommit || "fork:" + w.branch, eng: w };
   }
 }
 // Root of every ref (main and each Branch), to find what a step changed.
@@ -599,27 +713,187 @@ function graph(filter, activeLane) {
 }
 
 // ------------------------------------------------------------------ render: terminals
-const lineHtml = (l, isNew, prefix) => `<span class="ln${l.dim ? " dim" : ""}${isNew ? " new" : ""}">${prefix}${l.text ? `<span class="cmd">${esc(l.text)}</span>` : ""}</span>`
-  + (l.out || []).map((o) => `<span class="out${o.c ? " " + o.c : ""}${isNew ? " ln new" : ""}">${esc(o.t)}</span>`).join("");
+// Diagnostic timing per call (issue #329 C), as tui.html shows it: live is the
+// SDK call, the server's refresh and the HTTP round trip; sim is the in-page
+// model and says nothing about the product. Neither is a measurement.
+const fmtMs = (ms) => (ms < 1 ? ms.toFixed(2) : ms < 1000 ? ms.toFixed(0) : (ms / 1000).toFixed(2) + " s").replace(/(\d)$/, "$1 ms").replace(/ s ms$/, " s");
+function timingText(t) {
+  if (!t) return "";
+  if (t.simulated) return `${fmtMs(t.totalMs)} in the page (sim)`;
+  const http = Math.max(0, t.totalMs - (t.sdkMs || 0) - (t.refreshMs || 0));
+  return `sdk ${fmtMs(t.sdkMs || 0)} · refresh ${fmtMs(t.refreshMs || 0)} · http ${fmtMs(http)}`;
+}
+function cmdTime(calls) {
+  const ts = (calls || []).map((c) => c.timing).filter(Boolean);
+  if (!ts.length) return "";
+  const sum = ts.reduce((a, t) => a + (t.simulated ? t.totalMs : t.sdkMs || 0), 0);
+  return `<span class="tm" title="${ts[0].simulated ? "Time of the simulator in the page, not the product" : "SDK call time, summed over this line's calls"}">${fmtMs(sum)}${ts[0].simulated ? " sim" : ""}</span>`;
+}
+const OPEN_SDK = new Set();
+function lineHtml(l, isNew, prefix) {
+  const c = l.calls || [], key = String(l.t) + (l.text || "");
+  const sdk = c.length ? `<button class="sdkbtn" data-sdk="${esc(key)}" title="Show the SDK call and inline Node script">sdk${c.length > 1 ? " ×" + c.length : ""}</button><div class="sdk">${c.map((x) => `<span class="code"><b>${esc(x.call)}</b> → ${esc(x.code)}<span class="tm">${esc(timingText(x.timing))}</span></span><pre>${esc(x.script)}</pre>`).join("")}</div>` : "";
+  return `<div class="ln${l.dim ? " dim" : ""}${isNew ? " new" : ""}${OPEN_SDK.has(key) ? " open" : ""}">${prefix}${l.text ? `<span class="cmd">${esc(l.text)}</span>` : ""}${cmdTime(c)}${sdk}</div>`
+    + (l.out || []).map((o) => `<span class="out${o.c ? " " + o.c : ""}${isNew ? " ln new" : ""}">${esc(o.t)}</span>`).join("");
+}
 const inrow = (ph) => `<div class="inrow"><span class="prompt">you ›</span><span class="caret"></span><span>${esc(ph)}</span></div>`;
 
-// File tree of a ref from the engine, badged against the first Layer. Big
-// generated directories stay collapsed.
+// ------------------------------------------------------------------ Files (tui.html Files pane)
+// One Files view per tab. The subject is the tab's Branch (or main) at its
+// latest head or at one fixed point; the base is what it is compared with.
+// All reads go through simulation_engine/files.js on the engine state.
 const COLLAPSE = ["/node_modules", "/.git", "/.next"];
-function fileTree(ref) {
-  const s = W.sim.s, tree = W.sim.resolve(ref).tree, init = s.roots[s.layers[W.initLayer].root];
-  const kind = {}; for (const d of M.diffTrees(init, tree)) kind[d.path] = d.kind === "Added" ? "A" : d.kind === "Removed" ? "D" : "M";
-  const flash = W.flash[ref] || new Set();
-  return Object.keys(tree).filter((p) => !COLLAPSE.some((c) => p.startsWith(c + "/"))).sort().map((p) => {
-    const depth = p.split("/").length - 2, name = p.slice(p.lastIndexOf("/") + 1), dir = tree[p].type === "dir", c = kind[p] || "";
-    return `<div class="frow${dir ? " dir" : ""}${flash.has(p) ? " flash" : ""}" style="padding-left:${depth * 14}px"><span class="fb ${c}">${c}</span>${dir ? (COLLAPSE.includes(p) ? "▸ " : "▾ ") : ""}${esc(name)}${dir ? "/" : ""}${COLLAPSE.includes(p) ? " …" : ""}</div>`;
+const FILES = {};
+const fmtBytes = (n) => (n == null ? "not reported" : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+const bytesOf = (t) => new TextEncoder().encode(t || "").length;
+const ratio = (a, b) => (b > 0 ? `×${(a / b).toFixed(a / b >= 10 ? 0 : 1)}` : "–");
+const bar = (p, m) => `<span class="sbar"><i class="p" style="flex:${p} 0 0"></i><i class="m" style="flex:${m} 0 0"></i></span>`;
+const INODE_BYTES = 73; // one inode value row; directory entries and pooling ignored
+const laneColor = (b) => (!b || b === "main" ? "var(--purple)" : W.branches[b] ? `var(${W.branches[b].color})` : "var(--text-3)");
+const defaultBase = (tab) => (tab === "main" ? "" : "fork:" + tab);
+function filesOf(tab) { return (FILES[tab] ||= { at: "latest", base: defaultBase(tab), path: null, toggled: [], mode: "view", changedOnly: false, sdk: false }); }
+const subjectOf = (tab, p) => (p.at === "latest" ? tab : p.at);
+function pointLabel(ref) {
+  if (!ref) return "nothing";
+  if (ref === "main" || W.branches[ref]) return `${ref} · latest`;
+  if (ref.startsWith("fork:")) return `${ref.slice(5)} · fork point`;
+  const n = W.nodes[ref];
+  return n ? `${n.branch || "main"} · ${ref}` : ref;
+}
+function atSelect(tab, p) {
+  const s = W.sim.s, o = (v, label) => `<option value="${esc(v)}"${v === p.at ? " selected" : ""}>${esc(label)}</option>`;
+  const opts = tab === "main"
+    ? Object.values(s.layers).sort((a, b) => b.slot - a.slot).map((l) => o(l.id, `${l.id} · ${l.sourceCommit ? "from " + l.sourceCommit : "init"}`)).join("")
+    : Object.values(s.commits).filter((c) => c.branch === tab).sort((a, b) => b.slot - a.slot).map((c) => o(c.id, `${c.id} · ${c.message || c.via}`)).join("") + o("fork:" + tab, `fork point · ${s.branches[tab].from}`);
+  const live = p.at === "latest";
+  return `<span class="sync ${live ? "live" : "pinned"}" title="${live ? "Follows the head: new Commits show up as they land" : "Fixed at one point in history"}">${live ? "●" : "⊙"}</span><select class="fsel" data-fat="${esc(tab)}" title="Latest, or a fixed point">${o("latest", `latest · ${tab === "main" ? W.mainHead : W.branches[tab].head.replace("fork:", "fork ")}`)}${opts}</select>`;
+}
+const dirOpen = (p, path) => (COLLAPSE.includes(path) ? p.toggled.includes(path) : !p.toggled.includes(path));
+function treeHtml(p, subj, base, ch, dir, depth, flash) {
+  return FM.listBoth(subj, base, dir).filter((e) => !p.changedOnly || !ch || ch.files[e.path] || ch.dirs[e.path]).map((e) => {
+    const open = e.type === "dir" && dirOpen(p, e.path), k = ch && ch.files[e.path], roll = ch && !k && ch.dirs[e.path];
+    const row = `<div class="frow${e.path === p.path ? " sel" : ""}${e.gone ? " gone" : ""}${flash.has(e.path) ? " flash" : ""}" data-ftree="${esc(e.path)}" data-ftype="${e.type}" style="padding-left:${8 + depth * 13}px" title="${esc(e.path)}">
+      <span class="car">${e.type === "dir" ? (open ? "▾" : "▸") : ""}</span><span class="nm">${esc(e.name)}${e.type === "dir" ? "/" : ""}</span>${k ? `<span class="fb ${k}">${k}</span>` : roll ? `<span class="fr">${roll}</span>` : ""}</div>`;
+    return row + (open ? treeHtml(p, subj, base, ch, e.path, depth + 1, flash) : "");
   }).join("");
 }
+function sdkCalls(subject, p) {
+  const ref = JSON.stringify(subject), path = JSON.stringify(p.path || "/");
+  const calls = [`layerfs.fs.list(${ref}, dir, pageSize, pagePos) // per open folder`];
+  if (p.base) calls.push(`layerfs.branch.diff_branches(${JSON.stringify(p.base)}, ${ref}, pageSize, pagePos)`);
+  if (p.path) {
+    if (p.mode === "view") calls.push(`layerfs.fs.read(${ref}, ${path}, startLine, endLine)`);
+    if (p.mode === "blame") calls.push(`layerfs.fs.blame(${ref}, ${path}, fromLine)`);
+    if (p.mode === "diff" && p.base) calls.push(`layerfs.fs.diff_files(${JSON.stringify(p.base)}, ${path}, ${ref}, ${path})`);
+    calls.push(`operator.files.stats(${ref}, ${path})`, `operator.files.history(${ref}, ${path}, pageSize, pagePos)`);
+  }
+  return calls.map(esc).join("\n");
+}
+const codeLines = (text) => text.split("\n").map((t, i) => `<div class="cl"><span class="no">${i + 1}</span><span class="tx">${esc(t) || " "}</span></div>`).join("");
+// Per-file revisions, dedupe and compression (sim estimates, as in tui.html).
+function fileStats(subject, path) {
+  const revs = FM.history(W.sim, subject, path), seen = new Set();
+  let logical = 0, unique = 0, stored = 0, pending = false;
+  const rows = [...revs].reverse().map((r) => {
+    if (r.content == null) return { ...r, size: 0, added: 0, stored: 0 };
+    const size = bytesOf(r.content), fresh = !seen.has(r.content);
+    logical += size;
+    let z = 0;
+    if (fresh) { seen.add(r.content); unique += size; z = W.engine.storedSize(r.content); if (z == null) { pending = true; z = size; } stored += z; }
+    return { ...r, size, added: fresh ? size : 0, stored: fresh ? z : 0 };
+  }).reverse();
+  return { rows, revisions: revs.length, logical, unique, stored, pending, metadata: revs.length * INODE_BYTES };
+}
+function fileStatsHtml(subject, p, sv) {
+  const e = sv.tree[p.path];
+  if (e && e.type !== "file") return "";
+  const f = fileStats(subject, p.path), size = e ? fmtBytes(bytesOf(e.content)) : "deleted here";
+  return `<div class="fstats" title="Revisions: saved versions where this file changed. Logical: every revision's size. Unique: distinct versions once (dedupe). Stored: after compression (sim: deflate as a stand-in for zstd, no deltas).">
+    <span><b>${f.revisions}</b> revision${f.revisions === 1 ? "" : "s"}</span><span>current <b>${size}</b></span><span>history <b>${fmtBytes(f.logical)}</b> logical</span>
+    <span>unique <b>${fmtBytes(f.unique)}</b> ${ratio(f.logical, f.unique)}</span><span>stored ≈ <b>${fmtBytes(f.stored)}</b> ${ratio(f.unique, f.stored)}</span><span>metadata ≈ <b>${fmtBytes(f.metadata)}</b></span><span class="est">sim estimate${f.pending ? " · compressing…" : ""}</span></div>`;
+}
+function fileHistoryHtml(subject, path) {
+  const f = fileStats(subject, path);
+  if (!f.rows.length) return `<div class="fempty">${esc(path)} has no saved versions behind ${esc(pointLabel(subject))}.</div>`;
+  const rows = f.rows.map((r) => `<tr><td><span class="bch" style="--bc:${r.node.kind === "layer" ? "var(--purple)" : laneColor(r.node.branch)}" data-fblame="${r.node.id}" title="${esc(r.node.id)} · click to diff with its parent">${r.node.id}</span></td><td><span class="fb ${r.change}">${r.change}</span></td>
+    <td class="n">${r.content == null ? "–" : fmtBytes(r.size)}</td><td class="n${r.added ? "" : " zero"}">${r.content == null ? "–" : r.added ? "+" + fmtBytes(r.added) : "reused"}</td><td class="n${r.stored ? "" : " zero"}">${r.stored ? fmtBytes(r.stored) : "–"}</td></tr>`).join("");
+  return `<div class="fsum">${f.revisions} revision${f.revisions === 1 ? "" : "s"} of ${esc(path)} behind <b>${esc(pointLabel(subject))}</b>, newest first · new = bytes this version added (an identical earlier version is reused)</div>
+    <table class="frev"><tr><th>version</th><th></th><th class="n">size</th><th class="n">new</th><th class="n">stored ≈</th></tr>${rows}</table>`;
+}
+function viewHtml(subject, p, sv, bv, ch) {
+  if (!p.path) {
+    if (!ch) return `<div class="fempty">Pick a file above. Compare with parent, fork point or main to see what changed.</div>`;
+    const list = Object.entries(ch.files).filter(([path]) => (sv.tree[path] || bv.tree[path]).type === "file");
+    if (!list.length) return `<div class="fempty">No file differences between ${esc(pointLabel(p.base))} and ${esc(pointLabel(subject))}.</div>`;
+    return `<div class="fsum">${list.length} file${list.length === 1 ? "" : "s"} changed from <b>${esc(pointLabel(p.base))}</b> to <b>${esc(pointLabel(subject))}</b></div>` +
+      list.map(([path, k]) => `<div class="frow flat" data-fopen="${esc(path)}"><span class="fb ${k}">${k}</span><span class="nm">${esc(path)}</span></div>`).join("");
+  }
+  const se = sv.tree[p.path], be = bv && bv.tree[p.path];
+  if (p.mode === "view") {
+    if (!se) return `<div class="fempty">${esc(p.path)} does not exist at ${esc(pointLabel(subject))}${be ? " (deleted; switch to Diff to see what was removed)" : ""}.</div>`;
+    return se.type === "file" ? `<div class="code">${codeLines(se.content)}</div>` : `<div class="fempty">${esc(p.path)} is a folder.</div>`;
+  }
+  if (p.mode === "history") return fileHistoryHtml(subject, p.path);
+  if (p.mode === "blame") {
+    const b = FM.blame(W.sim, subject, p.path);
+    if (!b) return `<div class="fempty">${esc(p.path)} does not exist at ${esc(pointLabel(subject))}.</div>`;
+    let last = null;
+    const rows = b.lines.map((ln) => {
+      const o = ln.origin, first = o.id !== last; last = o.id;
+      return `<div class="cl"><span class="bch${first ? "" : " cont"}" style="--bc:${o.kind === "layer" ? "var(--purple)" : laneColor(o.branch)}" data-fblame="${o.id}" title="${esc(o.id)} · ${esc(W.attrib[o.id] || "")} · click to diff with its parent">${first ? o.id : ""}</span><span class="no">${ln.n}</span><span class="tx">${esc(ln.text) || " "}</span></div>`;
+    }).join("");
+    return `<div class="fsum">Blame at <b>${esc(pointLabel(subject))}</b> · composed from ${b.versions} saved versions</div><div class="code">${rows}</div>`;
+  }
+  if (!bv) return `<div class="fempty">Diff needs something to compare with: parent, fork point or main.</div>`;
+  if (!se && !be) return `<div class="fempty">${esc(p.path)} is in neither side.</div>`;
+  const before = be && be.type === "file" ? be.content : null, after = se && se.type === "file" ? se.content : null;
+  if (before === after) return `<div class="fsum">No changes in ${esc(p.path)} between <b>${esc(pointLabel(p.base))}</b> and <b>${esc(pointLabel(subject))}</b>.</div><div class="code">${codeLines(after || "")}</div>`;
+  let o = 0, n = 0;
+  const rows = M.lineDiff(before ?? "", after ?? "").map((d) => {
+    if ((before == null && d.op === "-") || (after == null && d.op === "+")) return "";
+    const on = d.op === "+" ? "" : ++o, nn = d.op === "-" ? "" : ++n;
+    return `<div class="cl ${d.op === "+" ? "add" : d.op === "-" ? "del" : ""}"><span class="no">${on}</span><span class="no">${nn}</span><span class="op">${d.op === " " ? "" : d.op}</span><span class="tx">${esc(d.text) || " "}</span></div>`;
+  }).join("");
+  return `<div class="fsum">${esc(p.path)} · ${before == null ? "added" : after == null ? "deleted" : "modified"} · <b>${esc(pointLabel(p.base))}</b> → <b>${esc(pointLabel(subject))}</b></div><div class="code diff">${rows}</div>`;
+}
+function filesHtml(tab) {
+  const p = filesOf(tab);
+  if (p.at !== "latest" && !W.nodes[p.at] && !p.at.startsWith("fork:")) p.at = "latest";
+  const subject = subjectOf(tab, p), sv = FM.resolveRef(W.sim, subject);
+  if (!sv) return `<div class="fempty">Nothing to show yet.</div>`;
+  const bv = p.base ? FM.resolveRef(W.sim, p.base) : null, ch = bv ? FM.changeMap(sv.tree, bv.tree) : null;
+  const parent = FM.parentRef(W.sim, subject) || "", fork = tab === "main" ? "" : "fork:" + tab;
+  const preset = (v, label) => (v ? `<button class="chipb${p.base === v ? " on" : ""}" data-fbase="${esc(tab)}|${esc(v)}">${label}</button>` : "");
+  const seg = (m, label) => `<button class="fseg${p.mode === m ? " on" : ""}" data-fmode="${esc(tab)}|${m}">${label}</button>`;
+  const flash = p.at === "latest" ? W.flash[tab] || new Set() : new Set();
+  return `<div class="fbar">${atSelect(tab, p)}<span class="sp"></span>${ch ? `<span class="fcount">${ch.count} change${ch.count === 1 ? "" : "s"}</span>` : ""}<button class="sdkbtn" data-fsdk="${esc(tab)}" title="The SDK calls behind this view">sdk</button></div>
+    <div class="fbar"><span>vs</span>${preset(parent, "parent")}${preset(fork, "fork point")}${tab !== "main" ? preset("main", "main") : ""}<button class="chipb${p.base ? "" : " on"}" data-fbase="${esc(tab)}|">none</button>
+      <label class="chk${ch ? "" : " off"}"><input type="checkbox" data-fchanged="${esc(tab)}"${p.changedOnly ? " checked" : ""}${ch ? "" : " disabled"}> changed only</label></div>
+    <div class="fbar"><span class="segs">${seg("view", "View")}${seg("blame", "Blame")}${seg("diff", "Diff")}${seg("history", "History")}</span></div>
+    ${p.sdk ? `<pre class="fsdk">${sdkCalls(subject, p)}</pre>` : ""}
+    <div class="fbody"><div class="ftree">${treeHtml(p, sv.tree, bv ? bv.tree : null, ch, "/", 0, flash)}</div>
+      <div class="fview">${p.path ? `<div class="fpath">${esc(p.path)} <span>@ ${esc(pointLabel(subject))}</span></div>${fileStatsHtml(subject, p, sv)}` : ""}${viewHtml(subject, p, sv, bv, ch)}</div></div>`;
+}
+// The global Store (sim estimate, from SimBackend.storage): dedupe and compression rates.
+function storeHtml() {
+  const z = W.engine.storage();
+  const tip = `Global Store, project ${W.sim.s.project ? W.sim.s.project.name : ""} (sim estimate). Logical ${fmtBytes(z.logical)}: every file in every saved root. Dedupe to ${fmtBytes(z.payload)}: distinct contents once (whole files; the product also dedupes chunks). Payload ${fmtBytes(z.stored)}: those contents compressed with deflate as a stand-in for zstd, no deltas. Metadata ${fmtBytes(z.metadata)}: 64 B per distinct entry + 256 B per Commit or Layer.`;
+  return `<div class="store" title="${esc(tip)}"><div class="srow"><span class="kind">STORE</span><b>${fmtBytes(z.store)}</b>${bar(z.stored, z.metadata)}<span><span class="pc">payload</span> ${fmtBytes(z.stored)} · <span class="mc">meta</span> ${fmtBytes(z.metadata)}</span></div>
+    <div class="srow"><span class="kind">RATE</span><span>logical <b>${fmtBytes(z.logical)}</b> · dedupe <b>${ratio(z.logical, z.payload)}</b> · compression <b>${ratio(z.payload, z.stored)}</b>${z.pending ? " · compressing…" : ""}</span><span class="est">sim est.</span></div></div>`;
+}
+// A Workspace's overlay: its uncommitted changes in the daemon's own database, not in the Store.
+function overlayHtml(w) {
+  const o = W.engine.overlayOf(w.eng);
+  if (!o) return "";
+  const n = o.added + o.modified + o.removed;
+  const tip = `This Workspace's overlay (sim estimate): ${n} change${n === 1 ? "" : "s"}; payload ${fmtBytes(o.payload)} is the changed files' bytes, metadata ${fmtBytes(o.metadata)} is 64 B per changed entry. It lives in the daemon's database, not in the global Store.`;
+  return `<div class="store" title="${esc(tip)}"><div class="srow"><span class="kind">OVERLAY</span><b>${fmtBytes(o.payload + o.metadata)}</b>${bar(o.payload, o.metadata)}<span>+${o.added} ~${o.modified} −${o.removed} · <span class="pc">payload</span> ${fmtBytes(o.payload)} · <span class="mc">meta</span> ${fmtBytes(o.metadata)}</span><span class="est">sim est.</span></div></div>`;
+}
 // The right column of either tab: History or Files of that tab's head.
-function rightCol(tab, title, headId, graphHtml, legend, tree) {
+function rightCol(tab, title, headId, graphHtml, legend) {
   const mode = rightMode[tab] || "history", seg = `<span class="seg"><button class="h${mode === "history" ? " on" : ""}" data-right="${tab}:history">HISTORY</button><button class="f${mode === "files" ? " on" : ""}" data-right="${tab}:files">FILES</button></span>`;
   return `<div class="col"><section class="term"><div class="thead">${seg}<span class="ttl">${esc(title)} @ ${esc(headId)}</span></div>
-    ${mode === "history" ? `<div class="graphwrap" data-scroll>${graphHtml}</div>${legend ? `<div class="legend">${legend}</div>` : ""}` : `<div class="tbody ftree">${tree}</div><div class="legend">changes since ${W.initLayer} · A added · M modified · D removed</div>`}</section></div>`;
+    ${mode === "history" ? `<div class="graphwrap" data-scroll>${graphHtml}</div>${legend ? `<div class="legend">${legend}</div>` : ""}` : filesHtml(tab)}${storeHtml()}</section></div>`;
 }
 
 function counts() {
@@ -650,7 +924,7 @@ function mainView() {
       <div class="tbody" id="scroll-hist">${histLines}</div>${inrow("init · branches · log · fork · merge · publish")}</section></div>
     <div class="col"><section class="term"><div class="thead"><span class="kind plain">BRANCHES</span><span class="ttl">${W.order.length} · by activity</span><span class="sp"></span>${counts()}</div>
       <div class="rows">${rows}</div></section></div>
-    ${W.mainHead ? rightCol("main", "main", W.mainHead, graph(null, "main"), "", fileTree("main"))
+    ${W.mainHead ? rightCol("main", "main", W.mainHead, graph(null, "main"), "")
       : `<div class="col"><div class="empty">No project yet</div></div>`}`;
 }
 
@@ -661,7 +935,7 @@ function branchView(b) {
   const wss = Object.values(W.ws).filter((w) => w.branch === b).sort((x, y) => x.born - y.born);
   const panes = wss.map((w) => `<section class="term${w.bad ? " bad" : lastHit("ws:" + w.id)}${w.born === W.seq ? " enter" : ""}" data-loc="ws:${w.id}">
       <div class="thead"><span class="kind sandbox">WORKSPACE</span>${tag(w.agent)}<span class="ttl">${esc(w.id)}</span><span class="sp"></span>${w.bad ? '<span class="pill warn">conflict</span>' : '<span class="pill run">mounted</span>'}</div>
-      <div class="tbody" data-scroll>${w.lines.map((l) => lineHtml(l, l.t === W.seq, l.dim ? "" : '<span class="prompt">$ </span>')).join("")}</div></section>`).join("");
+      <div class="tbody" data-scroll>${w.lines.map((l) => lineHtml(l, l.t === W.seq, l.dim ? "" : '<span class="prompt">$ </span>')).join("")}</div>${overlayHtml(w)}</section>`).join("");
   const recent = Object.values(W.nodes).filter((n) => n.branch === b && n.kind === "commit").slice(-4).reverse()
     .map((n) => `${n.id}  ${esc(n.by || "?")}: ${esc(n.msg || "")}`).join("\n");
   const cols = wss.length > 2 ? "1fr 1fr" : "1fr";
@@ -674,22 +948,99 @@ function branchView(b) {
     <div class="col">${wss.length ? `<div class="panes" style="grid-template-columns:${cols}">${panes}</div>`
       : `<div class="empty"><div><h3>No Workspace mounted on ${esc(b)}</h3>fs calls edit this Branch directly.<br>A <code>sandbox.mount</code> opens a pane here.${recent ? `<div class="recent">${recent}</div>` : ""}</div></div>`}
       <div class="bench" data-loc="bench" style="border-top:0;min-height:48px;background:var(--term);border-radius:8px;box-shadow:0 0 0 1px var(--term-border)"><b>Recently here</b>${recentlyOn(b).length ? "" : `<span>nobody in the last ${RECENT_S} s</span>`}</div></div>
-    ${rightCol(b, b, headId, graph(scope, b), "",
-      fileTree(b))}`;
+    ${rightCol(b, b, headId, graph(scope, b), "")}`;
 }
 
 let lastLoc = null;
 const lastHit = (loc) => (lastLoc === loc ? " hot" : "");
 
 function render() {
+  renderStatus();
+  const keepScroll = [".ftree", ".fview"].map((sel) => { const el = document.querySelector("#work " + sel); return [sel, el ? el.scrollTop : 0]; });
   if (active !== "main" && !W.branches[active]) active = "main";
   renderTabs();
   const work = $("work");
   work.className = "work " + (active === "main" ? "mainview" : "branchview");
   work.innerHTML = active === "main" ? mainView() : branchView(active);
   for (const el of work.querySelectorAll(".tbody, .graphwrap")) el.scrollTop = el.scrollHeight;
+  for (const [sel, top] of keepScroll) { const el = work.querySelector(sel); if (el) el.scrollTop = top; }
   requestAnimationFrame(placeCrabs);
 }
+
+// ------------------------------------------------------------------ status bar (tui.html)
+// Every Sandbox the engine knows, the agent dsh created it for, its mounts,
+// and its running processes. Read-only here: the story drives the engine.
+function renderStatus() {
+  const s = W.sim.s, owner = (id) => Object.keys(W.agents).find((n) => W.agents[n].sb === id), c = [`<span class="lbl">Sandboxes</span>`];
+  if (!s.sandboxOrder.length) c.push(`<span class="lbl">none yet</span>`);
+  for (const id of s.sandboxOrder) {
+    const sb = s.sandboxes[id], mounts = sb.wsOrder.filter((p) => sb.workspaces[p].mounted), n = owner(id);
+    c.push(`<span class="chip${sb.closed ? " closed" : ""}" title="${esc(id)}: created by dsh for ${esc(n || "?")}${mounts.length ? " · " + mounts.map((p) => `${id}:${p} on ${sb.workspaces[p].branch}`).join(", ") : ""}"><span class="d"></span>${n ? mascot(n, true) : ""}${esc(id)} · ${sb.closed ? "closed" : `${mounts.length} mount${mounts.length === 1 ? "" : "s"}`}</span>`);
+    for (const pid of sb.procOrder) {
+      const pr = sb.processes[pid];
+      if (pr.status === "running") c.push(`<span class="chip proc" title="Running in ${esc(id)}:${esc(pr.path)} (operator process list)"><span class="d"></span>${esc(pid)} ${esc(pr.command)}</span>`);
+    }
+  }
+  c.push(`<span class="sp"></span><span class="lbl">space play · ←→ step · F follow · hover a History node</span>`);
+  $("status").innerHTML = c.join("");
+}
+
+// ------------------------------------------------------------------ hover card (tui.html)
+// What a History node is, who made it, and which Workspaces are mounted on it.
+let cardTimer = null;
+function wsRows(name, nodeId) {
+  const s = W.sim.s, head = s.branches[name].head || "fork:" + name, rows = [];
+  for (const id of s.sandboxOrder) for (const p of s.sandboxes[id].wsOrder) {
+    const w = s.sandboxes[id].workspaces[p];
+    if (!w.mounted || w.branch !== name || (w.baseCommit || "fork:" + name) !== nodeId) continue;
+    const k = `${id}:${p}`, dirty = W.engine.dirtyOf(w), stale = nodeId !== head, agent = (W.panes[k] || {}).agent;
+    rows.push(`<button class="ws${stale ? " stale" : ""}" data-open="${esc(name)}" title="Open the ${esc(name)} tab"><span class="d"></span>${agent ? mascot(agent, true) : ""}${esc(k)}${dirty ? ` · +${dirty}` : ""}<small>${stale ? `stale · head ${head.replace("fork:", "")}` : "current"}</small></button>`);
+  }
+  return rows.length ? `<div class="sec">Workspaces mounted here</div>${rows.join("")}` : "";
+}
+function cardHtml(id) {
+  const s = W.sim.s, by = W.attrib[id] ? `by <b style="color:${AGENTS[W.attrib[id]].color}">${esc(W.attrib[id])}</b>` : "", head = '<span class="tag">head</span>';
+  const btns = `<div class="cbtns"><button class="cbtn" data-card-at="${esc(id)}">Browse files</button><button class="cbtn" data-card-cmp="${esc(id)}">Diff vs parent</button></div><div class="hint">Click the node: open Files at this point</div>`;
+  if (s.layers[id]) {
+    const l = s.layers[id];
+    return `<div class="h"><b>${l.id}</b>main${id === s.main.head ? head : ""}</div><div class="meta">Layer · root ${l.root}<br>${l.sourceCommit ? `published from ${esc(l.sourceBranch)} ${l.sourceCommit}` : "project.init"}${by ? "<br>" + by : ""}</div>${btns}`;
+  }
+  if (s.commits[id]) {
+    const c = s.commits[id], b = s.branches[c.branch];
+    const lww = (list) => (list && list.length ? "<br>" + list.map((d) => `last-writer-wins ${esc(d.path)} ← ${esc(d.kept)}`).join("<br>") : "");
+    const owner = (n) => (s.commits[n] ? `${esc(s.commits[n].branch)} ${n}` : `main ${n}`);
+    const mrg = c.mergedFrom ? `<div class="sec">Merge</div><div class="meta">merged from ${owner(c.mergedFrom)} into ${c.parent ? owner(c.parent) : "main " + c.base}${c.mergeBase ? `<br>merge base ${esc(c.mergeBase)}` : ""}${lww(c.lww)}</div>`
+      : c.merged ? `<div class="sec">Merged on commit</div><div class="meta">the Workspace was on ${c.merged.from}; merged with head ${c.merged.head}${lww(c.merged.lww)}</div>` : "";
+    const after = c.displacedBy ? `<div class="sec">Off the line</div><div class="meta">${c.displacedBy} was committed with --force, so ${c.id} is no longer an ancestor of the head.</div>` : "";
+    return `<div class="h"><b>${c.id}</b>${esc(c.branch)}${b.head === id ? head : ""}</div>
+      <div class="meta">parent ${c.parent || "Branch base"} · root ${c.root}<br>${by}${by ? " · " : ""}${esc(c.message || c.via)}<br>via ${esc(c.by === "fs" ? c.via : c.by === "merge" ? "branch.merge" : "sandbox.commit " + c.via)}</div>${mrg}${after}${wsRows(c.branch, id)}${btns}`;
+  }
+  const name = id.slice(5), b = s.branches[name];
+  return `<div class="h"><b>${esc(name)}</b>fork point${b.head ? "" : head}</div><div class="meta">forked from ${b.from}${b.head ? "" : " · no Commits yet"}${by ? "<br>" + by : ""}</div>${wsRows(name, id)}${btns}`;
+}
+function showCard(node) {
+  clearTimeout(cardTimer);
+  const card = $("hcard"), r = node.getBoundingClientRect();
+  card.innerHTML = cardHtml(node.dataset.node);
+  card.classList.add("open");
+  const h = card.offsetHeight;
+  card.style.left = Math.max(8, Math.min(innerWidth - 298, r.left + r.width / 2 - 145)) + "px";
+  card.style.top = (r.bottom + 8 + h > innerHeight ? r.top - h - 8 : r.bottom + 8) + "px";
+}
+const hideCard = (now) => { clearTimeout(cardTimer); cardTimer = setTimeout(() => $("hcard").classList.remove("open"), now ? 0 : 180); };
+$("work").addEventListener("mouseover", (e) => { const n = e.target.closest && e.target.closest("svg.graph [data-node]"); if (n) showCard(n); });
+$("work").addEventListener("mouseout", (e) => { const n = e.target.closest && e.target.closest("svg.graph [data-node]"); if (n && !n.contains(e.relatedTarget)) hideCard(); });
+$("hcard").addEventListener("mouseenter", () => clearTimeout(cardTimer));
+$("hcard").addEventListener("mouseleave", () => hideCard());
+// Card buttons open the node's lane at that point, in Files.
+$("hcard").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-card-at], [data-card-cmp]"); if (!b) return;
+  const id = b.dataset.cardAt || b.dataset.cardCmp, n = W.nodes[id]; if (!n) return;
+  const lane = n.branch || "main";
+  active = lane; follow = false; $("follow").classList.remove("on");
+  showPoint(lane, id); filesOf(lane).mode = b.dataset.cardCmp ? "diff" : "view";
+  hideCard(true); render();
+});
 
 // ------------------------------------------------------------------ crabs
 function crabEl(n) {
@@ -826,6 +1177,39 @@ $("theme").onclick = () => {
   const dark = matchMedia("(prefers-color-scheme: dark)").matches, cur = document.documentElement.dataset.theme || (dark ? "dark" : "light");
   document.documentElement.dataset.theme = cur === "dark" ? "light" : "dark"; render();
 };
+// Files controls, and History nodes that open Files at that point.
+function filesClick(e) {
+  const t = e.target, at = (sel) => t.closest(sel);
+  const tabOfPane = () => active;
+  let el;
+  if ((el = at("[data-fmode]"))) { const [tab, m] = el.dataset.fmode.split("|"); filesOf(tab).mode = m; render(); return true; }
+  if ((el = at("[data-fbase]"))) { const [tab, v] = el.dataset.fbase.split("|"); filesOf(tab).base = v; render(); return true; }
+  if ((el = at("[data-fsdk]"))) { const p = filesOf(el.dataset.fsdk); p.sdk = !p.sdk; render(); return true; }
+  if ((el = at("[data-ftree]"))) {
+    const p = filesOf(tabOfPane()), path = el.dataset.ftree;
+    if (el.dataset.ftype === "dir") { p.toggled = p.toggled.includes(path) ? p.toggled.filter((x) => x !== path) : [...p.toggled, path]; }
+    else p.path = path;
+    render(); return true;
+  }
+  if ((el = at("[data-fopen]"))) { const p = filesOf(tabOfPane()); p.path = el.dataset.fopen; if (p.mode === "view") p.mode = "diff"; render(); return true; }
+  if ((el = at("[data-fblame]"))) { const p = filesOf(tabOfPane()), id = el.dataset.fblame; showPoint(tabOfPane(), id); p.mode = "diff"; render(); return true; }
+  if ((el = at("svg.graph [data-node]"))) { showPoint(tabOfPane(), el.dataset.node); render(); return true; }
+  return false;
+}
+// Points Files at one node: on this tab's lane it pins the subject there; any
+// other node becomes the subject's base. The base defaults to its parent.
+function showPoint(tab, id) {
+  const p = filesOf(tab), n = W.nodes[id]; if (!n) return;
+  const lane = n.branch || "main";
+  if (lane === tab) { p.at = n.kind === "fork" ? "fork:" + tab : id; p.base = FM.parentRef(W.sim, p.at) || ""; }
+  else p.base = n.kind === "fork" ? id : id;
+  rightMode[tab] = "files";
+}
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (t.dataset.fat) { const p = filesOf(t.dataset.fat); p.at = t.value; p.base = p.at === "latest" ? defaultBase(t.dataset.fat) : FM.parentRef(W.sim, p.at) || ""; render(); }
+  else if (t.dataset.fchanged) { filesOf(t.dataset.fchanged).changedOnly = t.checked; render(); }
+});
 function closeMenu() { const m = document.querySelector(".menu"); if (m) m.remove(); }
 $("tabs").onclick = (e) => {
   closeMenu();
@@ -842,6 +1226,9 @@ $("tabs").onclick = (e) => {
   if (t) { active = t.dataset.tab; follow = false; $("follow").classList.remove("on"); render(); }
 };
 document.addEventListener("click", (e) => {
+  const sd = e.target.closest("[data-sdk]");
+  if (sd) { const k = sd.dataset.sdk; OPEN_SDK.has(k) ? OPEN_SDK.delete(k) : OPEN_SDK.add(k); render(); return; }
+  if (filesClick(e)) return;
   const ro = e.target.closest("[data-roster]");
   if (ro) { closeMenu(); rosterMenu(ro); return; }
   const r = e.target.closest("[data-right]");
