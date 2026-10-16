@@ -1,9 +1,13 @@
-// The LayerFS sidebar page: every LayerFS project, the dsh workspace each is
-// attached to (change or detach it), its History and Files, and a new
-// session on the LayerFS preset; a project can be removed (RemoveDialog).
-// Workspaces without a project offer Init (InitDialog). ellen_joe keeps the
-// page company.
+// The LayerFS sidebar page. On the left, every LayerFS project (with the dsh
+// workspace it is attached to) and "Import project" for workspaces without
+// one (InitDialog). On the right, the chosen project: a header with its one
+// action, New session, and a menu for Refresh, the attached workspace and
+// Remove (RemoveDialog); four stats (where main is, Branches, Commits, the
+// last publish); then its History and Files (ProjectBoard). ellen_joe sits in
+// the header, and full size where there is nothing else to show.
+// Colours, borders and radii are dsh's own tokens (--dsw-*).
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { Button, IconEllipsisOutlineRegular, IconFolderOpenOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular, IconTrashOutlineRegular, Menu, type MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import ellen from '../../../../../sdk_sim/avatars/ellen_joe.gif'
 import { api, type Project, type ProjectState, type Status } from './api.ts'
 import { InitDialog } from './InitDialog.tsx'
@@ -20,11 +24,18 @@ interface Workspace { workspaceId: string, path: string, title: string }
 const PRESET = 'layerfs-dsh-minimalist'
 const NO_ITEMS = { items: [] as readonly Workspace[] }
 const NOT_LISTED = { getSnapshot: () => NO_ITEMS, subscribe: () => () => {} }
-const muted = 'var(--dsh-color-fg-muted, #8a8a8a)'
-const line = 'var(--dsh-color-border, #8883)'
-const button = { font: 'inherit', fontSize: 12, padding: '4px 12px', borderRadius: 6, border: `1px solid ${line}`, background: 'transparent', color: 'inherit', cursor: 'pointer' } as const
-const primary = { ...button, background: 'var(--dsh-color-fg, #111)', color: 'var(--dsh-color-bg, #fff)', border: '1px solid transparent' } as const
-const chip = (on: boolean) => ({ ...button, borderRadius: 999, background: on ? 'var(--dsh-color-bg-muted, #8882)' : 'transparent', fontWeight: on ? 600 : 400 })
+
+// dsh tokens, and the 4/8/12/16/24 spacing scale
+const T = {
+  text: 'var(--dsw-alias-label-primary)', text2: 'var(--dsw-alias-label-secondary)', caption: 'var(--dsw-alias-label-caption)',
+  border: 'var(--dsw-alias-border-l2)', card: 'var(--dsw-alias-bg-layer-1)', well: 'var(--dsw-alias-bg-skeleton)',
+  hover: 'var(--dsw-alias-interactive-bg-hover)', active: 'var(--dsw-alias-interactive-bg-active)',
+  danger: 'var(--dsw-alias-state-error-primary)', warn: 'var(--dsw-alias-state-warn-primary)',
+  sm: 'var(--dsw-radius-sm)', md: 'var(--dsw-radius-md)',
+} as const
+const ROWS = `.lfs-prow { background: transparent; } .lfs-prow:hover { background: ${T.hover}; } .lfs-prow[aria-current='true'] { background: ${T.active}; }`
+// a card: dsh's layer fill (white in light mode) inside a hairline, as dsh's settings cards
+const card = { background: T.card, border: `1px solid ${T.border}`, borderRadius: T.md } as const
 
 export function LayerFsIcon({ size }: { size?: number }) {
   const s = size ?? 16
@@ -36,21 +47,37 @@ export function LayerFsIcon({ size }: { size?: number }) {
 }
 
 const short = (path: string) => path.split('/').filter(Boolean).slice(-2).join('/')
+const day = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 
-/** One line for ellen_joe's bubble: where main is and what was published last. */
-function summary(state: ProjectState | null, error: string | null) {
-  // the SDK refuses a second client while one is starting the project's
-  // service Sandbox (the first one also installs the Store into the volume)
-  if (error && /^Busy\b/.test(error)) return "LayerFS is busy with this project: another client is starting its Sandbox (the first one installs the Store, which takes a while for a big project). Press Refresh in a moment."
-  if (error) return `I couldn't read this project: ${error}`
-  if (!state) return 'Reading the project…'
+/** The four stats over the board: [label, value, title?]. */
+function stats(state: ProjectState): [string, string, string?][] {
   const s = state.s, real = Object.fromEntries(Object.entries(state.labels).map(([r, l]) => [l, r]))
   const last = Object.values(s.layers as Record<string, any>).filter((l) => l.sourceBranch).sort((a, b) => b.slot - a.slot)[0]
-  const branches = s.branchOrder.length, commits = Object.keys(s.commits).length
-  const head = `main is at ${s.main?.head ?? '–'} · ${branches} Branch${branches === 1 ? '' : 'es'}, ${commits} Commit${commits === 1 ? '' : 's'}.`
-  if (!last) return `${head} Nothing published yet.`
-  const by = state.authors[real[last.id]]
-  return `${head} Last publish: ${last.sourceBranch} as ${last.id}${by ? `, by ${by}` : ''}.`
+  const by = last && state.authors[real[last.id]]
+  return [
+    ['main', s.main?.head ?? '–'],
+    ['Branches', String(s.branchOrder.length)],
+    ['Commits', String(Object.keys(s.commits).length)],
+    ['Last publish', last ? `${last.sourceBranch}${by ? ` · ${by}` : ''}` : 'Nothing yet', last ? `${last.sourceBranch} published as ${last.id}${by ? ` by ${by}` : ''}` : undefined],
+  ]
+}
+
+/** Why the project could not be read, in words. */
+function problem(error: string) {
+  // the SDK refuses a second client while one is starting the project's
+  // service Sandbox (the first one also installs the Store into the volume)
+  if (/^Busy\b/.test(error)) return "LayerFS is busy with this project: another client is starting its Sandbox. The first start installs the Store, which takes a while for a big project. Refresh in a moment."
+  return `This project couldn't be read: ${error}`
+}
+
+/** ellen_joe at full size, for a page with nothing else to show. */
+function Notice({ title, children }: { title: string, children?: React.ReactNode }) {
+  return (
+    <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 16, padding: 16 }}>
+      <img src={ellen} alt="" width={72} height={72} style={{ flex: 'none' }} />
+      <div style={{ display: 'grid', gap: 4 }}><div style={{ fontWeight: 500 }}>{title}</div>{children && <div style={{ color: T.text2 }}>{children}</div>}</div>
+    </div>
+  )
 }
 
 export function LayerFsPanel({ services }: { services: () => PanelServices }) {
@@ -68,6 +95,7 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
   const [reads, setReads] = useState(0)
   const [initFor, setInitFor] = useState<Workspace | null>(null)
   const [removing, setRemoving] = useState(false)
+  const [menu, setMenu] = useState<'project' | 'import' | null>(null)
 
   const loadProjects = useCallback(() => api.projects().then(({ projects }) => { setProjects(projects); return projects }), [])
   useEffect(() => {
@@ -94,66 +122,87 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
     await api.attach(project!.name, project!.folder) // the folder's project for the new session
     uiWorkspace!.startSession(workspace!.workspaceId, { agentPreset: PRESET })
   })
+  const folderOf = (p: Project) => (p.folder ? items.find((w) => w.path === p.folder)?.title ?? short(p.folder) : null)
+
+  // the project menu: Refresh, the attached workspace (a submenu), Remove
+  const projectMenu: MenuEntry[] = project ? [
+    { id: 'refresh', label: 'Refresh', icon: <IconRefreshOutlineRegular size={16} /> },
+    {
+      id: 'attach', label: 'Attached workspace', icon: <IconFolderOpenOutlineRegular size={16} />, submenu: [
+        ...items.map((w) => ({ id: `attach:${w.path}`, label: `${w.title} · ${short(w.path)}` })),
+        { id: 'detach', label: 'Not attached' },
+      ],
+    },
+    { type: 'separator', id: 'sep' },
+    { id: 'remove', label: 'Remove project…', icon: <IconTrashOutlineRegular size={16} />, danger: true },
+  ] : []
+  const onProjectMenu = (id: string) => {
+    setMenu(null)
+    if (id === 'refresh') setReads((n) => n + 1)
+    else if (id === 'remove') setRemoving(true)
+    else if (id === 'detach') void attach(null)
+    else if (id.startsWith('attach:')) void attach(id.slice('attach:'.length))
+  }
+  const importMenu: MenuEntry[] = bare.length
+    ? [{ type: 'label', id: 'l', text: 'Workspaces without a project' }, ...bare.map((w) => ({ id: w.workspaceId, label: `${w.title} · ${short(w.path)}`, disabled: !status?.configured }))]
+    : [{ type: 'label', id: 'l', text: 'Every workspace has a project' }]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '20px 24px', height: '100%', boxSizing: 'border-box', fontSize: 13, lineHeight: 1.5, minHeight: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 16, fontWeight: 600, marginRight: 8 }}>LayerFS</span>
-        {projects?.map((p) => (
-          <button key={p.name} style={chip(p.name === selected)} onClick={() => setSelected(p.name)} title={p.folder ? `attached to ${p.folder}` : 'not attached to a workspace'}>
-            {p.name}{p.folder ? '' : ' · detached'}
-          </button>
-        ))}
-        {status && !status.configured && <span style={{ color: muted }}>Not set up: missing {status.missing.join(', ')} in layerfs-host.</span>}
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <img src={ellen} alt="ellen_joe" width={88} height={88} style={{ flex: 'none' }} />
-        <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 8 }}>
-          <div style={{ position: 'relative', alignSelf: 'start', justifySelf: 'start', padding: '8px 12px', borderRadius: 12, background: 'var(--dsh-color-bg-muted, #8881)', border: `1px solid ${line}` }}>
-            {project ? summary(state, stateError) : projects?.length === 0 ? 'No LayerFS project yet. Init one from a workspace below.' : 'Pick a project.'}
-          </div>
-          {project && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', color: muted }}>
-              <span>Workspace</span>
-              <select
-                aria-label="Workspace this project is attached to"
-                value={project.folder ?? ''}
-                disabled={!!busy}
-                onChange={(e) => { void attach(e.target.value || null) }}
-                style={{ ...button, cursor: 'pointer', maxWidth: 360 }}
-              >
-                <option value="">not attached</option>
-                {items.map((w) => <option key={w.workspaceId} value={w.path}>{w.title} · {short(w.path)}</option>)}
-                {project.folder && !items.some((w) => w.path === project.folder) && <option value={project.folder}>{short(project.folder)} (not a dsh workspace)</option>}
-              </select>
-              <span title={project.volume}>imported from {short(project.source)} · {new Date(project.created).toLocaleDateString()}</span>
-              <button style={button} onClick={() => setReads((n) => n + 1)} title="Read the project again">Refresh</button>
-              <button style={{ ...button, color: 'var(--dsh-color-fg-danger, #d33)' }} disabled={!!busy} onClick={() => setRemoving(true)}>Remove project…</button>
-            </div>
-          )}
-        </div>
-        {project && (
-          <button style={primary} disabled={!!busy || !workspace || !uiWorkspace} onClick={() => { void newSession() }} title={workspace ? `New session in ${workspace.title} on the LayerFS × DSH minimalist preset` : 'Attach the project to a dsh workspace first'}>
-            New LayerFS session
-          </button>
-        )}
-      </div>
-
-      {(busy || error) && <div style={{ color: error ? 'var(--dsh-color-fg-danger, #d33)' : muted }}>{error ?? busy}</div>}
-      {project && state && <ProjectBoard name={project.name} state={state} />}
-      {project && !state && <div style={{ flex: 1, minHeight: 380, border: `1px dashed ${line}`, borderRadius: 10 }} />}
-
-      {bare.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', color: muted, borderTop: `1px solid ${line}`, paddingTop: 10 }}>
-          <span>No project yet:</span>
-          {bare.map((w) => (
-            <button key={w.workspaceId} style={button} disabled={!!busy || !status?.configured} onClick={() => setInitFor(w)} title={`Init LayerFS for ${w.path}`}>
-              Init {w.title}
+    <div style={{ display: 'grid', gridTemplateColumns: 'clamp(150px, 18%, 200px) minmax(0, 1fr)', height: '100%', minHeight: 0, fontSize: 13, lineHeight: '20px', color: T.text }}>
+      <style>{ROWS}</style>
+      <nav aria-label="LayerFS projects" style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0, padding: '16px 8px', borderRight: `1px solid ${T.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px 8px', fontWeight: 500 }}><LayerFsIcon size={16} />LayerFS</div>
+        <div style={{ display: 'grid', gap: 2, overflowY: 'auto', minHeight: 0 }}>
+          {projects?.map((p) => (
+            <button key={p.name} className="lfs-prow" aria-current={p.name === selected} onClick={() => setSelected(p.name)} title={p.folder ?? 'Not attached to a workspace'}
+              style={{ display: 'grid', textAlign: 'left', gap: 0, padding: '6px 8px', border: 0, borderRadius: T.sm, color: 'inherit', font: 'inherit', cursor: 'pointer' }}>
+              <span style={{ fontWeight: p.name === selected ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+              <span style={{ fontSize: 12, color: p.folder ? T.text2 : T.caption, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folderOf(p) ?? 'Not attached'}</span>
             </button>
           ))}
         </div>
-      )}
+        <div style={{ flex: 1 }} />
+        <Menu open={menu === 'import'} onClose={() => setMenu(null)} items={importMenu} align="start" side="top" portal
+          onSelect={(id) => { setMenu(null); const w = bare.find((x) => x.workspaceId === id); if (w) setInitFor(w) }}
+          anchor={<Button variant="ghost" size="sm" icon={<IconPlusOutlineRegular size={16} />} onClick={() => setMenu(menu === 'import' ? null : 'import')} style={{ width: '100%', justifyContent: 'flex-start' }}>Import project</Button>} />
+      </nav>
+
+      <main style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, minHeight: 0, padding: '16px 24px' }}>
+        {status && !status.configured && <div style={{ ...card, padding: '8px 12px', color: T.warn }}>LayerFS isn't set up: layerfs-host is missing {status.missing.join(', ')}.</div>}
+        {projects && projects.length === 0 && <Notice title="Start your first project">Import a folder from a workspace: LayerFS keeps a versioned copy that agents fork, test and merge.</Notice>}
+        {project && (
+          <>
+            <header style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+              <img src={ellen} alt="" width={36} height={36} style={{ flex: 'none', borderRadius: '50%', background: T.well }} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 16, fontWeight: 500, lineHeight: '24px' }}>{project.name}</div>
+                <div style={{ fontSize: 12, color: T.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={project.volume}>
+                  {project.folder ? folderOf(project) : 'Not attached to a workspace'} · imported {day(project.created)} from {short(project.source)}
+                </div>
+              </div>
+              <Button variant="primary" size="sm" disabled={!!busy || !workspace || !uiWorkspace} onClick={() => { void newSession() }}
+                title={workspace ? `New session in ${workspace.title} on the LayerFS × DSH minimalist preset` : 'Attach the project to a workspace first (in the … menu)'}>New session</Button>
+              <Menu open={menu === 'project'} onClose={() => setMenu(null)} items={projectMenu} onSelect={onProjectMenu} align="end" portal
+                anchor={<Button variant="ghost" size="sm" aria-label="Project actions" icon={<IconEllipsisOutlineRegular size={16} />} disabled={!!busy} onClick={() => setMenu(menu === 'project' ? null : 'project')} />} />
+            </header>
+            {(busy || error) && <div role="status" style={{ color: error ? T.danger : T.text2 }}>{error ?? busy}</div>}
+            {stateError
+              ? <Notice title="Couldn't read this project">{problem(stateError)}</Notice>
+              : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
+                  {(state ? stats(state) : [['main'], ['Branches'], ['Commits'], ['Last publish']] as [string, string?, string?][]).map(([label, value, title]) => (
+                    <div key={label} title={title} style={{ ...card, padding: '8px 12px', minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: T.text2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+                      <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: value ? T.text : T.caption }}>{value ?? '…'}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            {state && <ProjectBoard name={project.name} state={state} />}
+            {!state && !stateError && <div style={{ flex: 1, minHeight: 380, border: `1px dashed ${T.border}`, borderRadius: T.md }} />}
+          </>
+        )}
+      </main>
       {removing && project && <RemoveDialog project={project} onClose={() => setRemoving(false)} onDone={() => {
         setRemoving(false)
         void loadProjects().then((all) => setSelected((all.find((p) => p.folder) ?? all[0])?.name ?? null))
