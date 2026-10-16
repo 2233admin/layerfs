@@ -50,6 +50,12 @@ button { font: inherit; color: inherit; }
 .titlebar { height: 46px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 14px; background: var(--chrome); border-bottom: .5px solid var(--sep); }
 .brand { display: flex; align-items: center; gap: 7px; font-weight: 600; margin-right: 6px; white-space: nowrap; }
 .brand small { font-weight: 400; color: var(--text-2); font-size: 11px; }
+.mode { display: inline-flex; border: 1px solid var(--sep-strong); border-radius: 6px; overflow: hidden; font: 600 10.5px/1 var(--mono, ui-monospace, monospace); flex: none; }
+.mode a { padding: 4px 7px; color: var(--text-2); text-decoration: none; }
+.mode a.on { background: var(--accent); color: #fff; } .mode a.on[data-mode="live"] { background: var(--green, #1f9d55); }
+.ib:disabled { opacity: .35; cursor: default; } .player .dots.locked i { cursor: default; }
+.player .ev .busy { color: var(--orange); } .player .ev .err { color: var(--red); } .player .ev .ok { color: var(--green); }
+.storysel { font: 500 11.5px var(--font); border: 1px solid var(--sep-strong); border-radius: 6px; background: var(--card); color: var(--text); padding: 3px 4px; flex: none; max-width: 140px; }
 .tabs { display: flex; gap: 4px; align-items: center; min-width: 0; overflow-x: auto; flex: 1; scrollbar-width: none; padding: 4px 0; }
 .tab { height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 10px; border-radius: 7px; cursor: pointer; color: var(--text-2); white-space: nowrap; border: 0; background: transparent; position: relative; transition: opacity .4s, background .2s; }
 .tab:hover { background: var(--sep); }
@@ -72,8 +78,10 @@ button { font: inherit; color: inherit; }
 
 /* work area */
 .work { flex: 1; min-height: 0; display: grid; gap: 6px; padding: 6px; background: var(--grid-bg); }
-.work.mainview { grid-template-columns: minmax(260px, 1fr) minmax(300px, 1.3fr) minmax(280px, 1fr); }
-.work.branchview { grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.8fr) minmax(280px, 1fr); }
+.work.mainview { grid-template-columns: minmax(240px, .9fr) minmax(300px, 1fr) minmax(320px, 1.4fr); }
+.work.branchview { grid-template-columns: minmax(240px, 1fr) minmax(300px, 1.55fr) minmax(300px, 1.3fr); }
+.work.branchview.wide { grid-template-columns: minmax(200px, .7fr) minmax(260px, 1fr) minmax(320px, 1.7fr); }
+.work.mainview.wide { grid-template-columns: minmax(200px, .7fr) minmax(260px, .8fr) minmax(320px, 1.7fr); }
 .seg { display: inline-flex; background: var(--well); border-radius: 6px; padding: 2px; gap: 2px; flex: none; }
 .seg button { border: 0; background: transparent; font: 700 10px var(--mono); letter-spacing: .03em; padding: 2px 8px; border-radius: 4px; cursor: pointer; color: var(--text-2); }
 .seg button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 0 0 .5px var(--sep); }
@@ -105,6 +113,8 @@ button { font: inherit; color: inherit; }
 .out.good { color: var(--t-green); } .out.bad { color: var(--t-red); } .out.mark { color: var(--t-orange); }
 .prompt { color: var(--t-blue); }
 .inrow { flex: none; display: flex; align-items: center; gap: 6px; padding: 5px 10px 7px; font: 12px var(--mono); color: var(--term-dim); border-top: 1px solid var(--term-border); }
+.inrow .prompt { flex: none; white-space: nowrap; }
+.inrow > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inrow .caret { width: 7px; height: 14px; background: var(--term-dim); opacity: .5; animation: blink 1.1s steps(2) infinite; }
 
 /* main view */
@@ -133,7 +143,9 @@ svg.graph .rt .dim { fill: var(--term-dim); }
 svg.graph .rt .hd { font-weight: 700; fill: var(--accent); }
 @keyframes popin { from { transform: scale(0); } to { transform: scale(1); } }
 .rows { flex: 1; min-height: 0; overflow: auto; padding: 4px; }
-.brow { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 6px; cursor: pointer; min-height: 46px; transition: background .25s; }
+.brow { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 6px; cursor: pointer; min-height: 32px; transition: background .25s; }
+.brow .slot { width: 100px; height: 20px; flex: none; }
+.brow .hd { font: 11px var(--mono); color: var(--text-2); width: 34px; text-align: right; flex: none; }
 .brow:hover { background: var(--well); }
 .brow.flash { animation: flash 1s ease-out; }
 .brow .st { width: 16px; text-align: center; font-size: 12px; flex: none; }
@@ -176,7 +188,27 @@ svg.graph .rt .hd { font-weight: 700; fill: var(--accent); }
 .fbar .sp { flex: 1; } .fbar .fcount { font: 11px var(--mono); } .fbar .sdkbtn { opacity: 1; margin-left: 0; }
 .fsdk { margin: 0; padding: 6px 10px; background: var(--well); border-bottom: 1px solid var(--term-border); font: 11px/1.5 var(--mono); color: var(--term-text); white-space: pre-wrap; }
 .fbody { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.ftree { flex: none; max-height: 40%; overflow: auto; border-bottom: 1px solid var(--term-border); padding: 4px 0; font: 12px/1.5 var(--mono); color: var(--term-text); }
+.ftree, .flist { flex: 1; min-height: 0; overflow: auto; padding: 4px 0 10px; font: 12px/1.6 var(--mono); color: var(--term-text); }
+.fhead { flex: none; display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: var(--term-head); border-bottom: 1px solid var(--term-border); font-size: 11.5px; color: var(--term-dim); min-width: 0; }
+.fhead .fsel { min-width: 0; flex: 0 1 auto; } .fhead .sp { flex: 1; min-width: 4px; }
+.fhead .fcount { font: 11px var(--mono); white-space: nowrap; } .fhead .sdkbtn { opacity: 1; margin-left: 0; flex: none; }
+.fwide { flex: none; border: 0; background: none; color: var(--term-dim); font-size: 13px; width: 22px; height: 22px; border-radius: 5px; cursor: pointer; }
+.fwide:hover, .fwide.on { background: var(--well); color: var(--term-text); }
+.fsw, .fmodes { flex: none; display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-bottom: 1px solid var(--term-border); min-width: 0; }
+.fsw .segs, .fmodes .segs { display: inline-flex; background: var(--well); border-radius: 6px; padding: 2px; flex: none; }
+.fsw .fseg, .fmodes .fseg { border: 0; background: transparent; padding: 2px 10px; border-radius: 4px; cursor: pointer; font-size: 11.5px; color: var(--term-dim); }
+.fsw .fseg.on, .fmodes .fseg.on { background: var(--card); color: var(--term-text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.fsw .fseg b { font-weight: 600; margin-left: 2px; }
+.fmodes .sp { flex: 1; } .fstat { font-size: 11px; color: var(--term-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: help; } .fstat b { color: var(--term-text); }
+.fdir { padding: 6px 10px 1px; color: var(--term-dim); font-size: 11px; }
+.fgroup { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 4px 10px; border-top: 1px dashed var(--term-border); color: var(--term-dim); font-size: 11.5px; cursor: pointer; white-space: nowrap; }
+.fgroup:hover { background: var(--well); } .fgroup b { color: var(--term-text); font-weight: 600; } .fgroup .car { width: 10px; } .fgroup .nm { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.fb.lead { margin: 0 6px 0 0; }
+.fpage { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--term-border); min-width: 0; }
+.fback { flex: none; border: 0; background: var(--well); color: var(--accent); font-size: 11.5px; padding: 2px 8px; border-radius: 5px; cursor: pointer; }
+.fback:hover { background: var(--accent-bg); }
+.fpathx { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--mono); }
+.fpathx .dir { color: var(--term-dim); } .fpathx b { color: var(--term-text); }
 .frow { display: flex; align-items: center; gap: 4px; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
 .frow:hover { background: var(--well); } .frow.sel { background: var(--accent-bg); }
 .frow.flash { animation: flash 1.2s ease-out; }
@@ -215,6 +247,30 @@ svg.graph .node { cursor: pointer; }
 .chip.closed { opacity: .5; } .chip.closed .d { background: var(--text-3); }
 .chip.proc .d { background: var(--orange); animation: blink 1.2s steps(2) infinite; }
 .chip.enter { animation: grow .3s ease-out; }
+.sblist { flex: 1 1 0; min-height: 140px; }
+.blist { flex: 0 1 auto; max-height: 48%; min-height: 96px; }
+.blist .rows { overflow-y: auto; padding: 4px; }
+.sbg { display: flex; flex-direction: column; gap: 1px; padding: 4px 2px 6px; border-radius: 6px; transition: box-shadow .15s; }
+.sbg + .sbg { border-top: 1px solid var(--term-border); }
+.sbg.closed { opacity: .5; }
+.sbg.sblit, .term.sblit { box-shadow: 0 0 0 2px var(--orange), 0 6px 18px rgba(0,0,0,.12); }
+.sbg.pulse { animation: focuspane 1.6s ease-out; }
+.sbh { display: flex; align-items: center; gap: 6px; padding: 2px 4px; font: 11.5px var(--mono); }
+.sbh .d { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: none; } .sbh .d.idle { background: var(--text-3); } .sbh .d.off { background: transparent; box-shadow: 0 0 0 1px var(--text-3); }
+.sbh .mk { display: inline-flex; gap: 4px; align-items: center; color: var(--term-dim); font: 11px var(--font); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sbh b, .sbh .ct { flex: none; white-space: nowrap; } .sbh .sp { flex: 1; } .sbh .ct { color: var(--term-dim); font-size: 10.5px; white-space: nowrap; }
+.dnote { font-size: 10.5px; color: var(--t-orange); padding: 0 4px 0 17px; }
+.dws { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; color: var(--term-text); font: 11px var(--mono); padding: 3px 4px 3px 15px; border-radius: 5px; cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden; }
+.dws:hover { background: var(--well); }
+.dws .at { color: var(--term-dim); }
+.dws .noag { width: 14px; text-align: center; color: var(--term-dim); }
+.bchip { font: 10.5px var(--mono); padding: 0 5px; border-radius: 4px; color: var(--bc); box-shadow: inset 0 0 0 1px var(--bc); white-space: nowrap; }
+.st { font-size: 10px; color: var(--term-dim); } .st.warn { color: var(--t-orange); } .st.bad { color: var(--t-red); } .st.run { color: var(--t-green); overflow: hidden; text-overflow: ellipsis; }
+button.chip { border: 0; color: inherit; cursor: pointer; }
+.sbchip { border: 0; font: 10.5px var(--mono); padding: 1px 6px; border-radius: 4px; background: var(--well); color: var(--term-text); cursor: pointer; flex: none; }
+.sbchip:hover { background: var(--orange-bg); color: var(--t-orange); }
+.term.focus { animation: focuspane 1.2s ease-out; }
+@keyframes focuspane { 0%, 40% { box-shadow: 0 0 0 2.5px var(--accent), 0 6px 18px rgba(0,0,0,.18); } }
 /* Hover card on History nodes (tui.html) */
 .hcard { position: fixed; z-index: 65; width: 290px; background: var(--card); border-radius: 10px; box-shadow: 0 14px 44px rgba(0,0,0,.24), 0 0 0 .5px var(--sep-strong); padding: 8px; display: none; font-size: 12px; }
 .hcard.open { display: block; animation: grow .12s ease-out; }
@@ -298,13 +354,16 @@ svg.graph .node { cursor: pointer; }
   .brand small, #follow .lbl { display: none; }
   .titlebar { padding: 0 6px 0 10px; gap: 4px; }
 }
+@media (max-width: 520px) { .bname { display: none; } .brand { margin-right: 0; } .storysel { max-width: 92px; } .mode a { padding: 4px 5px; } }
 @media (prefers-reduced-motion: reduce) { .crab, .block { transition: none; } .crab svg, .crab .leg, .crab .claw { animation: none !important; } }
 </style>
 </head>
 <body>
 <div class="window">
   <header class="titlebar">
-    <div class="brand"><svg width="14" height="14" viewBox="0 0 16 16"><path d="M8 1l7 3.5-7 3.5L1 4.5z" fill="currentColor"/><path d="M1 8l7 3.5L15 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M1 11.5L8 15l7-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" opacity=".55"/></svg>LayerFS × dsh <small>design preview · scripted</small></div>
+    <div class="brand"><svg width="14" height="14" viewBox="0 0 16 16"><path d="M8 1l7 3.5-7 3.5L1 4.5z" fill="currentColor"/><path d="M1 8l7 3.5L15 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M1 11.5L8 15l7-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" opacity=".55"/></svg><span class="bname">LayerFS × dsh</span> <small>design preview · scripted</small></div>
+    <span class="mode" id="mode" title="Engine: sim = the simulator in this page; live = real LayerFS through node sdk_sim/server/server.mjs"><a data-mode="sim" href="?backend=sim">sim</a><a data-mode="live" href="?backend=live">live</a></span>
+    <select class="storysel" id="story" title="Story: the dsh design story, or a tui.html demo story played by dsh agents"><option value="dsh">dsh story</option><option value="agents">Demo · 5 agents</option><option value="tour">Demo · Tour</option><option value="conflicts">Demo · Conflicts</option><option value="merge">Demo · Commit &amp; merge</option></select>
     <div class="tabs" id="tabs" role="tablist" aria-label="Tabs"></div>
     <button class="ib on" id="follow" title="Follow the acting agent across tabs (F)"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg><span class="lbl">Follow</span></button>
     <button class="ib" id="theme" title="Toggle light / dark"><svg viewBox="0 0 16 16"><path d="M8 2a6 6 0 100 12V2z" fill="currentColor"/><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
@@ -335,7 +394,9 @@ svg.graph .node { cursor: pointer; }
 <script src="simulation_engine/files.js"></script>
 <script src="simulation_engine/terminal.js"></script>
 <script src="simulation_engine/backend/sim.js"></script>
+<script src="simulation_engine/backend/live.js"></script>
 <script src="scenarios.js"></script>
+<script src="demo.js"></script>
 <script>
 "use strict";
 // ------------------------------------------------------------------ cast
@@ -350,7 +411,11 @@ const SCOUTS = ["#d6336c", "#0f8b9a", "#e08600", "#5856d6", "#8e6e53", "#c2255c"
 const RECENT_S = 90, CAP = { row: 3, term: 3, bench: 6, chip: 1 };
 const BCOL = ["--b0", "--b1", "--b2", "--b3", "--b4", "--b5"];
 const FADE_S = 30, MAX_TABS = 6;
-const M = window.LayerSim, FM = window.LayerFiles, simulateShell = window.LayerTerm.simulateShell;
+const M = window.LayerSim, FM = window.LayerFiles, { simulateShell, liveCommand, execLines, Engine } = window.LayerTerm;
+// ?backend=sim (default): the simulator in this page, with a free player.
+// ?backend=live: the real product through server/server.mjs (one project
+// per run, every call really made), so the player only goes forward.
+const LIVE = new URLSearchParams(location.search).get("backend") === "live";
 // Compressed sizes are computed asynchronously and shared across rebuilds.
 const PACKED = new Map(), PACKING = new Set();
 let renderSoon = null;
@@ -363,7 +428,7 @@ const FIXTURE = window.LAYERFS_SCENARIOS[0].steps[0].args.files;
 //   { a, call, args }   an SDK call
 //   { a, sh }           a shell command in the agent's mounted Workspace
 //   { a: "dsh", ... }   dsh itself: spawn agents, a burst of calls, a pause
-const STORY = [
+const DSH_STORY = [
   { a: "main", call: "project.init", args: { name: "website", files: FIXTURE },
     cap: "<b>Main tab</b> = the project map: the project terminal (left), the Branch list (middle), and History or Files of main (right). Nothing is ever mounted on main." },
   { a: "main", call: "main.fork", args: { name: "feature-home" },
@@ -392,9 +457,9 @@ const STORY = [
     cap: "tester keeps its own line and drops the markers…" },
   { a: "tester", call: "sandbox.commit", args: { message: "resolve headline" },
     cap: "…and commits on the new head." },
-  { a: "ui-dev", sh: "npm install && npm test" },
+  { a: "ui-dev", sh: "npm ci && npm test" },
   { a: "ui-dev", sh: "npm run dev &",
-    cap: "A background dev server. The <b>status bar</b> shows it under ui-dev's Sandbox while it runs." },
+    cap: "A background dev server. It shows under ui-dev's Sandbox on the main tab, and in the bottom bar on every tab." },
   { a: "ui-dev", call: "sandbox.commit", args: { message: "install deps" },
     cap: "ui-dev's Workspace is two Commits behind, but touched other files: the engine merges it cleanly and commits on the head." },
   { a: "ui-dev", call: "process.cancel", args: {},
@@ -428,17 +493,60 @@ const STORY = [
     cap: "<b>Recently here:</b> a Branch tab's bench holds only idle agents whose last call was on this Branch, for ~90 s." },
 ];
 
+// ------------------------------------------------------------------ demo stories (demo.js)
+// ?story=agents|tour|conflicts|merge plays a tui.html demo story. Its steps
+// run through the same terminal engine as tui.html (terminal.js Engine, which
+// test_demo.js checks), so every outcome matches tui.html on either backend.
+// dsh adds what the engine does not know: which agent made each call.
+// An agent step is one Bash tool call: mount a Workspace in the Branch's
+// shared Sandbox, run, commit, unmount. Each phase is one frame, in demo.js's
+// own schedule, so the calls of a burst interleave as they do in tui.html.
+const STORY_KEY = new URLSearchParams(location.search).get("story") || "dsh";
+const DEMO = (window.LAYERFS_DEMO || {})[STORY_KEY] || null;
+const LEAD = DEMO && DEMO.roster ? "lead" : "main";
+if (DEMO && DEMO.roster) for (const [k, r] of Object.entries(DEMO.roster)) AGENTS[k] = { color: r.color, crown: !!r.crown };
+function demoFrames(story) {
+  const escT = (t) => String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const out = [{ a: LEAD, call: "project.init", args: { name: "website", files: FIXTURE },
+    cap: `<b>${escT(story.title)}</b> · the tui.html demo story, played by dsh. Every call is made by an agent, and the UI shows who.`, w: 1 }];
+  story.steps.forEach((st, i) => {
+    const cap = st.note ? (st.act ? `<b>${escT(st.act)}</b> · ` : "") + escT(st.note) : null;
+    const w = st.beat || !story.roster ? 1 : 0.55;
+    const base = { demo: st, index: i };
+    if (st.agent || st.burst) {
+      const evs = window.LAYERFS_DEMO.schedule(st).filter((e) => e.phase !== "think");
+      evs.forEach((ev, k) => out.push({ ...base, ev, a: ev.who, cap: k ? null : cap, last: k === evs.length - 1,
+        w: ev.phase === "mount" ? 0.35 : w, label: `${ev.who} · ${ev.phase === "done" ? "commit + unmount" : ev.phase === "stop" ? "stop" : ev.phase === "mount" ? "mount" : ev.line}` }));
+      return;
+    }
+    const who = st.ui === "agents" || st.milestone ? "dsh" : LEAD;
+    const label = st.ui === "agents" ? `spawn ${st.agents.join(", ")} on ${st.branch}` : st.milestone ? `${st.milestone} ${st.pct}% · ${st.caption}`
+      : st.ui ? `${st.ui} ${st.as || st.term}` : `${st.term === "history" ? "project" : st.term === "fs" ? "fs" : st.term}> ${st.lines[0]}${st.lines.length > 1 ? " …" : ""}`;
+    out.push({ ...base, a: who, cap: st.milestone ? `<b>${escT(st.milestone)} ${st.pct}%</b> · ${escT(st.caption)}` : cap, last: true, label, w });
+  });
+  return out;
+}
+const STORY = DEMO ? demoFrames(DEMO) : DSH_STORY;
+
 // ------------------------------------------------------------------ driver
-// W is the view model: the engine (W.sim) plus what dsh knows and the engine
-// does not: which agent made each call, where each agent is, and the lines
-// each terminal printed. derive() rebuilds the graph/branch/Workspace views
-// from the engine state after every step.
+// W is the view model: the engine (W.engine, sim or live, same surface) plus
+// what dsh knows and the engine does not: which agent made each call, where
+// each agent is, and the lines each terminal printed. derive() rebuilds the
+// graph/branch/Workspace views from the engine state after every step.
 const newAgent = () => ({ lastLoc: { kind: "bench" }, lastT: -99 });
+const EMPTY_STATE = () => ({ project: null, main: null, roots: {}, commits: {}, layers: {}, branches: {}, branchOrder: [], sandboxes: {}, sandboxOrder: [] });
+const branchRoot = (s, b) => (b.head ? s.commits[b.head].root : s.layers[b.base].root);
 function fresh() {
-  const engine = new window.LayerBackendSim.SimBackend();
-  engine.packed = PACKED; engine.packing = PACKING; engine.onchange = rerender;
-  const W = { engine, sim: engine.sim, clock: 0, seq: 0, agents: { main: newAgent() }, panes: {}, fsLog: {}, hist: [], attrib: {}, touched: {},
-    flash: {}, newNodes: new Set(), lastTab: "main", last: null };
+  let engine;
+  if (LIVE) { engine = new window.LayerBackendLive.LiveBackend(); engine.state = EMPTY_STATE(); }
+  else { engine = new window.LayerBackendSim.SimBackend(); engine.packed = PACKED; engine.packing = PACKING; }
+  engine.onchange = rerender;
+  const W = { engine, clock: 0, seq: 0, agents: { [LEAD]: newAgent() }, panes: {}, fsLog: {}, hist: [], attrib: {}, touched: {},
+    flash: {}, newNodes: new Set(), lastTab: "main", last: null, check: null };
+  if (DEMO) {
+    W.demo = { e: new Engine(engine, "website"), fs: {}, sb: {}, st: {}, active: "main", code: {} };
+    if (DEMO.roster) W.demo.e.actor = "lead";
+  }
   derive(W);
   return W;
 }
@@ -446,29 +554,133 @@ const HIST = { "project.init": (a) => `init ${a.name}`, "main.fork": (a) => `for
   "branch.merge": (a) => `merge ${a.branch} ${a.with} --name ${a.name}`, "branch.publish": (a) => `publish ${a.branch}` };
 const FS = { "fs.read": (a) => `read ${a.path}`, "fs.edit": (a) => `edit ${a.path} -m "${a.message}"`, "fs.write": (a) => `write ${a.path} -m "${a.message}"` };
 
-function runStep(W, st) {
+async function runStep(W, st) {
   const before = rootsOf(W), known = new Set(Object.keys(W.nodes));
-  W.last = null;
-  if (st.burst) { W.clock += 4; for (const e of st.burst) runCall(W, e); W.lastTab = st.tab; }
+  W.last = null; W.check = null;
+  if (st.demo) { W.clock += 2; await runDemo(W, st); }
+  else if (st.burst) { W.clock += 4; for (const e of st.burst) await runCall(W, e); W.lastTab = st.tab; }
   else if (st.call === "dsh.view") W.lastTab = st.tab;
   else if (st.call === "dsh.spawn") { W.clock += 4; for (const n of st.args.agents) W.agents[n] ||= newAgent(); }
   else if (st.call === "dsh.idle") W.clock += st.args.seconds;
-  else { W.clock += 4; runCall(W, st); }
+  else { W.clock += 4; await runCall(W, st); }
   derive(W);
   W.newNodes = new Set(Object.keys(W.nodes).filter((id) => !known.has(id)));
   W.flash = changedPaths(W, before, rootsOf(W));
 }
 
-// One SDK call on the engine, timed in the page like SimBackend.run, with the
-// inline Node script an agent would send (model.js scriptFor).
-function sdkCall(W, calls, call, args) {
-  const t0 = performance.now(), o = W.sim.run(call, args);
-  o.timing = { totalMs: performance.now() - t0, simulated: true };
-  calls.push({ call, code: o.code, timing: o.timing, script: M.scriptFor({ call, args }, (W.sim.s.project || {}).name || "website") });
+// One frame of a demo story, run on the terminal engine; its records become
+// dsh terminal lines, Workspace panes, agent locations and attribution.
+const LINE_CLASS = { err: "bad", warn: "mark", ok: "good", info: "good" };
+const outLines = (rec) => rec.lines.map((x) => ({ t: x.t, c: LINE_CLASS[x.c] || "" }));
+const callsOf = (rec) => rec.calls.map((c) => ({ call: c.call, code: c.outcome.code, timing: c.outcome.timing, script: c.script }));
+async function runDemo(W, fr) {
+  const D = W.demo, e = D.e, st = fr.demo, n = fr.a, seq = ++W.seq, recs = [];
+  const A = n === "dsh" ? null : (W.agents[n] ||= newAgent());
+  const wsBranch = (b) => { const w = b && W.engine.s.sandboxes[b.sandbox] && W.engine.s.sandboxes[b.sandbox].workspaces[b.path]; return w ? w.branch : D.active; };
+  const paneLine = (b, line) => { const k = `${b.sandbox}:${b.path}`; (W.panes[k] ||= { agent: n, born: seq, lines: [] }).lines.push({ ...line, t: seq }); return k; };
+  const inPane = (b, rec, text, dim) => {
+    const k = paneLine(b, { text, dim, out: outLines(rec), calls: callsOf(rec) }), branch = wsBranch(b);
+    A.lastLoc = rec.unmounted ? { kind: "bench" } : { kind: "ws", branch, ws: k }; A.lastBranch = branch; W.lastTab = branch; W.touched[branch] = W.clock;
+  };
+  let code = null;
+  if (st.branch) D.active = st.branch;
+  if (st.ui === "agents") {
+    // dsh spawns the agents; they wait on this Branch's bench until they act
+    for (const a of st.agents) {
+      D.st[a] = { name: a, branch: st.branch, open: null, sticky: null, server: null };
+      Object.assign((W.agents[a] ||= newAgent()), { lastLoc: { kind: "bench" }, lastT: W.clock, lastBranch: st.branch });
+    }
+    code = "ok"; W.lastTab = st.branch;
+  } else if (st.milestone) code = "ok";
+  else if (fr.ev) {
+    const ev = fr.ev, a = D.st[ev.who], b = ev.phase === "stop" ? a.server : a.open;
+    let rec = null;
+    if (ev.phase === "stop") rec = await e.agentStop(a);
+    else if (ev.phase === "mount") {
+      rec = await e.agentMount(a, st.on);
+      if (rec.binding && !rec.reused) W.panes[`${rec.binding.sandbox}:${rec.binding.path}`] = { agent: n, born: seq, lines: [] };
+      if (rec.binding) inPane(rec.binding, rec, rec.reused ? "reuse the kept Workspace" : `mount ${wsBranch(rec.binding)}`, true);
+    } else if (ev.phase === "exec" && b) rec = await e.agentExec(a, ev.line);
+    else if (ev.phase === "done" && b) rec = await e.agentFinish(a);
+    if (rec && ev.phase !== "mount") inPane(b || rec.binding, rec, ev.phase === "done" ? `commit -m "${n}: ${ev.line}"` : ev.phase === "stop" ? "stop the server" : ev.line);
+    if (rec) { recs.push(rec); if (!(ev.phase === "mount" && a.open)) code = rec.code; }
+  } else if (st.ui === "open" || st.ui === "split") {
+    const o = await e.openSandbox(D.active, st.ui === "split" ? D.sb[st.from].sandbox : null);
+    recs.push(o.rec);
+    code = o.rec.calls.length ? o.rec.calls[o.rec.calls.length - 1].outcome.code : null;
+    if (o.binding) {
+      D.sb[st.as] = o.binding; A.sb ||= o.binding.sandbox;
+      W.panes[`${o.binding.sandbox}:${o.binding.path}`] = { agent: n, born: seq, lines: [] };
+      inPane(o.binding, o.rec, `${st.ui === "split" ? "split" : "open"} ${D.active}`, true);
+    }
+  } else if (st.ui === "stop") {
+    const b = D.sb[st.term], sb = W.engine.s.sandboxes[b.sandbox], rec = e.newRec();
+    const proc = sb.procOrder.find((p) => sb.processes[p].path === b.path && sb.processes[p].status === "running");
+    const o = await e.call(rec, "process.cancel", { sandbox: b.sandbox, process: proc });
+    rec.lines.push({ t: o.ok ? `■ ${proc} stopped` : `✕ ${o.code}`, c: o.ok ? "info" : "err" });
+    recs.push(rec); code = o.code; inPane(b, rec, `kill ${proc}`);
+  } else {
+    // typed lines: the project terminal (history), the fs terminal, or a Sandbox terminal
+    for (const line of st.lines) {
+      const at = D.active;
+      const rec = st.term === "history" ? await e.history(line) : st.term === "fs" ? await e.fs(at, line, (D.fs[at] ||= {})) : await e.sandbox(D.sb[st.term], line);
+      recs.push(rec);
+      if (rec.calls.length) code = rec.calls[rec.calls.length - 1].outcome.code;
+      const entry = { agent: n, text: line, out: outLines(rec), t: seq, calls: callsOf(rec), dim: /^(cat|read|ls|blame|log|branches|diff)\b/.test(line) };
+      if (st.term === "history" || (st.term === "fs" && at === "main")) {
+        W.hist.push(st.term === "fs" ? { ...entry, text: "fs " + line } : entry); A.lastLoc = { kind: "hist" }; W.lastTab = "main";
+      } else if (st.term === "fs") {
+        (W.fsLog[at] ||= []).push(entry); A.lastLoc = { kind: "fs", branch: at }; A.lastBranch = at; W.lastTab = at; W.touched[at] = W.clock;
+      } else {
+        const b = D.sb[st.term];
+        inPane(b, rec, line);
+        if (rec.calls.some((c) => c.call === "sandbox.unmount" && c.outcome.ok)) A.lastLoc = { kind: "bench" };
+      }
+      if (rec.forked) D.active = rec.forked;
+      // a read that names a file opens it in that tab's Files view (blame on main)
+      if (rec.files) { const tab = W.engine.s.branches[rec.files.subject] ? rec.files.subject : "main", f = filesOf(tab); f.path = rec.files.path; f.mode = rec.files.mode; rightMode[tab] = "files"; }
+    }
+  }
+  if (A) A.lastT = W.clock;
+  // attribution: each node a call created belongs to the agent that made it
+  for (const rec of recs) for (const c of rec.calls) {
+    const o = c.outcome, node = nodeOf(o);
+    if (node) { W.attrib[node] = n; W.last = { agent: n, call: c.call, step: { sh: fr.ev && fr.ev.line }, o, node }; }
+    if (o.ok && (o.code === "Forked" || o.code === "Merged")) { W.attrib["fork:" + o.result.branch] = n; W.touched[o.result.branch] = W.clock; }
+    if (o.ok && c.call === "branch.publish") W.touched[c.args.branch] = W.clock;
+  }
+  if (!W.last && n !== "dsh") {
+    const c = recs.flatMap((r) => r.calls).pop();
+    if (c) W.last = { agent: n, call: c.call, step: { sh: fr.ev && fr.ev.line }, o: c.outcome, node: null };
+  }
+  // the step's outcome, checked against demo.js's expectation on its last frame
+  if (code !== null) D.code[fr.index] = code;
+  if (fr.last) {
+    const expect = LIVE && st.live ? st.live : st.expect, got = D.code[fr.index] ?? "(none)";
+    W.check = { expect, code: got, ok: got === expect };
+    (W.checks ||= []).push({ index: fr.index, ...W.check });
+  }
+}
+
+// One SDK call on the engine, with its timing envelope (sim: in the page;
+// live: SDK, refresh and HTTP) and the inline Node script an agent would send
+// (model.js scriptFor). Live Init is the server's reset: a fresh volume and
+// an Init of the same fixture.
+async function sdkCall(W, calls, call, args) {
+  let o;
+  if (LIVE && call === "project.init") {
+    const t0 = performance.now();
+    o = await W.engine.reset();
+    const s = W.engine.s;
+    o.result = { kind: "Initialized", project: s.project.name, main: { headLayer: s.main.head } };
+    o.timing = { totalMs: performance.now() - t0, reset: true };
+  } else o = await W.engine.run(call, args);
+  calls.push({ call, code: o.code, timing: o.timing, script: M.scriptFor({ call, args }, (W.engine.s.project || {}).name || "website") });
   return o;
 }
-function runCall(W, st) {
-  const n = st.a, A = (W.agents[n] ||= newAgent()), s = W.sim.s, seq = ++W.seq;
+async function runCall(W, st) {
+  const n = st.a, A = (W.agents[n] ||= newAgent()), seq = ++W.seq;
+  let s = W.engine.s;
   let call = st.call, args = { ...st.args }, shOut = null, o, branch;
   const calls = [];
   const mine = A.ws && s.sandboxes[A.ws.sandbox].workspaces[A.ws.path], pane = A.ws && `${A.ws.sandbox}:${A.ws.path}`;
@@ -479,17 +691,23 @@ function runCall(W, st) {
     args = { sandbox: A.ws.sandbox, process: run.length ? run[run.length - 1].id : "none" };
   }
   if (call === "sandbox.mount") {
-    if (!A.sb) A.sb = sdkCall(W, calls, "sandbox.create", {}).result.id;
+    if (!A.sb) A.sb = (await sdkCall(W, calls, "sandbox.create", {})).result.id;
     args.sandbox = A.sb; branch = args.branch;
   }
   if (st.sh) {
     call = "sandbox.exec";
-    const r = simulateShell(st.sh, mine, s.sandboxes[A.ws.sandbox]);
-    shOut = r.out;
-    o = r.refuse ? { ok: false, code: "ShellRefused", refusal: { message: r.out.map((x) => x.t).join(" ") } }
-      : sdkCall(W, calls, call, { ...args, command: st.sh, writes: r.writes, output: r.out.map((x) => x.t).join("\n"), exitCode: r.code, background: r.background || undefined });
-  } else o = sdkCall(W, calls, call, args);
-  const out = outcome(call, o, shOut);
+    // sim: the shell is simulated and its writes go to the call; live: the
+    // command really runs in the Workspace (a trailing & starts a process).
+    const r = LIVE ? liveCommand(st.sh) : simulateShell(st.sh, mine, s.sandboxes[A.ws.sandbox]);
+    shOut = r.out || null;
+    if (r.refuse) o = { ok: false, code: "ShellRefused", refusal: { message: r.out.map((x) => x.t).join(" ") } };
+    else if (LIVE) { o = await sdkCall(W, calls, call, { ...args, command: r.command, background: r.background || undefined }); shOut = o.ok ? execLines(o.result) : []; }
+    else o = await sdkCall(W, calls, call, { ...args, command: st.sh, writes: r.writes, output: r.out.map((x) => x.t).join("\n"), exitCode: r.code, background: r.background || undefined });
+  } else o = await sdkCall(W, calls, call, args);
+  s = W.engine.s; // live: the server answers with a new state object
+  // live reads name a raw snapshot id: show the ref at its head instead, like the simulator
+  if (LIVE && call === "fs.read" && o.ok && s.branches[args.ref]) o.result.snapshot = `${args.ref} @ ${s.branches[args.ref].head || s.branches[args.ref].base}`;
+  const out = outcome(call, o, shOut, args);
   W.last = { agent: n, call, step: st, o, node: nodeOf(o) };
   if (W.last.node) W.attrib[W.last.node] = n;
   if (o.ok && (o.code === "Forked" || o.code === "Merged")) W.attrib["fork:" + o.result.branch] = n;
@@ -527,10 +745,13 @@ function nodeOf(o) {
   const r = o.result;
   return o.code === "Committed" || o.code === "Merged" ? r.head : o.code === "Added" ? r.publishedLayer.id : o.code === "Initialized" ? r.main.headLayer : null;
 }
-function outcome(call, o, shOut) {
+// Read both engines' answers: live results carry the product's fields, so
+// anything only the simulator reports is optional here.
+function outcome(call, o, shOut, args = {}) {
   const L = (t, c = "") => ({ t, c });
   if (shOut) {
     const out = shOut.map((x) => L(x.t, /^(<{7}|={7}|>{7})/.test(x.t) ? "mark" : x.c === "err" ? "bad" : ""));
+    if (o.ok && o.result.truncated) out.push(L("… output truncated at 1 MiB per stream", "dim"));
     out.push(!o.ok ? L(`✕ ${o.code}  ${o.refusal.message}`, "bad") : o.result.process ? L(`● running in background as ${o.result.process}`, "good") : L(`[exit ${o.result.exitCode}]`, o.result.exitCode ? "bad" : "good"));
     return out;
   }
@@ -539,15 +760,16 @@ function outcome(call, o, shOut) {
   switch (o.code) {
     case "Initialized": return [L(`Initialized ${r.project} → main @ ${r.main.headLayer}`, "good")];
     case "Forked": return [L(`${r.branch} ← ${r.head || r.base}`, "good")];
-    case "Committed": return [L(`Committed ${r.head}${r.merged ? ` · merged with ${r.merged.head}` : ""}`, "good")];
+    case "Committed": return [L(`Committed ${r.head}${r.merged ? ` · merged with ${r.merged.head || r.merged.from || "the head"}` : ""}`, "good")];
     case "UpToDate": return [L("UpToDate · nothing new to commit")];
     case "Merged": return [L(`Merged → ${r.branch} @ ${r.head}${r.fastForward ? " · fast-forward" : ""} · inputs untouched`, "good")];
-    case "Added": return [L(`Published ${r.source.branch}@${r.source.commit} → main @ ${r.publishedLayer.id}`, "good")];
+    case "Added": return [L(`Published ${r.source ? `${r.source.branch}@${r.source.commit}` : args.branch} → main @ ${r.publishedLayer.id}`, "good")];
     case "Mounted": return [L(`mounted ${r.branch}@${r.base} → ${r.sandbox}:${r.path}`)];
     case "Unmounted": return [L("unmounted")];
-    case "Stopped": return [L(`${r.process} ${r.status}`)];
+    case "Stopped": return [L(`${r.process} ${r.status || "stopped"}`)];
   }
-  if (call === "fs.read") return [L(`${r.text.split("\n").length} lines · ${r.snapshot}`)];
+  if (call === "fs.read") return [L(`${(r.text || "").split("\n").length} lines${r.snapshot ? " · " + r.snapshot : ""}`)];
+  if (call === "process.cancel") return [L(`${args.process} stopped`)];
   return [L(o.code)];
 }
 function bubbleOf(last) {
@@ -559,14 +781,15 @@ function bubbleOf(last) {
   if (o.code === "Forked") return ["fork", ""];
   if (o.code === "Mounted") return ["mount", ""];
   if (o.code === "running") return ["● dev server", "good"];
-  if (o.code === "Stopped") return ["■ stopped", ""];
-  if (o.code.startsWith("exit:")) return r.exitCode ? [`exit ${r.exitCode}`, "bad"] : /npm (test|run test)/.test(last.step.sh || "") ? ["✓ tests", "good"] : null;
+  if (o.code === "Stopped" || last.call === "process.cancel") return ["■ stopped", ""];
+  if (last.call === "sandbox.exec" && r && r.process) return ["● dev server", "good"];
+  if (last.call === "sandbox.exec" && r && r.exitCode != null) return r.exitCode ? [`exit ${r.exitCode}`, "bad"] : /npm (test|run test)/.test(last.step.sh || "") ? ["✓ tests", "good"] : null;
   return null;
 }
 
 // The engine state, reshaped for the views.
 function derive(W) {
-  const s = W.sim.s, nodes = {};
+  const s = W.engine.s, nodes = {};
   W.mainHead = s.main ? s.main.head : null;
   W.order = s.branchOrder.slice();
   W.initLayer = (Object.values(s.layers).find((l) => !l.parent) || {}).id;
@@ -578,7 +801,9 @@ function derive(W) {
   }
   for (const c of Object.values(s.commits)) {
     const own = c.parent && s.commits[c.parent] && s.commits[c.parent].branch === c.branch;
-    nodes[c.id] = { id: c.id, kind: "commit", branch: c.branch, parents: [own ? c.parent : "fork:" + c.branch, c.mergedFrom || null], t: c.slot, by: W.attrib[c.id], msg: c.message || c.via };
+    // demo commit messages already start with "<agent>: "; the label adds the agent itself
+    const by = W.attrib[c.id], raw = c.message || c.via || "", msg = by && raw.startsWith(`${by}: `) ? raw.slice(by.length + 2) : raw;
+    nodes[c.id] = { id: c.id, kind: "commit", branch: c.branch, parents: [own ? c.parent : "fork:" + c.branch, c.mergedFrom || null], t: c.slot, by, msg };
   }
   W.nodes = nodes;
   W.branches = {};
@@ -589,22 +814,26 @@ function derive(W) {
   });
   W.ws = {};
   for (const id of s.sandboxOrder) for (const p of s.sandboxes[id].wsOrder) {
-    const w = s.sandboxes[id].workspaces[p]; if (!w.mounted) continue;
-    const k = `${id}:${p}`, pane = W.panes[k] || { lines: [], born: 0 };
-    W.ws[k] = { id: k, agent: pane.agent, branch: w.branch, lines: pane.lines, born: pane.born, bad: W.sim.markersIn(w).length > 0, baseNode: w.baseCommit || "fork:" + w.branch, eng: w };
+    const w = s.sandboxes[id].workspaces[p], k = `${id}:${p}`, pane = W.panes[k];
+    // A Workspace no dsh event mounted (live: another client of the same
+    // server) has no agent to attribute it to, so it is not drawn.
+    if (!w.mounted || !pane) continue;
+    W.ws[k] = { id: k, agent: pane.agent, branch: w.branch, lines: pane.lines, born: pane.born, bad: W.engine.markersIn(w).length > 0, baseNode: w.baseCommit || "fork:" + w.branch, eng: w };
   }
 }
 // Root of every ref (main and each Branch), to find what a step changed.
 function rootsOf(W) {
-  const s = W.sim.s, out = {};
+  const s = W.engine.s, out = {};
   if (s.main) out.main = s.layers[s.main.head].root;
-  for (const b of s.branchOrder) out[b] = W.sim.branchRoot(s.branches[b]);
+  for (const b of s.branchOrder) out[b] = branchRoot(s, s.branches[b]);
   return out;
 }
+// Live trees load lazily: a tree not loaded yet reads as empty, so a ref only
+// flashes when both of its trees are already here.
 function changedPaths(W, before, after) {
-  const out = {};
+  const out = {}, roots = W.engine.s.roots, loaded = (r) => !LIVE || W.engine.trees[r];
   for (const [ref, root] of Object.entries(after))
-    if (before[ref] && before[ref] !== root) out[ref] = new Set(M.diffTrees(W.sim.s.roots[before[ref]], W.sim.s.roots[root]).map((d) => d.path));
+    if (before[ref] && before[ref] !== root && loaded(before[ref]) && loaded(root)) out[ref] = new Set(M.diffTrees(roots[before[ref]], roots[root]).map((d) => d.path));
   return out;
 }
 
@@ -623,7 +852,7 @@ const conflicted = (b) => Object.values(W.ws).some((w) => w.branch === b && w.ba
 const mounted = (b) => Object.values(W.ws).some((w) => w.branch === b);
 
 // ------------------------------------------------------------------ view state
-let W = fresh(), step = 0, active = "main", follow = true, playing = true, timer = null;
+let W = fresh(), step = 0, active = "main", follow = true, playing = !LIVE, timer = null;
 const pinned = {}, rightMode = {}, seenTabs = new Set(["main"]);
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -720,13 +949,14 @@ const fmtMs = (ms) => (ms < 1 ? ms.toFixed(2) : ms < 1000 ? ms.toFixed(0) : (ms 
 function timingText(t) {
   if (!t) return "";
   if (t.simulated) return `${fmtMs(t.totalMs)} in the page (sim)`;
+  if (t.reset) return `${fmtMs(t.totalMs)} · server reset: new volume + Init`;
   const http = Math.max(0, t.totalMs - (t.sdkMs || 0) - (t.refreshMs || 0));
   return `sdk ${fmtMs(t.sdkMs || 0)} · refresh ${fmtMs(t.refreshMs || 0)} · http ${fmtMs(http)}`;
 }
 function cmdTime(calls) {
   const ts = (calls || []).map((c) => c.timing).filter(Boolean);
   if (!ts.length) return "";
-  const sum = ts.reduce((a, t) => a + (t.simulated ? t.totalMs : t.sdkMs || 0), 0);
+  const sum = ts.reduce((a, t) => a + (t.simulated || t.reset ? t.totalMs : t.sdkMs || 0), 0);
   return `<span class="tm" title="${ts[0].simulated ? "Time of the simulator in the page, not the product" : "SDK call time, summed over this line's calls"}">${fmtMs(sum)}${ts[0].simulated ? " sim" : ""}</span>`;
 }
 const OPEN_SDK = new Set();
@@ -751,7 +981,9 @@ const bar = (p, m) => `<span class="sbar"><i class="p" style="flex:${p} 0 0"></i
 const INODE_BYTES = 73; // one inode value row; directory entries and pooling ignored
 const laneColor = (b) => (!b || b === "main" ? "var(--purple)" : W.branches[b] ? `var(${W.branches[b].color})` : "var(--text-3)");
 const defaultBase = (tab) => (tab === "main" ? "" : "fork:" + tab);
-function filesOf(tab) { return (FILES[tab] ||= { at: "latest", base: defaultBase(tab), path: null, toggled: [], mode: "view", changedOnly: false, sdk: false }); }
+// list: "changes" (grouped, against the base) or "all" (the tree); path: the
+// open file (the file page) or null (the list); wide: the column takes half the window.
+function filesOf(tab) { return (FILES[tab] ||= { at: "latest", base: defaultBase(tab), path: null, toggled: [], mode: "view", list: "changes", sdk: false, wide: false }); }
 const subjectOf = (tab, p) => (p.at === "latest" ? tab : p.at);
 function pointLabel(ref) {
   if (!ref) return "nothing";
@@ -761,16 +993,52 @@ function pointLabel(ref) {
   return n ? `${n.branch || "main"} · ${ref}` : ref;
 }
 function atSelect(tab, p) {
-  const s = W.sim.s, o = (v, label) => `<option value="${esc(v)}"${v === p.at ? " selected" : ""}>${esc(label)}</option>`;
+  const s = W.engine.s, o = (v, label) => `<option value="${esc(v)}"${v === p.at ? " selected" : ""}>${esc(label)}</option>`;
   const opts = tab === "main"
     ? Object.values(s.layers).sort((a, b) => b.slot - a.slot).map((l) => o(l.id, `${l.id} · ${l.sourceCommit ? "from " + l.sourceCommit : "init"}`)).join("")
     : Object.values(s.commits).filter((c) => c.branch === tab).sort((a, b) => b.slot - a.slot).map((c) => o(c.id, `${c.id} · ${c.message || c.via}`)).join("") + o("fork:" + tab, `fork point · ${s.branches[tab].from}`);
   const live = p.at === "latest";
-  return `<span class="sync ${live ? "live" : "pinned"}" title="${live ? "Follows the head: new Commits show up as they land" : "Fixed at one point in history"}">${live ? "●" : "⊙"}</span><select class="fsel" data-fat="${esc(tab)}" title="Latest, or a fixed point">${o("latest", `latest · ${tab === "main" ? W.mainHead : W.branches[tab].head.replace("fork:", "fork ")}`)}${opts}</select>`;
+  return `<span class="sync ${live ? "live" : "pinned"}" title="${live ? "Follows the head: new Commits show up as they land" : "Fixed at one point in history"}">${live ? "●" : "⊙"}</span><select class="fsel" data-fat="${esc(tab)}" title="What you look at: latest, or a fixed point">${o("latest", `${tab} @ ${tab === "main" ? W.mainHead : W.branches[tab].head.replace("fork:", "fork ")}`)}${opts}</select>`;
+}
+// What the point is compared with: parent, fork point, main, none, or a node picked in History.
+function baseSelect(tab, p, subject) {
+  const parent = FM.parentRef(W.engine, subject) || "", choices = [];
+  if (parent) choices.push([parent, `vs parent · ${parent.replace("fork:", "fork ")}`]);
+  if (tab !== "main") choices.push(["fork:" + tab, "vs fork point"], ["main", "vs main"]);
+  if (p.base && !choices.some(([v]) => v === p.base)) choices.push([p.base, `vs ${pointLabel(p.base)}`]);
+  choices.push(["", "no compare"]);
+  return `<select class="fsel cmp" data-fbasesel="${esc(tab)}" title="What it is compared with">${choices.map(([v, l]) => `<option value="${esc(v)}"${v === p.base ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+}
+// Where a changed path belongs in the Changes list: dependencies and build
+// output fold into one row each, so the source changes come first.
+const DEPS = /^\/(node_modules\/|package-lock\.json$|yarn\.lock$|pnpm-lock\.yaml$)/, BUILD = /^\/(\.next|dist|build|out|\.turbo|coverage)\//, VCS = /^\/\.git\//;
+const groupOf = (path) => (DEPS.test(path) ? "deps" : BUILD.test(path) ? "build" : VCS.test(path) ? "vcs" : "src");
+function changesHtml(tab, p, sv, bv, ch, flash) {
+  const files = Object.entries(ch.files).filter(([path]) => ((sv.tree[path] || bv.tree[path]) || {}).type === "file");
+  if (!files.length) return `<div class="fempty">No file differences between ${esc(pointLabel(p.base))} and ${esc(pointLabel(subjectOf(tab, p)))}.</div>`;
+  const row = (path, k, label, indent) => `<div class="frow${flash.has(path) ? " flash" : ""}" data-fopen="${esc(path)}" style="padding-left:${indent}px" title="${esc(path)}"><span class="fb ${k} lead">${k}</span><span class="nm">${esc(label)}</span></div>`;
+  const by = { src: [], build: [], deps: [], vcs: [] };
+  for (const f of files) by[groupOf(f[0])].push(f);
+  // source: by folder, root files first
+  const dirs = new Map();
+  for (const [path, k] of by.src.sort(([a], [b]) => a.localeCompare(b))) { const d = path.slice(0, path.lastIndexOf("/") + 1); (dirs.get(d) || dirs.set(d, []).get(d)).push([path, k]); }
+  let html = "";
+  for (const [d, list] of [...dirs].sort(([a], [b]) => (a === "/" ? -1 : b === "/" ? 1 : a.localeCompare(b)))) {
+    if (d !== "/") html += `<div class="fdir">${esc(d.slice(1))}</div>`;
+    html += list.map(([path, k]) => row(path, k, path.slice(d.length), d === "/" ? 10 : 22)).join("");
+  }
+  const lww = sv.tree["/.lww"] ? " · .lww: newest wins" : "";
+  const fold = (g, label, hint) => {
+    const list = by[g]; if (!list.length) return "";
+    const open = p.toggled.includes("group:" + g), roots = [...new Set(list.map(([path]) => path.split("/")[1]))].join(", ");
+    return `<div class="fgroup" data-fgroup="${esc(tab)}|${g}"><span class="car">${open ? "▾" : "▸"}</span><b>${label}</b><span class="nm">${esc(roots)}</span><span class="fr">${list.length} file${list.length === 1 ? "" : "s"}${hint}</span></div>`
+      + (open ? list.sort(([a], [b]) => a.localeCompare(b)).map(([path, k]) => row(path, k, path.slice(1), 22)).join("") : "");
+  };
+  return `<div class="flist">${html || `<div class="fempty">Only generated files and dependencies changed.</div>`}${fold("build", "build output", lww)}${fold("deps", "dependencies", "")}${fold("vcs", "version control", "")}</div>`;
 }
 const dirOpen = (p, path) => (COLLAPSE.includes(path) ? p.toggled.includes(path) : !p.toggled.includes(path));
 function treeHtml(p, subj, base, ch, dir, depth, flash) {
-  return FM.listBoth(subj, base, dir).filter((e) => !p.changedOnly || !ch || ch.files[e.path] || ch.dirs[e.path]).map((e) => {
+  return FM.listBoth(subj, base, dir).map((e) => {
     const open = e.type === "dir" && dirOpen(p, e.path), k = ch && ch.files[e.path], roll = ch && !k && ch.dirs[e.path];
     const row = `<div class="frow${e.path === p.path ? " sel" : ""}${e.gone ? " gone" : ""}${flash.has(e.path) ? " flash" : ""}" data-ftree="${esc(e.path)}" data-ftype="${e.type}" style="padding-left:${8 + depth * 13}px" title="${esc(e.path)}">
       <span class="car">${e.type === "dir" ? (open ? "▾" : "▸") : ""}</span><span class="nm">${esc(e.name)}${e.type === "dir" ? "/" : ""}</span>${k ? `<span class="fb ${k}">${k}</span>` : roll ? `<span class="fr">${roll}</span>` : ""}</div>`;
@@ -790,9 +1058,16 @@ function sdkCalls(subject, p) {
   return calls.map(esc).join("\n");
 }
 const codeLines = (text) => text.split("\n").map((t, i) => `<div class="cl"><span class="no">${i + 1}</span><span class="tx">${esc(t) || " "}</span></div>`).join("");
-// Per-file revisions, dedupe and compression (sim estimates, as in tui.html).
+// Per-file revisions, dedupe and compression: sim estimates, or live the
+// product's operator.files.stats/history and fs.blame (LiveBackend.fileReport).
+// A fork point is sent as the node it was forked from.
+const reportRef = (subject) => (subject.startsWith("fork:") ? (FM.resolveRef(W.engine, subject) || {}).node || subject : subject);
 function fileStats(subject, path) {
-  const revs = FM.history(W.sim, subject, path), seen = new Set();
+  if (LIVE) {
+    const f = W.engine.fileReport(reportRef(subject), path), k = { added: "A", modified: "M", deleted: "D", removed: "D" };
+    return { ...f, rows: f.rows.map((r) => ({ ...r, change: k[r.change] || r.change })) };
+  }
+  const revs = FM.history(W.engine, subject, path), seen = new Set();
   let logical = 0, unique = 0, stored = 0, pending = false;
   const rows = [...revs].reverse().map((r) => {
     if (r.content == null) return { ...r, size: 0, added: 0, stored: 0 };
@@ -806,28 +1081,23 @@ function fileStats(subject, path) {
 }
 function fileStatsHtml(subject, p, sv) {
   const e = sv.tree[p.path];
-  if (e && e.type !== "file") return "";
-  const f = fileStats(subject, p.path), size = e ? fmtBytes(bytesOf(e.content)) : "deleted here";
-  return `<div class="fstats" title="Revisions: saved versions where this file changed. Logical: every revision's size. Unique: distinct versions once (dedupe). Stored: after compression (sim: deflate as a stand-in for zstd, no deltas).">
-    <span><b>${f.revisions}</b> revision${f.revisions === 1 ? "" : "s"}</span><span>current <b>${size}</b></span><span>history <b>${fmtBytes(f.logical)}</b> logical</span>
-    <span>unique <b>${fmtBytes(f.unique)}</b> ${ratio(f.logical, f.unique)}</span><span>stored ≈ <b>${fmtBytes(f.stored)}</b> ${ratio(f.unique, f.stored)}</span><span>metadata ≈ <b>${fmtBytes(f.metadata)}</b></span><span class="est">sim estimate${f.pending ? " · compressing…" : ""}</span></div>`;
+  if (!e || e.type !== "file") return "";
+  const f = fileStats(subject, p.path), cur = LIVE ? f.size : e ? bytesOf(e.content) : null, size = cur == null ? (e ? "…" : "deleted here") : fmtBytes(cur);
+  // one line; the full numbers are in the tooltip
+  const tip = `${f.revisions ?? "?"} revisions (saved versions where this file changed) · current ${size} · history ${fmtBytes(f.logical)} logical · unique ${fmtBytes(f.unique)} (dedupe ${ratio(f.logical, f.unique)})`
+    + (LIVE ? ` · ${f.error || "product: operator.files.stats and files.history; physical per-file attribution not reported"}` : ` · stored ≈ ${fmtBytes(f.stored)} (compression ${ratio(f.unique, f.stored)}, sim: deflate as a stand-in for zstd) · metadata ≈ ${fmtBytes(f.metadata)}`);
+  return `<span class="fstat" title="${esc(tip)}"><b>${f.revisions ?? "…"}</b> rev · ${size}${LIVE ? "" : ` · ${ratio(f.unique, f.stored)}`}${f.pending ? " · …" : ""}</span>`;
 }
 function fileHistoryHtml(subject, path) {
   const f = fileStats(subject, path);
-  if (!f.rows.length) return `<div class="fempty">${esc(path)} has no saved versions behind ${esc(pointLabel(subject))}.</div>`;
+  if (LIVE && f.pending) return `<div class="fempty">Loading the file's history…</div>`;
+  if (!f.rows.length) return `<div class="fempty">${esc(f.error || `${path} has no saved versions behind ${pointLabel(subject)}.`)}</div>`;
   const rows = f.rows.map((r) => `<tr><td><span class="bch" style="--bc:${r.node.kind === "layer" ? "var(--purple)" : laneColor(r.node.branch)}" data-fblame="${r.node.id}" title="${esc(r.node.id)} · click to diff with its parent">${r.node.id}</span></td><td><span class="fb ${r.change}">${r.change}</span></td>
-    <td class="n">${r.content == null ? "–" : fmtBytes(r.size)}</td><td class="n${r.added ? "" : " zero"}">${r.content == null ? "–" : r.added ? "+" + fmtBytes(r.added) : "reused"}</td><td class="n${r.stored ? "" : " zero"}">${r.stored ? fmtBytes(r.stored) : "–"}</td></tr>`).join("");
-  return `<div class="fsum">${f.revisions} revision${f.revisions === 1 ? "" : "s"} of ${esc(path)} behind <b>${esc(pointLabel(subject))}</b>, newest first · new = bytes this version added (an identical earlier version is reused)</div>
-    <table class="frev"><tr><th>version</th><th></th><th class="n">size</th><th class="n">new</th><th class="n">stored ≈</th></tr>${rows}</table>`;
+    <td class="n">${r.content == null ? "–" : fmtBytes(r.size)}</td><td class="n${r.added ? "" : " zero"}">${r.content == null ? "–" : r.added == null ? "not reported" : r.added ? "+" + fmtBytes(r.added) : "reused"}</td>${LIVE ? "" : `<td class="n${r.stored ? "" : " zero"}">${r.stored ? fmtBytes(r.stored) : "–"}</td>`}</tr>`).join("");
+  return `<div class="fsum">${f.revisions} revision${f.revisions === 1 ? "" : "s"} behind <b>${esc(pointLabel(subject))}</b>, newest first · new = bytes this version added (an identical earlier version is reused)${f.hasMore ? " · first 50 shown" : ""}</div>
+    <table class="frev"><tr><th>version</th><th></th><th class="n">size</th><th class="n">new</th>${LIVE ? "" : '<th class="n">stored ≈</th>'}</tr>${rows}</table>`;
 }
 function viewHtml(subject, p, sv, bv, ch) {
-  if (!p.path) {
-    if (!ch) return `<div class="fempty">Pick a file above. Compare with parent, fork point or main to see what changed.</div>`;
-    const list = Object.entries(ch.files).filter(([path]) => (sv.tree[path] || bv.tree[path]).type === "file");
-    if (!list.length) return `<div class="fempty">No file differences between ${esc(pointLabel(p.base))} and ${esc(pointLabel(subject))}.</div>`;
-    return `<div class="fsum">${list.length} file${list.length === 1 ? "" : "s"} changed from <b>${esc(pointLabel(p.base))}</b> to <b>${esc(pointLabel(subject))}</b></div>` +
-      list.map(([path, k]) => `<div class="frow flat" data-fopen="${esc(path)}"><span class="fb ${k}">${k}</span><span class="nm">${esc(path)}</span></div>`).join("");
-  }
   const se = sv.tree[p.path], be = bv && bv.tree[p.path];
   if (p.mode === "view") {
     if (!se) return `<div class="fempty">${esc(p.path)} does not exist at ${esc(pointLabel(subject))}${be ? " (deleted; switch to Diff to see what was removed)" : ""}.</div>`;
@@ -835,56 +1105,75 @@ function viewHtml(subject, p, sv, bv, ch) {
   }
   if (p.mode === "history") return fileHistoryHtml(subject, p.path);
   if (p.mode === "blame") {
-    const b = FM.blame(W.sim, subject, p.path);
+    let b;
+    if (LIVE) {
+      // The product's fs.blame: each line names the Commit or Layer it came from.
+      const report = fileStats(subject, p.path);
+      if (!report.blame) return `<div class="fempty">${esc(report.error || "Loading attributed lines…")}</div>`;
+      b = { ...report.blame, versions: report.revisions, lines: report.blame.lines.map((l) => ({ ...l, origin: { id: l.commit, kind: l.commit.startsWith("L") ? "layer" : "commit", branch: (W.engine.s.commits[l.commit] || {}).branch } })) };
+    } else b = FM.blame(W.engine, subject, p.path);
     if (!b) return `<div class="fempty">${esc(p.path)} does not exist at ${esc(pointLabel(subject))}.</div>`;
     let last = null;
     const rows = b.lines.map((ln) => {
       const o = ln.origin, first = o.id !== last; last = o.id;
       return `<div class="cl"><span class="bch${first ? "" : " cont"}" style="--bc:${o.kind === "layer" ? "var(--purple)" : laneColor(o.branch)}" data-fblame="${o.id}" title="${esc(o.id)} · ${esc(W.attrib[o.id] || "")} · click to diff with its parent">${first ? o.id : ""}</span><span class="no">${ln.n}</span><span class="tx">${esc(ln.text) || " "}</span></div>`;
     }).join("");
-    return `<div class="fsum">Blame at <b>${esc(pointLabel(subject))}</b> · composed from ${b.versions} saved versions</div><div class="code">${rows}</div>`;
+    return `<div class="fsum">Blame at <b>${esc(pointLabel(subject))}</b> · ${LIVE ? "product attribution (fs.blame)" : `composed from ${b.versions} saved versions`}</div><div class="code">${rows}</div>`;
   }
-  if (!bv) return `<div class="fempty">Diff needs something to compare with: parent, fork point or main.</div>`;
+  if (!bv) return `<div class="fempty">Diff needs something to compare with: pick it next to the point above.</div>`;
   if (!se && !be) return `<div class="fempty">${esc(p.path)} is in neither side.</div>`;
   const before = be && be.type === "file" ? be.content : null, after = se && se.type === "file" ? se.content : null;
-  if (before === after) return `<div class="fsum">No changes in ${esc(p.path)} between <b>${esc(pointLabel(p.base))}</b> and <b>${esc(pointLabel(subject))}</b>.</div><div class="code">${codeLines(after || "")}</div>`;
+  if (before === after) return `<div class="fsum">No changes between <b>${esc(pointLabel(p.base))}</b> and <b>${esc(pointLabel(subject))}</b>.</div><div class="code">${codeLines(after || "")}</div>`;
   let o = 0, n = 0;
   const rows = M.lineDiff(before ?? "", after ?? "").map((d) => {
     if ((before == null && d.op === "-") || (after == null && d.op === "+")) return "";
     const on = d.op === "+" ? "" : ++o, nn = d.op === "-" ? "" : ++n;
     return `<div class="cl ${d.op === "+" ? "add" : d.op === "-" ? "del" : ""}"><span class="no">${on}</span><span class="no">${nn}</span><span class="op">${d.op === " " ? "" : d.op}</span><span class="tx">${esc(d.text) || " "}</span></div>`;
   }).join("");
-  return `<div class="fsum">${esc(p.path)} · ${before == null ? "added" : after == null ? "deleted" : "modified"} · <b>${esc(pointLabel(p.base))}</b> → <b>${esc(pointLabel(subject))}</b></div><div class="code diff">${rows}</div>`;
+  return `<div class="fsum">${before == null ? "added" : after == null ? "deleted" : "modified"} · <b>${esc(pointLabel(p.base))}</b> → <b>${esc(pointLabel(subject))}</b></div><div class="code diff">${rows}</div>`;
 }
 function filesHtml(tab) {
   const p = filesOf(tab);
   if (p.at !== "latest" && !W.nodes[p.at] && !p.at.startsWith("fork:")) p.at = "latest";
-  const subject = subjectOf(tab, p), sv = FM.resolveRef(W.sim, subject);
+  const subject = subjectOf(tab, p), sv = FM.resolveRef(W.engine, subject);
   if (!sv) return `<div class="fempty">Nothing to show yet.</div>`;
-  const bv = p.base ? FM.resolveRef(W.sim, p.base) : null, ch = bv ? FM.changeMap(sv.tree, bv.tree) : null;
-  const parent = FM.parentRef(W.sim, subject) || "", fork = tab === "main" ? "" : "fork:" + tab;
-  const preset = (v, label) => (v ? `<button class="chipb${p.base === v ? " on" : ""}" data-fbase="${esc(tab)}|${esc(v)}">${label}</button>` : "");
-  const seg = (m, label) => `<button class="fseg${p.mode === m ? " on" : ""}" data-fmode="${esc(tab)}|${m}">${label}</button>`;
+  const bv = p.base ? FM.resolveRef(W.engine, p.base) : null, ch = bv ? FM.changeMap(sv.tree, bv.tree) : null;
   const flash = p.at === "latest" ? W.flash[tab] || new Set() : new Set();
-  return `<div class="fbar">${atSelect(tab, p)}<span class="sp"></span>${ch ? `<span class="fcount">${ch.count} change${ch.count === 1 ? "" : "s"}</span>` : ""}<button class="sdkbtn" data-fsdk="${esc(tab)}" title="The SDK calls behind this view">sdk</button></div>
-    <div class="fbar"><span>vs</span>${preset(parent, "parent")}${preset(fork, "fork point")}${tab !== "main" ? preset("main", "main") : ""}<button class="chipb${p.base ? "" : " on"}" data-fbase="${esc(tab)}|">none</button>
-      <label class="chk${ch ? "" : " off"}"><input type="checkbox" data-fchanged="${esc(tab)}"${p.changedOnly ? " checked" : ""}${ch ? "" : " disabled"}> changed only</label></div>
-    <div class="fbar"><span class="segs">${seg("view", "View")}${seg("blame", "Blame")}${seg("diff", "Diff")}${seg("history", "History")}</span></div>
-    ${p.sdk ? `<pre class="fsdk">${sdkCalls(subject, p)}</pre>` : ""}
-    <div class="fbody"><div class="ftree">${treeHtml(p, sv.tree, bv ? bv.tree : null, ch, "/", 0, flash)}</div>
-      <div class="fview">${p.path ? `<div class="fpath">${esc(p.path)} <span>@ ${esc(pointLabel(subject))}</span></div>${fileStatsHtml(subject, p, sv)}` : ""}${viewHtml(subject, p, sv, bv, ch)}</div></div>`;
+  const nFiles = ch ? Object.keys(ch.files).filter((path) => ((sv.tree[path] || bv.tree[path]) || {}).type === "file").length : 0;
+  // one header row: what (point), against what (compare), how much changed, the SDK calls, wider
+  const head = `<div class="fhead">${atSelect(tab, p)}${baseSelect(tab, p, subject)}<span class="sp"></span>${ch ? `<span class="fcount" title="Files changed from the compared point">${nFiles} Δ</span>` : ""}`
+    + `<button class="sdkbtn" data-fsdk="${esc(tab)}" title="The SDK calls behind this view">sdk</button><button class="fwide${p.wide ? " on" : ""}" data-fwide="${esc(tab)}" title="${p.wide ? "Back to the normal width" : "Widen Files to half the window"}">${p.wide ? "⤡" : "⤢"}</button></div>`
+    + (p.sdk ? `<pre class="fsdk">${sdkCalls(subject, p)}</pre>` : "");
+  if (p.path) return head + filePage(tab, p, subject, sv, bv, ch);
+  const list = ch ? p.list : "all";
+  const sw = ch ? `<div class="fsw"><span class="segs"><button class="fseg${list === "changes" ? " on" : ""}" data-flist="${esc(tab)}|changes">Changes <b>${nFiles}</b></button><button class="fseg${list === "all" ? " on" : ""}" data-flist="${esc(tab)}|all">All files</button></span></div>` : "";
+  const body = list === "changes" ? changesHtml(tab, p, sv, bv, ch, flash) : `<div class="ftree">${treeHtml(p, sv.tree, bv ? bv.tree : null, ch, "/", 0, flash)}</div>`;
+  return head + sw + `<div class="fbody">${body}</div>`;
 }
-// The global Store (sim estimate, from SimBackend.storage): dedupe and compression rates.
+// One file: back to the list, its path and change badge, the modes and a
+// one-line summary, then the file itself.
+function filePage(tab, p, subject, sv, bv, ch) {
+  const k = ch && ch.files[p.path], cut = p.path.lastIndexOf("/") + 1;
+  const back = ch && p.list === "changes" ? "Changes" : "All files";
+  const seg = (m, label) => `<button class="fseg${p.mode === m ? " on" : ""}" data-fmode="${esc(tab)}|${m}">${label}</button>`;
+  return `<div class="fpage"><button class="fback" data-fback="${esc(tab)}" title="Back to the list">‹ ${back}</button><span class="fpathx" title="${esc(p.path)} @ ${esc(pointLabel(subject))}"><span class="dir">${esc(p.path.slice(1, cut))}</span><b>${esc(p.path.slice(cut))}</b></span>${k ? `<span class="fb ${k}">${k}</span>` : ""}</div>
+    <div class="fmodes"><span class="segs">${bv ? seg("diff", "Diff") : ""}${seg("view", "File")}${seg("blame", "Blame")}${seg("history", "History")}</span><span class="sp"></span>${fileStatsHtml(subject, p, sv)}</div>
+    <div class="fbody"><div class="fview">${viewHtml(subject, p, sv, bv, ch)}</div></div>`;
+}
+// The global Store: dedupe and compression rates. Sim estimates them from the
+// model (SimBackend.storage); live shows the Store's publication counters.
 function storeHtml() {
   const z = W.engine.storage();
-  const tip = `Global Store, project ${W.sim.s.project ? W.sim.s.project.name : ""} (sim estimate). Logical ${fmtBytes(z.logical)}: every file in every saved root. Dedupe to ${fmtBytes(z.payload)}: distinct contents once (whole files; the product also dedupes chunks). Payload ${fmtBytes(z.stored)}: those contents compressed with deflate as a stand-in for zstd, no deltas. Metadata ${fmtBytes(z.metadata)}: 64 B per distinct entry + 256 B per Commit or Layer.`;
+  if (!z) return `<div class="store"><div class="srow"><span class="kind">STORE</span><span>${LIVE ? "not reported yet" : "empty"}</span></div></div>`;
+  const tip = !z.estimate ? `Store publication counters: logical history states ${fmtBytes(z.logical)}, unique canonical objects ${fmtBytes(z.payload)}, complete pack bodies ${fmtBytes(z.stored)}; metadata ${fmtBytes(z.metadata)}. DB logical pages ${fmtBytes(z.store)}. WAL allocation is separate.` : `Global Store, project ${W.engine.s.project ? W.engine.s.project.name : ""} (sim estimate). Logical ${fmtBytes(z.logical)}: every file in every saved root. Dedupe to ${fmtBytes(z.payload)}: distinct contents once (whole files; the product also dedupes chunks). Payload ${fmtBytes(z.stored)}: those contents compressed with deflate as a stand-in for zstd, no deltas. Metadata ${fmtBytes(z.metadata)}: 64 B per distinct entry + 256 B per Commit or Layer.`;
   return `<div class="store" title="${esc(tip)}"><div class="srow"><span class="kind">STORE</span><b>${fmtBytes(z.store)}</b>${bar(z.stored, z.metadata)}<span><span class="pc">payload</span> ${fmtBytes(z.stored)} · <span class="mc">meta</span> ${fmtBytes(z.metadata)}</span></div>
-    <div class="srow"><span class="kind">RATE</span><span>logical <b>${fmtBytes(z.logical)}</b> · dedupe <b>${ratio(z.logical, z.payload)}</b> · compression <b>${ratio(z.payload, z.stored)}</b>${z.pending ? " · compressing…" : ""}</span><span class="est">sim est.</span></div></div>`;
+    <div class="srow"><span class="kind">RATE</span><span>logical <b>${fmtBytes(z.logical)}</b> · dedupe <b>${ratio(z.logical, z.payload)}</b> · compression <b>${ratio(z.payload, z.stored)}</b>${z.pending ? " · compressing…" : ""}</span><span class="est">${z.estimate ? "sim est." : "product"}</span></div></div>`;
 }
 // A Workspace's overlay: its uncommitted changes in the daemon's own database, not in the Store.
 function overlayHtml(w) {
   const o = W.engine.overlayOf(w.eng);
   if (!o) return "";
+  if (!o.estimate) return `<div class="store" title="Workspace operator counters (operator.workspace.overlay): payload is stored overlay cell bytes. It lives in the daemon's database, not in the global Store."><div class="srow"><span class="kind">OVERLAY</span><b>${fmtBytes(o.payload)}</b><span>payload · ${o.inodes} inodes · ${o.entries} names${o.changes ? ` · +${o.changes.added} ~${o.changes.modified} −${o.changes.removed}` : ""}</span><span class="est">product</span></div></div>`;
   const n = o.added + o.modified + o.removed;
   const tip = `This Workspace's overlay (sim estimate): ${n} change${n === 1 ? "" : "s"}; payload ${fmtBytes(o.payload)} is the changed files' bytes, metadata ${fmtBytes(o.metadata)} is 64 B per changed entry. It lives in the daemon's database, not in the global Store.`;
   return `<div class="store" title="${esc(tip)}"><div class="srow"><span class="kind">OVERLAY</span><b>${fmtBytes(o.payload + o.metadata)}</b>${bar(o.payload, o.metadata)}<span>+${o.added} ~${o.modified} −${o.removed} · <span class="pc">payload</span> ${fmtBytes(o.payload)} · <span class="mc">meta</span> ${fmtBytes(o.metadata)}</span><span class="est">sim est.</span></div></div>`;
@@ -893,7 +1182,7 @@ function overlayHtml(w) {
 function rightCol(tab, title, headId, graphHtml, legend) {
   const mode = rightMode[tab] || "history", seg = `<span class="seg"><button class="h${mode === "history" ? " on" : ""}" data-right="${tab}:history">HISTORY</button><button class="f${mode === "files" ? " on" : ""}" data-right="${tab}:files">FILES</button></span>`;
   return `<div class="col"><section class="term"><div class="thead">${seg}<span class="ttl">${esc(title)} @ ${esc(headId)}</span></div>
-    ${mode === "history" ? `<div class="graphwrap" data-scroll>${graphHtml}</div>${legend ? `<div class="legend">${legend}</div>` : ""}` : filesHtml(tab)}${storeHtml()}</section></div>`;
+    ${mode === "history" ? `<div class="graphwrap" data-scroll>${graphHtml}</div>${legend ? `<div class="legend">${legend}</div>` : ""}` : filesHtml(tab)}${tab === "main" ? storeHtml() : ""}</section></div>`;
 }
 
 function counts() {
@@ -918,12 +1207,13 @@ function mainView() {
     const B = W.branches[b], on = agentsOn(b), age = W.clock - B.last;
     const st = conflicted(b) ? `<span style="color:var(--red)">⚠</span>` : on.length || mounted(b) ? `<span style="color:var(--green)">●</span>` : B.published ? `<span style="color:var(--purple)">↑</span>` : `<span style="color:var(--text-3)">○</span>`;
     const meta = conflicted(b) ? "conflict" : B.published ? `→ ${W.mainHead}` : age < 1 ? "now" : `${age}s`;
-    return `<div class="brow${on.length || mounted(b) ? "" : " idle"}${B.last === W.clock && W.seq ? " flash" : ""}" data-open="${b}" data-loc="row:${b}" style="--bc:var(${B.color})"><span class="st">${st}</span><span class="nm">${esc(b)}</span><span class="meta">${meta}</span></div>`;
+    // small crabs stand in the slot (placeCrabs, mode "row"); the head and age follow
+    return `<div class="brow${on.length || mounted(b) ? "" : " idle"}${B.last === W.clock && W.seq ? " flash" : ""}" data-open="${b}" data-loc="row:${b}" style="--bc:var(${B.color})"><span class="st">${st}</span><span class="nm">${esc(b)}</span><span class="slot" data-slot="row:${b}"></span><span class="hd">${esc(B.head.replace("fork:", "") === b ? B.base : B.head)}</span><span class="meta">${meta}</span></div>`;
   }).join("") || `<div class="brow idle"><span class="meta">no Branches yet</span></div>`;
   return `<div class="col"><section class="term${lastHit("hist")}" data-loc="hist"><div class="thead"><span class="kind history">PROJECT</span><span class="ttl">${W.mainHead ? "website · main @ " + W.mainHead : "no project yet"}</span></div>
       <div class="tbody" id="scroll-hist">${histLines}</div>${inrow("init · branches · log · fork · merge · publish")}</section></div>
-    <div class="col"><section class="term"><div class="thead"><span class="kind plain">BRANCHES</span><span class="ttl">${W.order.length} · by activity</span><span class="sp"></span>${counts()}</div>
-      <div class="rows">${rows}</div></section></div>
+    <div class="col"><section class="term blist"><div class="thead"><span class="kind plain">BRANCHES</span><span class="ttl">${W.order.length} · by activity</span><span class="sp"></span>${counts()}</div>
+      <div class="rows">${rows}</div></section>${sandboxesHtml()}</div>
     ${W.mainHead ? rightCol("main", "main", W.mainHead, graph(null, "main"), "")
       : `<div class="col"><div class="empty">No project yet</div></div>`}`;
 }
@@ -933,9 +1223,9 @@ function branchView(b) {
   const fsLines = (W.fsLog[b] || []).map((l) => lineHtml(l, l.t === W.seq, tag(l.agent) + " ")).join("") || `<span class="out">no fs calls on ${esc(b)} yet</span>`;
   const headId = B.head.startsWith("fork:") ? B.base : B.head;
   const wss = Object.values(W.ws).filter((w) => w.branch === b).sort((x, y) => x.born - y.born);
-  const panes = wss.map((w) => `<section class="term${w.bad ? " bad" : lastHit("ws:" + w.id)}${w.born === W.seq ? " enter" : ""}" data-loc="ws:${w.id}">
-      <div class="thead"><span class="kind sandbox">WORKSPACE</span>${tag(w.agent)}<span class="ttl">${esc(w.id)}</span><span class="sp"></span>${w.bad ? '<span class="pill warn">conflict</span>' : '<span class="pill run">mounted</span>'}</div>
-      <div class="tbody" data-scroll>${w.lines.map((l) => lineHtml(l, l.t === W.seq, l.dim ? "" : '<span class="prompt">$ </span>')).join("")}</div>${overlayHtml(w)}</section>`).join("");
+  const panes = wss.map((w) => { const [sb, path] = w.id.split(":"); return `<section class="term${w.bad ? " bad" : lastHit("ws:" + w.id)}${w.born === W.seq ? " enter" : ""}${focusPane === w.id ? " focus" : ""}" data-loc="ws:${w.id}" data-sb="${esc(sb)}">
+      <div class="thead"><span class="kind sandbox">WORKSPACE</span>${tag(w.agent)}<button class="sbchip" data-sbchip="${esc(sb)}" data-sbhl="${esc(sb)}" title="Runs in Sandbox ${esc(sb)} · hover: its other panes here · click: the Sandbox on the main tab">${esc(sb)}</button><span class="ttl">${esc(path.replace("/workspaces/", "ws/"))}</span><span class="sp"></span>${w.bad ? '<span class="pill warn">conflict</span>' : '<span class="pill run">mounted</span>'}</div>
+      <div class="tbody" data-scroll>${w.lines.map((l) => lineHtml(l, l.t === W.seq, l.dim ? "" : '<span class="prompt">$ </span>')).join("")}</div>${overlayHtml(w)}</section>`; }).join("");
   const recent = Object.values(W.nodes).filter((n) => n.branch === b && n.kind === "commit").slice(-4).reverse()
     .map((n) => `${n.id}  ${esc(n.by || "?")}: ${esc(n.msg || "")}`).join("\n");
   const cols = wss.length > 2 ? "1fr 1fr" : "1fr";
@@ -956,40 +1246,79 @@ const lastHit = (loc) => (lastLoc === loc ? " hot" : "");
 
 function render() {
   renderStatus();
-  const keepScroll = [".ftree", ".fview"].map((sel) => { const el = document.querySelector("#work " + sel); return [sel, el ? el.scrollTop : 0]; });
+  const keepScroll = [".ftree", ".fview", ".sblist .tbody"].map((sel) => { const el = document.querySelector("#work " + sel); return [sel, el ? el.scrollTop : 0]; });
   if (active !== "main" && !W.branches[active]) active = "main";
   renderTabs();
   const work = $("work");
-  work.className = "work " + (active === "main" ? "mainview" : "branchview");
+  work.className = "work " + (active === "main" ? "mainview" : "branchview") + ((rightMode[active] === "files" && (FILES[active] || {}).wide) ? " wide" : "");
   work.innerHTML = active === "main" ? mainView() : branchView(active);
-  for (const el of work.querySelectorAll(".tbody, .graphwrap")) el.scrollTop = el.scrollHeight;
+  // terminals and History follow their newest line; lists (Sandboxes) keep their place
+  for (const el of work.querySelectorAll(".tbody, .graphwrap")) if (!el.closest(".sblist")) el.scrollTop = el.scrollHeight;
   for (const [sel, top] of keepScroll) { const el = work.querySelector(sel); if (el) el.scrollTop = top; }
+  if (sbLit) { const id = sbLit; sbLit = null; lightSandbox(id); } // the redraw dropped the highlight
+  if (sbPulse) { const g = work.querySelector(`[data-sbcol="${CSS.escape(sbPulse)}"]`); sbPulse = null; if (g) { g.classList.add("pulse"); g.scrollIntoView({ block: "nearest" }); } }
   requestAnimationFrame(placeCrabs);
 }
 
 // ------------------------------------------------------------------ status bar (tui.html)
 // Every Sandbox the engine knows, the agent dsh created it for, its mounts,
 // and its running processes. Read-only here: the story drives the engine.
+// The bottom bar, on every tab: running processes (a server matters wherever
+// you are) and the keys. The Sandboxes themselves are listed on the main tab.
 function renderStatus() {
-  const s = W.sim.s, owner = (id) => Object.keys(W.agents).find((n) => W.agents[n].sb === id), c = [`<span class="lbl">Sandboxes</span>`];
-  if (!s.sandboxOrder.length) c.push(`<span class="lbl">none yet</span>`);
-  for (const id of s.sandboxOrder) {
-    const sb = s.sandboxes[id], mounts = sb.wsOrder.filter((p) => sb.workspaces[p].mounted), n = owner(id);
-    c.push(`<span class="chip${sb.closed ? " closed" : ""}" title="${esc(id)}: created by dsh for ${esc(n || "?")}${mounts.length ? " · " + mounts.map((p) => `${id}:${p} on ${sb.workspaces[p].branch}`).join(", ") : ""}"><span class="d"></span>${n ? mascot(n, true) : ""}${esc(id)} · ${sb.closed ? "closed" : `${mounts.length} mount${mounts.length === 1 ? "" : "s"}`}</span>`);
-    for (const pid of sb.procOrder) {
-      const pr = sb.processes[pid];
-      if (pr.status === "running") c.push(`<span class="chip proc" title="Running in ${esc(id)}:${esc(pr.path)} (operator process list)"><span class="d"></span>${esc(pid)} ${esc(pr.command)}</span>`);
-    }
-  }
-  c.push(`<span class="sp"></span><span class="lbl">space play · ←→ step · F follow · hover a History node</span>`);
-  $("status").innerHTML = c.join("");
+  const s = W.engine.s;
+  const procs = s.sandboxOrder.filter((id) => !s.sandboxes[id].closed).flatMap((id) => s.sandboxes[id].procOrder.map((p) => s.sandboxes[id].processes[p]).filter((p) => p.status === "running").map((p) => ({ ...p, sb: id })));
+  $("status").innerHTML = `<span class="lbl">${procs.length ? "Running" : "No processes running"}</span>`
+    + procs.map((p) => `<button class="chip proc" data-sbchip="${esc(p.sb)}" data-sbhl="${esc(p.sb)}" title="Running in ${esc(p.sb)}:${esc(p.path)} (operator process list) · click to show its Sandbox on main"><span class="d"></span>${esc(p.sb)} · ${esc(p.command)}</button>`).join("")
+    + `<span class="sp"></span><span class="lbl">space play · ←→ step · F follow · hover a History node</span>`;
 }
+// Main tab only. Sandboxes belong to the project, not to a Branch: one
+// Sandbox (one machine, one localhost) holds Workspaces of any Branch and any
+// agent. A group per Sandbox: who dsh made it for, then a row per Workspace
+// (agent, Branch, base, uncommitted, current / stale / conflict, process).
+// Read-only in the preview: the story drives the engine, so cancel / close
+// are dsh operator actions (issue #345), not buttons here.
+function sandboxesHtml() {
+  const s = W.engine.s, open = s.sandboxOrder.filter((id) => !s.sandboxes[id].closed);
+  const owner = (id) => Object.keys(W.agents).find((n) => W.agents[n].sb === id);
+  const forBranch = (id) => W.demo && Object.keys(W.demo.e.branchSandbox || {}).find((b) => W.demo.e.branchSandbox[b] === id);
+  let nWs = 0, nProc = 0;
+  const groups = [...s.sandboxOrder].sort((a, b) => s.sandboxes[a].closed - s.sandboxes[b].closed).map((id) => {
+    const sb = s.sandboxes[id], n = owner(id), br = forBranch(id);
+    const rows = sb.wsOrder.filter((p) => sb.workspaces[p].mounted).map((p) => {
+      const w = sb.workspaces[p], k = `${id}:${p}`, v = W.ws[k], agent = v ? v.agent : null, B = W.branches[w.branch];
+      const base = w.baseCommit || w.baseLayer, stale = B && (w.baseCommit || "fork:" + w.branch) !== B.head, dirty = W.engine.dirtyOf(w);
+      const run = sb.procOrder.map((x) => sb.processes[x]).filter((x) => x.path === p && x.status === "running");
+      nWs++; nProc += run.length;
+      const state = v && v.bad ? `<span class="st bad">conflict</span>` : stale ? `<span class="st warn">stale</span>` : `<span class="st">current</span>`;
+      return `<button class="dws" data-dws="${esc(k)}" title="Open ${esc(w.branch)} at this Workspace">${agent ? mascot(agent, true) : '<span class="noag">?</span>'}<span class="nm">${esc(p.replace("/workspaces/", "ws/"))}</span>`
+        + `<span class="bchip" style="--bc:${B ? `var(${B.color})` : "var(--text-3)"}">${esc(w.branch)}</span><span class="at">@${esc(base)}</span>${dirty ? `<span class="st">+${dirty}</span>` : ""}${state}${run.length ? `<span class="st run">● ${esc(run[0].command)}</span>` : ""}</button>`;
+    });
+    const branches = new Set(sb.wsOrder.filter((p) => sb.workspaces[p].mounted).map((p) => sb.workspaces[p].branch));
+    const made = n ? `made for ${n}` : br ? `shared by ${br}'s agents` : "made by dsh";
+    return `<div class="sbg${sb.closed ? " closed" : ""}" data-sbcol="${esc(id)}" data-sbhl="${esc(id)}"><div class="sbh"><span class="d${sb.closed ? " off" : rows.length ? "" : " idle"}"></span><b>${esc(id)}</b><span class="mk">${n ? mascot(n, true) : ""}${esc(made)}</span><span class="sp"></span>`
+      + `<span class="ct">${sb.closed ? "closed" : rows.length ? `${rows.length} Workspace${rows.length === 1 ? "" : "s"}` : "idle"}</span></div>`
+      + (branches.size > 1 ? `<div class="dnote">${branches.size} Branches share this machine and its localhost</div>` : "") + rows.join("") + `</div>`;
+  });
+  return `<section class="term sblist"><div class="thead"><span class="kind sandbox">SANDBOXES</span><span class="ttl">${open.length} · ${nWs} Workspace${nWs === 1 ? "" : "s"} · ${nProc} process${nProc === 1 ? "" : "es"}</span></div>
+    <div class="tbody">${groups.join("") || `<span class="out">no Sandboxes yet · dsh creates one when an agent first mounts a Workspace</span>`}</div></section>`;
+}
+// Hovering anything tagged with a Sandbox lights it up: its group on main,
+// and in a Branch tab every pane on that machine.
+let sbLit = null, sbPulse = null;
+function lightSandbox(id) {
+  if (id === sbLit) return;
+  sbLit = id;
+  for (const el of document.querySelectorAll(".sblit")) el.classList.remove("sblit");
+  if (id) for (const el of document.querySelectorAll(`[data-sbcol="${CSS.escape(id)}"], .term[data-sb="${CSS.escape(id)}"]`)) el.classList.add("sblit");
+}
+document.addEventListener("mouseover", (e) => { const t = e.target.closest && e.target.closest("[data-sbhl]"); lightSandbox(t ? t.dataset.sbhl : null); });
 
 // ------------------------------------------------------------------ hover card (tui.html)
 // What a History node is, who made it, and which Workspaces are mounted on it.
 let cardTimer = null;
 function wsRows(name, nodeId) {
-  const s = W.sim.s, head = s.branches[name].head || "fork:" + name, rows = [];
+  const s = W.engine.s, head = s.branches[name].head || "fork:" + name, rows = [];
   for (const id of s.sandboxOrder) for (const p of s.sandboxes[id].wsOrder) {
     const w = s.sandboxes[id].workspaces[p];
     if (!w.mounted || w.branch !== name || (w.baseCommit || "fork:" + name) !== nodeId) continue;
@@ -999,7 +1328,7 @@ function wsRows(name, nodeId) {
   return rows.length ? `<div class="sec">Workspaces mounted here</div>${rows.join("")}` : "";
 }
 function cardHtml(id) {
-  const s = W.sim.s, by = W.attrib[id] ? `by <b style="color:${AGENTS[W.attrib[id]].color}">${esc(W.attrib[id])}</b>` : "", head = '<span class="tag">head</span>';
+  const s = W.engine.s, by = W.attrib[id] ? `by <b style="color:${AGENTS[W.attrib[id]].color}">${esc(W.attrib[id])}</b>` : "", head = '<span class="tag">head</span>';
   const btns = `<div class="cbtns"><button class="cbtn" data-card-at="${esc(id)}">Browse files</button><button class="cbtn" data-card-cmp="${esc(id)}">Diff vs parent</button></div><div class="hint">Click the node: open Files at this point</div>`;
   if (s.layers[id]) {
     const l = s.layers[id];
@@ -1079,17 +1408,19 @@ function placeCrabs() {
     groups.get(t.el).list.push(n);
   }
   for (const [host, { mode, list }] of groups) {
-    const r = host.getBoundingClientRect(), cap = mode === "pane" ? 1 : CAP[mode];
+    // a Branch row's crabs stand small in its slot, so the list stays compact
+    const slot = mode === "row" ? host.querySelector("[data-slot]") : null;
+    const r = host.getBoundingClientRect(), sr = slot ? slot.getBoundingClientRect() : r, cap = mode === "pane" ? 1 : CAP[mode];
     list.forEach((n, k) => {
       const el = crabEl(n);
       if (k >= cap) { el.classList.add("gone"); return; }
       let x, y;
       if (mode === "chip") { x = r.right - 30; y = r.bottom - 22; }
-      else if (mode === "row") { x = r.right - 92 - k * 40; y = r.top + r.height / 2 - 20; }
+      else if (mode === "row") { x = sr.left + k * 24 - 10; y = sr.top + sr.height / 2 - 17; }
       else if (mode === "bench") { x = r.left + 116 + k * 50; y = r.top + r.height / 2 - 24; }
       else { x = r.right - 52 - k * 46; y = r.bottom - 74; }
       el.classList.remove("gone");
-      el.classList.toggle("small", mode === "chip");
+      el.classList.toggle("small", mode === "chip" || mode === "row");
       const mood = Object.values(W.ws).some((w) => w.agent === n && w.bad) ? "sweat" : acting.has(n) && mode !== "bench" ? "busy" : "idle";
       el.classList.remove("idle", "busy", "sweat"); el.classList.add(mood);
       const pos = `${Math.round(x)},${Math.round(y)}`;
@@ -1101,8 +1432,8 @@ function placeCrabs() {
     if (list.length > cap && mode !== "chip") {
       const b = document.createElement("div"), k = cap;
       b.className = "crowd"; b.textContent = `+${list.length - cap}`;
-      const x = mode === "row" ? r.right - 92 - k * 40 + 14 : mode === "bench" ? r.left + 116 + k * 50 + 4 : r.right - 52 - k * 46 + 10;
-      const y = mode === "row" ? r.top + r.height / 2 - 6 : mode === "bench" ? r.top + r.height / 2 - 8 : r.bottom - 58;
+      const x = mode === "row" ? sr.left + k * 24 + 2 : mode === "bench" ? r.left + 116 + k * 50 + 4 : r.right - 52 - k * 46 + 10;
+      const y = mode === "row" ? sr.top + sr.height / 2 - 9 : mode === "bench" ? r.top + r.height / 2 - 8 : r.bottom - 58;
       b.style.transform = `translate(${x}px,${y}px)`; $("crabs").appendChild(b);
     }
   }
@@ -1129,10 +1460,28 @@ function flyBlock(n, nodeId, color) {
 }
 
 // ------------------------------------------------------------------ player
-function rebuild(to) { W = fresh(); for (let i = 0; i < to; i++) runStep(W, STORY[i]); }
+// Steps run one at a time (live calls take real time). Sim rewinds by
+// replaying from a fresh engine; live has one real project, so it only steps
+// forward, and Restart begins a new project at step 1.
+let queue = Promise.resolve(), running = null, failed = null;
+async function rebuild(to) { const w = fresh(); for (let i = 0; i < to; i++) await runStep(w, STORY[i]); return w; }
 function goto(i, animate) {
+  const job = queue.then(() => gotoNow(i, animate));
+  queue = job.catch(() => {});
+  return job;
+}
+async function gotoNow(i, animate) {
   i = Math.max(0, Math.min(STORY.length, i));
-  if (animate && i === step + 1) runStep(W, STORY[step]); else rebuild(i);
+  if (LIVE && i !== 0 && i !== step && i !== step + 1) return;
+  failed = null;
+  try {
+    if (i === step + 1) { running = STORY[step]; renderPlayer(); await runStep(W, STORY[step]); }
+    else if (i !== step || !LIVE) W = await rebuild(i);
+  } catch (e) {
+    running = null; failed = e.message;
+    setPlaying(false); render(); renderPlayer(); throw e;
+  }
+  running = null;
   step = i;
   const ev = STORY[step - 1];
   lastLoc = null;
@@ -1148,31 +1497,46 @@ function goto(i, animate) {
 }
 function renderPlayer() {
   const ev = STORY[step - 1];
+  for (const a of document.querySelectorAll("#mode a")) a.classList.toggle("on", (a.dataset.mode === "live") === LIVE);
+  $("p-prev").disabled = LIVE; $("p-dots").classList.toggle("locked", LIVE);
+  $("p-reset").title = LIVE ? "New project: restart the story on a fresh volume" : "Restart";
   $("p-count").textContent = `${step}/${STORY.length}`;
   let cap = ""; for (let i = step - 1; i >= 0 && !cap; i--) if (STORY[i].cap) cap = STORY[i].cap;
   $("p-cap").innerHTML = cap || "Press ▶ to play the story, or step with ← →.";
-  const shown = (st) => st.sh ? `sandbox.exec ${JSON.stringify({ command: st.sh })}` : `${st.call} ${JSON.stringify(Object.fromEntries(Object.entries(st.args || {}).filter(([k]) => !["files", "content", "agents"].includes(k))))}`;
+  const shown = (st) => st.label ? st.label : st.sh ? `sandbox.exec ${JSON.stringify({ command: st.sh })}` : `${st.call} ${JSON.stringify(Object.fromEntries(Object.entries(st.args || {}).filter(([k]) => !["files", "content", "agents"].includes(k))))}`;
   $("p-ev").innerHTML = ev && ev.burst ? `events · <b>×${ev.burst.length}</b> ${esc([...new Set(ev.burst.map((e) => e.call))].join(", "))} from ${ev.burst.length} agents`
     : ev && ev.a !== "dsh" ? `event · <b>${esc(ev.a)}</b> ${esc(shown(ev))}${W.last ? ` → <span class="${W.last.o.ok ? "" : "bad"}">${esc(W.last.o.code)}</span>` : ""}`
-    : ev ? `dsh · ${esc(ev.call.slice(4))}` : "event · —";
+    : ev ? `dsh · ${esc(ev.label || ev.call.slice(4))}` : "event · —";
+  // demo stories: the step's outcome against what demo.js expects
+  if (W.check) $("p-ev").innerHTML += W.check.ok ? ` <span class="ok" title="demo.js expects ${esc(W.check.expect)}">✓ as expected</span>` : ` <span class="err">✕ expected ${esc(W.check.expect)}, got ${esc(W.check.code)}</span>`;
+  if (running) $("p-ev").innerHTML = `<span class="busy">running ${esc(running.a)} · ${esc(running.label || (running.sh ? "sandbox.exec " + running.sh : running.call))}…</span>`;
+  if (failed) $("p-ev").innerHTML = `<span class="err">✕ ${esc(failed)}</span>`;
   $("p-dots").innerHTML = STORY.map((_, i) => `<i class="${i < step - 1 ? "done" : i === step - 1 ? "now" : ""}" data-step="${i + 1}" title="step ${i + 1}"></i>`).join("");
   $("p-play").textContent = playing ? "❚❚" : "▶";
 }
-function tick() {
+async function tick() {
   clearTimeout(timer);
   if (!playing) return;
   if (step >= STORY.length) { playing = false; renderPlayer(); return; }
-  goto(step + 1, true);
-  timer = setTimeout(tick, 2300 / +$("p-speed").value);
+  const t0 = performance.now();
+  try { await goto(step + 1, true); } catch (e) { console.error(e); setPlaying(false); return; }
+  const ms = 2300 * (STORY[step - 1].w ?? 1) / (DEMO && DEMO.speed ? DEMO.speed : 1) / +$("p-speed").value;
+  if (playing) timer = setTimeout(tick, Math.max(LIVE ? 400 : 0, ms - (performance.now() - t0)));
 }
 function setPlaying(p) { playing = p; renderPlayer(); clearTimeout(timer); if (p) timer = setTimeout(tick, 400); }
 
-$("p-play").onclick = () => { if (!playing && step >= STORY.length) goto(0); setPlaying(!playing); };
-$("p-next").onclick = () => { setPlaying(false); goto(step + 1, true); };
-$("p-prev").onclick = () => { setPlaying(false); goto(step - 1); };
-$("p-reset").onclick = () => { setPlaying(false); goto(0); };
-$("p-dots").onclick = (e) => { const s = e.target.dataset.step; if (s) { setPlaying(false); goto(+s); } };
-$("follow").onclick = () => { follow = !follow; $("follow").classList.toggle("on", follow); if (follow) goto(step); };
+// A failed step is shown in the player (gotoNow), so handlers drop the rejection.
+const go = (i, animate) => goto(i, animate).catch((e) => console.error(e));
+$("p-play").onclick = () => { if (!playing && step >= STORY.length) go(0); setPlaying(!playing); };
+$("p-next").onclick = () => { setPlaying(false); go(step + 1, true); };
+$("p-prev").onclick = () => { if (LIVE) return; setPlaying(false); go(step - 1); };
+$("p-reset").onclick = () => { setPlaying(false); go(0); };
+$("p-dots").onclick = (e) => { const s = e.target.dataset.step; if (s && !LIVE) { setPlaying(false); go(+s); } };
+$("follow").onclick = () => { follow = !follow; $("follow").classList.toggle("on", follow); if (follow) go(step); };
+// Mode links and the story picker keep the other choice.
+for (const a of document.querySelectorAll("#mode a")) a.href = `?backend=${a.dataset.mode}&story=${STORY_KEY}`;
+$("story").value = DEMO ? STORY_KEY : "dsh";
+$("story").onchange = (e) => { location.search = `?backend=${LIVE ? "live" : "sim"}&story=${e.target.value}`; };
 $("theme").onclick = () => {
   const dark = matchMedia("(prefers-color-scheme: dark)").matches, cur = document.documentElement.dataset.theme || (dark ? "dark" : "light");
   document.documentElement.dataset.theme = cur === "dark" ? "light" : "dark"; render();
@@ -1183,32 +1547,41 @@ function filesClick(e) {
   const tabOfPane = () => active;
   let el;
   if ((el = at("[data-fmode]"))) { const [tab, m] = el.dataset.fmode.split("|"); filesOf(tab).mode = m; render(); return true; }
-  if ((el = at("[data-fbase]"))) { const [tab, v] = el.dataset.fbase.split("|"); filesOf(tab).base = v; render(); return true; }
+  if ((el = at("[data-flist]"))) { const [tab, v] = el.dataset.flist.split("|"); filesOf(tab).list = v; render(); return true; }
+  if ((el = at("[data-fback]"))) { filesOf(el.dataset.fback).path = null; render(); return true; }
+  if ((el = at("[data-fwide]"))) { const p = filesOf(el.dataset.fwide); p.wide = !p.wide; render(); return true; }
+  if ((el = at("[data-fgroup]"))) { const [tab, g] = el.dataset.fgroup.split("|"), p = filesOf(tab), key = "group:" + g; p.toggled = p.toggled.includes(key) ? p.toggled.filter((x) => x !== key) : [...p.toggled, key]; render(); return true; }
   if ((el = at("[data-fsdk]"))) { const p = filesOf(el.dataset.fsdk); p.sdk = !p.sdk; render(); return true; }
   if ((el = at("[data-ftree]"))) {
     const p = filesOf(tabOfPane()), path = el.dataset.ftree;
     if (el.dataset.ftype === "dir") { p.toggled = p.toggled.includes(path) ? p.toggled.filter((x) => x !== path) : [...p.toggled, path]; }
-    else p.path = path;
+    else openFile(p, path);
     render(); return true;
   }
-  if ((el = at("[data-fopen]"))) { const p = filesOf(tabOfPane()); p.path = el.dataset.fopen; if (p.mode === "view") p.mode = "diff"; render(); return true; }
+  if ((el = at("[data-fopen]"))) { openFile(filesOf(tabOfPane()), el.dataset.fopen); render(); return true; }
   if ((el = at("[data-fblame]"))) { const p = filesOf(tabOfPane()), id = el.dataset.fblame; showPoint(tabOfPane(), id); p.mode = "diff"; render(); return true; }
   if ((el = at("svg.graph [data-node]"))) { showPoint(tabOfPane(), el.dataset.node); render(); return true; }
   return false;
+}
+// Opening a file shows what changed when it changed, else the file.
+function openFile(p, path) {
+  const sv = FM.resolveRef(W.engine, subjectOf(active, p)), bv = p.base ? FM.resolveRef(W.engine, p.base) : null;
+  const changed = sv && bv && FM.changeMap(sv.tree, bv.tree).files[path];
+  p.path = path; p.mode = changed ? "diff" : "view";
 }
 // Points Files at one node: on this tab's lane it pins the subject there; any
 // other node becomes the subject's base. The base defaults to its parent.
 function showPoint(tab, id) {
   const p = filesOf(tab), n = W.nodes[id]; if (!n) return;
   const lane = n.branch || "main";
-  if (lane === tab) { p.at = n.kind === "fork" ? "fork:" + tab : id; p.base = FM.parentRef(W.sim, p.at) || ""; }
+  if (lane === tab) { p.at = n.kind === "fork" ? "fork:" + tab : id; p.base = FM.parentRef(W.engine, p.at) || ""; }
   else p.base = n.kind === "fork" ? id : id;
   rightMode[tab] = "files";
 }
 document.addEventListener("change", (e) => {
   const t = e.target;
-  if (t.dataset.fat) { const p = filesOf(t.dataset.fat); p.at = t.value; p.base = p.at === "latest" ? defaultBase(t.dataset.fat) : FM.parentRef(W.sim, p.at) || ""; render(); }
-  else if (t.dataset.fchanged) { filesOf(t.dataset.fchanged).changedOnly = t.checked; render(); }
+  if (t.dataset.fat) { const p = filesOf(t.dataset.fat); p.at = t.value; p.base = p.at === "latest" ? defaultBase(t.dataset.fat) : FM.parentRef(W.engine, p.at) || ""; render(); }
+  else if (t.dataset.fbasesel !== undefined) { filesOf(t.dataset.fbasesel).base = t.value; render(); }
 });
 function closeMenu() { const m = document.querySelector(".menu"); if (m) m.remove(); }
 $("tabs").onclick = (e) => {
@@ -1225,6 +1598,19 @@ $("tabs").onclick = (e) => {
   const t = e.target.closest("[data-tab]");
   if (t) { active = t.dataset.tab; follow = false; $("follow").classList.remove("on"); render(); }
 };
+// Sandboxes: open a Workspace's Branch at its pane, or show a pane's Sandbox on main.
+let focusPane = null;
+document.addEventListener("click", (e) => {
+  const t = e.target.closest && e.target.closest("[data-dws], [data-sbchip]");
+  if (!t) return;
+  e.stopImmediatePropagation();
+  // a pane's or a process's Sandbox chip: show that Sandbox on the main tab
+  if (t.dataset.sbchip) { active = "main"; follow = false; $("follow").classList.remove("on"); sbPulse = t.dataset.sbchip; render(); return; }
+  const k = t.dataset.dws, w = W.ws[k] || null, branch = w ? w.branch : null;
+  if (!branch) return;
+  active = branch; follow = false; $("follow").classList.remove("on"); focusPane = k; render(); focusPane = null;
+  document.querySelector(`[data-loc="ws:${CSS.escape(k)}"]`)?.scrollIntoView({ block: "nearest" });
+}, true);
 document.addEventListener("click", (e) => {
   const sd = e.target.closest("[data-sdk]");
   if (sd) { const k = sd.dataset.sdk; OPEN_SDK.has(k) ? OPEN_SDK.delete(k) : OPEN_SDK.add(k); render(); return; }
@@ -1247,7 +1633,13 @@ addEventListener("resize", () => placeCrabs());
 // Narrow layouts scroll the page or a column: crabs stay with their hosts.
 addEventListener("scroll", () => placeCrabs(), { capture: true, passive: true });
 
-goto(0); renderPlayer(); setPlaying(true);
+// Live: a process that exits on its own (or a Workspace changed outside a
+// call) shows up through the server's state poll.
+if (LIVE) setInterval(async () => {
+  if (running || !W.engine.s.project) return;
+  try { if (await W.engine.poll()) { derive(W); render(); } } catch { /* the server may be resetting */ }
+}, 3000);
+go(0).then(() => { renderPlayer(); if (!LIVE) setPlaying(true); });
 </script>
 </body>
 </html>

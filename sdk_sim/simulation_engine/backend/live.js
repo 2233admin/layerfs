@@ -30,6 +30,9 @@
       const response = await fetch(this.base + path, method === "GET" ? {} : {
         method, headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}),
       });
+      // A static file server (no /api) answers with an HTML error page.
+      if (!(response.headers.get("content-type") || "").includes("application/json"))
+        throw new Error(`${path}: no LayerFS server here (HTTP ${response.status}); start node sdk_sim/server/server.mjs and open this page from it`);
       const answer = await response.json();
       if (!response.ok) throw new Error(`${path}: ${answer.error}`);
       return answer;
