@@ -1,0 +1,266 @@
+// Trace source: replays SDK trace lines (sdk/js/README.md, "Call trace") as
+// agent events. A trace holds ids, never content, so ReplayEngine rebuilds
+// the project from the lines alone: Branches, Commits, Layers, Sandboxes,
+// Workspaces and processes, under the mirror's display ids (C1, L0, sb_01).
+// Files and sizes are not in a trace; those views stay empty.
+import { Mirror } from "../mirror.js";
+import { prepare, record } from "../attribution.js";
+
+const EMPTY = Object.freeze({});
+/** A traced call's time: the SDK call as the calling process measured it. */
+const timingOf = (line) => ({ totalMs: line.ms || 0, sdkMs: line.ms || 0, traced: true });
+
+/** The `layerfs_trace` lines of a JSONL text; other lines are skipped. */
+export function parseTrace(text) {
+  const out = [];
+  for (const raw of String(text).split("\n")) {
+    if (!raw.trim()) continue;
+    try { const line = JSON.parse(raw); if (line && line.layerfs_trace === 1) out.push(line); } catch { /* not a trace line */ }
+  }
+  return out;
+}
+
+/** End lines in call order (start time, then id), without start lines. */
+export function endLines(lines) {
+  return lines.filter((l) => l.phase !== "start").sort((x, y) => Date.parse(x.start) - Date.parse(y.start) || seqOf(x) - seqOf(y));
+}
+const seqOf = (line) => Number(String(line.id).split("-").pop()) || 0;
+
+/** A read-only engine over trace lines, with the surface the views read. */
+export class ReplayEngine {
+  constructor({ project = "project" } = {}) {
+    this.m = new Mirror();
+    this.project = project;
+    this.live = true;
+    this.replay = true;
+    this.trees = {};
+    this.published = false;
+    this.initAlias = null;
+  }
+  get s() { return this.m.s; }
+
+  // ------------------------------------------------------------ ids
+  layer(real) {
+    if (!real) return null;
+    const m = this.m, s = this.s;
+    if (m.toLabel.has(real)) return m.toLabel.get(real);
+    // Before any publish, the first Layer a line names is main's Init Layer.
+    if (this.initAlias && !this.published) {
+      const label = this.initAlias; this.initAlias = null;
+      m.toLabel.set(real, label); m.toReal.set(label, real);
+      return label;
+    }
+    const id = m.label("L", real);
+    if (!s.layers[id]) s.layers[id] = { id, parent: null, root: null, sourceBranch: null, sourceCommit: null, slot: m.slot++ };
+    if (!s.main) s.main = { head: id };
+    this.ensureProject();
+    return id;
+  }
+  commit(real) { return real ? this.m.commitLabel(real) : null; }
+  sandbox(real) {
+    if (!real) return null;
+    const id = this.m.label("sb", real), s = this.s;
+    if (!s.sandboxes[id]) { s.sandboxes[id] = { id, closed: false, workspaces: {}, wsOrder: [], processes: {}, procOrder: [] }; s.sandboxOrder.push(id); }
+    return id;
+  }
+  ref(real) {
+    if (typeof real !== "string") return real;
+    return /^[0-9a-f]{64,68}$/.test(real) ? this.m.toLabel.get(real) ?? (real.startsWith("12") ? this.commit(real) : this.layer(real)) : real;
+  }
+  ensureProject() { this.s.project ||= { name: this.project }; }
+
+  // ------------------------------------------------------------ state
+  initialize() {
+    this.ensureProject();
+    if (this.s.main) return this.s.main.head;
+    const id = this.m.label("L", `init:${this.project}`);
+    this.s.layers[id] = { id, parent: null, root: null, sourceBranch: null, sourceCommit: null, slot: this.m.slot++ };
+    this.s.main = { head: id };
+    this.initAlias = id;
+    return id;
+  }
+  branch(name, fields) {
+    const s = this.s;
+    if (!s.branches[name]) { s.branches[name] = { name, base: null, head: null, from: null, slot: this.m.slot++ }; s.branchOrder.push(name); }
+    return Object.assign(s.branches[name], fields);
+  }
+  /** A new Commit on `branch` (or the known one, for an UpToDate or fast-forward head). */
+  addCommit(real, branch, fields) {
+    const id = this.commit(real), s = this.s;
+    if (!s.commits[id]) {
+      const b = s.branches[branch];
+      s.commits[id] = { id, parent: b ? b.head : null, root: null, branch, slot: this.m.slot++, ...fields };
+    }
+    if (s.branches[branch]) s.branches[branch].head = id;
+    return id;
+  }
+  workspace(sb, path) { const box = this.s.sandboxes[sb]; return box && box.workspaces[path]; }
+
+  /** Applies one end line and returns the call's outcome envelope, with display ids. */
+  apply(line) {
+    const a = line.args || {}, s = this.s;
+    if (!line.ok) {
+      if (line.method === "sandbox.commit" && line.code === "Conflict") {
+        const w = this.workspace(this.sandbox(a.sandbox), a.path);
+        if (w) w.markers = ["(conflict)"];
+      }
+      return { ok: false, code: line.code || "Refused", refusal: { message: this.m.text(line.message || ""), conflicts: [] }, replay: true, timing: timingOf(line) };
+    }
+    const ok = (code, result) => ({ ok: true, code, result, replay: true, timing: timingOf(line) });
+    switch (line.method) {
+      case "project.init": {
+        const head = this.initialize();
+        return ok("Initialized", { kind: "Initialized", project: s.project.name, main: { headLayer: head } });
+      }
+      case "branch.fork": {
+        const base = this.layer(line.base), head = this.commit(line.head);
+        const from = a.from && a.from !== "main" && s.branches[a.from] ? s.branches[a.from].head || "fork:" + a.from : head || base;
+        this.branch(line.branch, { base, head, from });
+        return ok("Forked", { kind: "Forked", branch: line.branch, base, head });
+      }
+      case "branch.merge": {
+        const left = s.branches[a.branch], right = s.branches[a.with];
+        const known = s.commits[this.m.node(line.head)];
+        this.branch(line.branch, { base: left ? left.base : null, from: left ? left.head || "fork:" + a.branch : null });
+        const head = known ? known.id : this.addCommit(line.head, line.branch, { parent: left ? left.head : null, mergedFrom: right ? right.head : null, message: a.message || `merge ${a.branch} ${a.with}`, via: "merge" });
+        s.branches[line.branch].head = head;
+        return ok("Merged", { kind: "Merged", branch: line.branch, head, fastForward: !!known });
+      }
+      case "branch.publish": {
+        const commit = this.commit(line.commit), id = this.m.label("L", line.layer);
+        s.layers[id] ||= { id, parent: s.main ? s.main.head : null, root: null, sourceBranch: a.branch, sourceCommit: commit, slot: this.m.slot++ };
+        s.main = { head: id };
+        this.published = true;
+        return ok("Added", { kind: "Added", source: { branch: a.branch, commit }, publishedLayer: { id } });
+      }
+      case "sandbox.create": {
+        const id = this.sandbox(line.sandbox);
+        return ok("Ready", { kind: "Ready", id });
+      }
+      case "sandbox.close": {
+        const id = this.sandbox(a.sandbox);
+        s.sandboxes[id].closed = true;
+        return ok("Closed", { kind: "Closed", id });
+      }
+      case "sandbox.mount": {
+        const id = this.sandbox(line.sandbox || a.sandbox), box = s.sandboxes[id], path = line.path;
+        const baseCommit = this.commit(line.base), baseLayer = this.layer(line.baseLayer);
+        if (!box.workspaces[path]) box.wsOrder.push(path);
+        box.workspaces[path] = { sandbox: id, path, branch: line.branch || a.branch, baseCommit, baseLayer, mounted: true, markers: [], dirty: 0, slot: this.m.slot++ };
+        return ok("Mounted", { kind: "Mounted", sandbox: id, path, branch: line.branch || a.branch, base: baseCommit || baseLayer });
+      }
+      case "sandbox.unmount": {
+        const w = this.workspace(this.sandbox(a.sandbox), a.path);
+        if (w) w.mounted = false;
+        return ok("Unmounted", { kind: "Unmounted" });
+      }
+      case "sandbox.commit": {
+        const w = this.workspace(this.sandbox(a.sandbox), a.path);
+        if (line.kind !== "Committed" || !w) return ok(line.kind || "UpToDate", { kind: line.kind, head: this.commit(line.commit) });
+        const head = this.addCommit(line.commit, w.branch, { message: a.message || "", via: "commit" });
+        Object.assign(w, { baseCommit: head, markers: [] });
+        return ok("Committed", { kind: "Committed", head });
+      }
+      case "sandbox.exec":
+        return ok(line.kind || "ok", { exitCode: line.exitCode ?? 0 });
+      case "operator.process.start": {
+        const box = s.sandboxes[this.sandbox(a.sandbox)];
+        box.processes[line.process] = { id: line.process, path: a.path, command: a.command, status: "running" };
+        box.procOrder.push(line.process);
+        return ok("running", { process: line.process });
+      }
+      case "operator.process.cancel": {
+        const box = s.sandboxes[this.sandbox(a.sandbox)], p = box.processes[a.process];
+        if (p) p.status = "stopped";
+        return ok("Stopped", { kind: "Stopped", process: a.process, status: "stopped" });
+      }
+    }
+    if (/^fs\.(write|edit|apply|mkdir|rm|cp|mv)$/.test(line.method) && line.commit) {
+      if (line.kind === "UpToDate") return ok("UpToDate", { kind: "UpToDate", head: this.commit(line.commit) });
+      const head = this.addCommit(line.commit, a.branch, { message: a.message || line.method.slice(3), via: "fs" });
+      return ok("Committed", { kind: "Committed", head });
+    }
+    return ok(line.kind || "ok", {});
+  }
+
+  // ------------------------------------------------------------ the views' engine surface
+  markersIn(ws) { return ws.markers || []; }
+  dirtyOf(ws) { return ws.dirty || 0; }
+  storage() { return null; }
+  overlayOf() { return null; }
+  storedSize() { return null; }
+  fileReport() { return { rows: [], revisions: null, logical: null, unique: null, stored: null, metadata: null, pending: false, replay: true }; }
+  async poll() { return false; }
+  liveMountsOf(branch) {
+    const s = this.s, out = [];
+    for (const id of s.sandboxOrder) {
+      const sb = s.sandboxes[id];
+      if (sb.closed) continue;
+      for (const p of sb.wsOrder) if (sb.workspaces[p].mounted && sb.workspaces[p].branch === branch) out.push(`${id}:${p}`);
+    }
+    return out;
+  }
+  resolve(ref) {
+    const s = this.s, refuse = (code, message) => { throw Object.assign(new Error(message), { code }); };
+    if (ref === "main") { const l = s.layers[s.main.head]; return { label: `main @ ${l.id}`, kind: "main", root: null, tree: EMPTY, layer: l.id }; }
+    if (s.commits[ref]) return { label: ref, kind: "commit", root: null, tree: EMPTY, commit: ref };
+    if (s.layers[ref]) return { label: ref, kind: "layer", root: null, tree: EMPTY, layer: ref };
+    if (ref.includes(":/")) return { label: `${ref} (live)`, kind: "live", root: null, tree: EMPTY, workspace: ref };
+    const b = s.branches[ref] || refuse("NoSuchBranch", `no Branch named ${ref}`);
+    return { label: `${b.name} @ ${b.head || b.base}`, kind: "branch", root: null, tree: EMPTY, head: b.head };
+  }
+}
+
+/** Calls that only the client makes for itself, or reads with no line of their own. */
+const SKIP = (method) => method === "sandbox.service" || (method.startsWith("operator.") && method !== "operator.process.start" && method !== "operator.process.cancel");
+
+/** The agent step a trace line stands for, in the story's call names, with
+ * its Workspace bound by the ids on the line; null for a line not drawn. */
+export function stepOf(E, line, agent) {
+  if (SKIP(line.method)) return null;
+  const a = line.args || {}, base = { a: line.agent || agent, group: line.step || null };
+  const bind = (path) => ({ sandbox: E.m.toLabel.get(a.sandbox) ?? E.sandbox(a.sandbox), path });
+  switch (line.method) {
+    case "project.init": return { ...base, call: "project.init", args: { name: E.project, path: a.path } };
+    case "branch.fork": return a.from && a.from !== "main" ? { ...base, call: "branch.fork", args: { name: a.name, branch: E.ref(a.from) } } : { ...base, call: "main.fork", args: { name: a.name } };
+    case "sandbox.mount": return { ...base, call: "sandbox.mount", args: { branch: a.branch, sandbox: E.sandbox(a.sandbox) } };
+    case "sandbox.close": return { ...base, call: "sandbox.close", args: { sandbox: E.sandbox(a.sandbox) } };
+    case "sandbox.exec": return { ...base, sh: a.command, args: {}, bind: bind(a.path) };
+    case "operator.process.start": return { ...base, sh: a.command, args: { background: true }, bind: bind(a.path) };
+    case "operator.process.cancel": {
+      const id = E.sandbox(a.sandbox), p = E.s.sandboxes[id].processes[a.process];
+      return { ...base, call: "process.cancel", args: { process: a.process }, bind: { sandbox: id, path: p ? p.path : a.path } };
+    }
+    case "sandbox.commit": case "sandbox.unmount": case "sandbox.status":
+      return { ...base, call: line.method, args: { message: a.message }, bind: bind(a.path) };
+  }
+  const args = Object.fromEntries(Object.entries(a).map(([k, v]) => [k, k === "ref" || k === "from" || k === "to" || k === "commit" ? E.ref(v) : v]));
+  return { ...base, call: line.method, args };
+}
+
+/** Replays one end line into view `W` (whose engine is a ReplayEngine):
+ * the engine state first, then the agent's terminal line and place. */
+export function replayLine(W, line, { agent = W.lead, t0 = null } = {}) {
+  const E = W.engine;
+  // whole seconds since the first call, like the story clock
+  if (t0 !== null) W.clock = Math.max(W.clock, Math.round((Date.parse(line.start) - t0 + (line.ms || 0)) / 1000));
+  const st = stepOf(E, line, agent);
+  const p = st && prepare(W, st);
+  const o = E.apply(line);
+  if (!st) return null;
+  record(W, st, p, o, null, [{ call: p.call, code: o.code, timing: timingOf(line) }]);
+  return o;
+}
+
+/** Story steps for trace lines: one step per drawn end line. */
+export function traceSteps(lines, { agent = "main", label = (line) => `${line.method}${line.step ? " · " + line.step : ""}` } = {}) {
+  const ends = endLines(lines), t0 = ends.length ? Date.parse(ends[0].start) : 0, steps = [];
+  let pending = [];
+  for (const line of ends) {
+    pending.push(line);
+    if (SKIP(line.method)) continue;
+    const batch = pending; pending = [];
+    steps.push({ a: line.agent || agent, label: label(line), line, replay: (W) => { for (const l of batch) replayLine(W, l, { agent, t0 }); } });
+  }
+  return steps;
+}

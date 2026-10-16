@@ -407,20 +407,19 @@ button.chip { border: 0; color: inherit; cursor: pointer; }
 <script src="scenarios.js"></script>
 <script src="demo.js"></script>
 <script src="avatars/avatars.js"></script>
-<script>
-"use strict";
+<script src="dsh_story.js"></script>
+<!-- The view model: @dsh-layerfs/model, shared with the dsh client plugin. -->
+<script type="module">
+import * as X from "../dsh/packages/model/src/index.js";
 // ------------------------------------------------------------------ cast
 const AGENTS = {
   main:     { color: "#a347d4", crown: true },
   "ui-dev": { color: "#0a6cff" },
   tester:   { color: "#1f9d55" },
 };
-const SCOUTS = ["#d6336c", "#0f8b9a", "#e08600", "#5856d6", "#8e6e53", "#c2255c", "#2b8a3e", "#1971c2", "#9c36b5"].map((color, i) => {
-  const n = `scout-${i + 1}`; AGENTS[n] = { color }; return n;
-});
-const RECENT_S = 90, CAP = { row: 3, term: 3, bench: 6, chip: 1 };
-const BCOL = ["--b0", "--b1", "--b2", "--b3", "--b4", "--b5"];
-const FADE_S = 30, MAX_TABS = 6;
+const SCOUTS = window.LAYERFS_DSH_STORY.SCOUTS;
+SCOUTS.forEach((n, i) => { AGENTS[n] = { color: ["#d6336c", "#0f8b9a", "#e08600", "#5856d6", "#8e6e53", "#c2255c", "#2b8a3e", "#1971c2", "#9c36b5"][i] }; });
+const { CAP, RECENT_S, bubbleOf } = X;
 const M = window.LayerSim, FM = window.LayerFiles, { simulateShell, liveCommand, execLines, Engine } = window.LayerTerm;
 // ?backend=sim (default): the simulator in this page, with a free player.
 // ?backend=live: the real product through server/server.mjs (one project
@@ -433,92 +432,12 @@ const rerender = () => { clearTimeout(renderSoon); renderSoon = setTimeout(() =>
 const FIXTURE = window.LAYERFS_SCENARIOS[0].steps[0].args.files;
 
 // ------------------------------------------------------------------ story
-// Each step is one agent's call. dsh runs it on the engine; every outcome
-// (ids, Conflict, merges) comes from the engine, never from this script.
-//   { a, call, args }   an SDK call; `as` names what it made (a Sandbox or a
-//                       Workspace) for later steps, and args.sandbox may use that name
-//   { a, sh }           a shell command in the agent's Workspace (`ws` picks one by name)
-//   { a, script, calls } one agent's script: several calls in one step, each an
-//                       event whose `group` is the script's name
-//   { a: "dsh", ... }   dsh itself: spawn agents, a burst of calls, a pause
-const DSH_STORY = [
-  { a: "main", call: "project.init", args: { name: "website", files: FIXTURE },
-    cap: "<b>Main tab</b> = the project map: the project terminal (left), the Branch list (middle), and History or Files of main (right). Nothing is ever mounted on main." },
-  { a: "main", call: "main.fork", args: { name: "feature-home" },
-    cap: "The main agent forks a Branch. Branch calls land in the <b>project terminal</b>; a tab chip appears for the new Branch." },
-  { a: "dsh", call: "dsh.spawn", args: { agents: ["ui-dev", "tester"] },
-    cap: "dsh spawns two subagents. No scope, no assignment: they wait until they act." },
-  { a: "ui-dev", call: "sandbox.create", args: {}, as: "box",
-    cap: "Any agent may create a Sandbox (one machine, one localhost). The call lands in the <b>project terminal</b>, tagged with who made it, and the Sandbox joins the list on main." },
-  { a: "ui-dev", call: "sandbox.mount", args: { branch: "feature-home", sandbox: "box" },
-    cap: "<b>Follow</b> jumps to the Branch tab. ui-dev mounts a Workspace in that Sandbox: a pane owned by ui-dev only." },
-  { a: "ui-dev", sh: "mkdir -p app/components && echo 'export function Hero() { return <section>Hero</section>; }' > app/components/hero.tsx",
-    cap: "Shell commands run in the Workspace (simulated shell). Their writes stay in the Workspace until a commit." },
-  { a: "ui-dev", call: "sandbox.commit", args: { message: "add hero" },
-    cap: "The commit lands on the Branch: a node in History, an A badge in Files." },
-  { a: "tester", call: "sandbox.mount", args: { branch: "feature-home", sandbox: "box" },
-    cap: "A second agent mounts its own Workspace on the same Branch, in the same Sandbox. <b>One Branch, many agents; one Workspace, one agent; one Sandbox, many Workspaces.</b>" },
-  { a: "main", call: "fs.read", args: { ref: "feature-home", path: "/app/page.tsx" },
-    cap: "The main agent uses <code>fs</code> calls. They go to the Branch's <b>fs terminal</b> on the left, tagged by agent." },
-  { a: "main", call: "fs.edit", args: { branch: "feature-home", path: "/app/page.tsx", oldText: "Hello world", newText: "Welcome back", message: "headline copy" },
-    cap: "An fs write commits straight to the Branch — no mount, no pane. Both mount badges in History turn red: those Workspaces are now behind." },
-  { a: "tester", sh: "sed -i 's/Hello world/Hello there/' app/page.tsx",
-    cap: "Meanwhile tester edits the same line in its stale Workspace." },
-  { a: "tester", call: "sandbox.commit", args: { message: "friendlier headline" },
-    cap: "The engine merges three-way and finds a <b>Conflict</b>. Nothing is committed; the pane and tab chip turn red." },
-  { a: "tester", sh: "cat app/page.tsx",
-    cap: "The engine wrote the conflict markers into tester's Workspace." },
-  { a: "tester", sh: "sed -i '/Welcome back\\|<<<<<<<\\|=======\\|>>>>>>>/d' app/page.tsx",
-    cap: "tester keeps its own line and drops the markers…" },
-  { a: "tester", call: "sandbox.commit", args: { message: "resolve headline" },
-    cap: "…and commits on the new head." },
-  { a: "ui-dev", sh: "npm ci && npm test" },
-  { a: "ui-dev", sh: "npm run dev &",
-    cap: "A background dev server. It shows under ui-dev's Sandbox on the main tab, and in the bottom bar on every tab." },
-  { a: "ui-dev", call: "sandbox.commit", args: { message: "install deps" },
-    cap: "ui-dev's Workspace is two Commits behind, but touched other files: the engine merges it cleanly and commits on the head." },
-  { a: "ui-dev", call: "process.cancel", args: {},
-    cap: "The engine refuses to unmount a busy Workspace, so ui-dev stops its server first." },
-  { a: "ui-dev", call: "sandbox.unmount", args: {},
-    cap: "Unmount closes the pane." },
-  { a: "tester", call: "sandbox.unmount", args: {} },
-  { a: "ui-dev", call: "branch.fork", args: { branch: "feature-home", name: "try-a" },
-    cap: "Any agent forks any Branch, any time. Fork, merge and publish always show on the main tab." },
-  { a: "tester", call: "branch.fork", args: { branch: "feature-home", name: "try-b" } },
-  { a: "dsh", call: "dsh.spawn", args: { agents: SCOUTS },
-    cap: "Scale it up: dsh spawns 9 scouts. Idle agents get no crabs on the main tab — just the count in the Branches header." },
-  { a: "dsh", call: "dsh.burst", tab: "main",
-    burst: SCOUTS.map((n, i) => ({ a: n, call: "fs.read", args: { ref: ["feature-home", "try-a", "try-b"][i % 3 === 0 || i > 6 ? 0 : i % 3], path: ["/app/page.tsx", "/app/components/hero.tsx", "/README.md"][i % 3] } })),
-    cap: "The scouts read across Branches. A row shows at most 3 crabs plus <b>+N</b>; tab chips cap their avatars the same way." },
-  { a: "dsh", call: "dsh.view", tab: "feature-home",
-    cap: "Inside a Branch tab the fs terminal caps its crowd too. Only agents on <i>this</i> Branch appear here." },
-  { a: "ui-dev", call: "fs.write", args: { branch: "try-a", path: "/app/theme.css", content: ":root { --brand: #d97757; }\n", message: "warm theme" },
-    cap: "One agent, many Branches: ui-dev is now on try-a. Its location comes from its last call — nothing was assigned." },
-  { a: "tester", call: "sandbox.mount", args: { branch: "try-b", sandbox: "box" } },
-  { a: "tester", sh: "sed -i 's/<section>/<section className=\"lazy\">/' app/components/hero.tsx" },
-  { a: "tester", call: "sandbox.commit", args: { message: "lazy hero" } },
-  { a: "tester", call: "sandbox.unmount", args: {} },
-  { a: "tester", script: "matrix.sh", tab: "main", calls: [
-      { call: "sandbox.create", args: {}, as: "ci" },
-      { call: "sandbox.mount", args: { branch: "try-a", sandbox: "ci" }, as: "ci-a" },
-      { call: "sandbox.mount", args: { branch: "try-b", sandbox: "ci" }, as: "ci-b" }],
-    cap: "One agent, many Workspaces: tester runs a script that creates its own Sandbox and mounts try-a and try-b side by side. Each call is still one event; its <b>group</b> names the script, so its lines carry <code>⧉ matrix.sh</code>." },
-  { a: "tester", script: "matrix.sh", tab: "main", calls: [{ ws: "ci-a", sh: "npm test" }, { ws: "ci-b", sh: "npm test" }],
-    cap: "tester stands where its last call ran, with <b>×N</b> for the places it works in at once; a faint copy marks each other Workspace it holds." },
-  { a: "tester", script: "matrix.sh", tab: "main", calls: [
-      { ws: "ci-a", call: "sandbox.unmount", args: {} },
-      { ws: "ci-b", call: "sandbox.unmount", args: {} },
-      { call: "sandbox.close", args: { sandbox: "ci" } }],
-    cap: "The script cleans up: two unmounts, then <b>sandbox close</b>. Not only the main agent: any agent may close a Sandbox once nothing is mounted in it." },
-  { a: "main", call: "branch.merge", args: { branch: "try-a", with: "try-b", name: "release" },
-    cap: "Merge never changes its inputs: the engine creates a new Branch from two." },
-  { a: "main", call: "branch.publish", args: { branch: "release" },
-    cap: "<b>Publish</b> is the one call that lands in main. A new Layer joins the main lane." },
-  { a: "dsh", call: "dsh.idle", args: { seconds: 40 },
-    cap: "Idle Branch tabs fade after ~30 s unless pinned; their history stays in the graph." },
-  { a: "dsh", call: "dsh.view", tab: "feature-home",
-    cap: "<b>Recently here:</b> a Branch tab's bench holds only idle agents whose last call was on this Branch, for ~90 s." },
-];
+// The dsh story (dsh_story.js), or ?source=trace&file=<jsonl>: an SDK trace
+// replayed through the model (sources/trace.js), or a demo story (below).
+const PARAMS = new URLSearchParams(location.search);
+const TRACE_FILE = PARAMS.get("source") === "trace" ? PARAMS.get("file") : null;
+const TRACE_LINES = TRACE_FILE ? X.parseTrace(await (await fetch(TRACE_FILE)).text()) : null;
+const DSH_STORY = window.LAYERFS_DSH_STORY.story(FIXTURE);
 
 // ------------------------------------------------------------------ demo stories (demo.js)
 // ?story=agents|tour|conflicts|merge plays a tui.html demo story. Its steps
@@ -528,8 +447,8 @@ const DSH_STORY = [
 // An agent step is one Bash tool call: mount a Workspace in the Branch's
 // shared Sandbox, run, commit, unmount. Each phase is one frame, in demo.js's
 // own schedule, so the calls of a burst interleave as they do in tui.html.
-const STORY_KEY = new URLSearchParams(location.search).get("story") || "dsh";
-const DEMO = (window.LAYERFS_DEMO || {})[STORY_KEY] || null;
+const STORY_KEY = PARAMS.get("story") || "dsh";
+const DEMO = TRACE_LINES ? null : (window.LAYERFS_DEMO || {})[STORY_KEY] || null;
 const LEAD = DEMO && DEMO.roster ? "lead" : "main";
 if (DEMO && DEMO.roster) for (const k of Object.keys(DEMO.roster)) AGENTS[k] = {};
 
@@ -554,406 +473,48 @@ function avatar(n) {
 }
 // the cast in story order: the lead first, then everyone this story uses
 for (const n of [LEAD, ...(DEMO ? Object.keys((DEMO && DEMO.roster) || {}) : Object.keys(AGENTS))]) avatar(n);
-function demoFrames(story) {
-  const escT = (t) => String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-  const out = [{ a: LEAD, call: "project.init", args: { name: "website", files: FIXTURE },
-    cap: `<b>${escT(story.title)}</b> · the tui.html demo story, played by dsh. Every call is made by an agent, and the UI shows who.`, w: 1 }];
-  story.steps.forEach((st, i) => {
-    const cap = st.note ? (st.act ? `<b>${escT(st.act)}</b> · ` : "") + escT(st.note) : null;
-    const w = st.beat || !story.roster ? 1 : 0.55;
-    const base = { demo: st, index: i };
-    if (st.agent || st.burst) {
-      const evs = window.LAYERFS_DEMO.schedule(st).filter((e) => e.phase !== "think");
-      evs.forEach((ev, k) => out.push({ ...base, ev, a: ev.who, cap: k ? null : cap, last: k === evs.length - 1,
-        w: ev.phase === "mount" ? 0.35 : w, label: `${ev.who} · ${ev.phase === "done" ? "commit + unmount" : ev.phase === "stop" ? "stop" : ev.phase === "mount" ? "mount" : ev.line}` }));
-      return;
-    }
-    const who = st.ui === "agents" || st.milestone ? "dsh" : LEAD;
-    const label = st.ui === "agents" ? `spawn ${st.agents.join(", ")} on ${st.branch}` : st.milestone ? `${st.milestone} ${st.pct}% · ${st.caption}`
-      : st.ui ? `${st.ui} ${st.as || st.term}` : `${st.term === "history" ? "project" : st.term === "fs" ? "fs" : st.term}> ${st.lines[0]}${st.lines.length > 1 ? " …" : ""}`;
-    out.push({ ...base, a: who, cap: st.milestone ? `<b>${escT(st.milestone)} ${st.pct}%</b> · ${escT(st.caption)}` : cap, last: true, label, w });
-  });
-  return out;
-}
-const STORY = DEMO ? demoFrames(DEMO) : DSH_STORY;
+const STORY = TRACE_LINES ? X.traceSteps(TRACE_LINES, { agent: LEAD }) : DEMO ? X.demoFrames(DEMO, { lead: LEAD, fixture: FIXTURE, schedule: window.LAYERFS_DEMO.schedule }) : DSH_STORY;
 
 // ------------------------------------------------------------------ driver
-// W is the view model: the engine (W.engine, sim or live, same surface) plus
-// what dsh knows and the engine does not: which agent made each call, where
-// each agent is, and the lines each terminal printed. derive() rebuilds the
-// graph/branch/Workspace views from the engine state after every step.
-const newAgent = () => ({ lastLoc: { kind: "bench" }, lastT: -99 });
+// W is the view (X.createView): the engine (W.engine: sim, live or a trace
+// replay, same surface) plus what dsh knows and the engine does not: which
+// agent made each call, where each agent is, and the lines each terminal
+// printed. The model (dsh/packages/model) builds it; this page draws it.
 const EMPTY_STATE = () => ({ project: null, main: null, roots: {}, commits: {}, layers: {}, branches: {}, branchOrder: [], sandboxes: {}, sandboxOrder: [] });
-const branchRoot = (s, b) => (b.head ? s.commits[b.head].root : s.layers[b.base].root);
-// the engine's Workspace for a pane key "sb_01:/workspaces/2"
-const engWs = (s, k) => { const i = k.indexOf(":"), sb = s.sandboxes[k.slice(0, i)]; return sb && sb.workspaces[k.slice(i + 1)]; };
+const ENV = {
+  live: LIVE, simulateShell, liveCommand, execLines, scriptFor: M.scriptFor, diffTrees: M.diffTrees,
+  loaded: (r, w) => !LIVE || w.engine.trees[r],
+  // a demo read that names a file opens it in that tab's Files view
+  onFiles: (tab, files) => { const f = filesOf(tab); f.path = files.path; f.mode = files.mode; rightMode[tab] = "files"; },
+};
 function fresh() {
   let engine;
-  if (LIVE) { engine = new window.LayerBackendLive.LiveBackend(); engine.state = EMPTY_STATE(); }
+  if (TRACE_LINES) engine = new X.ReplayEngine({ project: PARAMS.get("project") || "website" });
+  else if (LIVE) { engine = new window.LayerBackendLive.LiveBackend(); engine.state = EMPTY_STATE(); }
   else { engine = new window.LayerBackendSim.SimBackend(); engine.packed = PACKED; engine.packing = PACKING; }
   engine.onchange = rerender;
-  const W = { engine, clock: 0, seq: 0, agents: { [LEAD]: newAgent() }, panes: {}, fsLog: {}, hist: [], attrib: {}, touched: {}, names: {}, sbBy: {},
-    flash: {}, newNodes: new Set(), lastTab: "main", last: null, check: null };
-  if (DEMO) {
-    W.demo = { e: new Engine(engine, "website"), fs: {}, sb: {}, st: {}, active: "main", code: {} };
-    if (DEMO.roster) W.demo.e.actor = "lead";
-  }
-  derive(W);
-  return W;
+  return X.storyView(engine, { lead: LEAD, demo: DEMO, Engine });
 }
-const HIST = { "project.init": (a) => `init ${a.name}`, "main.fork": (a) => `fork ${a.name}`, "branch.fork": (a) => `fork ${a.name} --from ${a.branch}`,
-  "branch.merge": (a) => `merge ${a.branch} ${a.with} --name ${a.name}`, "branch.publish": (a) => `publish ${a.branch}`,
-  "sandbox.create": () => "sandbox create", "sandbox.close": (a) => `sandbox close ${a.sandbox}` };
-// Sandbox lifecycle calls belong to the project, not to a Branch: they print in the project terminal.
-const SB_LIFE = new Set(["sandbox.create", "sandbox.close"]);
-const FS = { "fs.read": (a) => `read ${a.path}`, "fs.edit": (a) => `edit ${a.path} -m "${a.message}"`, "fs.write": (a) => `write ${a.path} -m "${a.message}"` };
-
-async function runStep(W, st) {
-  const before = rootsOf(W), known = new Set(Object.keys(W.nodes));
-  W.last = null; W.check = null; W.tick = (W.tick || 0) + 1; // one tick per step: poses show this step's outcomes
-  if (st.demo) { W.clock += 2; await runDemo(W, st); }
-  else if (st.burst) { W.clock += 4; for (const e of st.burst) await runCall(W, e); W.lastTab = st.tab; }
-  else if (st.script) { W.clock += 4; for (const c of st.calls) await runCall(W, { a: st.a, group: st.script, ...c }); if (st.tab) W.lastTab = st.tab; }
-  else if (st.call === "dsh.view") W.lastTab = st.tab;
-  else if (st.call === "dsh.spawn") { W.clock += 4; for (const n of st.args.agents) (W.agents[n] ||= newAgent()).spawned = W.tick; }
-  else if (st.call === "dsh.idle") W.clock += st.args.seconds;
-  else { W.clock += 4; await runCall(W, st); }
-  derive(W);
-  W.newNodes = new Set(Object.keys(W.nodes).filter((id) => !known.has(id)));
-  W.flash = changedPaths(W, before, rootsOf(W));
-}
-
-// The outcome of an agent's last call in a step, for its pose.
-const outOf = (call, o, tick) => ({ call, code: o.code, ok: o.ok, exit: o.ok && o.result ? o.result.exitCode || 0 : 0, proc: call === "sandbox.exec" && !!(o.ok && o.result && o.result.process), tick });
-// Demo steps: a background start reads as "running", so use the step's code when it says so.
-const outCode = (call, o, code, tick) => ({ ...outOf(call, o, tick), proc: code === "running" || (call === "sandbox.exec" && !!(o.ok && o.result && o.result.process)) });
-// One frame of a demo story, run on the terminal engine; its records become
-// dsh terminal lines, Workspace panes, agent locations and attribution.
-const LINE_CLASS = { err: "bad", warn: "mark", ok: "good", info: "good" };
-const outLines = (rec) => rec.lines.map((x) => ({ t: x.t, c: LINE_CLASS[x.c] || "" }));
-const callsOf = (rec, skip) => rec.calls.filter((c) => !skip || !skip.has(c.call)).map((c) => ({ call: c.call, code: c.outcome.code, timing: c.outcome.timing, script: c.script }));
-const LIFTED = new Set(["sandbox.create"]);
-async function runDemo(W, fr) {
-  const D = W.demo, e = D.e, st = fr.demo, n = fr.a, seq = ++W.seq, recs = [];
-  // The engine creates a Sandbox inside a mount; dsh reports that create as
-  // its own event, so it prints in the project terminal under the agent.
-  const liftCreates = (rec) => {
-    for (const c of rec.calls.filter((x) => x.call === "sandbox.create")) {
-      W.hist.push({ agent: n, text: HIST["sandbox.create"](), out: outcome(c.call, c.outcome), t: seq, calls: callsOf({ calls: [c] }) });
-      if (c.outcome.ok) W.sbBy[c.outcome.result.id] = { made: n };
-    }
-    return rec;
-  };
-  const A = n === "dsh" ? null : (W.agents[n] ||= newAgent());
-  const wsBranch = (b) => { const w = b && W.engine.s.sandboxes[b.sandbox] && W.engine.s.sandboxes[b.sandbox].workspaces[b.path]; return w ? w.branch : D.active; };
-  const paneLine = (b, line) => { const k = `${b.sandbox}:${b.path}`; (W.panes[k] ||= { agent: n, born: seq, lines: [] }).lines.push({ ...line, t: seq }); return k; };
-  const inPane = (b, rec, text, dim) => {
-    const out = outLines(rec).filter((x) => !/^✓ created sb_/.test(x.t)); // the create printed in the project terminal
-    const k = paneLine(b, { text, dim, out, calls: callsOf(rec, LIFTED) }), branch = wsBranch(b);
-    A.lastLoc = rec.unmounted ? { kind: "bench" } : { kind: "ws", branch, ws: k }; A.lastBranch = branch; W.lastTab = branch; W.touched[branch] = W.clock;
-  };
-  let code = null;
-  if (st.branch) D.active = st.branch;
-  if (st.ui === "agents") {
-    // dsh spawns the agents; they wait on this Branch's bench until they act
-    for (const a of st.agents) {
-      D.st[a] = { name: a, branch: st.branch, open: null, sticky: null, server: null };
-      Object.assign((W.agents[a] ||= newAgent()), { lastLoc: { kind: "bench" }, lastT: W.clock, lastBranch: st.branch, spawned: W.tick });
-    }
-    code = "ok"; W.lastTab = st.branch;
-  } else if (st.milestone) code = "ok";
-  else if (fr.ev) {
-    const ev = fr.ev, a = D.st[ev.who], b = ev.phase === "stop" ? a.server : a.open;
-    let rec = null;
-    if (ev.phase === "stop") rec = await e.agentStop(a);
-    else if (ev.phase === "mount") {
-      rec = liftCreates(await e.agentMount(a, st.on));
-      if (rec.binding && !rec.reused) W.panes[`${rec.binding.sandbox}:${rec.binding.path}`] = { agent: n, born: seq, lines: [] };
-      if (rec.binding) inPane(rec.binding, rec, rec.reused ? "reuse the kept Workspace" : `mount ${wsBranch(rec.binding)}`, true);
-    } else if (ev.phase === "exec" && b) rec = await e.agentExec(a, ev.line);
-    else if (ev.phase === "done" && b) rec = await e.agentFinish(a);
-    if (rec && ev.phase !== "mount") inPane(b || rec.binding, rec, ev.phase === "done" ? `commit -m "${n}: ${ev.line}"` : ev.phase === "stop" ? "stop the server" : ev.line);
-    if (rec) { recs.push(rec); if (!(ev.phase === "mount" && a.open)) code = rec.code; }
-  } else if (st.ui === "open" || st.ui === "split") {
-    const o = await e.openSandbox(D.active, st.ui === "split" ? D.sb[st.from].sandbox : null);
-    liftCreates(o.rec);
-    recs.push(o.rec);
-    code = o.rec.calls.length ? o.rec.calls[o.rec.calls.length - 1].outcome.code : null;
-    if (o.binding) {
-      D.sb[st.as] = o.binding;
-      W.panes[`${o.binding.sandbox}:${o.binding.path}`] = { agent: n, born: seq, lines: [] };
-      inPane(o.binding, o.rec, `${st.ui === "split" ? "split" : "open"} ${D.active}`, true);
-    }
-  } else if (st.ui === "stop") {
-    const b = D.sb[st.term], sb = W.engine.s.sandboxes[b.sandbox], rec = e.newRec();
-    const proc = sb.procOrder.find((p) => sb.processes[p].path === b.path && sb.processes[p].status === "running");
-    const o = await e.call(rec, "process.cancel", { sandbox: b.sandbox, process: proc });
-    rec.lines.push({ t: o.ok ? `■ ${proc} stopped` : `✕ ${o.code}`, c: o.ok ? "info" : "err" });
-    recs.push(rec); code = o.code; inPane(b, rec, `kill ${proc}`);
-  } else {
-    // typed lines: the project terminal (history), the fs terminal, or a Sandbox terminal
-    for (const line of st.lines) {
-      const at = D.active;
-      const rec = st.term === "history" ? await e.history(line) : st.term === "fs" ? await e.fs(at, line, (D.fs[at] ||= {})) : await e.sandbox(D.sb[st.term], line);
-      recs.push(rec);
-      if (rec.calls.length) code = rec.calls[rec.calls.length - 1].outcome.code;
-      const entry = { agent: n, text: line, out: outLines(rec), t: seq, calls: callsOf(rec), dim: /^(cat|read|ls|blame|log|branches|diff)\b/.test(line) };
-      if (st.term === "history" || (st.term === "fs" && at === "main")) {
-        W.hist.push(st.term === "fs" ? { ...entry, text: "fs " + line } : entry); A.lastLoc = { kind: "hist" }; W.lastTab = "main";
-      } else if (st.term === "fs") {
-        (W.fsLog[at] ||= []).push(entry); A.lastLoc = { kind: "fs", branch: at }; A.lastBranch = at; W.lastTab = at; W.touched[at] = W.clock;
-      } else {
-        const b = D.sb[st.term];
-        inPane(b, rec, line);
-        if (rec.calls.some((c) => c.call === "sandbox.unmount" && c.outcome.ok)) A.lastLoc = { kind: "bench" };
-      }
-      if (rec.forked) D.active = rec.forked;
-      // a read that names a file opens it in that tab's Files view (blame on main)
-      if (rec.files) { const tab = W.engine.s.branches[rec.files.subject] ? rec.files.subject : "main", f = filesOf(tab); f.path = rec.files.path; f.mode = rec.files.mode; rightMode[tab] = "files"; }
-    }
-  }
-  if (A) A.lastT = W.clock;
-  // the call that matters for the pose: a refusal, Commit, merge, publish or command, not the unmount after it
-  const all = recs.flatMap((r) => r.calls), lastCall = all.filter((c) => !c.outcome.ok || ["Committed", "Merged", "Added"].includes(c.outcome.code) || c.call === "sandbox.exec").pop() || all[all.length - 1];
-  if (A && lastCall) A.out = outCode(lastCall.call, lastCall.outcome, D.code[fr.index], W.tick);
-  // attribution: each node a call created belongs to the agent that made it
-  for (const rec of recs) for (const c of rec.calls) {
-    const o = c.outcome, node = nodeOf(o);
-    if (node) { W.attrib[node] = n; W.last = { agent: n, call: c.call, step: { sh: fr.ev && fr.ev.line }, o, node }; }
-    if (o.ok && (o.code === "Forked" || o.code === "Merged")) { W.attrib["fork:" + o.result.branch] = n; W.touched[o.result.branch] = W.clock; }
-    if (o.ok && c.call === "branch.publish") W.touched[c.args.branch] = W.clock;
-  }
-  if (!W.last && n !== "dsh") {
-    const c = recs.flatMap((r) => r.calls).pop();
-    if (c) W.last = { agent: n, call: c.call, step: { sh: fr.ev && fr.ev.line }, o: c.outcome, node: null };
-  }
-  // the step's outcome, checked against demo.js's expectation on its last frame
-  if (code !== null) D.code[fr.index] = code;
-  if (fr.last) {
-    const expect = LIVE && st.live ? st.live : st.expect, got = D.code[fr.index] ?? "(none)";
-    W.check = { expect, code: got, ok: got === expect };
-    (W.checks ||= []).push({ index: fr.index, ...W.check });
-  }
-}
-
-// One SDK call on the engine, with its timing envelope (sim: in the page;
-// live: SDK, refresh and HTTP) and the inline Node script an agent would send
-// (model.js scriptFor). Live Init is the server's reset: a fresh volume and
-// an Init of the same fixture.
-async function sdkCall(W, calls, call, args) {
-  let o;
-  if (LIVE && call === "project.init") {
-    const t0 = performance.now();
-    o = await W.engine.reset();
-    const s = W.engine.s;
-    o.result = { kind: "Initialized", project: s.project.name, main: { headLayer: s.main.head } };
-    o.timing = { totalMs: performance.now() - t0, reset: true };
-  } else o = await W.engine.run(call, args);
-  calls.push({ call, code: o.code, timing: o.timing, script: M.scriptFor({ call, args }, (W.engine.s.project || {}).name || "website") });
-  return o;
-}
-async function runCall(W, st) {
-  const n = st.a, A = (W.agents[n] ||= newAgent()), seq = ++W.seq;
-  let s = W.engine.s;
-  let call = st.call, args = { ...st.args }, shOut = null, o, branch;
-  const calls = [];
-  // the Workspace a pane call runs in: the one the step names, else the agent's latest
-  const bind = st.ws ? W.names[st.ws] : A.ws, group = st.group || null;
-  const mine = bind && s.sandboxes[bind.sandbox].workspaces[bind.path], pane = bind && `${bind.sandbox}:${bind.path}`;
-  const paneCall = !!st.sh || call === "sandbox.commit" || call === "sandbox.unmount" || call === "process.cancel";
-  if (paneCall) { Object.assign(args, bind); branch = mine.branch; }
-  if (call === "process.cancel" && !args.process) {
-    const sb = s.sandboxes[bind.sandbox], run = sb.procOrder.map((id) => sb.processes[id]).filter((x) => x.path === bind.path && x.status === "running");
-    args = { sandbox: bind.sandbox, process: run.length ? run[run.length - 1].id : "none" };
-  }
-  // a Sandbox by the name a create step gave it, or by its id
-  if (args.sandbox && typeof W.names[args.sandbox] === "string") args.sandbox = W.names[args.sandbox];
-  if (call === "sandbox.mount") branch = args.branch;
-  if (st.sh) {
-    call = "sandbox.exec";
-    // sim: the shell is simulated and its writes go to the call; live: the
-    // command really runs in the Workspace (a trailing & starts a process).
-    const r = LIVE ? liveCommand(st.sh) : simulateShell(st.sh, mine, s.sandboxes[bind.sandbox]);
-    shOut = r.out || null;
-    if (r.refuse) o = { ok: false, code: "ShellRefused", refusal: { message: r.out.map((x) => x.t).join(" ") } };
-    else if (LIVE) { o = await sdkCall(W, calls, call, { ...args, command: r.command, background: r.background || undefined }); shOut = o.ok ? execLines(o.result) : []; }
-    else o = await sdkCall(W, calls, call, { ...args, command: st.sh, writes: r.writes, output: r.out.map((x) => x.t).join("\n"), exitCode: r.code, background: r.background || undefined });
-  } else o = await sdkCall(W, calls, call, args);
-  s = W.engine.s; // live: the server answers with a new state object
-  // live reads name a raw snapshot id: show the ref at its head instead, like the simulator
-  if (LIVE && call === "fs.read" && o.ok && s.branches[args.ref]) o.result.snapshot = `${args.ref} @ ${s.branches[args.ref].head || s.branches[args.ref].base}`;
-  const out = outcome(call, o, shOut, args);
-  W.last = { agent: n, call, step: st, o, node: nodeOf(o) };
-  A.out = outOf(call, o, W.tick);
-  if (W.last.node) W.attrib[W.last.node] = n;
-  if (o.ok && call === "sandbox.create") { W.sbBy[o.result.id] = { made: n }; if (st.as) W.names[st.as] = o.result.id; }
-  if (o.ok && call === "sandbox.close") (W.sbBy[args.sandbox] ||= {}).closed = n;
-  if (o.ok && (o.code === "Forked" || o.code === "Merged")) W.attrib["fork:" + o.result.branch] = n;
-
-  if (call.startsWith("fs.")) {
-    branch = args.branch || args.ref;
-    (W.fsLog[branch] ||= []).push({ agent: n, text: FS[call](args), out, t: seq, dim: call === "fs.read", calls, group });
-    A.lastLoc = { kind: "fs", branch };
-  } else if (call === "sandbox.mount") {
-    if (o.ok) {
-      A.ws = { sandbox: o.result.sandbox, path: o.result.path };
-      if (st.as) W.names[st.as] = A.ws;
-      const k = `${A.ws.sandbox}:${A.ws.path}`;
-      W.panes[k] = { agent: n, born: seq, lines: [{ dim: true, text: `mount ${branch}`, out, t: seq, calls, group }] };
-      A.lastLoc = { kind: "ws", branch, ws: k };
-    } else { W.hist.push({ agent: n, text: `mount ${branch}`, out, t: seq, calls, group }); A.lastLoc = { kind: "hist" }; }
-  } else if (paneCall) {
-    if (call === "sandbox.unmount" && o.ok) {
-      // the agent may still hold other Workspaces (a script's fan-out): it stays on the latest one
-      const left = Object.keys(W.panes).filter((k) => k !== pane && W.panes[k].agent === n && (engWs(s, k) || {}).mounted).pop();
-      if (left) { const i = left.indexOf(":"); A.ws = { sandbox: left.slice(0, i), path: left.slice(i + 1) }; A.lastLoc = { kind: "ws", branch: engWs(s, left).branch, ws: left }; }
-      else { A.ws = null; A.lastLoc = { kind: "bench" }; }
-      A.lastBranch = branch;
-    } else {
-      W.panes[pane].lines.push({ text: st.sh || (call === "process.cancel" ? `kill ${args.process}` : `commit -m "${args.message}"`), out, t: seq, calls, group });
-      A.lastLoc = { kind: "ws", branch, ws: pane };
-    }
-  } else {
-    W.hist.push({ agent: n, text: HIST[call](args), out, t: seq, calls, group });
-    A.lastLoc = { kind: "hist" };
-    branch = call === "branch.publish" ? args.branch : args.name;
-  }
-  A.lastT = W.clock;
-  if (A.lastLoc.branch) A.lastBranch = A.lastLoc.branch;
-  if (branch && s.branches[branch]) W.touched[branch] = W.clock;
-  W.lastTab = !SB_LIFE.has(call) && (call.startsWith("fs.") || call.startsWith("sandbox.") || paneCall) ? branch : "main";
-}
-// The node a call created, for attribution and the flying block.
-function nodeOf(o) {
-  if (!o.ok) return null;
-  const r = o.result;
-  return o.code === "Committed" || o.code === "Merged" ? r.head : o.code === "Added" ? r.publishedLayer.id : o.code === "Initialized" ? r.main.headLayer : null;
-}
-// Read both engines' answers: live results carry the product's fields, so
-// anything only the simulator reports is optional here.
-function outcome(call, o, shOut, args = {}) {
-  const L = (t, c = "") => ({ t, c });
-  if (shOut) {
-    const out = shOut.map((x) => L(x.t, /^(<{7}|={7}|>{7})/.test(x.t) ? "mark" : x.c === "err" ? "bad" : ""));
-    if (o.ok && o.result.truncated) out.push(L("… output truncated at 1 MiB per stream", "dim"));
-    out.push(!o.ok ? L(`✕ ${o.code}  ${o.refusal.message}`, "bad") : o.result.process ? L(`● running in background as ${o.result.process}`, "good") : L(`[exit ${o.result.exitCode}]`, o.result.exitCode ? "bad" : "good"));
-    return out;
-  }
-  if (!o.ok) return [L(`✕ ${o.code}  ${o.refusal.message}`, "bad"), ...(o.refusal.conflicts || []).map((c) => L(`  conflict ${c.path}`, "mark"))];
-  const r = o.result;
-  switch (o.code) {
-    case "Initialized": return [L(`Initialized ${r.project} → main @ ${r.main.headLayer}`, "good")];
-    case "Forked": return [L(`${r.branch} ← ${r.head || r.base}`, "good")];
-    case "Committed": return [L(`Committed ${r.head}${r.merged ? ` · merged with ${r.merged.head || r.merged.from || "the head"}` : ""}`, "good")];
-    case "UpToDate": return [L("UpToDate · nothing new to commit")];
-    case "Merged": return [L(`Merged → ${r.branch} @ ${r.head}${r.fastForward ? " · fast-forward" : ""} · inputs untouched`, "good")];
-    case "Added": return [L(`Published ${r.source ? `${r.source.branch}@${r.source.commit}` : args.branch} → main @ ${r.publishedLayer.id}`, "good")];
-    case "Mounted": return [L(`mounted ${r.branch}@${r.base} → ${r.sandbox}:${r.path}`)];
-    case "Unmounted": return [L("unmounted")];
-    case "Stopped": return [L(`${r.process} ${r.status || "stopped"}`)];
-    case "Ready": return [L(`Ready ${r.id} · a new machine with its own localhost`, "good")];
-    case "Closed": return [L(`Closed ${r.id}`)];
-  }
-  if (call === "fs.read") return [L(`${(r.text || "").split("\n").length} lines${r.snapshot ? " · " + r.snapshot : ""}`)];
-  if (call === "process.cancel") return [L(`${args.process} stopped`)];
-  return [L(o.code)];
-}
-function bubbleOf(last) {
-  const o = last.o, r = o.result;
-  if (!o.ok) return [o.code === "Conflict" ? "Conflict!" : o.code, "bad"];
-  if (o.code === "Committed") return [r.head, "good"];
-  if (o.code === "Merged") return [`merge → ${r.head}`, "good"];
-  if (o.code === "Added") return [`→ ${r.publishedLayer.id}`, "good"];
-  if (o.code === "Forked") return ["fork", ""];
-  if (o.code === "Mounted") return ["mount", ""];
-  if (o.code === "Ready") return [`+ ${r.id}`, "good"];
-  if (o.code === "Closed") return [`× ${r.id}`, ""];
-  if (o.code === "running") return ["● dev server", "good"];
-  if (o.code === "Stopped" || last.call === "process.cancel") return ["■ stopped", ""];
-  if (last.call === "sandbox.exec" && r && r.process) return ["● dev server", "good"];
-  if (last.call === "sandbox.exec" && r && r.exitCode != null) return r.exitCode ? [`exit ${r.exitCode}`, "bad"] : /npm (test|run test)/.test(last.step.sh || "") ? ["✓ tests", "good"] : null;
-  return null;
-}
-
-// The engine state, reshaped for the views.
-function derive(W) {
-  const s = W.engine.s, nodes = {};
-  W.mainHead = s.main ? s.main.head : null;
-  W.order = s.branchOrder.slice();
-  W.initLayer = (Object.values(s.layers).find((l) => !l.parent) || {}).id;
-  for (const l of Object.values(s.layers))
-    nodes[l.id] = { id: l.id, kind: "layer", branch: null, parents: [l.parent, l.sourceCommit || null], t: l.slot, by: W.attrib[l.id], msg: l.sourceBranch ? `publish ${l.sourceBranch}@${l.sourceCommit}` : `init ${s.project.name}` };
-  for (const name of s.branchOrder) {
-    const b = s.branches[name];
-    nodes["fork:" + name] = { id: "fork:" + name, kind: "fork", branch: name, parents: [b.from], t: b.slot, by: W.attrib["fork:" + name], msg: `fork ← ${b.from}` };
-  }
-  for (const c of Object.values(s.commits)) {
-    const own = c.parent && s.commits[c.parent] && s.commits[c.parent].branch === c.branch;
-    // demo commit messages already start with "<agent>: "; the label adds the agent itself
-    const by = W.attrib[c.id], raw = c.message || c.via || "", msg = by && raw.startsWith(`${by}: `) ? raw.slice(by.length + 2) : raw;
-    nodes[c.id] = { id: c.id, kind: "commit", branch: c.branch, parents: [own ? c.parent : "fork:" + c.branch, c.mergedFrom || null], t: c.slot, by, msg };
-  }
-  W.nodes = nodes;
-  W.branches = {};
-  s.branchOrder.forEach((name, i) => {
-    const b = s.branches[name];
-    W.branches[name] = { name, color: BCOL[i % BCOL.length], head: b.head || "fork:" + name, base: b.from, last: W.touched[name] ?? 0,
-      published: !!b.head && Object.values(s.layers).some((l) => l.sourceBranch === name && l.sourceCommit === b.head) };
-  });
-  W.ws = {};
-  for (const id of s.sandboxOrder) for (const p of s.sandboxes[id].wsOrder) {
-    const w = s.sandboxes[id].workspaces[p], k = `${id}:${p}`, pane = W.panes[k];
-    // A Workspace no dsh event mounted (live: another client of the same
-    // server) has no agent to attribute it to, so it is not drawn.
-    if (!w.mounted || !pane) continue;
-    W.ws[k] = { id: k, agent: pane.agent, branch: w.branch, lines: pane.lines, born: pane.born, bad: W.engine.markersIn(w).length > 0, baseNode: w.baseCommit || "fork:" + w.branch, eng: w };
-  }
-}
-// Root of every ref (main and each Branch), to find what a step changed.
-function rootsOf(W) {
-  const s = W.engine.s, out = {};
-  if (s.main) out.main = s.layers[s.main.head].root;
-  for (const b of s.branchOrder) out[b] = branchRoot(s, s.branches[b]);
-  return out;
-}
-// Live trees load lazily: a tree not loaded yet reads as empty, so a ref only
-// flashes when both of its trees are already here.
-function changedPaths(W, before, after) {
-  const out = {}, roots = W.engine.s.roots, loaded = (r) => !LIVE || W.engine.trees[r];
-  for (const [ref, root] of Object.entries(after))
-    if (before[ref] && before[ref] !== root && loaded(before[ref]) && loaded(root)) out[ref] = new Set(M.diffTrees(roots[before[ref]], roots[root]).map((d) => d.path));
-  return out;
-}
-
-// Where an agent is: its last call while recent, else its mounted Workspace, else the bench.
-function where(n) {
-  const A = W.agents[n]; if (!A) return null;
-  if (W.clock - A.lastT <= 12) return A.lastLoc;
-  const w = Object.values(W.ws).find((x) => x.agent === n);
-  return w ? { kind: "ws", branch: w.branch, ws: w.id } : { kind: "bench" };
-}
-const idle = (n) => where(n).kind === "bench";
-const recentlyOn = (b) => Object.keys(W.agents).filter((n) => idle(n) && W.agents[n].lastBranch === b && W.clock - W.agents[n].lastT <= RECENT_S);
+const runStep = (w, st) => X.runStep(w, st, ENV);
+const derive = (w) => X.derive(w);
+const where = (n) => X.where(W, n);
+const recentlyOn = (b) => X.recentlyOn(W, b);
 const capAvatars = (names, k = 3) => names.slice(0, k).map((n) => mascot(n, true)).join("") + (names.length > k ? `<span class="plus">+${names.length - k}</span>` : "");
-const agentsOn = (b) => Object.keys(W.agents).filter((n) => { const l = where(n); return l.branch === b; });
-const conflicted = (b) => Object.values(W.ws).some((w) => w.branch === b && w.bad);
-const mounted = (b) => Object.values(W.ws).some((w) => w.branch === b);
+const agentsOn = (b) => X.agentsOn(W, b);
+const conflicted = (b) => X.conflicted(W, b);
+const mounted = (b) => X.mounted(W, b);
+const idle = (n) => X.idle(W, n);
 
 // ------------------------------------------------------------------ view state
 let W = fresh(), step = 0, active = "main", follow = true, playing = !LIVE, timer = null;
+// for checks from the console and tests: the page's view, story and model
+window.__dsh = { get W() { return W; }, fresh, runStep, STORY, X };
 const pinned = {}, rightMode = {}, seenTabs = new Set(["main"]);
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
-function visibleTabs() {
-  const show = W.order.filter((b) => pinned[b] || b === active || mounted(b) || conflicted(b) || W.clock - W.branches[b].last <= FADE_S);
-  show.sort((x, y) => W.branches[y].last - W.branches[x].last);
-  const keep = show.slice(0, MAX_TABS);
-  if (show.includes(active) && !keep.includes(active)) keep[keep.length - 1] = active;
-  const hidden = W.order.filter((b) => !keep.includes(b));
-  return { tabs: W.order.filter((b) => keep.includes(b)), hidden };
-}
+const visibleTabs = () => X.visibleTabs(W, { pinned, active });
 
 // ------------------------------------------------------------------ avatars: head (tags) and sprite (hosts)
 const AV_N = Object.keys(AV.chars).length;
@@ -962,27 +523,11 @@ function mascot(n, mini) {
   if (mini) return `<span class="av" style="--ac:${a.color};background-image:url(${AV.heads});background-size:${AV_N * 16}px 16px;background-position:${-c.head * 16}px 0" aria-hidden="true">${dup}</span>`;
   return `<span class="spr" style="background-image:url(${c.sheet});background-size:${c.poses.length * AV.frame.w}px ${AV.frame.h}px"></span><i class="fx sweat">💦</i><i class="fx bang">!</i><i class="fan"></i>${dup}`;
 }
-// What an agent is doing, as a pose name: the outcome of its call in this
-// step first, then where it is. Variants have these poses; ellen_joe has
-// expressions, mapped below. Conflict and refusals add an overlay.
-const ELLEN = { idle: "shy", sleep: "sleepy", laptop: "thinking", read: "thinking", cheer: "thumbs_up", arms_open: "happy", heart: "smug", serve_tea: "happy", wave: "happy", conflict: "crying", refused: "surprised", failed: "angry" };
-function poseOf(n, mode, acting) {
-  const A = W.agents[n], o = A.out && A.out.tick === W.tick ? A.out : null, l = where(n);
-  const mine = Object.values(W.ws).filter((w) => w.agent === n);
-  if (A.spawned === W.tick) return "wave";
-  if (o && !o.ok) return o.code === "Conflict" ? "conflict" : "refused";
-  if (o && o.code === "Committed") return "cheer";
-  if (o && o.code === "Merged") return "arms_open";
-  if (o && o.code === "Added") return "heart";
-  if (o && o.proc) return "serve_tea";
-  if (o && o.exit) return "failed";
-  if (mine.some((w) => w.bad)) return "conflict";
-  if (mode === "bench") return W.clock - A.lastT > 40 ? "sleep" : "idle";
-  if (acting && l.kind === "ws") return "laptop";
-  if (acting && (l.kind === "fs" || l.kind === "hist")) return "read";
-  if (mine.some((w) => (W.engine.s.sandboxes[w.id.split(":")[0]].procOrder || []).some((p) => { const x = W.engine.s.sandboxes[w.id.split(":")[0]].processes[p]; return x.status === "running" && `${w.id.split(":")[0]}:${x.path}` === w.id; }))) return "serve_tea";
-  return "idle";
-}
+// What an agent is doing, as a pose name (X.poseOf). Variants have these
+// poses; ellen_joe has expressions, mapped by X.LEAD_POSES. Conflict and
+// refusals add an overlay.
+const ELLEN = X.LEAD_POSES;
+const poseOf = (n, mode, acting) => X.poseOf(W, n, mode, acting);
 function setPose(el, n, pose) {
   const a = avatar(n), c = AV.chars[a.av], frame = a.av === AV.main ? ELLEN[pose] || null : c.poses.includes(pose) ? pose : "idle";
   if (frame) el.querySelector(".spr").style.backgroundPosition = `${-c.poses.indexOf(frame) * AV.frame.w}px 0`;
@@ -1064,6 +609,7 @@ function timingText(t) {
   if (!t) return "";
   if (t.simulated) return `${fmtMs(t.totalMs)} in the page (sim)`;
   if (t.reset) return `${fmtMs(t.totalMs)} · server reset: new volume + Init`;
+  if (t.traced) return `${fmtMs(t.sdkMs)} SDK call, from its trace line`;
   const http = Math.max(0, t.totalMs - (t.sdkMs || 0) - (t.refreshMs || 0));
   return `sdk ${fmtMs(t.sdkMs || 0)} · refresh ${fmtMs(t.refreshMs || 0)} · http ${fmtMs(http)}`;
 }
@@ -1508,26 +1054,17 @@ function crabEl(n, ghost) {
 }
 // The element an agent stands on in the current tab, or null when this tab
 // has nothing to say about it (idle on main, idle elsewhere on a Branch tab).
+const spotEl = (spot) => !spot ? null : spot.loc ? document.querySelector(`[data-loc="${spot.loc}"]`) : document.querySelector(`[data-tab="${spot.tab}"]`) || (spot.mode === "chip" && spot.tab !== "main" ? document.querySelector("[data-more]") : null);
 function targetOf(n) {
-  const l = where(n), q = (s) => document.querySelector(`[data-loc="${s}"]`), chip = (t) => document.querySelector(`[data-tab="${t}"]`) || document.querySelector("[data-more]");
-  if (l.kind === "bench") return active !== "main" && recentlyOn(active).includes(n) ? { el: q("bench"), mode: "bench" } : { el: null };
-  if (active === "main") return l.kind === "hist" ? { el: q("hist"), mode: "term" } : { el: q("row:" + l.branch), mode: "row" };
-  if (l.kind === "hist") return { el: chip("main"), mode: "chip" };
-  if (l.branch !== active) return { el: chip(l.branch), mode: "chip" };
-  return { el: q(l.kind === "ws" ? "ws:" + l.ws : "fs:" + l.branch), mode: l.kind === "ws" ? "pane" : "term" };
+  const spot = X.spotOf(W, n, active, recentlyOn(active));
+  return spot ? { el: spotEl(spot), mode: spot.mode } : { el: null };
 }
-// Fan-out: an agent (say, running a script) may hold several Workspaces at
-// once. It stands where its last call ran; each other Workspace it holds gets
-// a faint copy, and the agent shows ×N for the places it works in.
-function fanOf(n) {
-  const l = where(n), others = Object.values(W.ws).filter((w) => w.agent === n && !(l.kind === "ws" && l.ws === w.id));
-  return { n: others.length + (l.kind === "bench" ? 0 : 1), others };
-}
+// Fan-out (X.fanOf): an agent holding several Workspaces stands where its
+// last call ran; each other Workspace gets a faint copy, and it shows ×N.
+const fanOf = (n) => X.fanOf(W, n);
 function ghostTarget(w) {
-  const q = (s) => document.querySelector(`[data-loc="${s}"]`);
-  if (active === "main") return { el: q("row:" + w.branch), mode: "row" };
-  if (w.branch !== active) return { el: document.querySelector(`[data-tab="${w.branch}"]`), mode: "chip" };
-  return { el: q("ws:" + w.id), mode: "pane" };
+  const spot = X.ghostSpot(active, w);
+  return { el: spot.loc ? document.querySelector(`[data-loc="${spot.loc}"]`) : document.querySelector(`[data-tab="${spot.tab}"]`), mode: spot.mode };
 }
 function placeCrabs() {
   const ev = STORY[step - 1], groups = new Map();
@@ -1570,14 +1107,11 @@ function placeCrabs() {
       if (mode !== "chip" && (y + 48 > view.bottom || y + 24 < view.top)) { el.classList.add("gone"); return; }
       el.classList.toggle("small", mode === "chip" || mode === "row");
       if (ghost) {
-        // what that Workspace is doing: its conflict, its server, or work
-        const id = ghost.split(":")[0], sb = W.engine.s.sandboxes[id];
-        const serving = sb.procOrder.some((p) => sb.processes[p].status === "running" && `${id}:${sb.processes[p].path}` === ghost);
         if (!el.dataset.pos) { el.style.transition = "none"; void el.offsetWidth; } // first placement: no slide in
         el.dataset.pos = `${Math.round(x)},${Math.round(y)}`; el.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
         if (el.style.transition) { void el.offsetWidth; el.style.transition = ""; }
         el.classList.remove("gone");
-        setPose(el, n, w.bad ? "conflict" : serving ? "serve_tea" : "laptop");
+        setPose(el, n, X.ghostPose(W, w)); // its conflict, its server, or work
         return;
       }
       el.classList.remove("gone");
@@ -1651,7 +1185,7 @@ async function gotoNow(i, animate) {
   step = i;
   const ev = STORY[step - 1];
   lastLoc = null;
-  if (ev && ev.a !== "dsh") { const l = where(ev.a); lastLoc = l.kind === "ws" ? "ws:" + l.ws : l.kind === "fs" ? "fs:" + l.branch : l.kind === "hist" ? "hist" : null; }
+  if (ev && ev.a !== "dsh") lastLoc = X.locKey(where(ev.a));
   if (follow && ev && ev.call !== "dsh.spawn") active = W.lastTab || "main";
   render(); renderPlayer();
   if (animate && ev && ev.a !== "dsh" && W.last) {

@@ -6,7 +6,7 @@
 // once; a refusal is returned as it came.
 import { setup, teardown } from "../../sdk/js/test/verify/lib.mjs";
 import { Executor } from "./executor.mjs";
-import { Mirror } from "./mirror.mjs";
+import { Mirror } from "../../dsh/packages/model/src/mirror.js";
 
 const fail = (code, message, detail = {}) => Object.assign(new Error(`${code}: ${message}`), { code, detail });
 const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));

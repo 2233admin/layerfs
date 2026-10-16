@@ -1,0 +1,17 @@
+{
+ "project": "website",
+ "step": "matrix.sh",
+ "branches": {
+  "feature": "12decd0407871b9730afa01cfc343f37a3ba64b3a2f1d42acef4d0a95f89e09f4f",
+  "release": "125fab172b99ecb964d6f1c5565a55bd81d340a5a52b908c35e306cfd1843b53e1",
+  "try": "125fab172b99ecb964d6f1c5565a55bd81d340a5a52b908c35e306cfd1843b53e1"
+ },
+ "mainLayer": "322ac2c75ef61269b7e8b5a14ba5e57b05d29280b82591a53a2e87e2aa9e16f711",
+ "sandboxes": [
+  [
+   "sb_09d249012da66267277d4b73ace5309ecf26d7d2fd262699f6d5fc46eae0b608",
+   true
+  ]
+ ],
+ "minNodes": 5
+}
