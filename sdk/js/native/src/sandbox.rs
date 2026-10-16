@@ -6,7 +6,8 @@
 //! installs the sealed Store into the shared volume; later ones open it.
 //! A create that failed before anything reached the Store volume removes
 //! the container it made (stop, then delete, each once) and its creation
-//! intent, then reports the failure. One whose effect is unknown keeps the
+//! intent, then reports the failure with its daemon's last log lines, read
+//! once before the delete. One whose effect is unknown keeps the
 //! intent, which refuses later creates until a person resolves it. Nothing
 //! is retried on the caller's behalf.
 use crate::job::{failed, refused, Outcome};
@@ -30,6 +31,9 @@ const PORT: u16 = 30421;
 const STARTUP: Duration = Duration::from_secs(30);
 /// Wait for one Engine control response.
 const ENGINE: Duration = Duration::from_secs(30);
+/// A failed create's report keeps its daemon's last log lines, up to this many bytes.
+const LOG_LINES: u16 = 20;
+const LOG_BYTES: usize = 2048;
 
 fn operation(failure: Box<OperationFailure>) -> SdkRefusal {
     values::refusal(&failure).unwrap_or_else(|| failed(failure))
@@ -255,11 +259,11 @@ fn settled(failure: &SandboxFailure) -> bool {
     failure.phase != SandboxPhase::Install && failure.installed.is_none() && !unknown_container
 }
 
-/// The refusal for a failed create. A settled one removes its container
-/// (stop, then delete, each once) and its intent; otherwise the intent stays,
-/// rewritten to say what is left.
+/// The refusal for a failed create. A settled one reads its container's log
+/// tail once, removes the container (stop, then delete, each once) and its
+/// intent; otherwise the intent stays, rewritten to say what is left.
 fn abandon(directory: &Path, id: &str, mut failure: Box<SandboxFailure>) -> SdkRefusal {
-    let cause = format!(
+    let mut cause = format!(
         "sandbox create stopped at {:?}: {:?}",
         failure.phase, failure.cause
     );
@@ -268,9 +272,18 @@ fn abandon(directory: &Path, id: &str, mut failure: Box<SandboxFailure>) -> SdkR
         .as_ref()
         .map(|sandbox| sandbox.identity().to_string());
     drop(failure.control.take());
+    let mut log = None;
     let left = if !settled(&failure) {
         Some("its effect on the Store volume or the Engine is unknown".to_owned())
     } else if let Some(sandbox) = failure.sandbox.as_mut() {
+        match sandbox.log_tail(LOG_LINES, LOG_BYTES) {
+            Ok(bytes) => {
+                let text = String::from_utf8_lossy(&bytes).trim_end().to_owned();
+                cause = format!("{cause}; its daemon's last log lines:\n{text}");
+                log = Some(text);
+            }
+            Err(error) => cause = format!("{cause}; its daemon log was unreadable: {error:?}"),
+        }
         let removed = sandbox.stop(1).and_then(|()| sandbox.delete());
         removed
             .err()
@@ -305,6 +318,7 @@ fn abandon(directory: &Path, id: &str, mut failure: Box<SandboxFailure>) -> SdkR
         detail: SdkValue::map([
             ("container", SdkValue::opt_text(container)),
             ("removed", SdkValue::Bool(removed)),
+            ("log", SdkValue::opt_text(log)),
         ]),
     }
 }

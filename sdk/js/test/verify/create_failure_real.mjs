@@ -1,6 +1,7 @@
 // A Sandbox create that fails before anything reaches the Store volume
 // removes the container it made and its creation intent, and reports the
-// original failure; the next create of the same project works. A creation
+// original failure with its daemon's last log lines; the next create of the
+// same project works. A creation
 // whose process ended mid-way stays refused with a message saying what to do.
 // A test daemon that exits at once stands in for one that refuses its Store.
 //   LAYERFS_DAEMON=<linux daemon> node sdk/js/test/verify/create_failure_real.mjs
@@ -34,6 +35,9 @@ async function failsClean(op, name) {
   assert.match(refused.message, /stopped at Listener/, op);
   assert.ok(refused.detail?.container, `${op}: names its container`);
   assert.equal(refused.detail.removed, true, `${op}: container removed`);
+  // Its daemon's stderr, read before the container went, is in the refusal.
+  assert.match(refused.detail.log ?? "", /test daemon: refusing the Store/, `${op}: daemon log\n${refused.message}`);
+  assert.ok(refused.message.includes("test daemon: refusing the Store"), `${op}: message names the daemon log`);
   assert.ok(!existsSync(intent), `${op}: no creation intent`);
   const id = op === "sandbox.create" ? name : `_service.${project}`;
   assert.ok(!existsSync(join(home, "_sandboxes", id)), `${op}: its name is free`);

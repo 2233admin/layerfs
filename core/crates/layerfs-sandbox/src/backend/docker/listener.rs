@@ -1,4 +1,5 @@
 //! Actual daemon stdout startup event; bounded line and multiplexed payload windows.
+//! A bounded read of the container's log tail, for a failed start's report.
 use super::{body::exact, Sandbox};
 use super::{body::Body, socket::Socket};
 use crate::{RuntimeError, WireFailure};
@@ -128,6 +129,66 @@ impl Sandbox {
                 transfer,
             })
         })
+    }
+}
+
+impl Sandbox {
+    /// Reads the container's last `lines` log lines once, stdout and stderr
+    /// interleaved, keeping only the final `cap` bytes. Read-only: it changes
+    /// no lifecycle state and is never retried.
+    pub fn log_tail(&self, lines: u16, cap: usize) -> Result<Vec<u8>, Box<WireFailure>> {
+        if self.delete_attempted {
+            return Err(self.invalid("log read before Delete"));
+        }
+        let mut r = self
+            .docker
+            .exchange(
+                "GET",
+                &format!(
+                    "/v1.54/containers/{}/logs?stdout=true&stderr=true&follow=false&tail={lines}&timestamps=false",
+                    self.id
+                ),
+                false,
+                |_| Ok(()),
+            )
+            .map_err(|f| self.selected(f))?;
+        if r.status != 200 {
+            return Err(self.selected(r.fail(RuntimeError::Http(r.status), None)));
+        }
+        if !r.multiplexed {
+            return Err(self.selected(r.fail(
+                RuntimeError::Protocol("daemon logs multiplexed media"),
+                None,
+            )));
+        }
+        let mut kept = Vec::new();
+        let parsed = (|| {
+            let mut payload = [0; 8192];
+            loop {
+                let mut header = [0; 8];
+                // The tail ends where the body ends, between frames.
+                if r.body.read(&mut header[..1])? == 0 {
+                    return Ok(());
+                }
+                exact(&mut r.body, &mut header[1..])?;
+                let (tag, mut left) = super::mux::header(header)?;
+                if !matches!(tag, 1 | 2) {
+                    return Err(RuntimeError::Protocol("daemon log frame"));
+                }
+                while left != 0 {
+                    let wanted = (left as usize).min(payload.len());
+                    let n = r.body.read(&mut payload[..wanted])?;
+                    if n == 0 {
+                        return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
+                    }
+                    left -= n as u32;
+                    kept.extend_from_slice(&payload[..n]);
+                    kept.drain(..kept.len().saturating_sub(cap));
+                }
+            }
+        })();
+        parsed.map_err(|e| self.selected(r.fail(e, None)))?;
+        Ok(kept)
     }
 }
 

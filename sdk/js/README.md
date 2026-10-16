@@ -73,7 +73,9 @@ A create that fails before anything reaches the Store volume (the container
 never became ready, for example a daemon that exits at startup) stops and
 deletes the container it made, once each, removes its intent and frees its
 name, then reports the original failure as `Failed` with `detail.container`
-and `detail.removed`; that container's log goes with it. One whose effect is
+and `detail.removed`. Before the delete it reads the container's last 20 log
+lines once, at most 2048 bytes, into `detail.log` and the message; a log it
+could not read leaves `detail.log` null and the message says so. One whose effect is
 unknown (an interrupted process, a Store install that failed, an Engine create
 whose outcome was lost, or a container that could not be removed) keeps the
 intent, which records what is known. Every later create of that project is then
