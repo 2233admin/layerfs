@@ -2,17 +2,19 @@
 // workspace it is attached to) and "Import project" for workspaces without
 // one (InitDialog). On the right, the chosen project: a header with its one
 // action, New session, and a menu for Refresh, the attached workspace and
-// Remove (RemoveDialog); four stats (where main is, Branches, Commits, the
-// last publish); then its History and Files (ProjectBoard). ellen_joe sits in
+// Remove (RemoveDialog); tiles for where main is, Branches, Commits, the
+// last publish, and its Store (storage.ts: on disk, saved, the last Commit's
+// cost); then its History and Files (ProjectBoard). ellen_joe sits in
 // the header, and full size where there is nothing else to show.
 // Colours, borders and radii are dsh's own tokens (--dsw-*).
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { Button, IconEllipsisOutlineRegular, IconFolderOpenOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular, IconTrashOutlineRegular, Menu, type MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import ellen from '../../../../../sdk_sim/avatars/ellen_joe.gif'
-import { api, type Project, type ProjectState, type Status } from './api.ts'
+import { api, type Project, type ProjectState, type Status, type Storage } from './api.ts'
 import { InitDialog } from './InitDialog.tsx'
 import { ProjectBoard } from './ProjectBoard.tsx'
 import { RemoveDialog } from './RemoveDialog.tsx'
+import { storageTiles } from './storage.ts'
 
 /** What the panel uses of dsh's workspace services (read with ctx.get). */
 export interface PanelServices {
@@ -50,7 +52,7 @@ export function LayerFsIcon({ size }: { size?: number }) {
 const short = (path: string) => path.split('/').filter(Boolean).slice(-2).join('/')
 const day = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 
-/** The four stats over the board: [label, value, title?]. */
+/** The project's stats over the board: [label, value, title?]. */
 function stats(state: ProjectState): [string, string, string?][] {
   const s = state.s, real = Object.fromEntries(Object.entries(state.labels).map(([r, l]) => [l, r]))
   const last = Object.values(s.layers as Record<string, any>).filter((l) => l.sourceBranch).sort((a, b) => b.slot - a.slot)[0]
@@ -102,6 +104,8 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
   const [selected, setSelected] = useState<string | null>(null)
   const [state, setState] = useState<ProjectState | null>(null)
   const [stateError, setStateError] = useState<string | null>(null)
+  const [storage, setStorage] = useState<Storage | null>(null)
+  const [storageError, setStorageError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reads, setReads] = useState(0)
@@ -117,8 +121,9 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
   useEffect(() => {
     if (!selected) return
     let stopped = false
-    setState(null); setStateError(null)
+    setState(null); setStateError(null); setStorage(null); setStorageError(null)
     api.projectState(selected).then((s) => { if (!stopped) setState(s) }, (e: Error) => { if (!stopped) setStateError(e.message) })
+    api.projectStorage(selected).then((z) => { if (!stopped) setStorage(z) }, (e: Error) => { if (!stopped) setStorageError(e.message) })
     return () => { stopped = true }
   }, [selected, reads])
 
@@ -202,7 +207,10 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
               ? <Notice title="Couldn't read this project">{problem(stateError)}</Notice>
               : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
-                  {(state ? stats(state) : [['main'], ['Branches'], ['Commits'], ['Last publish']] as [string, string?, string?][]).map(([label, value, title]) => (
+                  {[
+                    ...(state ? stats(state) : [['main'], ['Branches'], ['Commits'], ['Last publish']] as [string, string?, string?][]),
+                    ...(storage ? storageTiles(storage) : [['On disk', storageError ? '–' : undefined, storageError ?? undefined], ['Last Commit', storageError ? '–' : undefined, storageError ?? undefined]] as [string, string?, string?][]),
+                  ].map(([label, value, title]) => (
                     <div key={label} title={title} style={{ ...card, padding: '8px 12px', minWidth: 0 }}>
                       <div style={{ fontSize: 12, color: T.text2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
                       <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: value ? T.text : T.caption }}>{value ?? '…'}</div>

@@ -19,6 +19,14 @@ export interface SessionView {
   agents: Record<string, string>
 }
 export interface Status { configured: boolean, missing: string[] }
+/** A project's Store as LayerFS reports it, with what Init recorded and each recent Commit's cost (Host storage.js). */
+export interface Storage {
+  store: { logical: number, canonical: number, stored: number, metadata: number, file: number, free: number, dedupe: number | null, compression: number | null }
+  init: { entries: number, files: number, bytes: number, canonical: number, stored: number, metadata: number, millis: number } | null
+  commits: { id: string, time: number, message: string | null, via: string, logical: number, newCanonical: number, newStored: number, newMetadata: number }[]
+  branches: number
+  partial: boolean
+}
 export interface Counts { entries: number, files: number, bytes: number }
 /** A running or ended Init on the Host (jobs.js). */
 export interface InitJob {
@@ -73,6 +81,7 @@ export const api = {
   init,
   projects: () => call<{ projects: Project[] }>('GET', '/projects'),
   projectState: (name: string) => call<ProjectState>('GET', `/project/${encodeURIComponent(name)}/state`),
+  projectStorage: (name: string) => call<Storage>('GET', `/project/${encodeURIComponent(name)}/storage`),
   projectTree: (name: string, ref: string) => call<{ tree: Record<string, unknown>, partial: string | null }>('GET', `/project/${encodeURIComponent(name)}/tree?ref=${encodeURIComponent(ref)}`),
   remove: (name: string) => call<{ removed: string, volume: string }>('POST', `/project/${encodeURIComponent(name)}/remove`, { confirm: name }),
   attach: (name: string, folder: string | null) => call<{ project: Project }>('POST', `/project/${encodeURIComponent(name)}/attach`, { folder }),
