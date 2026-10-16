@@ -2,7 +2,9 @@
 // agent events. A trace holds ids, never content, so ReplayEngine rebuilds
 // the project from the lines alone: Branches, Commits, Layers, Sandboxes,
 // Workspaces and processes, under the mirror's display ids (C1, L0, sb_01).
-// Files and sizes are not in a trace; those views stay empty.
+// Files and sizes are not in a trace; those views stay empty unless the
+// engine is given `loadTree`, which reads a saved tree by its real id (the dsh
+// Host's /layerfs/session/<id>/tree route does).
 import { Mirror } from "../mirror.js";
 import { prepare, record } from "../attribution.js";
 
@@ -28,7 +30,13 @@ const seqOf = (line) => Number(String(line.id).split("-").pop()) || 0;
 
 /** A read-only engine over trace lines, with the surface the views read. */
 export class ReplayEngine {
-  constructor({ project = "project" } = {}) {
+  /**
+   * @param {object} [o]
+   * @param {string} [o.project] project name for the views
+   * @param {(real: string) => Promise<object>} [o.loadTree] a saved tree by its
+   *   real Commit or Layer id, in the simulator's shape ({ path: { type, content } })
+   */
+  constructor({ project = "project", loadTree = null } = {}) {
     this.m = new Mirror();
     this.project = project;
     this.live = true;
@@ -36,8 +44,28 @@ export class ReplayEngine {
     this.trees = {};
     this.published = false;
     this.initAlias = null;
+    this.onchange = null;
+    this.loadTree = loadTree;
+    this.loadsTrees = !!loadTree;
+    this.loading = {};
+    // a node's root is its own display id: s.roots[id] loads that node's tree
+    if (loadTree) this.m.s.roots = new Proxy({}, { get: (_, id) => (typeof id === "string" ? this.treeOf(id) : undefined) });
   }
   get s() { return this.m.s; }
+  rootOf(id) { return this.loadsTrees ? id : null; }
+  /** A node's saved tree: loaded on first use, empty until it arrives. */
+  treeOf(id) {
+    if (!id || !this.loadsTrees) return EMPTY;
+    if (this.trees[id]) return this.trees[id];
+    const real = this.m.toReal.get(id);
+    if (!real || !/^[0-9a-f]{64,68}$/.test(real)) return EMPTY;
+    if (!this.loading[id]) {
+      this.loading[id] = this.loadTree(real).then((tree) => { this.trees[id] = tree; }, (error) => {
+        this.trees[id] = Object.defineProperty({}, "partial", { value: `The tree could not be read: ${error.message}` });
+      }).then(() => { if (this.onchange) this.onchange(); });
+    }
+    return EMPTY;
+  }
 
   // ------------------------------------------------------------ ids
   layer(real) {
@@ -51,7 +79,7 @@ export class ReplayEngine {
       return label;
     }
     const id = m.label("L", real);
-    if (!s.layers[id]) s.layers[id] = { id, parent: null, root: null, sourceBranch: null, sourceCommit: null, slot: m.slot++ };
+    if (!s.layers[id]) s.layers[id] = { id, parent: null, root: this.rootOf(id), sourceBranch: null, sourceCommit: null, slot: m.slot++ };
     if (!s.main) s.main = { head: id };
     this.ensureProject();
     return id;
@@ -74,7 +102,7 @@ export class ReplayEngine {
     this.ensureProject();
     if (this.s.main) return this.s.main.head;
     const id = this.m.label("L", `init:${this.project}`);
-    this.s.layers[id] = { id, parent: null, root: null, sourceBranch: null, sourceCommit: null, slot: this.m.slot++ };
+    this.s.layers[id] = { id, parent: null, root: this.rootOf(id), sourceBranch: null, sourceCommit: null, slot: this.m.slot++ };
     this.s.main = { head: id };
     this.initAlias = id;
     return id;
@@ -89,7 +117,7 @@ export class ReplayEngine {
     const id = this.commit(real), s = this.s;
     if (!s.commits[id]) {
       const b = s.branches[branch];
-      s.commits[id] = { id, parent: b ? b.head : null, root: null, branch, slot: this.m.slot++, ...fields };
+      s.commits[id] = { id, parent: b ? b.head : null, root: this.rootOf(id), branch, slot: this.m.slot++, ...fields };
     }
     if (s.branches[branch]) s.branches[branch].head = id;
     return id;
@@ -128,7 +156,7 @@ export class ReplayEngine {
       }
       case "branch.publish": {
         const commit = this.commit(line.commit), id = this.m.label("L", line.layer);
-        s.layers[id] ||= { id, parent: s.main ? s.main.head : null, root: null, sourceBranch: a.branch, sourceCommit: commit, slot: this.m.slot++ };
+        s.layers[id] ||= { id, parent: s.main ? s.main.head : null, root: this.rootOf(id), sourceBranch: a.branch, sourceCommit: commit, slot: this.m.slot++ };
         s.main = { head: id };
         this.published = true;
         return ok("Added", { kind: "Added", source: { branch: a.branch, commit }, publishedLayer: { id } });
@@ -202,12 +230,13 @@ export class ReplayEngine {
   }
   resolve(ref) {
     const s = this.s, refuse = (code, message) => { throw Object.assign(new Error(message), { code }); };
-    if (ref === "main") { const l = s.layers[s.main.head]; return { label: `main @ ${l.id}`, kind: "main", root: null, tree: EMPTY, layer: l.id }; }
-    if (s.commits[ref]) return { label: ref, kind: "commit", root: null, tree: EMPTY, commit: ref };
-    if (s.layers[ref]) return { label: ref, kind: "layer", root: null, tree: EMPTY, layer: ref };
+    if (ref === "main") { const l = s.layers[s.main.head]; return { label: `main @ ${l.id}`, kind: "main", root: l.root, tree: this.treeOf(l.id), layer: l.id }; }
+    if (s.commits[ref]) return { label: ref, kind: "commit", root: s.commits[ref].root, tree: this.treeOf(ref), commit: ref };
+    if (s.layers[ref]) return { label: ref, kind: "layer", root: s.layers[ref].root, tree: this.treeOf(ref), layer: ref };
     if (ref.includes(":/")) return { label: `${ref} (live)`, kind: "live", root: null, tree: EMPTY, workspace: ref };
     const b = s.branches[ref] || refuse("NoSuchBranch", `no Branch named ${ref}`);
-    return { label: `${b.name} @ ${b.head || b.base}`, kind: "branch", root: null, tree: EMPTY, head: b.head };
+    const node = b.head || b.base;
+    return { label: `${b.name} @ ${node}`, kind: "branch", root: this.rootOf(node), tree: this.treeOf(node), head: b.head };
   }
 }
 
@@ -247,6 +276,11 @@ export function replayLine(W, line, { agent = W.lead, t0 = null } = {}) {
   const st = stepOf(E, line, agent);
   const p = st && prepare(W, st);
   const o = E.apply(line);
+  // the SDK's own Sandbox for an agent's fs and branch calls is not a step;
+  // it is drawn, as that agent's, once a call names it (closing it, say)
+  const services = (W.services ||= {}), real = line.args && line.args.sandbox;
+  if (line.method === "sandbox.service" && line.ok && line.sandbox) services[line.sandbox] = line.agent || agent;
+  if (real && services[real] && E.m.toLabel.has(real)) W.sbBy[E.m.toLabel.get(real)] ||= { made: services[real], service: true };
   if (!st) return null;
   record(W, st, p, o, null, [{ call: p.call, code: o.code, timing: timingOf(line) }]);
   return o;

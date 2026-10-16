@@ -5,3 +5,5 @@
 - insert:
     - id: layerfs-host
       name: '@dsh-layerfs/host'
+    - id: layerfs-client
+      name: '@dsh-layerfs/client'

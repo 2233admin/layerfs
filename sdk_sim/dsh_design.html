@@ -6,299 +6,24 @@
 <title>LayerFS × dsh</title>
 <link rel="icon" href="data:,">
 <style>
-:root {
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --mono: "SF Mono", ui-monospace, Menlo, Monaco, monospace;
-  --window: #fff; --chrome: #ececef; --card: #fff; --well: #f2f2f5; --grid-bg: #e4e4e8;
-  --text: #1d1d1f; --text-2: #6e6e73; --text-3: #a1a1a6; --sep: rgba(0,0,0,.09); --sep-strong: rgba(0,0,0,.16);
-  --accent: #007aff; --accent-bg: rgba(0,122,255,.12); --green: #28a745; --orange: #e08600; --red: #ff3b30; --purple: #a347d4;
-  --orange-bg: rgba(255,149,0,.14); --purple-bg: rgba(175,82,222,.13); --red-bg: rgba(255,59,48,.12); --green-bg: rgba(52,199,89,.14);
-  --term: #ffffff; --term-head: #f5f5f7; --term-border: rgba(0,0,0,.12); --term-text: #1d1d1f; --term-dim: #86868b;
-  --t-blue: #0058d0; --t-green: #1a7f37; --t-orange: #b35c00; --t-red: #d1242f; --t-purple: #8a3ab9; --t-cyan: #0a7590;
-  --t-add-bg: rgba(26,127,55,.08); --t-del-bg: rgba(209,36,47,.08);
-  --b0: #0a6cff; --b1: #1f9d55; --b2: #0f8b9a; --b3: #d6336c; --b4: #5856d6; --b5: #8e6e53;
-  color-scheme: light;
-}
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --window: #1e1e20; --chrome: #2a2a2d; --card: #2c2c2f; --well: #252528; --grid-bg: #141416;
-  --text: #f5f5f7; --text-2: #a1a1a6; --text-3: #6e6e73; --sep: rgba(255,255,255,.08); --sep-strong: rgba(255,255,255,.16);
-  --accent: #0a84ff; --accent-bg: rgba(10,132,255,.18); --green: #30d158; --orange: #ff9f0a; --red: #ff453a; --purple: #bf5af2;
-  --orange-bg: rgba(255,159,10,.16); --purple-bg: rgba(191,90,242,.16); --red-bg: rgba(255,69,58,.16); --green-bg: rgba(48,209,88,.16);
-  --term: #1c1c1e; --term-head: #252528; --term-border: rgba(255,255,255,.08); --term-text: #e5e5ea; --term-dim: #8e8e93;
-  --t-blue: #64b5ff; --t-green: #5fd97a; --t-orange: #ffb340; --t-red: #ff6b61; --t-purple: #d38cff; --t-cyan: #64d2ff;
-  --t-add-bg: rgba(95,217,122,.1); --t-del-bg: rgba(255,107,97,.1);
-  --b0: #4aa3ff; --b1: #3ecf74; --b2: #3cc6d4; --b3: #ff6b9a; --b4: #8e8cff; --b5: #c09a78;
-  color-scheme: dark; } }
-:root[data-theme="dark"] {
-  --window: #1e1e20; --chrome: #2a2a2d; --card: #2c2c2f; --well: #252528; --grid-bg: #141416;
-  --text: #f5f5f7; --text-2: #a1a1a6; --text-3: #6e6e73; --sep: rgba(255,255,255,.08); --sep-strong: rgba(255,255,255,.16);
-  --accent: #0a84ff; --accent-bg: rgba(10,132,255,.18); --green: #30d158; --orange: #ff9f0a; --red: #ff453a; --purple: #bf5af2;
-  --orange-bg: rgba(255,159,10,.16); --purple-bg: rgba(191,90,242,.16); --red-bg: rgba(255,69,58,.16); --green-bg: rgba(48,209,88,.16);
-  --term: #1c1c1e; --term-head: #252528; --term-border: rgba(255,255,255,.08); --term-text: #e5e5ea; --term-dim: #8e8e93;
-  --t-blue: #64b5ff; --t-green: #5fd97a; --t-orange: #ffb340; --t-red: #ff6b61; --t-purple: #d38cff; --t-cyan: #64d2ff;
-  --t-add-bg: rgba(95,217,122,.1); --t-del-bg: rgba(255,107,97,.1);
-  --b0: #4aa3ff; --b1: #3ecf74; --b2: #3cc6d4; --b3: #ff6b9a; --b4: #8e8cff; --b5: #c09a78;
-  color-scheme: dark; }
-
-* { box-sizing: border-box; }
+/* The page's own chrome: title bar, story picker and player. The view
+   (tabs, work area, status bar, avatars) is styled by @dsh-layerfs/view. */
 html, body { margin: 0; height: 100%; }
-body { font: 13px/1.4 var(--font); color: var(--text); background: var(--window); -webkit-font-smoothing: antialiased; overflow: hidden; }
-button { font: inherit; color: inherit; }
-.window { height: 100%; display: flex; flex-direction: column; }
-
-/* title bar + tabs */
+body { overflow: hidden; }
+.window { height: 100%; display: flex; flex-direction: column; background: var(--window); }
 .titlebar { height: 46px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 14px; background: var(--chrome); border-bottom: .5px solid var(--sep); }
 .brand { display: flex; align-items: center; gap: 7px; font-weight: 600; margin-right: 6px; white-space: nowrap; }
 .brand small { font-weight: 400; color: var(--text-2); font-size: 11px; }
 .mode { display: inline-flex; border: 1px solid var(--sep-strong); border-radius: 6px; overflow: hidden; font: 600 10.5px/1 var(--mono, ui-monospace, monospace); flex: none; }
 .mode a { padding: 4px 7px; color: var(--text-2); text-decoration: none; }
-.mode a.on { background: var(--accent); color: #fff; } .mode a.on[data-mode="live"] { background: var(--green, #1f9d55); }
-.ib:disabled { opacity: .35; cursor: default; } .player .dots.locked i { cursor: default; }
-.player .ev .busy { color: var(--orange); } .player .ev .err { color: var(--red); } .player .ev .ok { color: var(--green); }
+.mode a.on { background: var(--accent); color: #fff; }
+.mode a.on[data-mode="live"] { background: var(--green, #1f9d55); }
+.ib:disabled { opacity: .35; cursor: default; }
+.player .dots.locked i { cursor: default; }
+.player .ev .busy { color: var(--orange); }
+.player .ev .err { color: var(--red); }
+.player .ev .ok { color: var(--green); }
 .storysel { font: 500 11.5px var(--font); border: 1px solid var(--sep-strong); border-radius: 6px; background: var(--card); color: var(--text); padding: 3px 4px; flex: none; max-width: 140px; }
-.tabs { display: flex; gap: 4px; align-items: center; min-width: 0; overflow-x: auto; flex: 1; scrollbar-width: none; padding: 4px 0; }
-.tab { height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 10px; border-radius: 7px; cursor: pointer; color: var(--text-2); white-space: nowrap; border: 0; background: transparent; position: relative; transition: opacity .4s, background .2s; }
-.tab:hover { background: var(--sep); }
-.tab[aria-selected="true"] { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 0 0 .5px var(--sep); }
-.tab .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bc); flex: none; }
-.tab.main .dot { border-radius: 2px; transform: rotate(45deg); background: var(--purple); }
-.tab.conflict { box-shadow: 0 0 0 1.5px var(--red) !important; color: var(--red); }
-.tab .avs { display: inline-flex; gap: 1px; }
-.tab .pin { opacity: 0; font-size: 10px; padding: 0 2px; border-radius: 3px; }
-.tab:hover .pin, .tab .pin.on { opacity: .8; }
-.tab.enter { animation: grow .35s ease-out; }
-.tab.more { font: 600 11px var(--mono); }
-.menu { position: fixed; z-index: 60; background: var(--card); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.25), 0 0 0 .5px var(--sep-strong); padding: 4px; min-width: 160px; }
-.menu button { display: flex; width: 100%; gap: 8px; align-items: center; border: 0; background: transparent; padding: 6px 8px; border-radius: 5px; cursor: pointer; text-align: left; }
-.menu button:hover { background: var(--accent-bg); }
-.ib { height: 28px; min-width: 28px; padding: 0 9px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; color: var(--text-2); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.ib:hover { background: var(--sep); color: var(--text); }
-.ib.on { color: var(--accent); background: var(--accent-bg); }
-.ib svg { width: 15px; height: 15px; }
-
-/* work area */
-.work { flex: 1; min-height: 0; display: grid; gap: 6px; padding: 6px; background: var(--grid-bg); }
-.work.mainview { grid-template-columns: minmax(240px, .9fr) minmax(300px, 1fr) minmax(320px, 1.4fr); }
-.work.branchview { grid-template-columns: minmax(240px, 1fr) minmax(300px, 1.55fr) minmax(300px, 1.3fr); }
-.work.branchview.wide { grid-template-columns: minmax(200px, .7fr) minmax(260px, 1fr) minmax(320px, 1.7fr); }
-.work.mainview.wide { grid-template-columns: minmax(200px, .7fr) minmax(260px, .8fr) minmax(320px, 1.7fr); }
-.seg { display: inline-flex; background: var(--well); border-radius: 6px; padding: 2px; gap: 2px; flex: none; }
-.seg button { border: 0; background: transparent; font: 700 10px var(--mono); letter-spacing: .03em; padding: 2px 8px; border-radius: 4px; cursor: pointer; color: var(--text-2); }
-.seg button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 0 0 .5px var(--sep); }
-.seg button.on.h { color: var(--t-purple); } .seg button.on.f { color: var(--t-green); }
-.col { display: flex; flex-direction: column; gap: 6px; min-height: 0; min-width: 0; }
-.term { display: flex; flex-direction: column; background: var(--term); border-radius: 8px; overflow: hidden; min-width: 0; min-height: 0; box-shadow: 0 0 0 1px var(--term-border); position: relative; flex: 1; transition: box-shadow .25s; }
-.term.hot { box-shadow: 0 0 0 1.5px var(--accent), 0 6px 18px rgba(0,0,0,.12); }
-.term.bad { box-shadow: 0 0 0 1.5px var(--red), 0 6px 18px rgba(255,59,48,.18); }
-.term.enter { animation: grow .35s ease-out; }
-.thead { height: 30px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px; background: var(--term-head); color: var(--term-text); font-size: 12px; border-bottom: 1px solid var(--term-border); white-space: nowrap; overflow: hidden; }
-.thead .ttl { font: 12px var(--mono); color: var(--term-dim); overflow: hidden; text-overflow: ellipsis; }
-.thead .sp { flex: 1; }
-.kind { font: 700 10px var(--mono); padding: 1px 5px; border-radius: 4px; letter-spacing: .03em; flex: none; }
-.kind.fs { background: var(--accent-bg); color: var(--t-blue); }
-.kind.sandbox { background: var(--orange-bg); color: var(--t-orange); }
-.kind.history { background: var(--purple-bg); color: var(--t-purple); }
-.kind.files { background: var(--green-bg); color: var(--t-green); }
-.kind.plain { background: var(--well); color: var(--text-2); }
-.pill { font: 10.5px var(--mono); padding: 1px 6px; border-radius: 4px; background: var(--well); color: var(--term-dim); white-space: nowrap; display: inline-flex; gap: 4px; align-items: center; }
-.pill.warn { background: var(--red-bg); color: var(--t-red); }
-.pill.run { background: var(--green-bg); color: var(--t-green); }
-.agent-tag { display: inline-flex; align-items: center; gap: 4px; font: 600 11px var(--font); color: var(--ac); background: color-mix(in srgb, var(--ac) 14%, transparent); padding: 0 6px 0 3px; border-radius: 4px; height: 17px; }
-.tbody { flex: 1; min-height: 0; overflow: auto; padding: 8px 10px 6px; font: 12px/1.6 var(--mono); color: var(--term-text); white-space: pre-wrap; word-break: break-word; }
-.ln { display: block; white-space: pre-wrap; }
-.ln.new { animation: fadein .35s ease-out; }
-.ln .cmd { color: var(--term-text); }
-.ln .grp { font: 10px var(--mono); color: var(--term-dim); border: 1px dashed var(--term-border); border-radius: 3px; padding: 0 4px; margin-right: 6px; vertical-align: 1px; }
-.ln.dim, .ln.dim .cmd { color: var(--term-dim); }
-.out { display: block; color: var(--term-dim); padding-left: 2ch; }
-.out.good { color: var(--t-green); } .out.bad { color: var(--t-red); } .out.mark { color: var(--t-orange); }
-.prompt { color: var(--t-blue); }
-.inrow { flex: none; display: flex; align-items: center; gap: 6px; padding: 5px 10px 7px; font: 12px var(--mono); color: var(--term-dim); border-top: 1px solid var(--term-border); }
-.inrow .prompt { flex: none; white-space: nowrap; }
-.inrow > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.inrow .caret { width: 7px; height: 14px; background: var(--term-dim); opacity: .5; animation: blink 1.1s steps(2) infinite; }
-
-/* main view */
-.graphwrap { flex: 1; min-height: 0; overflow: auto; padding: 6px 4px; }
-svg.graph { display: block; }
-svg.graph text { font-family: var(--font); fill: var(--term-text); }
-svg.graph .row-line { stroke: var(--term-border); stroke-dasharray: 2 4; }
-svg.graph .rowband { fill: var(--accent-bg); }
-svg.graph .edge { fill: none; stroke: var(--term-dim); stroke-width: 1.8; }
-svg.graph .edge.main { stroke: var(--purple); stroke-width: 2.4; }
-svg.graph .edge.publish { stroke: var(--purple); stroke-width: 1.5; stroke-dasharray: 4 4; }
-svg.graph .edge.merge { stroke: var(--bc); stroke-width: 1.6; stroke-dasharray: 5 3; }
-svg.graph .mergehead { fill: none; stroke: var(--bc); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-svg.graph .node .shape { transform-box: fill-box; transform-origin: center; }
-svg.graph .layer .shape { fill: var(--purple); }
-svg.graph .commit .shape { fill: var(--bc); }
-svg.graph .commit .inner { fill: var(--term); }
-svg.graph .fork .shape { fill: var(--term); stroke: var(--bc); stroke-width: 2; }
-svg.graph .ini { font: 700 8px var(--font); fill: #fff; }
-svg.graph .mbadge circle { fill: var(--orange); stroke: var(--term); stroke-width: 1.5; }
-svg.graph .mbadge.stale circle { fill: var(--red); }
-svg.graph .mbadge text { fill: #fff; font: 700 8.5px var(--font); }
-svg.graph .popin { animation: popin .5s .3s both cubic-bezier(.2,.9,.3,1.35); transform-box: fill-box; transform-origin: center; }
-svg.graph .rt { font: 11.5px var(--mono); fill: var(--term-text); }
-svg.graph .rt .dim { fill: var(--term-dim); }
-svg.graph .rt .hd { font-weight: 700; fill: var(--accent); }
-@keyframes popin { from { transform: scale(0); } to { transform: scale(1); } }
-.rows { flex: 1; min-height: 0; overflow: auto; padding: 4px; }
-.brow { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 6px; cursor: pointer; min-height: 32px; transition: background .25s; }
-.brow .slot { width: 100px; height: 20px; flex: none; }
-.brow .hd { font: 11px var(--mono); color: var(--text-2); width: 34px; text-align: right; flex: none; }
-.brow:hover { background: var(--well); }
-.brow.flash { animation: flash 1s ease-out; }
-.brow .st { width: 16px; text-align: center; font-size: 12px; flex: none; }
-.brow .nm { font: 600 12px var(--mono); color: var(--bc); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.brow .meta { font: 11px var(--mono); color: var(--text-3); white-space: nowrap; }
-.brow.idle .nm { opacity: .6; }
-.bench { flex: none; min-height: 64px; border-top: 1px dashed var(--sep-strong); display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 11px; color: var(--text-3); position: relative; }
-.bench b { font-weight: 600; letter-spacing: .04em; text-transform: uppercase; font-size: 10px; }
-
-/* branch view */
-/* SDK call details on a terminal line (tui.html) */
-.sdkbtn { margin-left: 8px; font: 9.5px var(--mono); padding: 0 4px; border-radius: 3px; border: 1px solid var(--term-border); background: transparent; color: var(--term-dim); cursor: pointer; opacity: 0; vertical-align: 1px; }
-.ln:hover .sdkbtn, .ln.open .sdkbtn, .sdkbtn:focus-visible { opacity: 1; }
-.sdk { display: none; margin: 3px 0 5px; padding: 6px 9px; border-left: 2px solid var(--t-cyan); background: var(--well); border-radius: 0 6px 6px 0; color: var(--term-text); font-size: 11.5px; white-space: normal; }
-.ln.open .sdk { display: block; }
-.sdk .code { color: var(--term-dim); display: block; margin-bottom: 4px; padding: 0; }
-.sdk .code b { color: var(--t-cyan); font-weight: 600; }
-.sdk pre { margin: 0 0 6px; font: inherit; white-space: pre-wrap; }
-.tm { margin-left: 8px; font: 9.5px var(--mono); color: var(--term-dim); vertical-align: 1px; }
-.sdk .tm { margin-left: 6px; font-size: 10.5px; }
-/* Store and overlay footers */
-.store { flex: none; border-top: 1px solid var(--term-border); padding: 3px 10px 4px; font: 10.5px/1.6 var(--mono); color: var(--term-dim); background: var(--well); }
-.store .srow { display: flex; align-items: center; gap: 7px; white-space: nowrap; overflow: hidden; }
-.store .srow > span:not(.sbar):not(.est) { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.store .kind { flex: none; font-weight: 600; font-size: 9px; letter-spacing: .06em; padding: 0; background: none; }
-.store b { color: var(--term-text); font-weight: 600; } .store .est { margin-left: auto; flex: none; font-size: 9.5px; opacity: .8; }
-.store .sbar { flex: none; display: flex; width: 44px; height: 5px; border-radius: 3px; overflow: hidden; background: var(--term-border); }
-.store .sbar i { display: block; } .store .p { background: var(--t-cyan); } .store .m { background: var(--orange); }
-.store .pc { color: var(--t-cyan); } .store .mc { color: var(--orange); }
-/* Files pane (tui.html), stacked for the right column */
-.fsel { font: 11.5px var(--mono); height: 22px; max-width: 200px; min-width: 70px; border: 1px solid var(--term-border); border-radius: 5px; background: var(--term); color: var(--term-text); padding: 0 4px; }
-.sync { font-size: 11px; line-height: 1; flex: none; } .sync.live { color: var(--t-green); } .sync.pinned { color: var(--term-dim); }
-.fbar { flex: none; display: flex; align-items: center; gap: 6px; padding: 4px 8px; background: var(--term-head); border-bottom: 1px solid var(--term-border); font-size: 11.5px; color: var(--term-dim); flex-wrap: wrap; }
-.fbar .segs { display: inline-flex; background: var(--well); border-radius: 6px; padding: 2px; }
-.fbar .fseg { border: 0; background: transparent; padding: 2px 9px; border-radius: 4px; cursor: pointer; font-size: 11.5px; color: var(--term-dim); }
-.fbar .fseg.on { background: var(--card); color: var(--term-text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
-.fbar .chipb { border: 1px solid var(--term-border); background: transparent; border-radius: 10px; padding: 0 8px; height: 20px; cursor: pointer; font-size: 11px; color: var(--term-dim); }
-.fbar .chipb.on { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
-.fbar .chk { display: inline-flex; gap: 4px; align-items: center; } .fbar .chk.off { opacity: .45; }
-.fbar .sp { flex: 1; } .fbar .fcount { font: 11px var(--mono); } .fbar .sdkbtn { opacity: 1; margin-left: 0; }
-.fsdk { margin: 0; padding: 6px 10px; background: var(--well); border-bottom: 1px solid var(--term-border); font: 11px/1.5 var(--mono); color: var(--term-text); white-space: pre-wrap; }
-.fbody { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.ftree, .flist { flex: 1; min-height: 0; overflow: auto; padding: 4px 0 10px; font: 12px/1.6 var(--mono); color: var(--term-text); }
-.fhead { flex: none; display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: var(--term-head); border-bottom: 1px solid var(--term-border); font-size: 11.5px; color: var(--term-dim); min-width: 0; }
-.fhead .fsel { min-width: 0; flex: 0 1 auto; } .fhead .sp { flex: 1; min-width: 4px; }
-.fhead .fcount { font: 11px var(--mono); white-space: nowrap; } .fhead .sdkbtn { opacity: 1; margin-left: 0; flex: none; }
-.fwide { flex: none; border: 0; background: none; color: var(--term-dim); font-size: 13px; width: 22px; height: 22px; border-radius: 5px; cursor: pointer; }
-.fwide:hover, .fwide.on { background: var(--well); color: var(--term-text); }
-.fsw, .fmodes { flex: none; display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-bottom: 1px solid var(--term-border); min-width: 0; }
-.fsw .segs, .fmodes .segs { display: inline-flex; background: var(--well); border-radius: 6px; padding: 2px; flex: none; }
-.fsw .fseg, .fmodes .fseg { border: 0; background: transparent; padding: 2px 10px; border-radius: 4px; cursor: pointer; font-size: 11.5px; color: var(--term-dim); }
-.fsw .fseg.on, .fmodes .fseg.on { background: var(--card); color: var(--term-text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
-.fsw .fseg b { font-weight: 600; margin-left: 2px; }
-.fmodes .sp { flex: 1; } .fstat { font-size: 11px; color: var(--term-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: help; } .fstat b { color: var(--term-text); }
-.fdir { padding: 6px 10px 1px; color: var(--term-dim); font-size: 11px; }
-.fgroup { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 4px 10px; border-top: 1px dashed var(--term-border); color: var(--term-dim); font-size: 11.5px; cursor: pointer; white-space: nowrap; }
-.fgroup:hover { background: var(--well); } .fgroup b { color: var(--term-text); font-weight: 600; } .fgroup .car { width: 10px; } .fgroup .nm { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.fb.lead { margin: 0 6px 0 0; }
-.fpage { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--term-border); min-width: 0; }
-.fback { flex: none; border: 0; background: var(--well); color: var(--accent); font-size: 11.5px; padding: 2px 8px; border-radius: 5px; cursor: pointer; }
-.fback:hover { background: var(--accent-bg); }
-.fpathx { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--mono); }
-.fpathx .dir { color: var(--term-dim); } .fpathx b { color: var(--term-text); }
-.frow { display: flex; align-items: center; gap: 4px; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
-.frow:hover { background: var(--well); } .frow.sel { background: var(--accent-bg); }
-.frow.flash { animation: flash 1.2s ease-out; }
-.frow .car { width: 10px; color: var(--term-dim); flex: none; } .frow .nm { overflow: hidden; text-overflow: ellipsis; }
-.frow.gone .nm { text-decoration: line-through; color: var(--term-dim); }
-.frow.flat { padding: 2px 10px; font: 12px var(--mono); }
-.fb { font: 700 9.5px var(--mono); padding: 0 4px; border-radius: 3px; margin-left: auto; flex: none; }
-.frow.flat .fb { margin: 0 6px 0 0; }
-.fb.A { color: var(--t-green); background: var(--t-add-bg); } .fb.M { color: var(--t-blue); background: var(--accent-bg); } .fb.D { color: var(--t-red); background: var(--t-del-bg); }
-.fr { margin-left: auto; font: 10px var(--mono); color: var(--term-dim); flex: none; }
-.fview { flex: 1; min-height: 0; overflow: auto; font: 12px/1.55 var(--mono); color: var(--term-text); }
-.fpath { position: sticky; top: 0; z-index: 1; background: var(--term); padding: 5px 10px; border-bottom: 1px solid var(--term-border); font-weight: 600; }
-.fpath span { font-weight: 400; color: var(--term-dim); }
-.fsum { padding: 6px 10px; color: var(--term-dim); font-size: 11.5px; } .fsum b { color: var(--term-text); font-weight: 600; }
-.fstats { display: flex; flex-wrap: wrap; gap: 3px 14px; padding: 6px 10px; border-bottom: 1px solid var(--term-border); background: var(--well); font-size: 11px; color: var(--term-dim); }
-.fstats b { color: var(--term-text); font-weight: 600; } .fstats .est { margin-left: auto; }
-.frev { width: 100%; border-collapse: collapse; font-size: 11.5px; } .frev th { text-align: left; font-weight: 600; color: var(--term-dim); padding: 4px 6px; border-bottom: 1px solid var(--term-border); }
-.frev td { padding: 3px 6px; border-bottom: 1px solid var(--term-border); white-space: nowrap; } .frev td.n, .frev th.n { text-align: right; } .frev .zero { color: var(--term-dim); }
-.fempty { padding: 18px 12px; color: var(--term-dim); line-height: 1.6; }
-.code { padding: 2px 0 10px; }
-.cl { display: flex; white-space: pre; min-height: 18px; }
-.cl .no { flex: none; width: 34px; padding-right: 8px; text-align: right; color: var(--term-dim); user-select: none; }
-.cl .op { flex: none; width: 14px; color: var(--term-dim); }
-.cl .tx { flex: 1; padding-right: 10px; }
-.cl.add { background: var(--t-add-bg); } .cl.add .op, .cl.add .tx { color: var(--t-green); }
-.cl.del { background: var(--t-del-bg); } .cl.del .op, .cl.del .tx { color: var(--t-red); }
-.bch { flex: none; width: 40px; margin: 0 4px 0 6px; font: 600 10.5px/18px var(--mono); color: var(--bc); border-left: 3px solid var(--bc); padding-left: 5px; cursor: pointer; }
-.bch.cont { opacity: .55; } .bch:hover { background: var(--well); }
-svg.graph .node { cursor: pointer; }
-/* Sandbox / process status bar (tui.html) */
-.statusbar { height: 32px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--chrome); border-top: .5px solid var(--sep); overflow-x: auto; scrollbar-width: none; font-size: 11px; }
-.statusbar .lbl { color: var(--text-3); white-space: nowrap; }
-.statusbar .sp { flex: 1; min-width: 10px; }
-.chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; font: 11px var(--mono); background: var(--card); box-shadow: 0 0 0 .5px var(--sep-strong); white-space: nowrap; }
-.chip .d { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
-.chip.closed { opacity: .5; } .chip.closed .d { background: var(--text-3); }
-.chip.proc .d { background: var(--orange); animation: blink 1.2s steps(2) infinite; }
-.chip.enter { animation: grow .3s ease-out; }
-.sblist { flex: 1 1 0; min-height: 140px; }
-.blist { flex: 0 1 auto; max-height: 48%; min-height: 96px; }
-.blist .rows { overflow-y: auto; padding: 4px; }
-.sbg { display: flex; flex-direction: column; gap: 1px; padding: 4px 2px 6px; border-radius: 6px; transition: box-shadow .15s; }
-.sbg + .sbg { border-top: 1px solid var(--term-border); }
-.sbg.closed { opacity: .5; }
-.sbg.sblit, .term.sblit { box-shadow: 0 0 0 2px var(--orange), 0 6px 18px rgba(0,0,0,.12); }
-.sbg.pulse { animation: focuspane 1.6s ease-out; }
-.sbh { display: flex; align-items: center; gap: 6px; padding: 2px 4px; font: 11.5px var(--mono); }
-.sbh .d { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: none; } .sbh .d.idle { background: var(--text-3); } .sbh .d.off { background: transparent; box-shadow: 0 0 0 1px var(--text-3); }
-.sbh .mk { display: inline-flex; gap: 4px; align-items: center; color: var(--term-dim); font: 11px var(--font); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sbh b, .sbh .ct { flex: none; white-space: nowrap; } .sbh .sp { flex: 1; } .sbh .ct { color: var(--term-dim); font-size: 10.5px; white-space: nowrap; }
-.dnote { font-size: 10.5px; color: var(--t-orange); padding: 0 4px 0 17px; }
-.dws { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; color: var(--term-text); font: 11px var(--mono); padding: 3px 4px 3px 15px; border-radius: 5px; cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden; }
-.dws:hover { background: var(--well); }
-.dws .at { color: var(--term-dim); }
-.dws .noag { width: 14px; text-align: center; color: var(--term-dim); }
-.bchip { font: 10.5px var(--mono); padding: 0 5px; border-radius: 4px; color: var(--bc); box-shadow: inset 0 0 0 1px var(--bc); white-space: nowrap; }
-.st { font-size: 10px; color: var(--term-dim); } .st.warn { color: var(--t-orange); } .st.bad { color: var(--t-red); } .st.run { color: var(--t-green); overflow: hidden; text-overflow: ellipsis; }
-button.chip { border: 0; color: inherit; cursor: pointer; }
-.sbchip { border: 0; font: 10.5px var(--mono); padding: 1px 6px; border-radius: 4px; background: var(--well); color: var(--term-text); cursor: pointer; flex: none; }
-.sbchip:hover { background: var(--orange-bg); color: var(--t-orange); }
-.term.focus { animation: focuspane 1.2s ease-out; }
-@keyframes focuspane { 0%, 40% { box-shadow: 0 0 0 2.5px var(--accent), 0 6px 18px rgba(0,0,0,.18); } }
-/* Hover card on History nodes (tui.html) */
-.hcard { position: fixed; z-index: 65; width: 290px; background: var(--card); border-radius: 10px; box-shadow: 0 14px 44px rgba(0,0,0,.24), 0 0 0 .5px var(--sep-strong); padding: 8px; display: none; font-size: 12px; }
-.hcard.open { display: block; animation: grow .12s ease-out; }
-.hcard .h { display: flex; align-items: baseline; gap: 6px; margin: 0 4px 2px; }
-.hcard .h b { font: 600 13px var(--mono); }
-.hcard .tag { font: 600 10px var(--font); padding: 1px 6px; border-radius: 4px; background: var(--accent-bg); color: var(--accent); }
-.hcard .meta { margin: 0 4px 6px; color: var(--text-2); font: 11px var(--mono); line-height: 1.5; }
-.hcard .meta b { color: var(--text); }
-.hcard .sec { margin: 6px 4px 3px; font-size: 10.5px; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
-.hcard .ws { width: 100%; display: flex; align-items: center; gap: 6px; padding: 5px 6px; border: 0; background: transparent; border-radius: 6px; cursor: pointer; text-align: left; font: 11.5px var(--mono); color: var(--text); }
-.hcard .ws:hover, .hcard .ws:focus-visible { background: var(--accent-bg); outline: 0; }
-.hcard .ws .d { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); flex: none; }
-.hcard .ws.stale .d { background: var(--red); }
-.hcard .ws small { margin-left: auto; font: 10.5px var(--font); color: var(--text-2); white-space: nowrap; }
-.hcard .ws.stale small { color: var(--red); }
-.hcard .cbtns { display: flex; gap: 6px; margin: 8px 4px 0; }
-.hcard .cbtn { flex: 1; border: 0; border-radius: 6px; padding: 5px 6px; background: var(--well); cursor: pointer; font-size: 11.5px; color: var(--text); }
-.hcard .cbtn:hover { background: var(--accent); color: #fff; }
-.hcard .hint { margin: 6px 4px 0; font-size: 10.5px; color: var(--text-3); }
-.panes { flex: 1; min-height: 0; display: grid; gap: 6px; grid-auto-rows: minmax(0, 1fr); }
-.empty { flex: 1; display: grid; place-items: center; text-align: center; color: var(--text-2); background: var(--term); border-radius: 8px; box-shadow: 0 0 0 1px var(--term-border); padding: 16px; }
-.empty h3 { margin: 0 0 6px; font-size: 14px; color: var(--text); }
-.empty .recent { white-space: pre; margin-top: 10px; font: 11.5px/1.7 var(--mono); text-align: left; color: var(--term-dim); }
-.legend { flex: none; display: flex; flex-wrap: wrap; gap: 4px 10px; padding: 6px 10px 8px; border-top: 1px solid var(--term-border); font: 11px var(--mono); color: var(--text-2); }
-.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--bc); margin-right: 4px; }
-
-/* player */
 .player { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--chrome); border-top: .5px solid var(--sep); min-height: 64px; }
 .player .ctl { display: flex; gap: 2px; flex: none; }
 .player .count { font: 600 12px var(--mono); color: var(--text-2); width: 46px; text-align: center; flex: none; }
@@ -306,69 +31,31 @@ button.chip { border: 0; color: inherit; cursor: pointer; }
 .player .cap { font-size: 13px; line-height: 1.4; min-height: 18px; }
 .player .cap code { font: 12px var(--mono); background: var(--well); padding: 1px 5px; border-radius: 4px; }
 .player .ev { font: 11px var(--mono); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.player .ev b { color: var(--t-purple); font-weight: 600; } .player .ev .bad { color: var(--t-red); font-weight: 600; }
+.player .ev b { color: var(--t-purple); font-weight: 600; }
+.player .ev .bad { color: var(--t-red); font-weight: 600; }
 .player .dots { display: flex; gap: 3px; }
 .player .dots i { flex: 1; height: 4px; border-radius: 2px; background: var(--sep-strong); cursor: pointer; }
-.player .dots i.done { background: var(--accent); } .player .dots i.now { background: var(--orange); }
+.player .dots i.done { background: var(--accent); }
+.player .dots i.now { background: var(--orange); }
 .player select { font: 12px var(--font); color: var(--text); background: var(--well); border: 1px solid var(--sep-strong); border-radius: 6px; height: 26px; }
-
-/* crabs */
-#crabs { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
-.crab { position: absolute; left: 0; top: 0; width: 36px; height: 48px; transition: transform .55s ease-in-out, opacity .3s; }
-.crab .spr { display: block; width: 36px; height: 48px; background-repeat: no-repeat; transform-origin: 50% 100%; transition: transform .25s; filter: drop-shadow(0 2px 2px rgba(0,0,0,.18)); }
-.crab.flip .spr { transform: scaleX(-1); }
-.crab.small .spr { transform: scale(.5); } .crab.small.flip .spr { transform: scale(-.5, .5); }
-.crab.gone { opacity: 0; }
-.crab.idle .spr { animation: avbob 2.6s ease-in-out infinite; }
-.crab.walk .spr { animation: avhop .28s ease-in-out infinite; }
-.crab .fx { display: none; position: absolute; right: -2px; top: 2px; font: 700 13px/1 var(--font); font-style: normal; }
-.crab .fx.bang { color: var(--red); right: 0; top: 0; font-size: 15px; }
-.crab.sweat .fx.sweat, .crab.bang .fx.bang { display: block; animation: avhop .5s ease-in-out infinite; }
-.crab.small .fx { top: 22px; right: 4px; font-size: 10px; }
-.crab .dup, .av .dup { position: absolute; right: -3px; bottom: -2px; font: 700 8px/10px var(--font); font-style: normal; min-width: 10px; text-align: center; border-radius: 5px; background: var(--card); color: var(--text-2); box-shadow: 0 0 0 .5px var(--sep-strong); }
-.crab .dup { bottom: 12px; }
-.av { position: relative; display: inline-block; width: 16px; height: 16px; flex: none; border-radius: 50%; background-repeat: no-repeat; background-color: var(--well); box-shadow: 0 0 0 1px var(--ac); vertical-align: middle; }
-@keyframes avbob { 50% { translate: 0 -1.5px; } }
-@keyframes avhop { 50% { translate: 0 -4px; } }
-.crab .name { position: absolute; left: 50%; top: 48px; transform: translateX(-50%); font: 600 9.5px var(--font); color: var(--c); white-space: nowrap; background: color-mix(in srgb, var(--window) 80%, transparent); padding: 0 3px; border-radius: 3px; }
-.crab.small .name { display: none; }
-/* fan-out: an agent working in several places at once (a script's calls) */
-.crab .fan { display: none; position: absolute; left: -4px; top: 4px; font: 700 9px/13px var(--font); font-style: normal; padding: 0 3px; border-radius: 7px; background: var(--c); color: #fff; box-shadow: 0 0 0 1.5px var(--window); }
-.crab.fanned .fan { display: block; }
-.crab.small .fan { top: 22px; left: 6px; font-size: 8px; line-height: 11px; }
-.crab.ghost { opacity: .42; transition: opacity .3s; }
-.crab.ghost .spr { filter: grayscale(.3); animation: none; }
-.crab.ghost .name { opacity: .8; }
-.crab.ghost.gone { opacity: 0; }
-.bubble { position: fixed; z-index: 45; pointer-events: none; transform: translate(-50%, -100%); font: 600 11px var(--mono); padding: 3px 7px; border-radius: 8px; background: var(--card); color: var(--text); box-shadow: 0 4px 14px rgba(0,0,0,.2), 0 0 0 .5px var(--sep-strong); white-space: nowrap; animation: bubble 1.9s ease-out forwards; }
-.bubble.good { color: var(--t-green); } .bubble.bad { color: var(--t-red); }
-.block { position: fixed; z-index: 44; width: 12px; height: 12px; border-radius: 3px; pointer-events: none; transition: transform .6s cubic-bezier(.4,0,.2,1), opacity .2s .55s; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
-
-@keyframes bob { 50% { transform: translateY(-1.5px); } }
-@keyframes claw { 50% { transform: translateY(-2px); } }
-@keyframes blink { 50% { opacity: .1; } }
-@keyframes grow { from { transform: scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes fadein { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
-@keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
-@keyframes flash { 0% { background: var(--accent-bg); } 100% { background: transparent; } }
-@keyframes bubble { 0% { opacity: 0; margin-top: 6px; } 12% { opacity: 1; margin-top: 0; } 80% { opacity: 1; } 100% { opacity: 0; margin-top: -8px; } }
-
 @media (max-width: 860px) {
   body { overflow: auto; }
   .window { height: auto; min-height: 100%; }
-  .work.mainview, .work.branchview { grid-template-columns: 1fr; }
-  .col { min-height: 300px; }
   .player { flex-wrap: wrap; position: sticky; bottom: 0; }
   .player .mid { flex-basis: 100%; order: 5; }
   .brand small, #follow .lbl { display: none; }
   .titlebar { padding: 0 6px 0 10px; gap: 4px; }
 }
-@media (max-width: 520px) { .bname { display: none; } .brand { margin-right: 0; } .storysel { max-width: 92px; } .mode a { padding: 4px 5px; } }
-@media (prefers-reduced-motion: reduce) { .crab, .block { transition: none; } .crab .spr, .crab .fx { animation: none !important; } }
+@media (max-width: 520px) {
+  .bname { display: none; }
+  .brand { margin-right: 0; }
+  .storysel { max-width: 92px; }
+  .mode a { padding: 4px 5px; }
+}
 </style>
 </head>
 <body>
-<div class="window">
+<div class="window" id="root">
   <header class="titlebar">
     <div class="brand"><svg width="14" height="14" viewBox="0 0 16 16"><path d="M8 1l7 3.5-7 3.5L1 4.5z" fill="currentColor"/><path d="M1 8l7 3.5L15 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M1 11.5L8 15l7-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" opacity=".55"/></svg><span class="bname">LayerFS × dsh</span> <small>design preview · scripted</small></div>
     <span class="mode" id="mode" title="Engine: sim = the simulator in this page; live = real LayerFS through node sdk_sim/server/server.mjs"><a data-mode="sim" href="?backend=sim">sim</a><a data-mode="live" href="?backend=live">live</a></span>
@@ -395,8 +82,6 @@ button.chip { border: 0; color: inherit; cursor: pointer; }
     <select id="p-speed" aria-label="Speed"><option value="0.6">0.6×</option><option value="1" selected>1×</option><option value="1.6">1.6×</option><option value="2.5">2.5×</option></select>
   </footer>
 </div>
-<div id="crabs" aria-hidden="true"></div>
-<div class="hcard" id="hcard" role="tooltip"></div>
 
 <!-- The engine: the LayerFS SDK simulator and its shell, shared with tui.html. -->
 <script src="simulation_engine/model.js"></script>
@@ -408,18 +93,10 @@ button.chip { border: 0; color: inherit; cursor: pointer; }
 <script src="demo.js"></script>
 <script src="avatars/avatars.js"></script>
 <script src="dsh_story.js"></script>
-<!-- The view model: @dsh-layerfs/model, shared with the dsh client plugin. -->
-<script type="module">
+<!-- The view model and the view: @dsh-layerfs/model and @dsh-layerfs/view, shared with the dsh client plugin. --><script type="module">
 import * as X from "../dsh/packages/model/src/index.js";
-// ------------------------------------------------------------------ cast
-const AGENTS = {
-  main:     { color: "#a347d4", crown: true },
-  "ui-dev": { color: "#0a6cff" },
-  tester:   { color: "#1f9d55" },
-};
+import { createView, injectStyle } from "../dsh/packages/view/src/index.js";
 const SCOUTS = window.LAYERFS_DSH_STORY.SCOUTS;
-SCOUTS.forEach((n, i) => { AGENTS[n] = { color: ["#d6336c", "#0f8b9a", "#e08600", "#5856d6", "#8e6e53", "#c2255c", "#2b8a3e", "#1971c2", "#9c36b5"][i] }; });
-const { CAP, RECENT_S, bubbleOf } = X;
 const M = window.LayerSim, FM = window.LayerFiles, { simulateShell, liveCommand, execLines, Engine } = window.LayerTerm;
 // ?backend=sim (default): the simulator in this page, with a free player.
 // ?backend=live: the real product through server/server.mjs (one project
@@ -428,7 +105,7 @@ const LIVE = new URLSearchParams(location.search).get("backend") === "live";
 // Compressed sizes are computed asynchronously and shared across rebuilds.
 const PACKED = new Map(), PACKING = new Set();
 let renderSoon = null;
-const rerender = () => { clearTimeout(renderSoon); renderSoon = setTimeout(() => render(), 40); };
+const rerender = () => { clearTimeout(renderSoon); renderSoon = setTimeout(() => view.render(), 40); };
 const FIXTURE = window.LAYERFS_SCENARIOS[0].steps[0].args.files;
 
 // ------------------------------------------------------------------ story
@@ -450,42 +127,34 @@ const DSH_STORY = window.LAYERFS_DSH_STORY.story(FIXTURE);
 const STORY_KEY = PARAMS.get("story") || "dsh";
 const DEMO = TRACE_LINES ? null : (window.LAYERFS_DEMO || {})[STORY_KEY] || null;
 const LEAD = DEMO && DEMO.roster ? "lead" : "main";
-if (DEMO && DEMO.roster) for (const k of Object.keys(DEMO.roster)) AGENTS[k] = {};
 
-// ------------------------------------------------------------------ avatars (sharky_maid, built by avatars/build.py)
-// The main agent is ellen_joe. Every other agent gets a colour variant picked
-// from a hash of its name, so it is the same on every rewind, reload and
-// backend; no variant repeats until all are in use (then a number tells them
-// apart). An agent's colour (tags, History, cards) is its variant's hair.
-const AV = window.DSH_AVATARS, VARIANTS = Object.keys(AV.chars).filter((c) => c !== AV.main), AV_TAKEN = new Map();
-const nameHash = (s) => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
-function avatar(n) {
-  const a = (AGENTS[n] ||= {});
-  if (a.av) return a;
-  if (n === LEAD) a.av = AV.main;
-  else {
-    const k = nameHash(n) % VARIANTS.length;
-    a.av = VARIANTS.map((_, i) => VARIANTS[(k + i) % VARIANTS.length]).find((v) => !AV_TAKEN.has(v)) || VARIANTS[k];
-  }
-  a.dup = (AV_TAKEN.get(a.av) || 0) + 1; AV_TAKEN.set(a.av, a.dup);
-  a.color = AV.chars[a.av].color;
-  return a;
-}
+// ------------------------------------------------------------------ the view (@dsh-layerfs/view)
+// It draws W into this page: tabs in the title bar, the work area, the status
+// bar and the avatars (sharky_maid, built by avatars/build.py). The main
+// agent is ellen_joe; every other agent gets a colour variant hashed from its name.
+const $ = (id) => document.getElementById(id);
+injectStyle();
+const view = createView($("root"), {
+  avatars: window.DSH_AVATARS, files: FM, lineDiff: M.lineDiff, live: LIVE, lead: LEAD,
+  layout: { tabs: $("tabs"), work: $("work"), status: $("status"), follow: $("follow") },
+  hint: "space play · ←→ step · F follow · hover a History node",
+  onFollowOn: () => go(step),
+});
 // the cast in story order: the lead first, then everyone this story uses
-for (const n of [LEAD, ...(DEMO ? Object.keys((DEMO && DEMO.roster) || {}) : Object.keys(AGENTS))]) avatar(n);
+for (const n of [LEAD, ...(DEMO ? Object.keys(DEMO.roster || {}) : ["main", "ui-dev", "tester", ...SCOUTS])]) view.avatar(n);
 const STORY = TRACE_LINES ? X.traceSteps(TRACE_LINES, { agent: LEAD }) : DEMO ? X.demoFrames(DEMO, { lead: LEAD, fixture: FIXTURE, schedule: window.LAYERFS_DEMO.schedule }) : DSH_STORY;
 
 // ------------------------------------------------------------------ driver
-// W is the view (X.createView): the engine (W.engine: sim, live or a trace
-// replay, same surface) plus what dsh knows and the engine does not: which
-// agent made each call, where each agent is, and the lines each terminal
-// printed. The model (dsh/packages/model) builds it; this page draws it.
+// W is the view model (X.createView): the engine (W.engine: sim, live or a
+// trace replay, same surface) plus what dsh knows and the engine does not:
+// which agent made each call, where each agent is, and the lines each terminal
+// printed. The model (dsh/packages/model) builds it; the view draws it.
 const EMPTY_STATE = () => ({ project: null, main: null, roots: {}, commits: {}, layers: {}, branches: {}, branchOrder: [], sandboxes: {}, sandboxOrder: [] });
 const ENV = {
   live: LIVE, simulateShell, liveCommand, execLines, scriptFor: M.scriptFor, diffTrees: M.diffTrees,
   loaded: (r, w) => !LIVE || w.engine.trees[r],
   // a demo read that names a file opens it in that tab's Files view
-  onFiles: (tab, files) => { const f = filesOf(tab); f.path = files.path; f.mode = files.mode; rightMode[tab] = "files"; },
+  onFiles: (tab, files) => { const f = view.files.filesOf(tab); f.path = files.path; f.mode = files.mode; view.setRight(tab, "files"); },
 };
 function fresh() {
   let engine;
@@ -496,668 +165,12 @@ function fresh() {
   return X.storyView(engine, { lead: LEAD, demo: DEMO, Engine });
 }
 const runStep = (w, st) => X.runStep(w, st, ENV);
-const derive = (w) => X.derive(w);
-const where = (n) => X.where(W, n);
-const recentlyOn = (b) => X.recentlyOn(W, b);
-const capAvatars = (names, k = 3) => names.slice(0, k).map((n) => mascot(n, true)).join("") + (names.length > k ? `<span class="plus">+${names.length - k}</span>` : "");
-const agentsOn = (b) => X.agentsOn(W, b);
-const conflicted = (b) => X.conflicted(W, b);
-const mounted = (b) => X.mounted(W, b);
-const idle = (n) => X.idle(W, n);
 
 // ------------------------------------------------------------------ view state
-let W = fresh(), step = 0, active = "main", follow = true, playing = !LIVE, timer = null;
+let step = 0, playing = !LIVE, timer = null;
+view.W = fresh();
 // for checks from the console and tests: the page's view, story and model
-window.__dsh = { get W() { return W; }, fresh, runStep, STORY, X };
-const pinned = {}, rightMode = {}, seenTabs = new Set(["main"]);
-const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-
-const visibleTabs = () => X.visibleTabs(W, { pinned, active });
-
-// ------------------------------------------------------------------ avatars: head (tags) and sprite (hosts)
-const AV_N = Object.keys(AV.chars).length;
-function mascot(n, mini) {
-  const a = avatar(n), c = AV.chars[a.av], dup = a.dup > 1 ? `<i class="dup">${a.dup}</i>` : "";
-  if (mini) return `<span class="av" style="--ac:${a.color};background-image:url(${AV.heads});background-size:${AV_N * 16}px 16px;background-position:${-c.head * 16}px 0" aria-hidden="true">${dup}</span>`;
-  return `<span class="spr" style="background-image:url(${c.sheet});background-size:${c.poses.length * AV.frame.w}px ${AV.frame.h}px"></span><i class="fx sweat">💦</i><i class="fx bang">!</i><i class="fan"></i>${dup}`;
-}
-// What an agent is doing, as a pose name (X.poseOf). Variants have these
-// poses; ellen_joe has expressions, mapped by X.LEAD_POSES. Conflict and
-// refusals add an overlay.
-const ELLEN = X.LEAD_POSES;
-const poseOf = (n, mode, acting) => X.poseOf(W, n, mode, acting);
-function setPose(el, n, pose) {
-  const a = avatar(n), c = AV.chars[a.av], frame = a.av === AV.main ? ELLEN[pose] || null : c.poses.includes(pose) ? pose : "idle";
-  if (frame) el.querySelector(".spr").style.backgroundPosition = `${-c.poses.indexOf(frame) * AV.frame.w}px 0`;
-  el.classList.toggle("sweat", pose === "conflict");
-  el.classList.toggle("bang", pose === "refused" || pose === "failed");
-}
-const tag = (n) => `<span class="agent-tag" style="--ac:${AGENTS[n].color}">${mascot(n, true)}${esc(n)}</span>`;
-
-// ------------------------------------------------------------------ render: tabs
-function renderTabs() {
-  const { tabs, hidden } = visibleTabs();
-  const chip = (b) => {
-    const B = W.branches[b], avs = capAvatars(agentsOn(b));
-    const isNew = !seenTabs.has(b); seenTabs.add(b);
-    return `<button class="tab${conflicted(b) ? " conflict" : ""}${isNew ? " enter" : ""}" role="tab" data-tab="${b}" aria-selected="${b === active}" style="--bc:var(${B.color})">
-      <span class="dot"></span>${esc(b)}<span class="avs">${avs}</span><span class="pin${pinned[b] ? " on" : ""}" data-pin="${b}" title="Pin tab">${pinned[b] ? "📌" : "⌖"}</span></button>`;
-  };
-  const histAvs = capAvatars(Object.keys(W.agents).filter((n) => where(n).kind === "hist"));
-  $("tabs").innerHTML = `<button class="tab main" role="tab" data-tab="main" aria-selected="${active === "main"}"><span class="dot"></span>main<span class="avs">${histAvs}</span></button>`
-    + tabs.map(chip).join("") + (hidden.length ? `<button class="tab more" data-more="1" title="${hidden.length} idle Branches">+${hidden.length}</button>` : "");
-}
-
-// ------------------------------------------------------------------ render: graph
-// History in the tui.html shape, turned vertical: one column per lane (main
-// first), one row per node, oldest at the top. Gray edges join a lane; a fork
-// leaves its source sideways then runs down; publish and merge are dashed.
-// Mounted Workspaces show as a badge on the node they are based on.
-function graph(filter, activeLane) {
-  const lanes = ["main", ...W.order.filter((b) => !filter || filter.has(b))];
-  const rank = { fork: 0, commit: 1, layer: 2 };
-  const nodes = Object.values(W.nodes).filter((n) => !n.branch || lanes.includes(n.branch)).sort((x, y) => x.t - y.t || rank[x.kind] - rank[y.kind]);
-  const LW = 22, RH = 28, X0 = 16, Y0 = 18, row = {};
-  nodes.forEach((n, i) => (row[n.id] = i));
-  const P = (id) => ({ x: X0 + (W.nodes[id].branch ? lanes.indexOf(W.nodes[id].branch) : 0) * LW, y: Y0 + row[id] * RH });
-  const TX = X0 + (lanes.length - 1) * LW + 20, H = Y0 + nodes.length * RH, Wd = TX + 250;
-  const bc = (b) => (b ? `var(${W.branches[b].color})` : "var(--purple)");
-  const curve = (a, b) => (Math.abs(a.x - b.x) < 1 ? `M${a.x},${a.y} L${b.x},${b.y}` : `M${a.x},${a.y} C${b.x},${a.y} ${b.x},${a.y} ${b.x},${b.y}`);
-  const scurve = (a, b) => { const m = (a.y + b.y) / 2; return `M${a.x},${a.y} C${a.x},${m} ${b.x},${m} ${b.x},${b.y}`; };
-  let g = "";
-  // lane guides from each lane's first row, and the active lane's band
-  lanes.forEach((l, i) => {
-    const first = nodes.find((n) => (l === "main" ? !n.branch : n.branch === l)), x = X0 + i * LW;
-    if (l === activeLane) g += `<rect class="rowband" x="${x - 11}" y="0" width="22" height="${H}" rx="5"/>`;
-    if (first) g += `<line class="row-line" x1="${x}" y1="${P(first.id).y}" x2="${x}" y2="${H}"/>`;
-  });
-  for (const n of nodes) {
-    const [p0, p1] = n.parents, has = (id) => id && row[id] !== undefined;
-    if (n.kind === "layer") {
-      if (has(p0)) g += `<path class="edge main" d="${curve(P(p0), P(n.id))}"/>`;
-      if (has(p1)) g += `<path class="edge publish" d="${scurve(P(p1), P(n.id))}"/>`;
-    } else if (has(p0)) g += `<path class="edge" d="${curve(P(p0), P(n.id))}"/>`;
-    if (n.kind === "commit" && has(p1)) {
-      const a = P(p1), b = P(n.id), ey = b.y - 9, ex = b.x;
-      g += `<g style="--bc:${bc(W.nodes[p1].branch)}"><path class="edge merge" d="M${a.x},${a.y} C${a.x},${(a.y + ey) / 2} ${ex},${(a.y + ey) / 2} ${ex},${ey}"/><path class="mergehead" d="M${ex - 4.5},${ey - 5} L${ex},${ey} L${ex + 4.5},${ey - 5}"/></g>`;
-    }
-  }
-  const heads = new Set([W.mainHead, ...W.order.map((b) => W.branches[b].head)]);
-  for (const n of nodes) {
-    const p = P(n.id), pop = W.newNodes.has(n.id) ? " popin" : "", style = `style="--bc:${bc(n.branch)}"`;
-    const ms = Object.values(W.ws).filter((w) => w.baseNode === n.id);
-    const badge = ms.length ? `<g class="mbadge${n.id !== W.branches[n.branch].head ? " stale" : ""}"><circle cx="${p.x + 8}" cy="${p.y - 9}" r="6.5"/><text x="${p.x + 8}" y="${p.y - 6}" text-anchor="middle">${ms.length}</text></g>` : "";
-    g += n.kind === "layer" ? `<g class="node layer${pop}" data-node="${n.id}"><rect class="shape" x="${p.x - 8}" y="${p.y - 8}" width="16" height="16" rx="4"/></g>`
-      : n.kind === "fork" ? `<g class="node fork${pop}" ${style} data-node="${n.id}"><circle class="shape" cx="${p.x}" cy="${p.y}" r="4.5"/>${badge}</g>`
-      : `<g class="node commit${pop}" ${style} data-node="${n.id}"><circle class="shape" cx="${p.x}" cy="${p.y}" r="7.5"/>${n.parents[1] ? `<circle class="inner" cx="${p.x}" cy="${p.y}" r="2.8"/>` : `<text class="ini" x="${p.x}" y="${p.y + 3}" text-anchor="middle">${esc((n.by || "?")[0].toUpperCase())}</text>`}${badge}</g>`;
-    const lane = n.branch || "main", id = n.kind === "fork" ? "fork" : n.id;
-    // id · lane (implied for Layers) · agent: message
-    const who = AGENTS[n.by] ? `<tspan style="fill:${AGENTS[n.by].color}" font-weight="600">${esc(n.by)}</tspan><tspan class="dim">: ${esc(n.msg || "")}</tspan>` : "";
-    g += `<text class="rt" x="${TX}" y="${p.y + 4}"><tspan font-weight="600">${esc(id)}</tspan>  ${n.branch ? `<tspan style="fill:${bc(n.branch)}">${esc(lane)}</tspan>  ` : ""}${who}${heads.has(n.id) ? `<tspan class="hd"> ◂ head</tspan>` : ""}</text>`;
-  }
-  return `<svg class="graph" width="${Wd}" height="${H}" viewBox="0 0 ${Wd} ${H}">${g}</svg>`;
-}
-
-// ------------------------------------------------------------------ render: terminals
-// Diagnostic timing per call (issue #329 C), as tui.html shows it: live is the
-// SDK call, the server's refresh and the HTTP round trip; sim is the in-page
-// model and says nothing about the product. Neither is a measurement.
-const fmtMs = (ms) => (ms < 1 ? ms.toFixed(2) : ms < 1000 ? ms.toFixed(0) : (ms / 1000).toFixed(2) + " s").replace(/(\d)$/, "$1 ms").replace(/ s ms$/, " s");
-function timingText(t) {
-  if (!t) return "";
-  if (t.simulated) return `${fmtMs(t.totalMs)} in the page (sim)`;
-  if (t.reset) return `${fmtMs(t.totalMs)} · server reset: new volume + Init`;
-  if (t.traced) return `${fmtMs(t.sdkMs)} SDK call, from its trace line`;
-  const http = Math.max(0, t.totalMs - (t.sdkMs || 0) - (t.refreshMs || 0));
-  return `sdk ${fmtMs(t.sdkMs || 0)} · refresh ${fmtMs(t.refreshMs || 0)} · http ${fmtMs(http)}`;
-}
-function cmdTime(calls) {
-  const ts = (calls || []).map((c) => c.timing).filter(Boolean);
-  if (!ts.length) return "";
-  const sum = ts.reduce((a, t) => a + (t.simulated || t.reset ? t.totalMs : t.sdkMs || 0), 0);
-  return `<span class="tm" title="${ts[0].simulated ? "Time of the simulator in the page, not the product" : "SDK call time, summed over this line's calls"}">${fmtMs(sum)}${ts[0].simulated ? " sim" : ""}</span>`;
-}
-const OPEN_SDK = new Set();
-function lineHtml(l, isNew, prefix) {
-  const c = l.calls || [], key = String(l.t) + (l.text || "");
-  const sdk = c.length ? `<button class="sdkbtn" data-sdk="${esc(key)}" title="Show the SDK call and inline Node script">sdk${c.length > 1 ? " ×" + c.length : ""}</button><div class="sdk">${c.map((x) => `<span class="code"><b>${esc(x.call)}</b> → ${esc(x.code)}<span class="tm">${esc(timingText(x.timing))}</span></span><pre>${esc(x.script)}</pre>`).join("")}</div>` : "";
-  const grp = l.group ? `<span class="grp" title="event group: these calls come from one script of ${esc(l.agent || "this agent")}">⧉ ${esc(l.group)}</span>` : "";
-  return `<div class="ln${l.dim ? " dim" : ""}${isNew ? " new" : ""}${OPEN_SDK.has(key) ? " open" : ""}">${prefix}${grp}${l.text ? `<span class="cmd">${esc(l.text)}</span>` : ""}${cmdTime(c)}${sdk}</div>`
-    + (l.out || []).map((o) => `<span class="out${o.c ? " " + o.c : ""}${isNew ? " ln new" : ""}">${esc(o.t)}</span>`).join("");
-}
-const inrow = (ph) => `<div class="inrow"><span class="prompt">you ›</span><span class="caret"></span><span>${esc(ph)}</span></div>`;
-
-// ------------------------------------------------------------------ Files (tui.html Files pane)
-// One Files view per tab. The subject is the tab's Branch (or main) at its
-// latest head or at one fixed point; the base is what it is compared with.
-// All reads go through simulation_engine/files.js on the engine state.
-const COLLAPSE = ["/node_modules", "/.git", "/.next"];
-const FILES = {};
-const fmtBytes = (n) => (n == null ? "not reported" : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
-const bytesOf = (t) => new TextEncoder().encode(t || "").length;
-const ratio = (a, b) => (b > 0 ? `×${(a / b).toFixed(a / b >= 10 ? 0 : 1)}` : "–");
-const bar = (p, m) => `<span class="sbar"><i class="p" style="flex:${p} 0 0"></i><i class="m" style="flex:${m} 0 0"></i></span>`;
-const INODE_BYTES = 73; // one inode value row; directory entries and pooling ignored
-const laneColor = (b) => (!b || b === "main" ? "var(--purple)" : W.branches[b] ? `var(${W.branches[b].color})` : "var(--text-3)");
-const defaultBase = (tab) => (tab === "main" ? "" : "fork:" + tab);
-// list: "changes" (grouped, against the base) or "all" (the tree); path: the
-// open file (the file page) or null (the list); wide: the column takes half the window.
-function filesOf(tab) { return (FILES[tab] ||= { at: "latest", base: defaultBase(tab), path: null, toggled: [], mode: "view", list: "changes", sdk: false, wide: false }); }
-const subjectOf = (tab, p) => (p.at === "latest" ? tab : p.at);
-function pointLabel(ref) {
-  if (!ref) return "nothing";
-  if (ref === "main" || W.branches[ref]) return `${ref} · latest`;
-  if (ref.startsWith("fork:")) return `${ref.slice(5)} · fork point`;
-  const n = W.nodes[ref];
-  return n ? `${n.branch || "main"} · ${ref}` : ref;
-}
-function atSelect(tab, p) {
-  const s = W.engine.s, o = (v, label) => `<option value="${esc(v)}"${v === p.at ? " selected" : ""}>${esc(label)}</option>`;
-  const opts = tab === "main"
-    ? Object.values(s.layers).sort((a, b) => b.slot - a.slot).map((l) => o(l.id, `${l.id} · ${l.sourceCommit ? "from " + l.sourceCommit : "init"}`)).join("")
-    : Object.values(s.commits).filter((c) => c.branch === tab).sort((a, b) => b.slot - a.slot).map((c) => o(c.id, `${c.id} · ${c.message || c.via}`)).join("") + o("fork:" + tab, `fork point · ${s.branches[tab].from}`);
-  const live = p.at === "latest";
-  return `<span class="sync ${live ? "live" : "pinned"}" title="${live ? "Follows the head: new Commits show up as they land" : "Fixed at one point in history"}">${live ? "●" : "⊙"}</span><select class="fsel" data-fat="${esc(tab)}" title="What you look at: latest, or a fixed point">${o("latest", `${tab} @ ${tab === "main" ? W.mainHead : W.branches[tab].head.replace("fork:", "fork ")}`)}${opts}</select>`;
-}
-// What the point is compared with: parent, fork point, main, none, or a node picked in History.
-function baseSelect(tab, p, subject) {
-  const parent = FM.parentRef(W.engine, subject) || "", choices = [];
-  if (parent) choices.push([parent, `vs parent · ${parent.replace("fork:", "fork ")}`]);
-  if (tab !== "main") choices.push(["fork:" + tab, "vs fork point"], ["main", "vs main"]);
-  if (p.base && !choices.some(([v]) => v === p.base)) choices.push([p.base, `vs ${pointLabel(p.base)}`]);
-  choices.push(["", "no compare"]);
-  return `<select class="fsel cmp" data-fbasesel="${esc(tab)}" title="What it is compared with">${choices.map(([v, l]) => `<option value="${esc(v)}"${v === p.base ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
-}
-// Where a changed path belongs in the Changes list: dependencies and build
-// output fold into one row each, so the source changes come first.
-const DEPS = /^\/(node_modules\/|package-lock\.json$|yarn\.lock$|pnpm-lock\.yaml$)/, BUILD = /^\/(\.next|dist|build|out|\.turbo|coverage)\//, VCS = /^\/\.git\//;
-const groupOf = (path) => (DEPS.test(path) ? "deps" : BUILD.test(path) ? "build" : VCS.test(path) ? "vcs" : "src");
-function changesHtml(tab, p, sv, bv, ch, flash) {
-  const files = Object.entries(ch.files).filter(([path]) => ((sv.tree[path] || bv.tree[path]) || {}).type === "file");
-  if (!files.length) return `<div class="fempty">No file differences between ${esc(pointLabel(p.base))} and ${esc(pointLabel(subjectOf(tab, p)))}.</div>`;
-  const row = (path, k, label, indent) => `<div class="frow${flash.has(path) ? " flash" : ""}" data-fopen="${esc(path)}" style="padding-left:${indent}px" title="${esc(path)}"><span class="fb ${k} lead">${k}</span><span class="nm">${esc(label)}</span></div>`;
-  const by = { src: [], build: [], deps: [], vcs: [] };
-  for (const f of files) by[groupOf(f[0])].push(f);
-  // source: by folder, root files first
-  const dirs = new Map();
-  for (const [path, k] of by.src.sort(([a], [b]) => a.localeCompare(b))) { const d = path.slice(0, path.lastIndexOf("/") + 1); (dirs.get(d) || dirs.set(d, []).get(d)).push([path, k]); }
-  let html = "";
-  for (const [d, list] of [...dirs].sort(([a], [b]) => (a === "/" ? -1 : b === "/" ? 1 : a.localeCompare(b)))) {
-    if (d !== "/") html += `<div class="fdir">${esc(d.slice(1))}</div>`;
-    html += list.map(([path, k]) => row(path, k, path.slice(d.length), d === "/" ? 10 : 22)).join("");
-  }
-  const lww = sv.tree["/.lww"] ? " · .lww: newest wins" : "";
-  const fold = (g, label, hint) => {
-    const list = by[g]; if (!list.length) return "";
-    const open = p.toggled.includes("group:" + g), roots = [...new Set(list.map(([path]) => path.split("/")[1]))].join(", ");
-    return `<div class="fgroup" data-fgroup="${esc(tab)}|${g}"><span class="car">${open ? "▾" : "▸"}</span><b>${label}</b><span class="nm">${esc(roots)}</span><span class="fr">${list.length} file${list.length === 1 ? "" : "s"}${hint}</span></div>`
-      + (open ? list.sort(([a], [b]) => a.localeCompare(b)).map(([path, k]) => row(path, k, path.slice(1), 22)).join("") : "");
-  };
-  return `<div class="flist">${html || `<div class="fempty">Only generated files and dependencies changed.</div>`}${fold("build", "build output", lww)}${fold("deps", "dependencies", "")}${fold("vcs", "version control", "")}</div>`;
-}
-const dirOpen = (p, path) => (COLLAPSE.includes(path) ? p.toggled.includes(path) : !p.toggled.includes(path));
-function treeHtml(p, subj, base, ch, dir, depth, flash) {
-  return FM.listBoth(subj, base, dir).map((e) => {
-    const open = e.type === "dir" && dirOpen(p, e.path), k = ch && ch.files[e.path], roll = ch && !k && ch.dirs[e.path];
-    const row = `<div class="frow${e.path === p.path ? " sel" : ""}${e.gone ? " gone" : ""}${flash.has(e.path) ? " flash" : ""}" data-ftree="${esc(e.path)}" data-ftype="${e.type}" style="padding-left:${8 + depth * 13}px" title="${esc(e.path)}">
-      <span class="car">${e.type === "dir" ? (open ? "▾" : "▸") : ""}</span><span class="nm">${esc(e.name)}${e.type === "dir" ? "/" : ""}</span>${k ? `<span class="fb ${k}">${k}</span>` : roll ? `<span class="fr">${roll}</span>` : ""}</div>`;
-    return row + (open ? treeHtml(p, subj, base, ch, e.path, depth + 1, flash) : "");
-  }).join("");
-}
-function sdkCalls(subject, p) {
-  const ref = JSON.stringify(subject), path = JSON.stringify(p.path || "/");
-  const calls = [`layerfs.fs.list(${ref}, dir, pageSize, pagePos) // per open folder`];
-  if (p.base) calls.push(`layerfs.branch.diff_branches(${JSON.stringify(p.base)}, ${ref}, pageSize, pagePos)`);
-  if (p.path) {
-    if (p.mode === "view") calls.push(`layerfs.fs.read(${ref}, ${path}, startLine, endLine)`);
-    if (p.mode === "blame") calls.push(`layerfs.fs.blame(${ref}, ${path}, fromLine)`);
-    if (p.mode === "diff" && p.base) calls.push(`layerfs.fs.diff_files(${JSON.stringify(p.base)}, ${path}, ${ref}, ${path})`);
-    calls.push(`operator.files.stats(${ref}, ${path})`, `operator.files.history(${ref}, ${path}, pageSize, pagePos)`);
-  }
-  return calls.map(esc).join("\n");
-}
-const codeLines = (text) => text.split("\n").map((t, i) => `<div class="cl"><span class="no">${i + 1}</span><span class="tx">${esc(t) || " "}</span></div>`).join("");
-// Per-file revisions, dedupe and compression: sim estimates, or live the
-// product's operator.files.stats/history and fs.blame (LiveBackend.fileReport).
-// A fork point is sent as the node it was forked from.
-const reportRef = (subject) => (subject.startsWith("fork:") ? (FM.resolveRef(W.engine, subject) || {}).node || subject : subject);
-function fileStats(subject, path) {
-  if (LIVE) {
-    const f = W.engine.fileReport(reportRef(subject), path), k = { added: "A", modified: "M", deleted: "D", removed: "D" };
-    return { ...f, rows: f.rows.map((r) => ({ ...r, change: k[r.change] || r.change })) };
-  }
-  const revs = FM.history(W.engine, subject, path), seen = new Set();
-  let logical = 0, unique = 0, stored = 0, pending = false;
-  const rows = [...revs].reverse().map((r) => {
-    if (r.content == null) return { ...r, size: 0, added: 0, stored: 0 };
-    const size = bytesOf(r.content), fresh = !seen.has(r.content);
-    logical += size;
-    let z = 0;
-    if (fresh) { seen.add(r.content); unique += size; z = W.engine.storedSize(r.content); if (z == null) { pending = true; z = size; } stored += z; }
-    return { ...r, size, added: fresh ? size : 0, stored: fresh ? z : 0 };
-  }).reverse();
-  return { rows, revisions: revs.length, logical, unique, stored, pending, metadata: revs.length * INODE_BYTES };
-}
-function fileStatsHtml(subject, p, sv) {
-  const e = sv.tree[p.path];
-  if (!e || e.type !== "file") return "";
-  const f = fileStats(subject, p.path), cur = LIVE ? f.size : e ? bytesOf(e.content) : null, size = cur == null ? (e ? "…" : "deleted here") : fmtBytes(cur);
-  // one line; the full numbers are in the tooltip
-  const tip = `${f.revisions ?? "?"} revisions (saved versions where this file changed) · current ${size} · history ${fmtBytes(f.logical)} logical · unique ${fmtBytes(f.unique)} (dedupe ${ratio(f.logical, f.unique)})`
-    + (LIVE ? ` · ${f.error || "product: operator.files.stats and files.history; physical per-file attribution not reported"}` : ` · stored ≈ ${fmtBytes(f.stored)} (compression ${ratio(f.unique, f.stored)}, sim: deflate as a stand-in for zstd) · metadata ≈ ${fmtBytes(f.metadata)}`);
-  return `<span class="fstat" title="${esc(tip)}"><b>${f.revisions ?? "…"}</b> rev · ${size}${LIVE ? "" : ` · ${ratio(f.unique, f.stored)}`}${f.pending ? " · …" : ""}</span>`;
-}
-function fileHistoryHtml(subject, path) {
-  const f = fileStats(subject, path);
-  if (LIVE && f.pending) return `<div class="fempty">Loading the file's history…</div>`;
-  if (!f.rows.length) return `<div class="fempty">${esc(f.error || `${path} has no saved versions behind ${pointLabel(subject)}.`)}</div>`;
-  const rows = f.rows.map((r) => `<tr><td><span class="bch" style="--bc:${r.node.kind === "layer" ? "var(--purple)" : laneColor(r.node.branch)}" data-fblame="${r.node.id}" title="${esc(r.node.id)} · click to diff with its parent">${r.node.id}</span></td><td><span class="fb ${r.change}">${r.change}</span></td>
-    <td class="n">${r.content == null ? "–" : fmtBytes(r.size)}</td><td class="n${r.added ? "" : " zero"}">${r.content == null ? "–" : r.added == null ? "not reported" : r.added ? "+" + fmtBytes(r.added) : "reused"}</td>${LIVE ? "" : `<td class="n${r.stored ? "" : " zero"}">${r.stored ? fmtBytes(r.stored) : "–"}</td>`}</tr>`).join("");
-  return `<div class="fsum">${f.revisions} revision${f.revisions === 1 ? "" : "s"} behind <b>${esc(pointLabel(subject))}</b>, newest first · new = bytes this version added (an identical earlier version is reused)${f.hasMore ? " · first 50 shown" : ""}</div>
-    <table class="frev"><tr><th>version</th><th></th><th class="n">size</th><th class="n">new</th>${LIVE ? "" : '<th class="n">stored ≈</th>'}</tr>${rows}</table>`;
-}
-function viewHtml(subject, p, sv, bv, ch) {
-  const se = sv.tree[p.path], be = bv && bv.tree[p.path];
-  if (p.mode === "view") {
-    if (!se) return `<div class="fempty">${esc(p.path)} does not exist at ${esc(pointLabel(subject))}${be ? " (deleted; switch to Diff to see what was removed)" : ""}.</div>`;
-    return se.type === "file" ? `<div class="code">${codeLines(se.content)}</div>` : `<div class="fempty">${esc(p.path)} is a folder.</div>`;
-  }
-  if (p.mode === "history") return fileHistoryHtml(subject, p.path);
-  if (p.mode === "blame") {
-    let b;
-    if (LIVE) {
-      // The product's fs.blame: each line names the Commit or Layer it came from.
-      const report = fileStats(subject, p.path);
-      if (!report.blame) return `<div class="fempty">${esc(report.error || "Loading attributed lines…")}</div>`;
-      b = { ...report.blame, versions: report.revisions, lines: report.blame.lines.map((l) => ({ ...l, origin: { id: l.commit, kind: l.commit.startsWith("L") ? "layer" : "commit", branch: (W.engine.s.commits[l.commit] || {}).branch } })) };
-    } else b = FM.blame(W.engine, subject, p.path);
-    if (!b) return `<div class="fempty">${esc(p.path)} does not exist at ${esc(pointLabel(subject))}.</div>`;
-    let last = null;
-    const rows = b.lines.map((ln) => {
-      const o = ln.origin, first = o.id !== last; last = o.id;
-      return `<div class="cl"><span class="bch${first ? "" : " cont"}" style="--bc:${o.kind === "layer" ? "var(--purple)" : laneColor(o.branch)}" data-fblame="${o.id}" title="${esc(o.id)} · ${esc(W.attrib[o.id] || "")} · click to diff with its parent">${first ? o.id : ""}</span><span class="no">${ln.n}</span><span class="tx">${esc(ln.text) || " "}</span></div>`;
-    }).join("");
-    return `<div class="fsum">Blame at <b>${esc(pointLabel(subject))}</b> · ${LIVE ? "product attribution (fs.blame)" : `composed from ${b.versions} saved versions`}</div><div class="code">${rows}</div>`;
-  }
-  if (!bv) return `<div class="fempty">Diff needs something to compare with: pick it next to the point above.</div>`;
-  if (!se && !be) return `<div class="fempty">${esc(p.path)} is in neither side.</div>`;
-  const before = be && be.type === "file" ? be.content : null, after = se && se.type === "file" ? se.content : null;
-  if (before === after) return `<div class="fsum">No changes between <b>${esc(pointLabel(p.base))}</b> and <b>${esc(pointLabel(subject))}</b>.</div><div class="code">${codeLines(after || "")}</div>`;
-  let o = 0, n = 0;
-  const rows = M.lineDiff(before ?? "", after ?? "").map((d) => {
-    if ((before == null && d.op === "-") || (after == null && d.op === "+")) return "";
-    const on = d.op === "+" ? "" : ++o, nn = d.op === "-" ? "" : ++n;
-    return `<div class="cl ${d.op === "+" ? "add" : d.op === "-" ? "del" : ""}"><span class="no">${on}</span><span class="no">${nn}</span><span class="op">${d.op === " " ? "" : d.op}</span><span class="tx">${esc(d.text) || " "}</span></div>`;
-  }).join("");
-  return `<div class="fsum">${before == null ? "added" : after == null ? "deleted" : "modified"} · <b>${esc(pointLabel(p.base))}</b> → <b>${esc(pointLabel(subject))}</b></div><div class="code diff">${rows}</div>`;
-}
-function filesHtml(tab) {
-  const p = filesOf(tab);
-  if (p.at !== "latest" && !W.nodes[p.at] && !p.at.startsWith("fork:")) p.at = "latest";
-  const subject = subjectOf(tab, p), sv = FM.resolveRef(W.engine, subject);
-  if (!sv) return `<div class="fempty">Nothing to show yet.</div>`;
-  const bv = p.base ? FM.resolveRef(W.engine, p.base) : null, ch = bv ? FM.changeMap(sv.tree, bv.tree) : null;
-  const flash = p.at === "latest" ? W.flash[tab] || new Set() : new Set();
-  const nFiles = ch ? Object.keys(ch.files).filter((path) => ((sv.tree[path] || bv.tree[path]) || {}).type === "file").length : 0;
-  // one header row: what (point), against what (compare), how much changed, the SDK calls, wider
-  const head = `<div class="fhead">${atSelect(tab, p)}${baseSelect(tab, p, subject)}<span class="sp"></span>${ch ? `<span class="fcount" title="Files changed from the compared point">${nFiles} Δ</span>` : ""}`
-    + `<button class="sdkbtn" data-fsdk="${esc(tab)}" title="The SDK calls behind this view">sdk</button><button class="fwide${p.wide ? " on" : ""}" data-fwide="${esc(tab)}" title="${p.wide ? "Back to the normal width" : "Widen Files to half the window"}">${p.wide ? "⤡" : "⤢"}</button></div>`
-    + (p.sdk ? `<pre class="fsdk">${sdkCalls(subject, p)}</pre>` : "");
-  if (p.path) return head + filePage(tab, p, subject, sv, bv, ch);
-  const list = ch ? p.list : "all";
-  const sw = ch ? `<div class="fsw"><span class="segs"><button class="fseg${list === "changes" ? " on" : ""}" data-flist="${esc(tab)}|changes">Changes <b>${nFiles}</b></button><button class="fseg${list === "all" ? " on" : ""}" data-flist="${esc(tab)}|all">All files</button></span></div>` : "";
-  const body = list === "changes" ? changesHtml(tab, p, sv, bv, ch, flash) : `<div class="ftree">${treeHtml(p, sv.tree, bv ? bv.tree : null, ch, "/", 0, flash)}</div>`;
-  return head + sw + `<div class="fbody">${body}</div>`;
-}
-// One file: back to the list, its path and change badge, the modes and a
-// one-line summary, then the file itself.
-function filePage(tab, p, subject, sv, bv, ch) {
-  const k = ch && ch.files[p.path], cut = p.path.lastIndexOf("/") + 1;
-  const back = ch && p.list === "changes" ? "Changes" : "All files";
-  const seg = (m, label) => `<button class="fseg${p.mode === m ? " on" : ""}" data-fmode="${esc(tab)}|${m}">${label}</button>`;
-  return `<div class="fpage"><button class="fback" data-fback="${esc(tab)}" title="Back to the list">‹ ${back}</button><span class="fpathx" title="${esc(p.path)} @ ${esc(pointLabel(subject))}"><span class="dir">${esc(p.path.slice(1, cut))}</span><b>${esc(p.path.slice(cut))}</b></span>${k ? `<span class="fb ${k}">${k}</span>` : ""}</div>
-    <div class="fmodes"><span class="segs">${bv ? seg("diff", "Diff") : ""}${seg("view", "File")}${seg("blame", "Blame")}${seg("history", "History")}</span><span class="sp"></span>${fileStatsHtml(subject, p, sv)}</div>
-    <div class="fbody"><div class="fview">${viewHtml(subject, p, sv, bv, ch)}</div></div>`;
-}
-// The global Store: dedupe and compression rates. Sim estimates them from the
-// model (SimBackend.storage); live shows the Store's publication counters.
-function storeHtml() {
-  const z = W.engine.storage();
-  if (!z) return `<div class="store"><div class="srow"><span class="kind">STORE</span><span>${LIVE ? "not reported yet" : "empty"}</span></div></div>`;
-  const tip = !z.estimate ? `Store publication counters: logical history states ${fmtBytes(z.logical)}, unique canonical objects ${fmtBytes(z.payload)}, complete pack bodies ${fmtBytes(z.stored)}; metadata ${fmtBytes(z.metadata)}. DB logical pages ${fmtBytes(z.store)}. WAL allocation is separate.` : `Global Store, project ${W.engine.s.project ? W.engine.s.project.name : ""} (sim estimate). Logical ${fmtBytes(z.logical)}: every file in every saved root. Dedupe to ${fmtBytes(z.payload)}: distinct contents once (whole files; the product also dedupes chunks). Payload ${fmtBytes(z.stored)}: those contents compressed with deflate as a stand-in for zstd, no deltas. Metadata ${fmtBytes(z.metadata)}: 64 B per distinct entry + 256 B per Commit or Layer.`;
-  return `<div class="store" title="${esc(tip)}"><div class="srow"><span class="kind">STORE</span><b>${fmtBytes(z.store)}</b>${bar(z.stored, z.metadata)}<span><span class="pc">payload</span> ${fmtBytes(z.stored)} · <span class="mc">meta</span> ${fmtBytes(z.metadata)}</span></div>
-    <div class="srow"><span class="kind">RATE</span><span>logical <b>${fmtBytes(z.logical)}</b> · dedupe <b>${ratio(z.logical, z.payload)}</b> · compression <b>${ratio(z.payload, z.stored)}</b>${z.pending ? " · compressing…" : ""}</span><span class="est">${z.estimate ? "sim est." : "product"}</span></div></div>`;
-}
-// A Workspace's overlay: its uncommitted changes in the daemon's own database, not in the Store.
-function overlayHtml(w) {
-  const o = W.engine.overlayOf(w.eng);
-  if (!o) return "";
-  if (!o.estimate) return `<div class="store" title="Workspace operator counters (operator.workspace.overlay): payload is stored overlay cell bytes. It lives in the daemon's database, not in the global Store."><div class="srow"><span class="kind">OVERLAY</span><b>${fmtBytes(o.payload)}</b><span>payload · ${o.inodes} inodes · ${o.entries} names${o.changes ? ` · +${o.changes.added} ~${o.changes.modified} −${o.changes.removed}` : ""}</span><span class="est">product</span></div></div>`;
-  const n = o.added + o.modified + o.removed;
-  const tip = `This Workspace's overlay (sim estimate): ${n} change${n === 1 ? "" : "s"}; payload ${fmtBytes(o.payload)} is the changed files' bytes, metadata ${fmtBytes(o.metadata)} is 64 B per changed entry. It lives in the daemon's database, not in the global Store.`;
-  return `<div class="store" title="${esc(tip)}"><div class="srow"><span class="kind">OVERLAY</span><b>${fmtBytes(o.payload + o.metadata)}</b>${bar(o.payload, o.metadata)}<span>+${o.added} ~${o.modified} −${o.removed} · <span class="pc">payload</span> ${fmtBytes(o.payload)} · <span class="mc">meta</span> ${fmtBytes(o.metadata)}</span><span class="est">sim est.</span></div></div>`;
-}
-// The right column of either tab: History or Files of that tab's head.
-function rightCol(tab, title, headId, graphHtml, legend) {
-  const mode = rightMode[tab] || "history", seg = `<span class="seg"><button class="h${mode === "history" ? " on" : ""}" data-right="${tab}:history">HISTORY</button><button class="f${mode === "files" ? " on" : ""}" data-right="${tab}:files">FILES</button></span>`;
-  return `<div class="col"><section class="term"><div class="thead">${seg}<span class="ttl">${esc(title)} @ ${esc(headId)}</span></div>
-    ${mode === "history" ? `<div class="graphwrap" data-scroll>${graphHtml}</div>${legend ? `<div class="legend">${legend}</div>` : ""}` : filesHtml(tab)}${tab === "main" ? storeHtml() : ""}</section></div>`;
-}
-
-function counts() {
-  const all = Object.keys(W.agents), busy = all.filter((n) => !idle(n)).length;
-  return `<button class="pill roster" data-roster="1" title="All agents"><span style="color:var(--green)">●</span> ${busy} working · <span>○</span> ${all.length - busy} idle</button>`;
-}
-function rosterMenu(anchor) {
-  const r = anchor.getBoundingClientRect(), m = document.createElement("div");
-  m.className = "menu roster-menu"; m.style.top = r.bottom + 4 + "px"; m.style.left = Math.max(8, r.right - 300) + "px";
-  const label = (n) => { const l = where(n), A = W.agents[n];
-    return l.kind === "ws" ? `${l.branch} · ${l.ws}` : l.kind === "fs" ? `${l.branch} · fs` : l.kind === "hist" ? "project terminal"
-      : A.lastBranch ? `idle · last on ${A.lastBranch}` : "idle"; };
-  const all = Object.keys(W.agents).sort((x, y) => idle(x) - idle(y));
-  m.innerHTML = all.map((n) => { const l = where(n);
-    return `<button ${l.branch ? `data-open="${l.branch}"` : ""}>${mascot(n, true)}<b style="color:${AGENTS[n].color}">${esc(n)}</b><span style="margin-left:auto;font:11px var(--mono);color:var(--text-3)">${esc(label(n))}</span></button>`; }).join("");
-  document.body.appendChild(m);
-}
-
-function mainView() {
-  const histLines = W.hist.map((l) => lineHtml(l, l.t === W.seq, tag(l.agent) + " ")).join("") || `<span class="out">no calls yet</span>`;
-  const rows = W.order.slice().sort((x, y) => W.branches[y].last - W.branches[x].last).map((b) => {
-    const B = W.branches[b], on = agentsOn(b), age = W.clock - B.last;
-    const st = conflicted(b) ? `<span style="color:var(--red)">⚠</span>` : on.length || mounted(b) ? `<span style="color:var(--green)">●</span>` : B.published ? `<span style="color:var(--purple)">↑</span>` : `<span style="color:var(--text-3)">○</span>`;
-    const meta = conflicted(b) ? "conflict" : B.published ? `→ ${W.mainHead}` : age < 1 ? "now" : `${age}s`;
-    // small crabs stand in the slot (placeCrabs, mode "row"); the head and age follow
-    return `<div class="brow${on.length || mounted(b) ? "" : " idle"}${B.last === W.clock && W.seq ? " flash" : ""}" data-open="${b}" data-loc="row:${b}" style="--bc:var(${B.color})"><span class="st">${st}</span><span class="nm">${esc(b)}</span><span class="slot" data-slot="row:${b}"></span><span class="hd">${esc(B.head.replace("fork:", "") === b ? B.base : B.head)}</span><span class="meta">${meta}</span></div>`;
-  }).join("") || `<div class="brow idle"><span class="meta">no Branches yet</span></div>`;
-  return `<div class="col"><section class="term${lastHit("hist")}" data-loc="hist"><div class="thead"><span class="kind history">PROJECT</span><span class="ttl">${W.mainHead ? "website · main @ " + W.mainHead : "no project yet"}</span></div>
-      <div class="tbody" id="scroll-hist">${histLines}</div>${inrow("init · branches · log · fork · merge · publish")}</section></div>
-    <div class="col"><section class="term blist"><div class="thead"><span class="kind plain">BRANCHES</span><span class="ttl">${W.order.length} · by activity</span><span class="sp"></span>${counts()}</div>
-      <div class="rows">${rows}</div></section>${sandboxesHtml()}</div>
-    ${W.mainHead ? rightCol("main", "main", W.mainHead, graph(null, "main"), "")
-      : `<div class="col"><div class="empty">No project yet</div></div>`}`;
-}
-
-function branchView(b) {
-  const B = W.branches[b];
-  const fsLines = (W.fsLog[b] || []).map((l) => lineHtml(l, l.t === W.seq, tag(l.agent) + " ")).join("") || `<span class="out">no fs calls on ${esc(b)} yet</span>`;
-  const headId = B.head.startsWith("fork:") ? B.base : B.head;
-  const wss = Object.values(W.ws).filter((w) => w.branch === b).sort((x, y) => x.born - y.born);
-  const panes = wss.map((w) => { const [sb, path] = w.id.split(":"); return `<section class="term${w.bad ? " bad" : lastHit("ws:" + w.id)}${w.born === W.seq ? " enter" : ""}${focusPane === w.id ? " focus" : ""}" data-loc="ws:${w.id}" data-sb="${esc(sb)}">
-      <div class="thead"><span class="kind sandbox">WORKSPACE</span>${tag(w.agent)}<button class="sbchip" data-sbchip="${esc(sb)}" data-sbhl="${esc(sb)}" title="Runs in Sandbox ${esc(sb)} · hover: its other panes here · click: the Sandbox on the main tab">${esc(sb)}</button><span class="ttl">${esc(path.replace("/workspaces/", "ws/"))}</span><span class="sp"></span>${w.bad ? '<span class="pill warn">conflict</span>' : '<span class="pill run">mounted</span>'}</div>
-      <div class="tbody" data-scroll>${w.lines.map((l) => lineHtml(l, l.t === W.seq, l.dim ? "" : '<span class="prompt">$ </span>')).join("")}</div>${overlayHtml(w)}</section>`; }).join("");
-  const recent = Object.values(W.nodes).filter((n) => n.branch === b && n.kind === "commit").slice(-4).reverse()
-    .map((n) => `${n.id}  ${esc(n.by || "?")}: ${esc(n.msg || "")}`).join("\n");
-  const cols = wss.length > 2 ? "1fr 1fr" : "1fr";
-  // scoped history: this Branch, its ancestors, and Branches made from it
-  const scope = new Set([b]);
-  for (let n = W.nodes[B.base]; n && n.branch; n = W.nodes[W.branches[n.branch].base]) scope.add(n.branch);
-  for (const o of W.order) { const ob = W.branches[o]; if (W.nodes[ob.base] && W.nodes[ob.base].branch === b) scope.add(o); const h = W.nodes[ob.head]; if (h && h.parents.some((p) => W.nodes[p] && W.nodes[p].branch === b)) scope.add(o); }
-  return `<div class="col"><section class="term${lastHit("fs:" + b)}" data-loc="fs:${b}"><div class="thead"><span class="kind fs">FS</span><span class="ttl">${esc(b)} @ ${headId}</span></div>
-      <div class="tbody" data-scroll>${fsLines}</div>${inrow("read · grep · write · edit · mv · rm")}</section></div>
-    <div class="col">${wss.length ? `<div class="panes" style="grid-template-columns:${cols}">${panes}</div>`
-      : `<div class="empty"><div><h3>No Workspace mounted on ${esc(b)}</h3>fs calls edit this Branch directly.<br>A <code>sandbox.mount</code> opens a pane here.${recent ? `<div class="recent">${recent}</div>` : ""}</div></div>`}
-      <div class="bench" data-loc="bench" style="border-top:0;min-height:48px;background:var(--term);border-radius:8px;box-shadow:0 0 0 1px var(--term-border)"><b>Recently here</b>${recentlyOn(b).length ? "" : `<span>nobody in the last ${RECENT_S} s</span>`}</div></div>
-    ${rightCol(b, b, headId, graph(scope, b), "")}`;
-}
-
-let lastLoc = null;
-const lastHit = (loc) => (lastLoc === loc ? " hot" : "");
-
-function render() {
-  renderStatus();
-  const keepScroll = [".ftree", ".fview", ".sblist .tbody"].map((sel) => { const el = document.querySelector("#work " + sel); return [sel, el ? el.scrollTop : 0]; });
-  if (active !== "main" && !W.branches[active]) active = "main";
-  renderTabs();
-  const work = $("work");
-  work.className = "work " + (active === "main" ? "mainview" : "branchview") + ((rightMode[active] === "files" && (FILES[active] || {}).wide) ? " wide" : "");
-  work.innerHTML = active === "main" ? mainView() : branchView(active);
-  // terminals and History follow their newest line; lists (Sandboxes) keep their place
-  for (const el of work.querySelectorAll(".tbody, .graphwrap")) if (!el.closest(".sblist")) el.scrollTop = el.scrollHeight;
-  for (const [sel, top] of keepScroll) { const el = work.querySelector(sel); if (el) el.scrollTop = top; }
-  if (sbLit) { const id = sbLit; sbLit = null; lightSandbox(id); } // the redraw dropped the highlight
-  if (sbPulse) { const g = work.querySelector(`[data-sbcol="${CSS.escape(sbPulse)}"]`); sbPulse = null; if (g) { g.classList.add("pulse"); g.scrollIntoView({ block: "nearest" }); } }
-  requestAnimationFrame(placeCrabs);
-}
-
-// ------------------------------------------------------------------ status bar (tui.html)
-// Every Sandbox the engine knows, the agent dsh created it for, its mounts,
-// and its running processes. Read-only here: the story drives the engine.
-// The bottom bar, on every tab: running processes (a server matters wherever
-// you are) and the keys. The Sandboxes themselves are listed on the main tab.
-function renderStatus() {
-  const s = W.engine.s;
-  const procs = s.sandboxOrder.filter((id) => !s.sandboxes[id].closed).flatMap((id) => s.sandboxes[id].procOrder.map((p) => s.sandboxes[id].processes[p]).filter((p) => p.status === "running").map((p) => ({ ...p, sb: id })));
-  $("status").innerHTML = `<span class="lbl">${procs.length ? "Running" : "No processes running"}</span>`
-    + procs.map((p) => `<button class="chip proc" data-sbchip="${esc(p.sb)}" data-sbhl="${esc(p.sb)}" title="Running in ${esc(p.sb)}:${esc(p.path)} (operator process list) · click to show its Sandbox on main"><span class="d"></span>${esc(p.sb)} · ${esc(p.command)}</button>`).join("")
-    + `<span class="sp"></span><span class="lbl">space play · ←→ step · F follow · hover a History node</span>`;
-}
-// Main tab only. Sandboxes belong to the project, not to a Branch: one
-// Sandbox (one machine, one localhost) holds Workspaces of any Branch and any
-// agent. A group per Sandbox: who dsh made it for, then a row per Workspace
-// (agent, Branch, base, uncommitted, current / stale / conflict, process).
-// Read-only in the preview: the story drives the engine, so cancel / close
-// are dsh operator actions (issue #345), not buttons here.
-function sandboxesHtml() {
-  const s = W.engine.s, open = s.sandboxOrder.filter((id) => !s.sandboxes[id].closed);
-  const by = (id) => W.sbBy[id] || {};
-  const forBranch = (id) => W.demo && Object.keys(W.demo.e.branchSandbox || {}).find((b) => W.demo.e.branchSandbox[b] === id);
-  let nWs = 0, nProc = 0;
-  const groups = [...s.sandboxOrder].sort((a, b) => s.sandboxes[a].closed - s.sandboxes[b].closed).map((id) => {
-    const sb = s.sandboxes[id], n = by(id).made, br = forBranch(id);
-    const rows = sb.wsOrder.filter((p) => sb.workspaces[p].mounted).map((p) => {
-      const w = sb.workspaces[p], k = `${id}:${p}`, v = W.ws[k], agent = v ? v.agent : null, B = W.branches[w.branch];
-      const base = w.baseCommit || w.baseLayer, stale = B && (w.baseCommit || "fork:" + w.branch) !== B.head, dirty = W.engine.dirtyOf(w);
-      const run = sb.procOrder.map((x) => sb.processes[x]).filter((x) => x.path === p && x.status === "running");
-      nWs++; nProc += run.length;
-      const state = v && v.bad ? `<span class="st bad">conflict</span>` : stale ? `<span class="st warn">stale</span>` : `<span class="st">current</span>`;
-      return `<button class="dws" data-dws="${esc(k)}" title="Open ${esc(w.branch)} at this Workspace">${agent ? mascot(agent, true) : '<span class="noag">?</span>'}<span class="nm">${esc(p.replace("/workspaces/", "ws/"))}</span>`
-        + `<span class="bchip" style="--bc:${B ? `var(${B.color})` : "var(--text-3)"}">${esc(w.branch)}</span><span class="at">@${esc(base)}</span>${dirty ? `<span class="st">+${dirty}</span>` : ""}${state}${run.length ? `<span class="st run">● ${esc(run[0].command)}</span>` : ""}</button>`;
-    });
-    const branches = new Set(sb.wsOrder.filter((p) => sb.workspaces[p].mounted).map((p) => sb.workspaces[p].branch));
-    const made = (n ? `created by ${n}` : "created outside dsh") + (br ? ` · ${br}'s agents share it` : "") + (sb.closed && by(id).closed ? ` · closed by ${by(id).closed}` : "");
-    return `<div class="sbg${sb.closed ? " closed" : ""}" data-sbcol="${esc(id)}" data-sbhl="${esc(id)}"><div class="sbh"><span class="d${sb.closed ? " off" : rows.length ? "" : " idle"}"></span><b>${esc(id)}</b><span class="mk">${n ? mascot(n, true) : ""}${esc(made)}</span><span class="sp"></span>`
-      + `<span class="ct">${sb.closed ? "closed" : rows.length ? `${rows.length} Workspace${rows.length === 1 ? "" : "s"}` : "idle"}</span></div>`
-      + (branches.size > 1 ? `<div class="dnote">${branches.size} Branches share this machine and its localhost</div>` : "") + rows.join("") + `</div>`;
-  });
-  return `<section class="term sblist"><div class="thead"><span class="kind sandbox">SANDBOXES</span><span class="ttl">${open.length} · ${nWs} Workspace${nWs === 1 ? "" : "s"} · ${nProc} process${nProc === 1 ? "" : "es"}</span></div>
-    <div class="tbody">${groups.join("") || `<span class="out">no Sandboxes yet · any agent may create one (sandbox.create)</span>`}</div></section>`;
-}
-// Hovering anything tagged with a Sandbox lights it up: its group on main,
-// and in a Branch tab every pane on that machine.
-let sbLit = null, sbPulse = null;
-function lightSandbox(id) {
-  if (id === sbLit) return;
-  sbLit = id;
-  for (const el of document.querySelectorAll(".sblit")) el.classList.remove("sblit");
-  if (id) for (const el of document.querySelectorAll(`[data-sbcol="${CSS.escape(id)}"], .term[data-sb="${CSS.escape(id)}"]`)) el.classList.add("sblit");
-}
-document.addEventListener("mouseover", (e) => { const t = e.target.closest && e.target.closest("[data-sbhl]"); lightSandbox(t ? t.dataset.sbhl : null); });
-
-// ------------------------------------------------------------------ hover card (tui.html)
-// What a History node is, who made it, and which Workspaces are mounted on it.
-let cardTimer = null;
-function wsRows(name, nodeId) {
-  const s = W.engine.s, head = s.branches[name].head || "fork:" + name, rows = [];
-  for (const id of s.sandboxOrder) for (const p of s.sandboxes[id].wsOrder) {
-    const w = s.sandboxes[id].workspaces[p];
-    if (!w.mounted || w.branch !== name || (w.baseCommit || "fork:" + name) !== nodeId) continue;
-    const k = `${id}:${p}`, dirty = W.engine.dirtyOf(w), stale = nodeId !== head, agent = (W.panes[k] || {}).agent;
-    rows.push(`<button class="ws${stale ? " stale" : ""}" data-open="${esc(name)}" title="Open the ${esc(name)} tab"><span class="d"></span>${agent ? mascot(agent, true) : ""}${esc(k)}${dirty ? ` · +${dirty}` : ""}<small>${stale ? `stale · head ${head.replace("fork:", "")}` : "current"}</small></button>`);
-  }
-  return rows.length ? `<div class="sec">Workspaces mounted here</div>${rows.join("")}` : "";
-}
-function cardHtml(id) {
-  const s = W.engine.s, by = W.attrib[id] ? `by <b style="color:${AGENTS[W.attrib[id]].color}">${esc(W.attrib[id])}</b>` : "", head = '<span class="tag">head</span>';
-  const btns = `<div class="cbtns"><button class="cbtn" data-card-at="${esc(id)}">Browse files</button><button class="cbtn" data-card-cmp="${esc(id)}">Diff vs parent</button></div><div class="hint">Click the node: open Files at this point</div>`;
-  if (s.layers[id]) {
-    const l = s.layers[id];
-    return `<div class="h"><b>${l.id}</b>main${id === s.main.head ? head : ""}</div><div class="meta">Layer · root ${l.root}<br>${l.sourceCommit ? `published from ${esc(l.sourceBranch)} ${l.sourceCommit}` : "project.init"}${by ? "<br>" + by : ""}</div>${btns}`;
-  }
-  if (s.commits[id]) {
-    const c = s.commits[id], b = s.branches[c.branch];
-    const lww = (list) => (list && list.length ? "<br>" + list.map((d) => `last-writer-wins ${esc(d.path)} ← ${esc(d.kept)}`).join("<br>") : "");
-    const owner = (n) => (s.commits[n] ? `${esc(s.commits[n].branch)} ${n}` : `main ${n}`);
-    const mrg = c.mergedFrom ? `<div class="sec">Merge</div><div class="meta">merged from ${owner(c.mergedFrom)} into ${c.parent ? owner(c.parent) : "main " + c.base}${c.mergeBase ? `<br>merge base ${esc(c.mergeBase)}` : ""}${lww(c.lww)}</div>`
-      : c.merged ? `<div class="sec">Merged on commit</div><div class="meta">the Workspace was on ${c.merged.from}; merged with head ${c.merged.head}${lww(c.merged.lww)}</div>` : "";
-    const after = c.displacedBy ? `<div class="sec">Off the line</div><div class="meta">${c.displacedBy} was committed with --force, so ${c.id} is no longer an ancestor of the head.</div>` : "";
-    return `<div class="h"><b>${c.id}</b>${esc(c.branch)}${b.head === id ? head : ""}</div>
-      <div class="meta">parent ${c.parent || "Branch base"} · root ${c.root}<br>${by}${by ? " · " : ""}${esc(c.message || c.via)}<br>via ${esc(c.by === "fs" ? c.via : c.by === "merge" ? "branch.merge" : "sandbox.commit " + c.via)}</div>${mrg}${after}${wsRows(c.branch, id)}${btns}`;
-  }
-  const name = id.slice(5), b = s.branches[name];
-  return `<div class="h"><b>${esc(name)}</b>fork point${b.head ? "" : head}</div><div class="meta">forked from ${b.from}${b.head ? "" : " · no Commits yet"}${by ? "<br>" + by : ""}</div>${wsRows(name, id)}${btns}`;
-}
-function showCard(node) {
-  clearTimeout(cardTimer);
-  const card = $("hcard"), r = node.getBoundingClientRect();
-  card.innerHTML = cardHtml(node.dataset.node);
-  card.classList.add("open");
-  const h = card.offsetHeight;
-  card.style.left = Math.max(8, Math.min(innerWidth - 298, r.left + r.width / 2 - 145)) + "px";
-  card.style.top = (r.bottom + 8 + h > innerHeight ? r.top - h - 8 : r.bottom + 8) + "px";
-}
-const hideCard = (now) => { clearTimeout(cardTimer); cardTimer = setTimeout(() => $("hcard").classList.remove("open"), now ? 0 : 180); };
-$("work").addEventListener("mouseover", (e) => { const n = e.target.closest && e.target.closest("svg.graph [data-node]"); if (n) showCard(n); });
-$("work").addEventListener("mouseout", (e) => { const n = e.target.closest && e.target.closest("svg.graph [data-node]"); if (n && !n.contains(e.relatedTarget)) hideCard(); });
-$("hcard").addEventListener("mouseenter", () => clearTimeout(cardTimer));
-$("hcard").addEventListener("mouseleave", () => hideCard());
-// Card buttons open the node's lane at that point, in Files.
-$("hcard").addEventListener("click", (e) => {
-  const b = e.target.closest("[data-card-at], [data-card-cmp]"); if (!b) return;
-  const id = b.dataset.cardAt || b.dataset.cardCmp, n = W.nodes[id]; if (!n) return;
-  const lane = n.branch || "main";
-  active = lane; follow = false; $("follow").classList.remove("on");
-  showPoint(lane, id); filesOf(lane).mode = b.dataset.cardCmp ? "diff" : "view";
-  hideCard(true); render();
-});
-
-// ------------------------------------------------------------------ crabs
-function crabEl(n, ghost) {
-  const key = ghost ? `${n}|${ghost}` : n;
-  let el = $("crabs").querySelector(ghost ? `[data-ghost="${CSS.escape(key)}"]` : `[data-crab="${n}"]`);
-  if (!el && ghost) {
-    // a ghost appears where it stands, without walking there
-    el = document.createElement("div"); el.className = "crab ghost gone"; el.dataset.ghost = key;
-    el.style.setProperty("--c", AGENTS[n].color);
-    el.innerHTML = mascot(n) + `<span class="name">${esc(n)}</span>`;
-    el.title = `${n} also holds this Workspace`;
-    $("crabs").appendChild(el);
-  } else if (!el) {
-    el = document.createElement("div"); el.className = "crab idle"; el.dataset.crab = n; el.dataset.av = avatar(n).av;
-    el.style.setProperty("--c", AGENTS[n].color);
-    el.innerHTML = mascot(n) + `<span class="name">${esc(n)}</span>`;
-    el.style.transform = `translate(${innerWidth / 2}px, ${innerHeight - 120}px)`;
-    $("crabs").appendChild(el);
-  }
-  return el;
-}
-// The element an agent stands on in the current tab, or null when this tab
-// has nothing to say about it (idle on main, idle elsewhere on a Branch tab).
-const spotEl = (spot) => !spot ? null : spot.loc ? document.querySelector(`[data-loc="${spot.loc}"]`) : document.querySelector(`[data-tab="${spot.tab}"]`) || (spot.mode === "chip" && spot.tab !== "main" ? document.querySelector("[data-more]") : null);
-function targetOf(n) {
-  const spot = X.spotOf(W, n, active, recentlyOn(active));
-  return spot ? { el: spotEl(spot), mode: spot.mode } : { el: null };
-}
-// Fan-out (X.fanOf): an agent holding several Workspaces stands where its
-// last call ran; each other Workspace gets a faint copy, and it shows ×N.
-const fanOf = (n) => X.fanOf(W, n);
-function ghostTarget(w) {
-  const spot = X.ghostSpot(active, w);
-  return { el: spot.loc ? document.querySelector(`[data-loc="${spot.loc}"]`) : document.querySelector(`[data-tab="${spot.tab}"]`), mode: spot.mode };
-}
-function placeCrabs() {
-  const ev = STORY[step - 1], groups = new Map();
-  const view = { top: document.querySelector(".titlebar").getBoundingClientRect().bottom, bottom: Math.min(innerHeight, $("status").getBoundingClientRect().top, document.querySelector(".player").getBoundingClientRect().top) };
-  for (const b of $("crabs").querySelectorAll(".crowd")) b.remove();
-  // after a rewind, agents not spawned yet at this step have no crab
-  for (const el of $("crabs").querySelectorAll(".crab")) if (!W.agents[el.dataset.crab || el.dataset.ghost.split("|")[0]]) el.classList.add("gone");
-  const ghosts = new Set();
-  // the acting agent first, so a capped host never hides the one doing the work
-  const acting = new Set(ev && ev.burst ? ev.burst.map((e) => e.a) : ev ? [ev.a] : []);
-  const names = Object.keys(W.agents).sort((x, y) => acting.has(y) - acting.has(x));
-  const join = (t, item) => { if (!groups.has(t.el)) groups.set(t.el, { mode: t.mode, list: [] }); groups.get(t.el).list.push(item); };
-  const fans = {};
-  for (const n of names) {
-    const el = crabEl(n), t = targetOf(n), f = (fans[n] = fanOf(n));
-    el.classList.toggle("fanned", f.n > 1); el.querySelector(".fan").textContent = `×${f.n}`;
-    if (!t.el) el.classList.add("gone"); else join(t, { n });
-    // ghosts after everyone real, so a capped host keeps the real crabs
-  }
-  for (const n of names) if (fans[n].n > 1) for (const w of fans[n].others) {
-    const t = ghostTarget(w), main = targetOf(n).el;
-    if (!t.el || t.el === main) continue;
-    join(t, { n, ghost: w.id, w }); ghosts.add(`${n}|${w.id}`);
-  }
-  for (const el of $("crabs").querySelectorAll("[data-ghost]")) if (!ghosts.has(el.dataset.ghost)) el.classList.add("gone");
-  for (const [host, { mode, list }] of groups) {
-    // a Branch row's crabs stand small in its slot, so the list stays compact
-    const slot = mode === "row" ? host.querySelector("[data-slot]") : null;
-    const r = host.getBoundingClientRect(), sr = slot ? slot.getBoundingClientRect() : r, cap = mode === "pane" ? 1 : CAP[mode];
-    list.forEach(({ n, ghost, w }, k) => {
-      const el = crabEl(n, ghost);
-      if (k >= cap) { el.classList.add("gone"); return; }
-      let x, y;
-      // the sprite box is 36x48 (small: drawn at half size, centred low in it)
-      if (mode === "chip") { x = r.right - 33; y = r.bottom - 50; }
-      else if (mode === "row") { x = sr.left + k * 22 - 9; y = sr.top + sr.height / 2 - 36; }
-      else if (mode === "bench") { x = r.left + 116 + k * 40; y = r.top + r.height / 2 - 26; }
-      else { x = r.right - 48 - k * 42; y = r.bottom - 89; }
-      // a host scrolled under the title bar or the player hides its agents instead of drawing over them
-      if (mode !== "chip" && (y + 48 > view.bottom || y + 24 < view.top)) { el.classList.add("gone"); return; }
-      el.classList.toggle("small", mode === "chip" || mode === "row");
-      if (ghost) {
-        if (!el.dataset.pos) { el.style.transition = "none"; void el.offsetWidth; } // first placement: no slide in
-        el.dataset.pos = `${Math.round(x)},${Math.round(y)}`; el.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
-        if (el.style.transition) { void el.offsetWidth; el.style.transition = ""; }
-        el.classList.remove("gone");
-        setPose(el, n, X.ghostPose(W, w)); // its conflict, its server, or work
-        return;
-      }
-      el.classList.remove("gone");
-      const pose = poseOf(n, mode, acting.has(n));
-      el.classList.toggle("idle", pose === "idle" || pose === "sleep");
-      const pos = `${Math.round(x)},${Math.round(y)}`;
-      if (el.dataset.pos !== pos) {
-        // walking: the run pose (ellen_joe hops), facing where it goes
-        const from = (el.dataset.pos || pos).split(",").map(Number);
-        el.dataset.pos = pos; el.style.transform = `translate(${x}px,${y}px)`;
-        el.classList.toggle("flip", x > from[0] + 2);
-        el.classList.add("walk"); setPose(el, n, "run");
-        clearTimeout(el.wt); el.wt = setTimeout(() => { el.classList.remove("walk", "flip"); setPose(el, n, el.dataset.pose); }, 560);
-      }
-      el.dataset.pose = pose;
-      if (!el.classList.contains("walk")) setPose(el, n, pose);
-    });
-    if (list.length > cap && mode !== "chip") {
-      const b = document.createElement("div"), k = cap;
-      b.className = "crowd"; b.textContent = `+${list.length - cap}`;
-      const x = mode === "row" ? sr.left + k * 22 + 2 : mode === "bench" ? r.left + 116 + k * 40 + 4 : r.right - 48 - k * 42 + 10;
-      const y = mode === "row" ? sr.top + sr.height / 2 - 9 : mode === "bench" ? r.top + r.height / 2 - 8 : r.bottom - 70;
-      b.style.transform = `translate(${x}px,${y}px)`; $("crabs").appendChild(b);
-    }
-  }
-}
-function bubbleOn(n, text, cls) {
-  const el = $("crabs").querySelector(`[data-crab="${n}"]`); if (!el) return;
-  setTimeout(() => {
-    const r = el.getBoundingClientRect(), b = document.createElement("div");
-    b.className = "bubble " + (cls || ""); b.textContent = text;
-    b.style.left = r.left + r.width / 2 + "px"; b.style.top = r.top - 2 + "px";
-    document.body.appendChild(b); setTimeout(() => b.remove(), 2000);
-  }, 560);
-}
-function flyBlock(n, nodeId, color) {
-  const crab = $("crabs").querySelector(`[data-crab="${n}"]`), target = document.querySelector(`[data-node="${nodeId}"]`);
-  if (!crab || !target) return;
-  setTimeout(() => {
-    const a = crab.getBoundingClientRect(), z = target.getBoundingClientRect(), b = document.createElement("div");
-    b.className = "block"; b.style.background = color; b.style.left = a.left + 15 + "px"; b.style.top = a.top + 8 + "px";
-    document.body.appendChild(b);
-    requestAnimationFrame(() => requestAnimationFrame(() => { b.style.transform = `translate(${z.left + z.width / 2 - a.left - 21}px,${z.top + z.height / 2 - a.top - 14}px) scale(.7)`; b.style.opacity = "0"; }));
-    setTimeout(() => b.remove(), 900);
-  }, 520);
-}
+window.__dsh = { get W() { return view.W; }, fresh, runStep, STORY, X, view };
 
 // ------------------------------------------------------------------ player
 // Steps run one at a time (live calls take real time). Sim rewinds by
@@ -1175,28 +188,23 @@ async function gotoNow(i, animate) {
   if (LIVE && i !== 0 && i !== step && i !== step + 1) return;
   failed = null;
   try {
-    if (i === step + 1) { running = STORY[step]; renderPlayer(); await runStep(W, STORY[step]); }
-    else if (i !== step || !LIVE) W = await rebuild(i);
+    if (i === step + 1) { running = STORY[step]; renderPlayer(); await runStep(view.W, STORY[step]); }
+    else if (i !== step || !LIVE) view.W = await rebuild(i);
   } catch (e) {
     running = null; failed = e.message;
-    setPlaying(false); render(); renderPlayer(); throw e;
+    setPlaying(false); view.render(); renderPlayer(); throw e;
   }
   running = null;
   step = i;
   const ev = STORY[step - 1];
-  lastLoc = null;
-  if (ev && ev.a !== "dsh") lastLoc = X.locKey(where(ev.a));
-  if (follow && ev && ev.call !== "dsh.spawn") active = W.lastTab || "main";
-  render(); renderPlayer();
-  if (animate && ev && ev.a !== "dsh" && W.last) {
-    const b = bubbleOf(W.last);
-    if (b) bubbleOn(ev.a, b[0], b[1]);
-    const id = W.last.node;
-    if (id && W.nodes[id]) flyBlock(ev.a, id, W.nodes[id].branch ? css(W.branches[W.nodes[id].branch].color) : css("--purple"));
-  }
+  view.lastLoc = ev && ev.a !== "dsh" ? X.locKey(X.where(view.W, ev.a)) : null;
+  view.acting = ev && ev.burst ? ev.burst.map((e) => e.a) : ev ? [ev.a] : [];
+  if (view.follow && ev && ev.call !== "dsh.spawn") view.active = view.W.lastTab || "main";
+  view.render(); renderPlayer();
+  if (animate && ev) view.animate(ev.a);
 }
 function renderPlayer() {
-  const ev = STORY[step - 1];
+  const W = view.W, ev = STORY[step - 1], esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   for (const a of document.querySelectorAll("#mode a")) a.classList.toggle("on", (a.dataset.mode === "live") === LIVE);
   $("p-prev").disabled = LIVE; $("p-dots").classList.toggle("locked", LIVE);
   $("p-reset").title = LIVE ? "New project: restart the story on a fresh volume" : "Restart";
@@ -1233,112 +241,27 @@ $("p-next").onclick = () => { setPlaying(false); go(step + 1, true); };
 $("p-prev").onclick = () => { if (LIVE) return; setPlaying(false); go(step - 1); };
 $("p-reset").onclick = () => { setPlaying(false); go(0); };
 $("p-dots").onclick = (e) => { const s = e.target.dataset.step; if (s && !LIVE) { setPlaying(false); go(+s); } };
-$("follow").onclick = () => { follow = !follow; $("follow").classList.toggle("on", follow); if (follow) go(step); };
 // Mode links and the story picker keep the other choice.
 for (const a of document.querySelectorAll("#mode a")) a.href = `?backend=${a.dataset.mode}&story=${STORY_KEY}`;
 $("story").value = DEMO ? STORY_KEY : "dsh";
 $("story").onchange = (e) => { location.search = `?backend=${LIVE ? "live" : "sim"}&story=${e.target.value}`; };
 $("theme").onclick = () => {
-  const dark = matchMedia("(prefers-color-scheme: dark)").matches, cur = document.documentElement.dataset.theme || (dark ? "dark" : "light");
-  document.documentElement.dataset.theme = cur === "dark" ? "light" : "dark"; render();
+  const root = $("root"), dark = matchMedia("(prefers-color-scheme: dark)").matches, cur = root.dataset.theme || (dark ? "dark" : "light");
+  root.dataset.theme = cur === "dark" ? "light" : "dark"; view.render();
 };
-// Files controls, and History nodes that open Files at that point.
-function filesClick(e) {
-  const t = e.target, at = (sel) => t.closest(sel);
-  const tabOfPane = () => active;
-  let el;
-  if ((el = at("[data-fmode]"))) { const [tab, m] = el.dataset.fmode.split("|"); filesOf(tab).mode = m; render(); return true; }
-  if ((el = at("[data-flist]"))) { const [tab, v] = el.dataset.flist.split("|"); filesOf(tab).list = v; render(); return true; }
-  if ((el = at("[data-fback]"))) { filesOf(el.dataset.fback).path = null; render(); return true; }
-  if ((el = at("[data-fwide]"))) { const p = filesOf(el.dataset.fwide); p.wide = !p.wide; render(); return true; }
-  if ((el = at("[data-fgroup]"))) { const [tab, g] = el.dataset.fgroup.split("|"), p = filesOf(tab), key = "group:" + g; p.toggled = p.toggled.includes(key) ? p.toggled.filter((x) => x !== key) : [...p.toggled, key]; render(); return true; }
-  if ((el = at("[data-fsdk]"))) { const p = filesOf(el.dataset.fsdk); p.sdk = !p.sdk; render(); return true; }
-  if ((el = at("[data-ftree]"))) {
-    const p = filesOf(tabOfPane()), path = el.dataset.ftree;
-    if (el.dataset.ftype === "dir") { p.toggled = p.toggled.includes(path) ? p.toggled.filter((x) => x !== path) : [...p.toggled, path]; }
-    else openFile(p, path);
-    render(); return true;
-  }
-  if ((el = at("[data-fopen]"))) { openFile(filesOf(tabOfPane()), el.dataset.fopen); render(); return true; }
-  if ((el = at("[data-fblame]"))) { const p = filesOf(tabOfPane()), id = el.dataset.fblame; showPoint(tabOfPane(), id); p.mode = "diff"; render(); return true; }
-  if ((el = at("svg.graph [data-node]"))) { showPoint(tabOfPane(), el.dataset.node); render(); return true; }
-  return false;
-}
-// Opening a file shows what changed when it changed, else the file.
-function openFile(p, path) {
-  const sv = FM.resolveRef(W.engine, subjectOf(active, p)), bv = p.base ? FM.resolveRef(W.engine, p.base) : null;
-  const changed = sv && bv && FM.changeMap(sv.tree, bv.tree).files[path];
-  p.path = path; p.mode = changed ? "diff" : "view";
-}
-// Points Files at one node: on this tab's lane it pins the subject there; any
-// other node becomes the subject's base. The base defaults to its parent.
-function showPoint(tab, id) {
-  const p = filesOf(tab), n = W.nodes[id]; if (!n) return;
-  const lane = n.branch || "main";
-  if (lane === tab) { p.at = n.kind === "fork" ? "fork:" + tab : id; p.base = FM.parentRef(W.engine, p.at) || ""; }
-  else p.base = n.kind === "fork" ? id : id;
-  rightMode[tab] = "files";
-}
-document.addEventListener("change", (e) => {
-  const t = e.target;
-  if (t.dataset.fat) { const p = filesOf(t.dataset.fat); p.at = t.value; p.base = p.at === "latest" ? defaultBase(t.dataset.fat) : FM.parentRef(W.engine, p.at) || ""; render(); }
-  else if (t.dataset.fbasesel !== undefined) { filesOf(t.dataset.fbasesel).base = t.value; render(); }
-});
-function closeMenu() { const m = document.querySelector(".menu"); if (m) m.remove(); }
-$("tabs").onclick = (e) => {
-  closeMenu();
-  const pin = e.target.closest("[data-pin]");
-  if (pin) { const b = pin.dataset.pin; pinned[b] = !pinned[b]; e.stopPropagation(); render(); return; }
-  const more = e.target.closest("[data-more]");
-  if (more) {
-    const r = more.getBoundingClientRect(), m = document.createElement("div");
-    m.className = "menu"; m.style.left = r.left + "px"; m.style.top = r.bottom + 4 + "px";
-    m.innerHTML = visibleTabs().hidden.map((b) => `<button data-open="${b}"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(${W.branches[b].color})"></span>${esc(b)}</button>`).join("");
-    document.body.appendChild(m); return;
-  }
-  const t = e.target.closest("[data-tab]");
-  if (t) { active = t.dataset.tab; follow = false; $("follow").classList.remove("on"); render(); }
-};
-// Sandboxes: open a Workspace's Branch at its pane, or show a pane's Sandbox on main.
-let focusPane = null;
-document.addEventListener("click", (e) => {
-  const t = e.target.closest && e.target.closest("[data-dws], [data-sbchip]");
-  if (!t) return;
-  e.stopImmediatePropagation();
-  // a pane's or a process's Sandbox chip: show that Sandbox on the main tab
-  if (t.dataset.sbchip) { active = "main"; follow = false; $("follow").classList.remove("on"); sbPulse = t.dataset.sbchip; render(); return; }
-  const k = t.dataset.dws, w = W.ws[k] || null, branch = w ? w.branch : null;
-  if (!branch) return;
-  active = branch; follow = false; $("follow").classList.remove("on"); focusPane = k; render(); focusPane = null;
-  document.querySelector(`[data-loc="ws:${CSS.escape(k)}"]`)?.scrollIntoView({ block: "nearest" });
-}, true);
-document.addEventListener("click", (e) => {
-  const sd = e.target.closest("[data-sdk]");
-  if (sd) { const k = sd.dataset.sdk; OPEN_SDK.has(k) ? OPEN_SDK.delete(k) : OPEN_SDK.add(k); render(); return; }
-  if (filesClick(e)) return;
-  const ro = e.target.closest("[data-roster]");
-  if (ro) { closeMenu(); rosterMenu(ro); return; }
-  const r = e.target.closest("[data-right]");
-  if (r) { const [t, m] = r.dataset.right.split(":"); rightMode[t] = m; render(); return; }
-  const o = e.target.closest("[data-open]");
-  if (o) { active = o.dataset.open; follow = false; $("follow").classList.remove("on"); closeMenu(); render(); }
-  else if (!e.target.closest("[data-more]") && !e.target.closest(".menu")) closeMenu();
-});
 document.addEventListener("keydown", (e) => {
+  if (e.target.closest && e.target.closest("select, input, textarea")) return;
   if (e.key === " ") { e.preventDefault(); $("p-play").click(); }
   else if (e.key === "ArrowRight") $("p-next").click();
   else if (e.key === "ArrowLeft") $("p-prev").click();
   else if (e.key === "f" || e.key === "F") $("follow").click();
 });
-addEventListener("resize", () => placeCrabs());
-// Narrow layouts scroll the page or a column: crabs stay with their hosts.
-addEventListener("scroll", () => placeCrabs(), { capture: true, passive: true });
 
 // Live: a process that exits on its own (or a Workspace changed outside a
 // call) shows up through the server's state poll.
 if (LIVE) setInterval(async () => {
-  if (running || !W.engine.s.project) return;
-  try { if (await W.engine.poll()) { derive(W); render(); } } catch { /* the server may be resetting */ }
+  if (running || !view.W.engine.s.project) return;
+  try { if (await view.W.engine.poll()) { X.derive(view.W); view.render(); } } catch { /* the server may be resetting */ }
 }, 3000);
 go(0).then(() => { renderPlayer(); if (!LIVE) setPlaying(true); });
 </script>

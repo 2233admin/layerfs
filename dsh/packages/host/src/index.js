@@ -13,6 +13,7 @@ import z from "@deepseek-ai/schemastery";
 import { resolveConfig } from "./config.js";
 import { contributor } from "./env.js";
 import { registerRoutes } from "./route.js";
+import { TreeReader } from "./trees.js";
 
 export const name = "layerfs-host";
 export const inject = ["shellEnv", "sessions"];
@@ -38,5 +39,7 @@ export function apply(ctx, config) {
   ctx.effect(() => ctx.shellEnv.register(contributor(ctx, spec, bindings, collector)), "layerfs-host: bash environment");
   ctx.effect(() => collector.start(), "layerfs-host: trace collection");
   ctx.on("session/event", (session, event) => collector.observe(session, event));
-  ctx.inject(["webServer", "connection"], (child) => registerRoutes(child, { spec, bindings, collector }));
+  const trees = new TreeReader(spec);
+  ctx.effect(() => () => trees.dispose(), "layerfs-host: tree clients");
+  ctx.inject(["webServer", "connection"], (child) => registerRoutes(child, { spec, bindings, collector, trees }));
 }

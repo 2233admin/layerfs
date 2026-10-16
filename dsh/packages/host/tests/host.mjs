@@ -19,6 +19,7 @@ const { BindingStore } = await import("../src/binding.js");
 const { Collector } = await import("../src/collector.js");
 const { contributor } = await import("../src/env.js");
 const { registerRoutes } = await import("../src/route.js");
+const { TreeReader } = await import("../src/trees.js");
 const { CALL, PROJECT } = await import("@dsh-layerfs/model/sources/records.js");
 
 const dir = mkdtempSync(join(tmpdir(), "dsh-layerfs-host-"));
@@ -105,10 +106,25 @@ try {
   assert.equal(child.records.length, 2);
   assert.equal(JSON.parse(readFileSync(join(h.spec.stateDir, "bindings.json"), "utf8")).agents["child-1"].name, "tester");
 
+  // finished lines outlive the temporary trace files through the journal
+  rmSync(h.spec.traceDir, { recursive: true, force: true });
+  assert.deepEqual(host().collector.snapshot("session-root").lines.map((l) => l.method), ["sandbox.create", "sandbox.exec"]);
+
+  // saved trees: dependency folders stay closed, long files are cut, a tree is read once
+  const REF = "a".repeat(64), reads = [], closed = [];
+  const fakeFs = {
+    async list(ref, dir) {
+      const items = { "/": [{ path: "/node_modules", type: "dir", inode: 2 }, { path: "/src", type: "dir", inode: 3 }, { path: "/big.txt", type: "file", inode: 4 }], "/src": [{ path: "/src/a.js", type: "file", inode: 5 }, { path: "/src/link", type: "symlink", inode: 6 }] }[dir] ?? [];
+      return { items, hasMore: false };
+    },
+    async read(ref, path, line) { reads.push(path); return path === "/big.txt" ? { text: "x".repeat(100_000), nextLine: line + 1 } : { text: "ok\n", nextLine: null }; },
+  };
+  const trees = new TreeReader(h.spec, async () => ({ layerfs: { fs: fakeFs, sandboxes: new Set(["sb_service"]), sandbox: { close: async (id) => closed.push(id) } } }));
+
   // the route answers only requests Connection accepts
   let handler;
   const routeCtx = { ...h.ctx, effect: (fn) => fn(), webServer: { register: (route) => { handler = route.handler; return () => {}; } }, connection: { requestRejection: (req) => (req.headers.cookie ? undefined : 401) } };
-  registerRoutes(routeCtx, { spec: h.spec, bindings: h.bindings, collector: h.collector });
+  registerRoutes(routeCtx, { spec: h.spec, bindings: h.bindings, collector: h.collector, trees });
   const call = async (method, url, body, cookie = "dsh=1") => {
     const res = { statusCode: 0, headers: {}, text: "", setHeader(k, v) { this.headers[k] = v; }, end(text = "") { this.text = text; } };
     const req = { method, url, headers: cookie ? { cookie } : {}, async *[Symbol.asyncIterator]() { if (body) yield Buffer.from(JSON.stringify(body)); } };
@@ -121,10 +137,25 @@ try {
   const view = await call("GET", "/layerfs/session/child-1");
   assert.deepEqual([view.status, view.body.root, view.body.project.name, view.body.lines.length], [200, "session-root", "website", 2]);
   assert.equal((await call("POST", "/layerfs/session/session-root/project", { project: null })).status, 409);
+  const fresh = session("session-new", FOLDER);
+  h.live.set(fresh.header.id, fresh);
+  const chose = await call("POST", "/layerfs/session/session-new/project", { project: null });
+  assert.deepEqual([chose.status, chose.body.project, chose.body.lines], [200, null, []]);
   h.live.clear(); // Sessions that are not loaded: the binding keeps the folder
   const cold = await call("GET", "/layerfs/session/child-1");
   assert.deepEqual([cold.body.root, cold.body.folder, cold.body.project.name, cold.body.agents["child-1"]], ["session-root", FOLDER, "website", "tester"]);
   assert.equal((await call("GET", "/layerfs/nope")).status, 404);
+  assert.equal((await call("GET", "/layerfs/session/child-1/tree?ref=main")).status, 400);
+  const tree = await call("GET", `/layerfs/session/child-1/tree?ref=${REF}`);
+  assert.deepEqual(Object.keys(tree.body.tree).sort(), ["/big.txt", "/node_modules", "/src", "/src/a.js", "/src/link"]);
+  assert.match(tree.body.tree["/big.txt"].content, /\[cut at 128 KB\]\n$/);
+  assert.equal(tree.body.tree["/src/link"].content, "→ symlink");
+  assert.match(tree.body.partial, /node_modules folders are not opened.*over 128 KB/);
+  const count = reads.length;
+  await call("GET", `/layerfs/session/child-1/tree?ref=${REF}`);
+  assert.equal(reads.length, count, "a saved tree is read once");
+  await trees.dispose();
+  assert.deepEqual(closed, ["sb_service"]);
   console.log("host: ok");
 } finally {
   rmSync(dir, { recursive: true, force: true });

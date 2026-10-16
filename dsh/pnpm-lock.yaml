@@ -8,8 +8,20 @@ importers:
 
   .: {}
 
+  packages/client:
+    dependencies:
+      '@dsh-layerfs/model':
+        specifier: workspace:*
+        version: link:../model
+      '@dsh-layerfs/view':
+        specifier: workspace:*
+        version: link:../view
+
   packages/dsh-layerfs:
     dependencies:
+      '@dsh-layerfs/client':
+        specifier: workspace:*
+        version: link:../client
       '@dsh-layerfs/host':
         specifier: workspace:*
         version: link:../host
@@ -24,3 +36,9 @@ importers:
         version: link:../../../sdk/js
 
   packages/model: {}
+
+  packages/view:
+    dependencies:
+      '@dsh-layerfs/model':
+        specifier: workspace:*
+        version: link:../model

@@ -1,8 +1,10 @@
 // Trace collection: each agent's bash calls append SDK trace lines to that
 // agent's own file. The collector reads new lines as they arrive, keeps them
 // per root session for the views, and writes each finished call to the
-// calling agent's session as a plugin:layerfs/call record.
-import { closeSync, existsSync, openSync, readSync, readdirSync, statSync } from "node:fs";
+// calling agent's session as a plugin:layerfs/call record. Finished lines are
+// also journaled per root session under the state folder, since trace files
+// live in temporary storage.
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { appendCall } from "./records.js";
 
@@ -20,7 +22,7 @@ export class Collector {
     this.bindings = bindings;
     /** sessionId -> { file, offset, rest, project } */
     this.tails = new Map();
-    /** rootId -> { lines: [], running: Map<id, line>, loaded } */
+    /** rootId -> { lines: [], seen: Set<agentId|id>, running: Map<id, line>, loaded } */
     this.roots = new Map();
     /** sessionId -> label from its subagent descriptor */
     this.labels = new Map();
@@ -119,8 +121,9 @@ export class Collector {
     const own = { ...stripped(line), agent: agent.name, agentId: sessionId, project };
     if (line.phase === "start") { view.running.set(line.id, own); return; }
     view.running.delete(line.id);
-    view.lines.push(own);
+    if (!this.keep(view, own)) return;
     if (!live) return;
+    this.journal(agent.root, own);
     const record = { agent: { id: sessionId, name: agent.name }, project, line: stripped(line) };
     if (!this.pending.has(sessionId)) this.pending.set(sessionId, []);
     this.pending.get(sessionId).push(record);
@@ -136,8 +139,26 @@ export class Collector {
   }
 
   view(rootId) {
-    if (!this.roots.has(rootId)) this.roots.set(rootId, { lines: [], running: new Map(), loaded: false });
+    if (!this.roots.has(rootId)) this.roots.set(rootId, { lines: [], seen: new Set(), running: new Map(), loaded: false });
     return this.roots.get(rootId);
+  }
+
+  /** Adds a finished line once; false when the view has it already. */
+  keep(view, line) {
+    const key = `${line.agentId}|${line.id}`;
+    if (view.seen.has(key)) return false;
+    view.seen.add(key);
+    view.lines.push(line);
+    return true;
+  }
+
+  journalFile(rootId) { return join(this.spec.stateDir, "lines", `${encodeURIComponent(rootId)}.jsonl`); }
+
+  journal(rootId, line) {
+    try {
+      mkdirSync(join(this.spec.stateDir, "lines"), { recursive: true });
+      appendFileSync(this.journalFile(rootId), `${JSON.stringify(line)}\n`);
+    } catch (error) { this.ctx.logger?.warn?.(`layerfs: the line journal could not be written: ${error.message}`); }
   }
 
   /** Loads the lines a root session's agents wrote before this Host started. */
@@ -145,8 +166,11 @@ export class Collector {
     const view = this.view(rootId);
     if (view.loaded) return view;
     view.loaded = true;
-    if (!existsSync(this.spec.traceDir)) return view;
-    for (const entry of readdirSync(this.spec.traceDir)) {
+    const journal = this.journalFile(rootId);
+    if (existsSync(journal)) for (const raw of readFileSync(journal, "utf8").split("\n")) {
+      try { if (raw) this.keep(view, JSON.parse(raw)); } catch { /* a torn last line */ }
+    }
+    if (existsSync(this.spec.traceDir)) for (const entry of readdirSync(this.spec.traceDir)) {
       if (!entry.endsWith(".jsonl")) continue;
       const sessionId = entry.slice(0, -6), agent = this.bindings.agent(sessionId);
       if (!agent || agent.root !== rootId) continue;

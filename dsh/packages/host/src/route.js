@@ -4,11 +4,13 @@
 //   GET  /layerfs/workspace?folder=<abs>      the folder's projects
 //   POST /layerfs/init {folder, source?, name?}   Init LayerFS
 //   GET  /layerfs/session/<id>                the root session's project, agents and trace lines
-//   POST /layerfs/session/<id>/project {project}  choose the project (null: none) until locked
+//   POST /layerfs/session/<id>/project {project}  choose the project (null: none) until locked; answers as GET
 //   GET  /layerfs/session/<id>/state          the project as LayerFS reports it
+//   GET  /layerfs/session/<id>/tree?ref=<id>  a saved Commit's or Layer's files (bounded)
 import { missingDeployment } from "./config.js";
 import { initProject } from "./init.js";
 import { projectState } from "./layerfs-client.js";
+import { isSavedId } from "./trees.js";
 
 const PREFIX = "/layerfs";
 const MAX_BODY = 64 * 1024;
@@ -34,7 +36,7 @@ async function readJson(req) {
  * Registers the route; its disposer runs with the plugin fiber.
  * @param {object} ctx plugin context with webServer and connection
  */
-export function registerRoutes(ctx, { spec, bindings, collector }) {
+export function registerRoutes(ctx, { spec, bindings, collector, trees }) {
   const sessionView = (id) => {
     const session = ctx.sessions.get(id);
     const agent = session ? collector.agentOf(session) : { id, root: bindings.agent(id)?.root ?? id, cwd: undefined };
@@ -62,16 +64,23 @@ export function registerRoutes(ctx, { spec, bindings, collector }) {
       }
       if (parts[0] === "session" && parts.length >= 2) {
         const view = sessionView(decodeURIComponent(parts[1]));
-        if (req.method === "GET" && parts.length === 2) return send(res, 200, { ...view, ...collector.snapshot(view.root) });
+        const full = (v) => ({ ...v, ...collector.snapshot(v.root) });
+        if (req.method === "GET" && parts.length === 2) return send(res, 200, full(view));
         if (req.method === "POST" && parts[2] === "project" && parts.length === 3) {
           const body = await readJson(req);
           if (!view.folder) return send(res, 409, { code: "no-folder", message: "this session has no workspace folder" });
           const taken = bindings.choose(view.root, view.folder, body.project ?? null);
-          return taken ? send(res, 200, sessionView(view.root)) : send(res, 409, { code: "locked", message: "the session's project is fixed once an agent has used it" });
+          return taken ? send(res, 200, full(sessionView(view.root))) : send(res, 409, { code: "locked", message: "the session's project is fixed once an agent has used it" });
         }
         if (req.method === "GET" && parts[2] === "state" && parts.length === 3) {
           if (!view.project) return send(res, 404, { code: "no-project", message: "this session has no LayerFS project" });
           return send(res, 200, await projectState(spec, view.project, collector.sandboxesOf(view.root)));
+        }
+        if (req.method === "GET" && parts[2] === "tree" && parts.length === 3) {
+          const ref = url.searchParams.get("ref");
+          if (!isSavedId(ref)) return send(res, 400, { code: "invalid-ref", message: "ref must be a saved Commit or Layer id" });
+          if (!view.project) return send(res, 404, { code: "no-project", message: "this session has no LayerFS project" });
+          return send(res, 200, await trees.read(view.project, ref));
         }
       }
       return send(res, 404, { code: "not-found", message: `no route ${req.method} ${url.pathname}` });
