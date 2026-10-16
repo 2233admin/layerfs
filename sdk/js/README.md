@@ -102,6 +102,14 @@ identity/timestamps. Destinations are exact and must not exist. Same-path/subtre
 moves or copies are InvalidInput. Mkdir creates parents and an existing directory
 is a no-op. Edit requires exactly one match and streams large files.
 
+One SDK request must fit a 65,519-byte encoded control record, including its
+paths, metadata and tracing fields. Before-send size admission returns `TooLarge`
+with null detail; no change index exists because no change was attempted.
+Content bytes alone cannot predict the encoded size. Inspect the retained input
+before choosing a smaller call or an ordinary Sandbox step for a larger atomic
+change. Calls are never split or replayed automatically. This call bound does
+not limit file, namespace or Workspace size.
+
 Pages have `items` and `hasMore`; advance by `pagePos + items.length`. Defaults
 are 50/0, max pageSize 1000, with safe integers only. Byte bounds can shorten a
 page; they never mean EOF when `hasMore` is true. Deep offsets skip through bounded

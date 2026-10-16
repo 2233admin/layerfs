@@ -2,8 +2,12 @@
 //!
 //! Every non-Workspace JavaScript method is one daemon call: its arguments
 //! and result are plain values, and a refusal carries a stable code.
-use crate::{base::failure::exchange, internal::Control, OperationFailure};
-use layerfs_bridge::control::{Reply, Request, SdkCall, SdkRefusal, SdkValue};
+use crate::{
+    base::failure::exchange,
+    internal::{Control, ControlCause, ControlPhase},
+    OperationCause, OperationFailure,
+};
+use layerfs_bridge::control::{ControlError, Reply, Request, SdkCall, SdkRefusal, SdkValue};
 use std::fmt;
 
 /// The failure of one SDK call.
@@ -22,7 +26,24 @@ pub type SdkResult = Result<SdkValue, SdkError>;
 
 impl From<Box<OperationFailure>> for SdkError {
     fn from(failure: Box<OperationFailure>) -> Self {
-        Self::Operation(failure)
+        let oversized = matches!(&failure.cause, OperationCause::Exchange(cause)
+            if cause.phase == ControlPhase::Encode
+                && !cause.attempted
+                && cause.received.is_none()
+                && cause.fence_error.is_none()
+                && matches!(&cause.cause,
+                    ControlCause::Protocol(ControlError("control record limit"))));
+        if oversized {
+            Self::Refused(SdkRefusal {
+                code: "TooLarge".into(),
+                message:
+                    "SDK request exceeds one control record; use a smaller call or a Sandbox step"
+                        .into(),
+                detail: SdkValue::Null,
+            })
+        } else {
+            Self::Operation(failure)
+        }
     }
 }
 

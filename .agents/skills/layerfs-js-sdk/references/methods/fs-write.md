@@ -30,8 +30,15 @@ Examples use `layerfs` as connected in [SKILL.md](../../SKILL.md#connect-to-a-pr
 | `NoSuchBranch` | No such Branch | `branch.fork` it, or check the name |
 | `HeadMoved` | Another writer published on the Branch during the call; nothing was published | Read the files you changed again, then decide whether to apply your change |
 | `NoSuchPath` | A path or its parent folder is missing | `fs.list` the parent; `fs.mkdir` first |
-| `TooLarge` | The change didn't fit one call | Split it into smaller calls |
+| `TooLarge` | The complete encoded request did not fit one control call; nothing was sent | Inspect the input, then choose a smaller call or a larger atomic Sandbox step |
 | `InvalidInput` | A bad argument (message bytes, relative path, …) | Read `message`; fix the call |
+
+One encoded control request fits at most 65,519 bytes, including paths, metadata
+and tracing fields as well as content. `TooLarge` from this before-send admission
+has null detail, without a change index. Do not estimate the allowance from content
+bytes alone or resend an unchanged failed call. Splitting an `apply` creates
+separate Commits and changes atomicity; use one ordinary Sandbox step when the
+larger change must stay atomic. The SDK never splits or replays it automatically.
 
 ## `fs.write(branch, path, content, message?)`
 
