@@ -7,10 +7,11 @@
 // this session. Without a directory picker it opens InitDialog instead. The
 // choice is fixed once an agent's first bash call has used the project.
 import { useEffect, useRef, useState } from 'react'
-import { IconChevronDownOutlineRegular, IconDatabaseOutlineRegular, IconPlusOutlineRegular, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronDownOutlineRegular, IconPlusOutlineRegular, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import { api, type InitJob, type SessionView } from './api.ts'
 import { ProgressBar, jobFraction, jobText, useClock } from './Progress.tsx'
 import { InitDialog, type Directories } from './InitDialog.tsx'
+import { LayerFsIcon } from './LayerFsPanel.tsx'
 
 const NONE = '\u0000none'
 const IMPORT = '\u0000import'
@@ -88,7 +89,7 @@ export function ProjectPicker({ sessionId, directories }: { sessionId: string, d
     else void run(() => api.choose(sessionId, id === NONE ? null : id))
   }
   const locked = !!view.choice?.locked
-  const icon = <IconDatabaseOutlineRegular size={16} />
+  const icon = <LayerFsIcon size={16} />
   return (
     <span ref={anchor} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', minWidth: 0 }}>
       <Menu
@@ -115,7 +116,7 @@ export function ProjectPicker({ sessionId, directories }: { sessionId: string, d
             disabled={busy || locked}
             onClick={() => setOpen((value) => !value)}
           >
-            <IconDatabaseOutlineRegular size={16} />
+            <LayerFsIcon size={16} />
             <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{job ? `Importing ${job.name}…` : view.project?.name ?? 'No LayerFS'}</span>
             {!locked && <IconChevronDownOutlineRegular size={14} className="lfs-chevron" />}
           </button>
