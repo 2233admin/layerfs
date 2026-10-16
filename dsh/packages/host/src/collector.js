@@ -189,6 +189,32 @@ export class Collector {
     return { lines: view.lines, running: [...view.running.values()], agents: this.bindings.agentsOf(rootId) };
   }
 
+  /**
+   * What the journaled sessions know of a project's nodes that LayerFS does
+   * not report: who made each Commit and Layer ({ real id: agent name }),
+   * when each Layer was published ({ real id: epoch ms }), and when each
+   * Branch was forked ({ name: epoch ms }; the latest fork of a reused name).
+   * @param {string} project
+   */
+  nodesOf(project) {
+    const dir = join(this.spec.stateDir, "lines"), authors = {}, times = {}, forks = {}, out = { authors, times, forks };
+    if (!existsSync(dir)) return out;
+    for (const entry of readdirSync(dir)) {
+      if (!entry.endsWith(".jsonl")) continue;
+      for (const raw of readFileSync(join(dir, entry), "utf8").split("\n")) {
+        let line;
+        try { line = raw ? JSON.parse(raw) : null; } catch { continue; /* a torn last line */ }
+        if (!line || line.project !== project || !line.ok) continue;
+        const made = line.kind === "Committed" ? line.commit : line.method === "branch.publish" ? line.layer : null;
+        if (made && !authors[made]) authors[made] = this.bindings.agent(line.agentId)?.name ?? line.agent;
+        const at = Date.parse(line.start) + (line.ms || 0);
+        if (line.method === "branch.publish" && line.layer) times[line.layer] = at;
+        if ((line.kind === "Forked" || line.kind === "Merged") && line.branch) forks[line.branch] = Math.max(forks[line.branch] ?? 0, at);
+      }
+    }
+    return out;
+  }
+
   /** Real Sandbox ids the root session's agents created. */
   sandboxesOf(rootId) {
     return [...new Set(this.load(rootId).lines.filter((l) => l.method === "sandbox.create" && l.ok).map((l) => l.sandbox))];

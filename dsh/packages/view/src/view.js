@@ -6,6 +6,9 @@
 //            Files) or a Branch view (FS terminal, Workspace panes, History or Files)
 //   status   running processes
 //   overlay  avatars, bubbles and flying blocks, placed relative to the root
+// With `project`, it draws one project instead: History and Files side by
+// side (Files follows the History node clicked), without tabs, terminals or
+// avatars.
 // The host owns the clock: it sets W, then calls render(), and animate() for
 // the call that just happened.
 import * as X from "../../model/src/index.js";
@@ -27,12 +30,18 @@ const html = (s) => { const t = document.createElement("template"); t.innerHTML 
  * @param {object} [o.layout] existing { tabs, work, status, follow } elements
  *   (the preview's); missing ones are created as the standalone layout
  * @param {(follow: boolean) => void} [o.onFollow] the follow toggle changed
+ * @param {boolean} [o.project] draw a project's History and Files only
  */
 export function createView(root, o) {
   const AV = o.avatars, FM = o.files, LEAD = o.lead || "main";
   root.classList.add("lfs");
+  const PROJECT = !!o.project;
   let layout = o.layout;
-  if (!layout) {
+  if (PROJECT) {
+    root.classList.add("lfs-project");
+    root.innerHTML = `<main class="work projectview"></main>`;
+    layout = { work: root.querySelector(".work") };
+  } else if (!layout) {
     root.classList.add("lfs-app");
     root.innerHTML = `<div class="lfs-strip"><div class="tabs" role="tablist" aria-label="LayerFS tabs"></div><span class="lfs-note"></span><button class="ib on" data-follow="1" title="Follow the acting agent across tabs"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg><span class="lbl">Follow</span></button></div><main class="work"></main><div class="statusbar" aria-label="Sandboxes and processes"></div>`;
     layout = { tabs: root.querySelector(".tabs"), work: root.querySelector(".work"), status: root.querySelector(".statusbar"), follow: root.querySelector("[data-follow]"), note: root.querySelector(".lfs-note") };
@@ -79,7 +88,7 @@ export function createView(root, o) {
 
   // ---------------------------------------------------------------- state
   const v = {
-    W: null, FM, lineDiff: o.lineDiff, live: !!o.live, rightMode: {}, active: "main", follow: true,
+    W: null, FM, lineDiff: o.lineDiff, live: !!o.live, project: PROJECT, rightMode: {}, active: "main", follow: true,
     acting: new Set(), lastLoc: null, colorOf, render: () => render(),
   };
   const files = createFiles(v);
@@ -231,9 +240,21 @@ export function createView(root, o) {
   }
 
   // ---------------------------------------------------------------- render
+  function projectView() {
+    const W = v.W, name = W.engine.s.project ? W.engine.s.project.name : "project";
+    return `<div class="col"><section class="term"><div class="thead"><span class="kind history">HISTORY</span><span class="ttl">${esc(name)} · main @ ${esc(W.mainHead || "–")}</span></div>
+        <div class="graphwrap" data-scroll>${W.mainHead ? graph(W, colorOf, null, "main") : `<div class="empty">No history yet</div>`}</div></section></div>
+      <div class="col"><section class="term"><div class="thead"><span class="kind plain">FILES</span><span class="ttl">click a History node to look there</span></div>${W.mainHead ? files.filesHtml("main") : ""}</section></div>`;
+  }
   function render() {
     const W = v.W;
     if (!W) return;
+    if (PROJECT) {
+      const keep = [".ftree", ".fview", ".graphwrap"].map((sel) => { const el = layout.work.querySelector(sel); return [sel, el ? el.scrollTop : 0]; });
+      layout.work.innerHTML = projectView();
+      for (const [sel, top] of keep) { const el = layout.work.querySelector(sel); if (el) el.scrollTop = top; }
+      return;
+    }
     renderStatus();
     const work = layout.work;
     const keepScroll = [".ftree", ".fview", ".sblist .tbody"].map((sel) => { const el = work.querySelector(sel); return [sel, el ? el.scrollTop : 0]; });
@@ -464,12 +485,13 @@ export function createView(root, o) {
   };
   const onClick = (e) => {
     if (!v.W) return;
-    if (layout.tabs.contains(e.target)) return onTabs(e);
+    if (layout.tabs && layout.tabs.contains(e.target)) return onTabs(e);
     if (layout.follow && layout.follow.contains(e.target)) { setFollow(!v.follow); if (v.follow && o.onFollowOn) o.onFollowOn(); return; }
     const c = e.target.closest("[data-card-at], [data-card-cmp]");
     if (c) {
       // card buttons open the node's lane at that point, in Files
       const id = c.dataset.cardAt || c.dataset.cardCmp, n = v.W.nodes[id]; if (!n) return;
+      if (PROJECT) { files.showAt("main", id); files.filesOf("main").mode = c.dataset.cardCmp ? "diff" : "view"; hideCard(true); render(); return; }
       const lane = n.branch || "main";
       v.active = lane; setFollow(false);
       files.showPoint(lane, id); files.filesOf(lane).mode = c.dataset.cardCmp ? "diff" : "view";
@@ -496,7 +518,7 @@ export function createView(root, o) {
   const onOut = (e) => { const n = e.target.closest && e.target.closest("svg.graph [data-node]"); if (n && !n.contains(e.relatedTarget)) hideCard(); };
   const onCardEnter = () => clearTimeout(cardTimer), onCardLeave = () => hideCard();
   const onChange = (e) => files.change(e);
-  const place = () => placeCrabs();
+  const place = () => { if (!PROJECT) placeCrabs(); };
   root.addEventListener("click", onClick);
   root.addEventListener("mouseover", onOver);
   layout.work.addEventListener("mouseout", onOut);

@@ -12,6 +12,7 @@ import { Setup } from './Setup.tsx'
 import { linesKey, replay, treeLoader, type TreeCache } from './replay.ts'
 import { MESSAGE } from './ui.ts'
 import { useHiddenComposer } from './composer.ts'
+import { followTheme } from './theme.ts'
 
 const POLL_MS = 1500
 
@@ -80,18 +81,11 @@ function Board({ sessionId, view, error }: { sessionId: string, view: SessionVie
       avatars: AVATARS, files: FM, lineDiff: M.lineDiff, live: false, lead: 'main',
       hint: 'hover a History node · F follow',
     })
-    const theme = () => {
-      const scheme = document.documentElement.style.colorScheme
-      if (scheme === 'dark' || scheme === 'light') root.dataset.theme = scheme
-      else delete root.dataset.theme
-    }
-    theme()
-    const observer = new MutationObserver(theme)
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] })
+    const unfollow = followTheme(root)
     board.current.rerender = () => { clearTimeout(soon); soon = setTimeout(() => board.current?.W && board.current.render(), 40) }
     return () => {
       clearTimeout(soon)
-      observer.disconnect()
+      unfollow()
       board.current.dispose()
       board.current = null
       shown.current = null

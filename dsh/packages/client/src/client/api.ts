@@ -1,6 +1,12 @@
 // The Host's /layerfs route, from the page that dsh web or Desktop serves
 // (same origin, its session cookie).
-export interface Project { name: string, source: string, volume: string, created: number }
+export interface Project { name: string, source: string, volume: string, created: number, folder: string | null }
+/**
+ * inspect.snapshot through the Host's mirror (labelled state, labels by real
+ * id), with what the session journals add: who made each node, when each
+ * Layer was published (by real id) and when each Branch was forked (by name).
+ */
+export interface ProjectState { s: any, labels: Record<string, string>, authors: Record<string, string>, times: Record<string, number>, forks: Record<string, number> }
 export interface SessionView {
   session: string
   root: string
@@ -36,5 +42,9 @@ export const api = {
   session: (id: string) => call<SessionView>('GET', `/session/${sid(id)}`),
   choose: (id: string, project: string | null) => call<SessionView>('POST', `/session/${sid(id)}/project`, { project }),
   init: (folder: string, name?: string) => call<{ project: Project }>('POST', '/init', { folder, name }),
+  projects: () => call<{ projects: Project[] }>('GET', '/projects'),
+  projectState: (name: string) => call<ProjectState>('GET', `/project/${encodeURIComponent(name)}/state`),
+  projectTree: (name: string, ref: string) => call<{ tree: Record<string, unknown>, partial: string | null }>('GET', `/project/${encodeURIComponent(name)}/tree?ref=${encodeURIComponent(ref)}`),
+  attach: (name: string, folder: string | null) => call<{ project: Project }>('POST', `/project/${encodeURIComponent(name)}/attach`, { folder }),
   tree: (id: string, ref: string) => call<{ tree: Record<string, unknown>, partial: string | null }>('GET', `/session/${sid(id)}/tree?ref=${encodeURIComponent(ref)}`),
 }

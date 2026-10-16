@@ -1,19 +1,27 @@
-// The LayerFS sidebar panel: the Host's settings, and each dsh workspace with
-// its LayerFS projects, Init, and a new session on the LayerFS preset.
+// The LayerFS sidebar page: every LayerFS project, the dsh workspace each is
+// attached to (change or detach it), its History and Files, and a new
+// session on the LayerFS preset; workspaces without a project offer Init.
+// ellen_joe keeps the page company.
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
-import { api, type Project, type Status } from './api.ts'
-import { MESSAGE } from './ui.ts'
+import ellen from '../../../../../sdk_sim/avatars/ellen_joe.gif'
+import { api, type Project, type ProjectState, type Status } from './api.ts'
+import { ProjectBoard } from './ProjectBoard.tsx'
 
 /** What the panel uses of dsh's workspace services (read with ctx.get). */
 export interface PanelServices {
-  workspaces?: { list: { getSnapshot(): { items: readonly { workspaceId: string, path: string, title: string }[] }, subscribe(listener: () => void): () => void } }
+  workspaces?: { list: { getSnapshot(): { items: readonly Workspace[] }, subscribe(listener: () => void): () => void } }
   uiWorkspace?: { startSession(workspaceId?: string, options?: { agentPreset?: string }): void }
 }
+interface Workspace { workspaceId: string, path: string, title: string }
 
 const PRESET = 'layerfs-dsh-minimalist'
-const NO_ITEMS = { items: [] } as const
+const NO_ITEMS = { items: [] as readonly Workspace[] }
 const NOT_LISTED = { getSnapshot: () => NO_ITEMS, subscribe: () => () => {} }
-const button = { font: 'inherit', fontSize: 12, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--dsh-color-border, #8884)', background: 'transparent', color: 'inherit', cursor: 'pointer' } as const
+const muted = 'var(--dsh-color-fg-muted, #8a8a8a)'
+const line = 'var(--dsh-color-border, #8883)'
+const button = { font: 'inherit', fontSize: 12, padding: '4px 12px', borderRadius: 6, border: `1px solid ${line}`, background: 'transparent', color: 'inherit', cursor: 'pointer' } as const
+const primary = { ...button, background: 'var(--dsh-color-fg, #111)', color: 'var(--dsh-color-bg, #fff)', border: '1px solid transparent' } as const
+const chip = (on: boolean) => ({ ...button, borderRadius: 999, background: on ? 'var(--dsh-color-bg-muted, #8882)' : 'transparent', fontWeight: on ? 600 : 400 })
 
 export function LayerFsIcon({ size }: { size?: number }) {
   const s = size ?? 16
@@ -24,55 +32,124 @@ export function LayerFsIcon({ size }: { size?: number }) {
   )
 }
 
+const short = (path: string) => path.split('/').filter(Boolean).slice(-2).join('/')
+
+/** One line for ellen_joe's bubble: where main is and what was published last. */
+function summary(state: ProjectState | null, error: string | null) {
+  if (error) return `I couldn't read this project: ${error}`
+  if (!state) return 'Reading the project…'
+  const s = state.s, real = Object.fromEntries(Object.entries(state.labels).map(([r, l]) => [l, r]))
+  const last = Object.values(s.layers as Record<string, any>).filter((l) => l.sourceBranch).sort((a, b) => b.slot - a.slot)[0]
+  const branches = s.branchOrder.length, commits = Object.keys(s.commits).length
+  const head = `main is at ${s.main?.head ?? '–'} · ${branches} Branch${branches === 1 ? '' : 'es'}, ${commits} Commit${commits === 1 ? '' : 's'}.`
+  if (!last) return `${head} Nothing published yet.`
+  const by = state.authors[real[last.id]]
+  return `${head} Last publish: ${last.sourceBranch} as ${last.id}${by ? `, by ${by}` : ''}.`
+}
+
 export function LayerFsPanel({ services }: { services: () => PanelServices }) {
   const { workspaces, uiWorkspace } = services()
   const list = workspaces?.list ?? NOT_LISTED
   const subscribe = useCallback((listener: () => void) => list.subscribe(listener), [list])
   const { items } = useSyncExternalStore(subscribe, () => list.getSnapshot())
-  const [status, setStatus] = useState<Status & { home?: string } | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  useEffect(() => { api.status().then(setStatus, (e: Error) => setError(e.message)) }, [])
-
-  return (
-    <div style={{ ...MESSAGE, paddingBottom: 24, display: 'grid', gap: 16, maxWidth: 760 }}>
-      <div>
-        <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--dsh-color-fg, inherit)' }}>LayerFS</div>
-        {error && <div>The LayerFS Host plugin is not answering: {error}</div>}
-        {status && (status.configured
-          ? <div>Projects keep versioned copies of workspace folders. Sessions on the <b>LayerFS × DSH minimalist</b> preset fork, test and merge them through the SDK.</div>
-          : <div>LayerFS is not set up on this dsh Host. Missing settings of <code>layerfs-host</code>: {status.missing.join(', ')}.</div>)}
-      </div>
-      {items.length === 0 && <div>No workspaces yet. Add one from the sidebar.</div>}
-      {items.map((w) => (
-        <WorkspaceRow key={w.workspaceId} title={w.title} path={w.path} disabled={!status?.configured} onNewSession={uiWorkspace ? () => uiWorkspace.startSession(w.workspaceId, { agentPreset: PRESET }) : undefined} />
-      ))}
-    </div>
-  )
-}
-
-function WorkspaceRow({ title, path, disabled, onNewSession }: { title: string, path: string, disabled: boolean, onNewSession?: () => void }) {
+  const [status, setStatus] = useState<Status | null>(null)
   const [projects, setProjects] = useState<Project[] | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [state, setState] = useState<ProjectState | null>(null)
+  const [stateError, setStateError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const load = useCallback(() => { api.workspace(path).then((w) => setProjects(w.projects), (e: Error) => setError(e.message)) }, [path])
-  useEffect(load, [load])
-  const init = async () => {
-    setBusy(true); setError(null)
-    try { await api.init(path); load() } catch (e) { setError((e as Error).message) } finally { setBusy(false) }
+  const [reads, setReads] = useState(0)
+
+  const loadProjects = useCallback(() => api.projects().then(({ projects }) => { setProjects(projects); return projects }), [])
+  useEffect(() => {
+    api.status().then(setStatus, (e: Error) => setError(e.message))
+    loadProjects().then((all) => setSelected((current) => current ?? (all.find((p) => p.folder) ?? all[0])?.name ?? null), (e: Error) => setError(e.message))
+  }, [loadProjects])
+  useEffect(() => {
+    if (!selected) return
+    let stopped = false
+    setState(null); setStateError(null)
+    api.projectState(selected).then((s) => { if (!stopped) setState(s) }, (e: Error) => { if (!stopped) setStateError(e.message) })
+    return () => { stopped = true }
+  }, [selected, reads])
+
+  const act = (label: string, run: () => Promise<unknown>) => async () => {
+    setBusy(label); setError(null)
+    try { await run() } catch (e) { setError((e as Error).message) } finally { setBusy(null) }
   }
+  const project = projects?.find((p) => p.name === selected) ?? null
+  const workspace = project?.folder ? items.find((w) => w.path === project.folder) : undefined
+  const bare = items.filter((w) => !projects?.some((p) => p.folder === w.path))
+  const attach = (folder: string | null) => act(folder ? 'Attaching…' : 'Detaching…', async () => { await api.attach(project!.name, folder); await loadProjects() })()
+  const init = (w: Workspace) => act(`Initializing ${w.title}…`, async () => {
+    const { project: made } = await api.init(w.path)
+    await loadProjects()
+    setSelected(made.name)
+  })
+  const newSession = act('Opening a session…', async () => {
+    await api.attach(project!.name, project!.folder) // the folder's project for the new session
+    uiWorkspace!.startSession(workspace!.workspaceId, { agentPreset: PRESET })
+  })
+
   return (
-    <div style={{ display: 'grid', gap: 4, paddingTop: 12, borderTop: '1px solid var(--dsh-color-border, #8883)' }}>
-      <div><b style={{ color: 'var(--dsh-color-fg, inherit)' }}>{title}</b> <code style={{ opacity: 0.7 }}>{path}</code></div>
-      <div>
-        {projects === null ? 'Reading…' : projects.length === 0 ? 'No LayerFS project.' : projects.map((p) => (
-          <span key={p.name} title={`volume ${p.volume}`} style={{ marginRight: 12 }}>◆ {p.name} <span style={{ opacity: 0.6 }}>since {new Date(p.created).toLocaleDateString()}</span></span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '20px 24px', height: '100%', boxSizing: 'border-box', fontSize: 13, lineHeight: 1.5, minHeight: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 16, fontWeight: 600, marginRight: 8 }}>LayerFS</span>
+        {projects?.map((p) => (
+          <button key={p.name} style={chip(p.name === selected)} onClick={() => setSelected(p.name)} title={p.folder ? `attached to ${p.folder}` : 'not attached to a workspace'}>
+            {p.name}{p.folder ? '' : ' · detached'}
+          </button>
         ))}
+        {status && !status.configured && <span style={{ color: muted }}>Not set up: missing {status.missing.join(', ')} in layerfs-host.</span>}
       </div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {projects?.length === 0 && <button style={button} disabled={disabled || busy} onClick={() => { void init() }}>{busy ? 'Initializing…' : 'Init LayerFS'}</button>}
-        {!!projects?.length && onNewSession && <button style={button} onClick={onNewSession}>New LayerFS session</button>}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <img src={ellen} alt="ellen_joe" width={88} height={88} style={{ flex: 'none' }} />
+        <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 8 }}>
+          <div style={{ position: 'relative', alignSelf: 'start', justifySelf: 'start', padding: '8px 12px', borderRadius: 12, background: 'var(--dsh-color-bg-muted, #8881)', border: `1px solid ${line}` }}>
+            {project ? summary(state, stateError) : projects?.length === 0 ? 'No LayerFS project yet. Init one from a workspace below.' : 'Pick a project.'}
+          </div>
+          {project && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', color: muted }}>
+              <span>Workspace</span>
+              <select
+                aria-label="Workspace this project is attached to"
+                value={project.folder ?? ''}
+                disabled={!!busy}
+                onChange={(e) => { void attach(e.target.value || null) }}
+                style={{ ...button, cursor: 'pointer', maxWidth: 360 }}
+              >
+                <option value="">not attached</option>
+                {items.map((w) => <option key={w.workspaceId} value={w.path}>{w.title} · {short(w.path)}</option>)}
+                {project.folder && !items.some((w) => w.path === project.folder) && <option value={project.folder}>{short(project.folder)} (not a dsh workspace)</option>}
+              </select>
+              <span title={project.volume}>imported from {short(project.source)} · {new Date(project.created).toLocaleDateString()}</span>
+              <button style={button} onClick={() => setReads((n) => n + 1)} title="Read the project again">Refresh</button>
+            </div>
+          )}
+        </div>
+        {project && (
+          <button style={primary} disabled={!!busy || !workspace || !uiWorkspace} onClick={() => { void newSession() }} title={workspace ? `New session in ${workspace.title} on the LayerFS × DSH minimalist preset` : 'Attach the project to a dsh workspace first'}>
+            New LayerFS session
+          </button>
+        )}
       </div>
-      {error && <div style={{ color: 'var(--dsh-color-fg-danger, #d33)' }}>{error}</div>}
+
+      {(busy || error) && <div style={{ color: error ? 'var(--dsh-color-fg-danger, #d33)' : muted }}>{error ?? busy}</div>}
+      {project && state && <ProjectBoard name={project.name} state={state} />}
+      {project && !state && <div style={{ flex: 1, minHeight: 380, border: `1px dashed ${line}`, borderRadius: 10 }} />}
+
+      {bare.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', color: muted, borderTop: `1px solid ${line}`, paddingTop: 10 }}>
+          <span>No project yet:</span>
+          {bare.map((w) => (
+            <button key={w.workspaceId} style={button} disabled={!!busy || !status?.configured} onClick={() => { void init(w)() }} title={`Init LayerFS from ${w.path}`}>
+              Init {w.title}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

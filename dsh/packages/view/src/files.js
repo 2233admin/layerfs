@@ -35,9 +35,11 @@ export function createFiles(v) {
   }
   function atSelect(tab, p) {
     const s = W().engine.s, o = (val, label) => `<option value="${esc(val)}"${val === p.at ? " selected" : ""}>${esc(label)}</option>`;
+    // a project page looks at any node; a lane's tab, at its own
+    const commitsOf = (lane) => Object.values(s.commits).filter((c) => lane === null || c.branch === lane).sort((a, b) => b.slot - a.slot).map((c) => o(c.id, `${lane === null ? c.branch + " · " : ""}${c.id} · ${c.message || c.via}`)).join("");
     const opts = tab === "main"
-      ? Object.values(s.layers).sort((a, b) => b.slot - a.slot).map((l) => o(l.id, `${l.id} · ${l.sourceCommit ? "from " + l.sourceCommit : "init"}`)).join("")
-      : Object.values(s.commits).filter((c) => c.branch === tab).sort((a, b) => b.slot - a.slot).map((c) => o(c.id, `${c.id} · ${c.message || c.via}`)).join("") + o("fork:" + tab, `fork point · ${s.branches[tab].from}`);
+      ? Object.values(s.layers).sort((a, b) => b.slot - a.slot).map((l) => o(l.id, `${l.id} · ${l.sourceCommit ? "from " + l.sourceCommit : "init"}`)).join("") + (v.project ? commitsOf(null) : "")
+      : commitsOf(tab) + o("fork:" + tab, `fork point · ${s.branches[tab].from}`);
     const live = p.at === "latest";
     return `<span class="sync ${live ? "live" : "pinned"}" title="${live ? "Follows the head: new Commits show up as they land" : "Fixed at one point in history"}">${live ? "●" : "⊙"}</span><select class="fsel" data-fat="${esc(tab)}" title="What you look at: latest, or a fixed point">${o("latest", `${tab} @ ${tab === "main" ? W().mainHead : W().branches[tab].head.replace("fork:", "fork ")}`)}${opts}</select>`;
   }
@@ -231,6 +233,13 @@ export function createFiles(v) {
     else p.base = id;
     v.rightMode[tab] = "files";
   }
+  /** Files at any node, compared with its parent (a project page). */
+  function showAt(tab, id) {
+    const p = filesOf(tab), n = W().nodes[id]; if (!n) return;
+    p.at = n.kind === "fork" ? "fork:" + n.branch : id;
+    p.base = FM.parentRef(W().engine, p.at) || "";
+    p.path = null;
+  }
   // Files controls, and History nodes that open Files at that point.
   function click(e) {
     const at = (sel) => e.target.closest(sel), tab = v.active;
@@ -249,7 +258,7 @@ export function createFiles(v) {
     }
     if ((el = at("[data-fopen]"))) { openFile(filesOf(tab), el.dataset.fopen); v.render(); return true; }
     if ((el = at("[data-fblame]"))) { const p = filesOf(tab); showPoint(tab, el.dataset.fblame); p.mode = "diff"; v.render(); return true; }
-    if ((el = at("svg.graph [data-node]"))) { showPoint(tab, el.dataset.node); v.render(); return true; }
+    if ((el = at("svg.graph [data-node]"))) { (v.project ? showAt : showPoint)(tab, el.dataset.node); v.render(); return true; }
     return false;
   }
   function change(e) {
@@ -257,5 +266,5 @@ export function createFiles(v) {
     if (t.dataset.fat) { const p = filesOf(t.dataset.fat); p.at = t.value; p.base = p.at === "latest" ? defaultBase(t.dataset.fat) : FM.parentRef(W().engine, p.at) || ""; v.render(); }
     else if (t.dataset.fbasesel !== undefined) { filesOf(t.dataset.fbasesel).base = t.value; v.render(); }
   }
-  return { filesOf, filesHtml, storeHtml, overlayHtml, showPoint, click, change, wide: (tab) => (FILES[tab] || {}).wide };
+  return { filesOf, filesHtml, storeHtml, overlayHtml, showPoint, showAt, click, change, wide: (tab) => (FILES[tab] || {}).wide };
 }

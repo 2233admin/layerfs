@@ -56,6 +56,8 @@ export class Mirror {
     const s = this.s, before = JSON.stringify(s);
     s.project = { name: snap.project };
     s.store = snap.store;
+    // Commit labels follow the order Commits were made, before a Layer names one.
+    for (const c of [...snap.commits].sort((a, b) => a.time - b.time)) this.commitLabel(c.id);
     // Layers: the snapshot lists main's chain newest first.
     for (const l of [...snap.layers].reverse()) this.absorbLayer(l);
     const main = snap.branches.find((b) => b.name === "main");

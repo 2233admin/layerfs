@@ -61,6 +61,8 @@ export const CSS = `
 .lfs .ib svg { width: 15px; height: 15px; }
 /* work area */
 .lfs .work { flex: 1; min-height: 0; display: grid; gap: 6px; padding: 6px; background: var(--grid-bg); }
+.lfs.lfs-project { display: flex; flex-direction: column; min-height: 0; background: var(--window); }
+.lfs .work.projectview { grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.3fr); }
 .lfs .work.mainview { grid-template-columns: minmax(240px, .9fr) minmax(300px, 1fr) minmax(320px, 1.4fr); }
 .lfs .work.branchview { grid-template-columns: minmax(240px, 1fr) minmax(300px, 1.55fr) minmax(300px, 1.3fr); }
 .lfs .work.branchview.wide { grid-template-columns: minmax(200px, .7fr) minmax(260px, 1fr) minmax(320px, 1.7fr); }

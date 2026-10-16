@@ -3,7 +3,7 @@
 // dsh's appendPluginRecord is replaced by a stand-in that keeps each record
 // on the fake Session; Sessions, the web server and Connection are fakes.
 import assert from "node:assert/strict";
-import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { register } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -156,6 +156,35 @@ try {
   assert.equal(reads.length, count, "a saved tree is read once");
   await trees.dispose();
   assert.deepEqual(closed, ["sb_service"]);
+
+  // projects: listed with their folder; attach moves one, detach keeps sessions on it
+  const OTHER = "/work/other";
+  assert.deepEqual((await call("GET", "/layerfs/projects")).body.projects.map((p) => [p.name, p.folder]), [["website", FOLDER]]);
+  assert.equal((await call("POST", "/layerfs/project/website/attach", { folder: OTHER })).body.project.folder, OTHER);
+  assert.deepEqual([h.bindings.workspace(FOLDER).projects, h.bindings.workspace(OTHER).lastUsed], [[], "website"]);
+  assert.equal((await call("POST", "/layerfs/project/website/attach", { folder: null })).body.project.folder, null);
+  assert.equal(h.bindings.projectFor("session-root", FOLDER).name, "website", "a locked session keeps its detached project");
+  assert.equal(h.bindings.projectFor("session-other", FOLDER), null);
+  assert.equal((await call("POST", "/layerfs/project/website/attach", { folder: 3 })).status, 400);
+  assert.equal((await call("POST", "/layerfs/project/nope/attach", { folder: null })).status, 404);
+  await call("POST", "/layerfs/project/website/attach", { folder: FOLDER });
+
+  // who made each node: every journaled session's lines of that project
+  const journal = (line) => appendFileSync(join(h.spec.stateDir, "lines", "session-root.jsonl"), JSON.stringify({ agentId: "child-1", agent: "tester", project: "website", ok: true, start: "2026-10-16T00:00:01.000Z", ms: 5, ...line }) + "\n");
+  journal({ id: "x-1", method: "fs.write", kind: "Committed", commit: "c".repeat(64) });
+  journal({ id: "x-2", method: "branch.publish", kind: "Added", commit: "c".repeat(64), layer: "l".repeat(66) });
+  journal({ id: "x-3", method: "branch.fork", kind: "Forked", branch: "feature" });
+  const known = h.collector.nodesOf("website"), at = Date.parse("2026-10-16T00:00:01.005Z");
+  assert.deepEqual(known.authors, { ["c".repeat(64)]: "tester", ["l".repeat(66)]: "tester" });
+  assert.deepEqual([known.times, known.forks], [{ ["l".repeat(66)]: at }, { feature: at }]);
+  assert.deepEqual(h.collector.nodesOf("other"), { authors: {}, times: {}, forks: {} });
+
+  // a version 1 file is read as version 2
+  const old = join(dir, "v1");
+  mkdirSync(old);
+  writeFileSync(join(old, "bindings.json"), JSON.stringify({ version: 1, workspaces: { [FOLDER]: { projects: [{ name: "a", source: FOLDER, volume: "v", created: 1 }], lastUsed: "a" } }, sessions: {}, agents: {} }));
+  const upgraded = new BindingStore(old);
+  assert.deepEqual([upgraded.data.version, upgraded.byName("a").folder, upgraded.workspace(FOLDER).lastUsed], [2, FOLDER, "a"]);
   console.log("host: ok");
 } finally {
   rmSync(dir, { recursive: true, force: true });
