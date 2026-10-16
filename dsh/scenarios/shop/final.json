@@ -34,6 +34,10 @@
   "/test/helpers.js": "0c43f5a6dbdef87109abc45bd2014f6af9b29c4782e30814c24786b8035a89dc",
   "/test/web.test.js": "cf8115ca9f118b480fa0d4412775392e937952802d4f1884ee5f11ced8c249d0"
  },
+ "varies": {
+  "stamp": "[0-9]{16,}",
+  "content": {}
+ },
  "history": {
   "branches": {
    "acceptance": {

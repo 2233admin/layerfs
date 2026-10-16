@@ -148,8 +148,8 @@ if (existsSync(finalFile)) {
   const lf = new LayerFS(project, { sandbox: check });
   try {
     gate("order", await orderFailures(final, lf, new LayerFSOperator(lf)));
-    const tree = await finalTreeFailures(final, lf);
-    gate("final tree", tree.failures, { files: tree.files });
+    const tree = await finalTreeFailures(final, lf, check);
+    gate("final tree", tree.failures, { files: tree.files, varies: tree.varies });
   } finally {
     await lf.sandbox.close(check);
   }

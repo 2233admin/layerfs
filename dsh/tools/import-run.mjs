@@ -10,11 +10,9 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, lstatSync, readlinkSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { variesOf } from "./checks/gates.mjs";
 import { historyOf } from "./checks/history.mjs";
-import { listAll, readAll, trackedHashes, ignoredOf } from "./checks/tree.mjs";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { execFileSync } from "node:child_process";
+import { readAll, trackedHashes, trackedTree } from "./checks/tree.mjs";
 
 const FORMATS = {
   shop: { read: async (i) => (await import("./import/shop.mjs")).readShop(i), title: "Shop", order: 7, blurb: "a builder agent's recorded run of a small web shop, from skeleton to admin page, over six milestones", target: 60, inputs: ["trace", "builder", "seed"] },
@@ -70,7 +68,8 @@ try {
   }
 
   const dropped = new Set(), optional = new Set(), kept = [], notes = [];
-  let lastEnd = new Map(), ignore = ignoreCache(lf);
+  const lastEnd = new Map(), trees = new Map();
+  const treeOf = (ref) => { if (!trees.has(ref)) trees.set(ref, trackedTree(lf, ref)); return trees.get(ref); };
   for (const step of record.steps) {
     const calls = [];
     for (const call of step.calls) {
@@ -78,7 +77,7 @@ try {
       if (m === "project.init") { lastEnd.set(step.agent, call.start + call.ms); continue; }
       if (WRITES.has(m)) {
         if (call.ok === false) fail(`${step.label}: a refused ${m} is not replayed yet`);
-        const changes = await changesOf(call.commit, commits, ignore);
+        const changes = await changesOf(call.commit, commits, treeOf);
         if (!changes.length) { dropped.add(call.commit); notes.push(`${step.label}: ${m} ${short(call.commit)} has no tracked content change; dropped`); continue; }
         calls.push({ op: "write", branch: call.args.branch, message: call.args.message ?? null, changes, commit: call.commit, expect: `fs.apply:${kindOf(call)}` });
       } else if (HISTORY.has(m)) {
@@ -96,7 +95,7 @@ try {
         if (m === "sandbox.exec") calls.push(execOf(step, call, ws, notes));
         if (m === "sandbox.commit") {
           let expect = `${m}:${kindOf(call)}`;
-          if (call.ok && call.kind === "Committed" && call.commit && await generatedOnly(call.commit, commits, ignore)) {
+          if (call.ok && call.kind === "Committed" && call.commit && await generatedOnly(call.commit, commits, treeOf)) {
             expect = `${m}:Committed|UpToDate`;
             optional.add(call.commit);
           }
@@ -176,9 +175,11 @@ try {
     };
   }
   if (dropped.size) notes.push(`history: ${dropped.size} dropped Commit(s) are left out of the order checks`);
-  const final = await trackedHashes(lf, "main");
-  if (Object.keys(final.problems).length) fail(`final main files that cannot be hashed: ${JSON.stringify(final.problems)}`);
-  writeFileSync(join(out, "final.json"), JSON.stringify({ main: final.files, history: recorded }, null, 1) + "\n");
+  // main's files hashed by their bytes, in a Workspace of a Sandbox of the converter's own
+  const hasher = await lf.sandbox.create(`${store.project}-import`.slice(0, 63), store.project, store.env.LAYERFS_IMAGE);
+  let final;
+  try { final = await trackedHashes(new LayerFS(store.project, { sandbox: hasher }), hasher); } finally { await lf.sandbox.close(hasher); }
+  writeFileSync(join(out, "final.json"), JSON.stringify({ main: final.files, varies: variesOf(final.files), history: recorded }, null, 1) + "\n");
   writeFileSync(join(out, "seed.json"), JSON.stringify(seedOf(inputs.seed), null, 1) + "\n");
   const scenario = {
     type: "layerfs-mock-scenario", version: 2, title: kind.title, order: kind.order, speed: 1,
@@ -220,18 +221,41 @@ function execOf(step, call, ws, notes) {
   return { op: "exec", ws, command: replaced, message: call.args.message ?? null, exit: Number(exit), output: Buffer.from(lines).subarray(-OUTPUT_BYTES).toString(), ms: Math.round(call.ms), expect: `sandbox.exec:exit:${exit}` };
 }
 
+/**
+ * A Commit's tracked changes from its parent (a Branch's first Commit: from
+ * its base Layer), by comparing the two tracked trees: entries added, removed
+ * or of another type, and files whose content differs (fs.diff_files, which
+ * compares binary files too). Ignored folders are never walked: diff_commits
+ * would walk both whole trees, a build's cargo home and target included, again
+ * for every page of its answer.
+ */
+async function trackedChanges(commit, treeOf) {
+  const before = commit.parent ?? commit.base;
+  const [a, b] = [await treeOf(before), await treeOf(commit.id)];
+  const out = [];
+  for (const [path, type] of b) {
+    const was = a.get(path);
+    if (!was) out.push({ path, kind: "Added", type });
+    else if (was !== type) out.push({ path, kind: "Removed", type: was }, { path, kind: "Added", type });
+    else if (type === "file" && !(await lf.fs.diff_files(before, path, commit.id, path)).contentEqual) out.push({ path, kind: "Modified", type });
+    else if (type === "symlink") fail(`${path}: a symlink in the tracked tree is not compared yet`);
+  }
+  for (const [path, type] of a) if (!b.has(path)) out.push({ path, kind: "Removed", type });
+  // in diff_commits' order: by path segments
+  const segments = (p) => p.split("/");
+  return out.sort((x, y) => { const [p, q] = [segments(x.path), segments(y.path)]; for (let i = 0; i < Math.min(p.length, q.length); i++) if (p[i] !== q[i]) return p[i] < q[i] ? -1 : 1; return p.length - q.length; });
+}
+
 /** A write Commit's tracked changes, from the Store: what its fs.apply replays. */
-async function changesOf(commitId, commits, ignore) {
+async function changesOf(commitId, commits, treeOf) {
   const commit = commits.get(commitId) ?? fail(`no Commit ${commitId} in the Store`);
-  const items = await diffOf(commit);
-  const tracked = await ignore.tracked(commitId, items.map((i) => ({ path: i.path, dir: i.type === "dir" })));
-  const removed = items.filter((i) => i.kind === "Removed" && tracked.has(i.path)).map((i) => i.path);
+  const items = await trackedChanges(commit, treeOf);
+  const removed = items.filter((i) => i.kind === "Removed").map((i) => i.path);
   const top = removed.filter((p) => !removed.some((q) => q !== p && p.startsWith(`${q}/`)));
   const changes = [];
-  for (const i of items.filter((i) => i.kind === "Added" && i.type === "dir" && tracked.has(i.path)).sort((a, b) => a.path.length - b.path.length)) changes.push({ op: "mkdir", path: i.path });
+  for (const i of items.filter((i) => i.kind === "Added" && i.type === "dir").sort((x, y) => x.path.length - y.path.length)) changes.push({ op: "mkdir", path: i.path });
   for (const i of items) {
-    if (i.kind === "Removed" || i.type === "dir" || !tracked.has(i.path)) continue;
-    if (i.kind === "Modified" && !i.content) continue; // metadata only
+    if (i.kind === "Removed" || i.type === "dir") continue;
     if (i.type !== "file") fail(`${i.path}: a ${i.type} write is not replayed yet`);
     const read = await readAll(lf, commitId, i.path);
     if (read.problem) fail(`${i.path} at ${short(commitId)}: ${read.problem}`);
@@ -241,75 +265,10 @@ async function changesOf(commitId, commits, ignore) {
   return changes;
 }
 
-/**
- * A Commit's changes from its parent, as diff_commits lists them. A Branch's
- * first Commit has no parent Commit and diff_commits takes only Commits, so
- * its changes from the base Layer come from walking both trees (.git and
- * node_modules are skipped: neither is ever a write step's change).
- */
-async function diffOf(commit) {
-  if (commit.parent) return lfAll((s, p) => lf.branch.diff_commits(commit.parent, commit.id, s, p));
-  const items = [], walk = async (dir) => {
-    const list = async (ref) => { try { return new Map((await listAll(lf, ref, dir)).map((e) => [e.name, e])); } catch (error) { if (error.code) return new Map(); throw error; } };
-    const [before, after] = [await list(commit.base), await list(commit.id)];
-    for (const name of new Set([...before.keys(), ...after.keys()])) {
-      if (name === ".git" || name === "node_modules") continue;
-      const b = before.get(name), a = after.get(name), path = (a ?? b).path;
-      if (!a) items.push({ path, kind: "Removed", type: b.type });
-      else if (!b || b.type !== a.type) {
-        if (b) items.push({ path, kind: "Removed", type: b.type });
-        items.push({ path, kind: "Added", type: a.type, content: true });
-        if (a.type === "dir") await walk(path);
-      } else if (a.type === "dir") await walk(path);
-      else {
-        const [x, y] = [await readAll(lf, commit.base, path), await readAll(lf, commit.id, path)];
-        if (x.problem || y.problem || x.text !== y.text) items.push({ path, kind: "Modified", type: a.type, content: true });
-      }
-    }
-  };
-  await walk("/");
-  return items;
-}
-
 /** Whether every change a command's Commit made is to a path .gitignore excludes. */
-async function generatedOnly(commitId, commits, ignore) {
+async function generatedOnly(commitId, commits, treeOf) {
   const commit = commits.get(commitId);
-  if (!commit) return false;
-  const items = await diffOf(commit);
-  const tracked = await ignore.tracked(commitId, items.map((i) => ({ path: i.path, dir: i.type === "dir" })));
-  return items.every((i) => !tracked.has(i.path) || (i.kind === "Modified" && !i.content && i.type === "dir"));
-}
-
-/** .gitignore decisions at a saved snapshot, from the .gitignore files on each path's way down. */
-function ignoreCache(client) {
-  const repos = new Map();
-  return { tracked: async (ref, entries) => {
-    let repo = repos.get(ref);
-    if (!repo) {
-      repo = { dir: mkdtempSync(join(tmpdir(), "lfs-ign-")), seen: new Set() };
-      execFileSync("git", ["init", "-q", repo.dir]);
-      repos.set(ref, repo);
-    }
-    const dirs = new Set(["/"]);
-    for (const e of entries) { const parts = e.path.split("/").slice(1, -1); for (let k = 1; k <= parts.length; k++) dirs.add(`/${parts.slice(0, k).join("/")}`); }
-    for (const dir of dirs) {
-      if (repo.seen.has(dir)) continue;
-      repo.seen.add(dir);
-      const file = `${dir === "/" ? "" : dir}/.gitignore`;
-      let read;
-      try { read = await readAll(client, ref, file); } catch (error) { if (error.code === "NotFound" || error.code === "NoSuchPath") continue; throw error; }
-      if (read.problem) fail(`${file}: ${read.problem}`);
-      mkdirSync(join(repo.dir, dir), { recursive: true });
-      writeFileSync(join(repo.dir, file), read.text);
-    }
-    const rel = entries.filter((e) => !e.path.split("/").includes(".git")).map((e) => e.path.slice(1) + (e.dir ? "/" : ""));
-    const ignored = ignoredOf(repo.dir, rel);
-    // a path under an ignored folder is ignored too
-    const isIgnored = (p) => { const parts = p.split("/"); for (let k = 1; k <= parts.length; k++) { const head = parts.slice(0, k).join("/"); if (ignored.has(head) || ignored.has(`${head}/`)) return true; } return false; };
-    const tracked = new Set();
-    for (const e of entries) if (!e.path.split("/").includes(".git") && !isIgnored(e.path.slice(1))) tracked.add(e.path);
-    return tracked;
-  } };
+  return commit ? (await trackedChanges(commit, treeOf)).length === 0 : false;
 }
 
 /** The original Init's imported folder as data: every entry, its mode and its content. */

@@ -55,9 +55,20 @@ async function expectCall(call, method, work) {
 const tail = (text, lines = 12) => String(text ?? "").trimEnd().split("\n").slice(-lines).join("\n");
 const short = (id) => String(id ?? "").slice(0, 12);
 
-/** A recorded ref ("main", "orders#2", "L3") as this run's id. */
+/** A recorded ref ("main", "orders#2", "L3": main's fourth Layer) as this run's id. */
 async function resolveRef(lf, ref) {
   if (ref === "main" || ref == null) return ref ?? undefined;
+  const layer = /^L([0-9]+)$/.exec(ref);
+  if (layer) {
+    const { LayerFSOperator } = await import(process.env.DSH_LAYERFS_OPERATOR);
+    const snap = await new LayerFSOperator(lf).inspect.snapshot();
+    // main's Layers from Init's, each the parent of the next
+    const byParent = new Map(snap.layers.map((l) => [l.parent ?? null, l]));
+    let l = byParent.get(null);
+    for (let i = 0; l && i < Number(layer[1]); i++) l = byParent.get(l.id);
+    if (!l) throw new Mismatch(`main has no Layer ${layer[1]} yet`);
+    return l.id;
+  }
   const [, branch, index] = /^(.+)#([0-9]+)$/.exec(ref) ?? [];
   if (!branch) throw new Mismatch(`cannot name ${ref} in this run`);
   const items = [];

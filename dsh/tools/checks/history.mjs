@@ -17,6 +17,9 @@ async function pages(read) {
   }
 }
 
+/** The prefix of the Branch the final-tree check forks from main to read its bytes (tree.mjs); not part of a run. */
+export const CHECK_PREFIX = "final-tree-check-";
+
 /**
  * Reads the history of the project `lf` names.
  * @param {object} lf LayerFS client
@@ -33,7 +36,7 @@ export async function historyOf(lf, operator) {
   if (layers.length !== snap.layers.length) throw new Error("main's Layers are not one line");
   const ids = new Map(layers.map((l, i) => [l.id, `L${i}`]));
 
-  const branches = (await pages((size, pos) => lf.project.list_branches(size, pos))).filter((b) => b.name !== "main");
+  const branches = (await pages((size, pos) => lf.project.list_branches(size, pos))).filter((b) => b.name !== "main" && !b.name.startsWith(CHECK_PREFIX));
   const chains = {};
   for (const b of branches) {
     // a Branch made by a merge lists its first input's Commits too, up to the

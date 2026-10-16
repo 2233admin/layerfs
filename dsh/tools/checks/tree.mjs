@@ -1,17 +1,19 @@
-// The tracked files of a saved snapshot and their SHA-256, read through the
-// SDK: what import-run.mjs writes to a scenario's final.json and what the
-// final-tree check compares a run's main with. A tracked path is one the
-// project's own .gitignore files do not exclude (Git decides, with
-// `git check-ignore --no-index` over a scratch repository holding only those
-// files); .git itself is never tracked. Ignored folders are not walked.
-// A file is read in fs.read windows, and its SHA-256 is that of the text,
-// which must have exactly the file's size; anything else (a binary file, a
-// line too long for one reply) is reported as a problem, not hashed.
+// The tracked files of a saved snapshot and their SHA-256: what import-run.mjs
+// writes to a scenario's final.json and what the final-tree check compares a
+// run's main with. A tracked path is one the project's own .gitignore files do
+// not exclude (Git decides, with `git check-ignore --no-index` over a scratch
+// repository holding only those files); .git itself is never tracked. Ignored
+// folders are not walked, so a build's target/ or node_modules costs nothing.
+// The SDK reads text only, and a build leaves binary files that are not
+// ignored (databases, test data), so a file's SHA-256 is of its bytes, taken
+// by sha256sum in a Workspace. main cannot be mounted, so the check forks a
+// Branch from it (CHECK_PREFIX, which the order check leaves out), mounts it,
+// and unmounts it without a Commit.
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { CHECK_PREFIX } from "./history.mjs";
 
 /** Every entry of `dir` in `ref`, page by page. */
 export async function listAll(lf, ref, dir) {
@@ -44,12 +46,12 @@ export async function readAll(lf, ref, path) {
 }
 
 /**
- * The tracked files of `ref` with their SHA-256 (symlinks: "symlink").
- * @returns {Promise<{ files: Record<string, string>, problems: Record<string, string> }>}
+ * The tracked entries of `ref` (a Branch, Commit or Layer), by path.
+ * @returns {Promise<Map<string, "file" | "dir" | "symlink">>}
  */
-export async function trackedHashes(lf, ref) {
+export async function trackedTree(lf, ref) {
   const scratch = mkdtempSync(join(tmpdir(), "lfs-ignore-"));
-  const files = {}, problems = {};
+  const tree = new Map();
   try {
     execFileSync("git", ["init", "-q", scratch]);
     const dirs = ["/"];
@@ -67,27 +69,70 @@ export async function trackedHashes(lf, ref) {
       const ignored = ignoredOf(scratch, items.map((item) => item.path.slice(1) + (item.type === "dir" ? "/" : "")));
       for (const item of items) {
         if (ignored.has(item.path.slice(1) + (item.type === "dir" ? "/" : ""))) continue;
+        tree.set(item.path, item.type);
         if (item.type === "dir") dirs.push(item.path);
-        else if (item.type === "symlink") files[item.path] = "symlink";
-        else {
-          const read = await readAll(lf, ref, item.path);
-          if (read.problem) problems[item.path] = read.problem;
-          else files[item.path] = createHash("sha256").update(read.text).digest("hex");
-        }
       }
     }
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
-  return { files: sortKeys(files), problems };
+  return tree;
 }
 
-/** Which of `paths` (relative, folders ending in /) the scratch repository's .gitignore files exclude. */
+const quote = (text) => `'${text.replaceAll("'", "'\\''")}'`;
+
+/**
+ * The SHA-256 of each of `paths` on `branch`, from its bytes.
+ * @returns {Promise<Record<string, string>>}
+ */
+export async function byteHashes(lf, sandbox, branch, paths) {
+  const hashes = {};
+  if (!paths.length) return hashes;
+  const ws = await lf.sandbox.mount(sandbox, branch);
+  try {
+    for (let i = 0; i < paths.length; i += 200) {
+      const chunk = paths.slice(i, i + 200);
+      const r = await lf.sandbox.exec(sandbox, ws, `timeout 100 sha256sum -- ${chunk.map((p) => quote(`.${p}`)).join(" ")}`);
+      if (r.exitCode !== 0) throw new Error(`sha256sum exited ${r.exitCode}: ${String(r.stderr ?? "").slice(0, 400)}`);
+      const lines = String(r.stdout).split("\n").filter(Boolean);
+      if (lines.length !== chunk.length) throw new Error(`sha256sum listed ${lines.length} of ${chunk.length} files`);
+      lines.forEach((line, k) => {
+        const [, sha, name] = /^([0-9a-f]{64}) [ *](.*)$/.exec(line) ?? [];
+        if (name !== `.${chunk[k]}`) throw new Error(`sha256sum answered ${line} for ${chunk[k]}`);
+        hashes[chunk[k]] = sha;
+      });
+    }
+  } finally {
+    await lf.sandbox.unmount(sandbox, ws, true);
+  }
+  return hashes;
+}
+
+/**
+ * The tracked files of main with their SHA-256 (symlinks: "symlink").
+ * @returns {Promise<{ files: Record<string, string> }>}
+ */
+export async function trackedHashes(lf, sandbox) {
+  const tree = await trackedTree(lf, "main"), files = {};
+  const regular = [...tree].filter(([, type]) => type === "file").map(([path]) => path);
+  if (regular.length) {
+    const branch = `${CHECK_PREFIX}${Date.now().toString(36)}`;
+    await lf.branch.fork(branch);
+    Object.assign(files, await byteHashes(lf, sandbox, branch, regular));
+  }
+  for (const [path, type] of tree) if (type === "symlink") files[path] = "symlink";
+  return { files: sortKeys(files) };
+}
+
+/**
+ * Which of `paths` (relative, folders ending in /) the scratch repository's
+ * .gitignore files exclude.
+ */
 export function ignoredOf(scratch, paths) {
   if (!paths.length) return new Set();
   let out = "";
   try {
-    out = execFileSync("git", ["-C", scratch, "check-ignore", "--no-index", "-z", "--stdin"], { input: paths.join("\0") + "\0", encoding: "utf8" });
+    out = execFileSync("git", ["-C", scratch, "check-ignore", "--no-index", "-z", "--stdin"], { input: paths.join("\0") + "\0", encoding: "utf8", maxBuffer: 1 << 30 });
   } catch (error) {
     // exit 1: none of the paths is ignored
     if (error.status !== 1) throw error;

@@ -6,7 +6,11 @@
 //                each Branch's Commits in the recorded order, each fork from
 //                and each merge and publish of the recorded node
 //   final tree   every tracked file on main has the recorded SHA-256, and no
-//                other tracked file exists
+//                other tracked file exists. final.json's `varies` names what a
+//                run cannot reproduce byte for byte: a name's clock reading
+//                (`stamp`, matched as a pattern) and files whose format holds
+//                the run's clock or an OS-assigned value (`content`, compared
+//                by presence); variesOf() decides both from the record
 //   closed       no container uses the project's volume: every Sandbox of the
 //                run, the service Sandbox included, is closed, so no Workspace
 //                is mounted
@@ -62,16 +66,54 @@ export async function orderFailures(final, lf, operator) {
   return compareHistory(final.history, await historyOf(lf, operator));
 }
 
+/** The patterns `varies` uses: a clock reading in a name, and the formats whose bytes hold run-time values. */
+const STAMP = /[0-9]{16,}/g;
+const CONTENT = [
+  [/\.sqlite$/, "an SQLite database (page headers count writes; rows hold times)"],
+  [/\.pyc$/, "CPython bytecode (holds its source's modification time)"],
+  [/\/server-[0-9]{16,}\.stdout$/, "a test server's log (holds its OS-assigned port)"],
+];
+
+/**
+ * What of a recorded final main a run cannot reproduce byte for byte, from
+ * the record alone (import-run.mjs writes it to final.json).
+ * @returns {{ stamp: string, content: Record<string, string> }}
+ */
+export function variesOf(main) {
+  const content = {};
+  for (const path of Object.keys(main)) for (const [pattern, why] of CONTENT) if (pattern.test(path)) content[path] = why;
+  return { stamp: STAMP.source, content };
+}
+
 /** The final-tree check: main's tracked files against final.json's. */
-export async function finalTreeFailures(final, lf) {
-  const run = await trackedHashes(lf, "main"), failures = [];
-  for (const [path, problem] of Object.entries(run.problems)) failures.push(`${path}: ${problem}`);
-  for (const [path, sha] of Object.entries(final.main)) {
-    if (!(path in run.files) && !(path in run.problems)) failures.push(`${path} is missing from main`);
-    else if (path in run.files && run.files[path] !== sha) failures.push(`${path} differs: ${run.files[path].slice(0, 12)}, recorded ${sha.slice(0, 12)}`);
+export async function finalTreeFailures(final, lf, sandbox) {
+  const run = await trackedHashes(lf, sandbox), failures = [];
+  const varies = final.varies ?? { stamp: null, content: {} };
+  const stamp = varies.stamp ? new RegExp(varies.stamp, "g") : null;
+  const name = (path) => (stamp ? path.replace(stamp, "<stamp>") : path);
+  const exempt = new Set(Object.keys(varies.content).map(name));
+  // each file as (name pattern, SHA-256, or "*" when its bytes vary), counted
+  const count = (files) => {
+    const out = new Map();
+    for (const [path, sha] of Object.entries(files)) {
+      const key = `${name(path)} ${exempt.has(name(path)) ? "*" : sha}`;
+      out.set(key, [...(out.get(key) ?? []), path]);
+    }
+    return out;
+  };
+  const [want, got] = [count(final.main), count(run.files)];
+  for (const [key, paths] of want) {
+    const have = got.get(key)?.length ?? 0;
+    if (have >= paths.length) continue;
+    const pattern = key.slice(0, key.lastIndexOf(" ")), there = [...got].filter(([k]) => k.startsWith(`${pattern} `)).flatMap(([, p]) => p);
+    const recorded = paths.map((p) => final.main[p].slice(0, 12)).join(", ");
+    failures.push(there.length ? `${paths[have]} differs: ${there.map((p) => run.files[p].slice(0, 12)).join(", ")}, recorded ${recorded}` : `${paths[have]} is missing from main`);
   }
-  for (const path of Object.keys(run.files)) if (!(path in final.main)) failures.push(`${path} is tracked on main but not in the record`);
-  return { failures, files: Object.keys(run.files).length };
+  for (const [key, paths] of got) {
+    const extra = paths.length - (want.get(key)?.length ?? 0);
+    if (extra > 0) failures.push(`${paths[paths.length - extra]} (${run.files[paths[0]].slice(0, 12)}) is tracked on main but not in the record`);
+  }
+  return { failures, files: Object.keys(run.files).length, varies: { stamped: Object.keys(final.main).filter((p) => name(p) !== p).length, content: exempt.size } };
 }
 
 /** The closed check: the containers that still use the project's volume. */

@@ -1,6 +1,5 @@
 // Issue #334's record format (Shop, Phase C Builder 2): the SDK trace
-// (trace.jsonl, one line per call, its step label set by the builder's
-// script) and the builder's working folder, which holds each step's script
+// (trace.mjs) and the builder's working folder, which holds each step's script
 // (NNN-*.mjs) and what it printed (NNN-*.out).
 //
 // The trace shortens a long `command` to 200 characters and "…". Such a
@@ -12,6 +11,7 @@ import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readTrace } from "./trace.mjs";
 
 const STUB = `
 import { appendFileSync } from "node:fs";
@@ -76,17 +76,8 @@ function printedRuns(builder, number) {
  * @returns {{ steps: { label: string, agent: string, calls: object[] }[] }}
  */
 export function readShop({ trace, builder }) {
-  const steps = new Map();
-  for (const text of readFileSync(trace, "utf8").split("\n").filter(Boolean)) {
-    const line = JSON.parse(text);
-    if (line.phase === "start" || /^OBS\b/.test(line.step)) continue;
-    if (!steps.has(line.step)) steps.set(line.step, { label: line.step, agent: "root", calls: [] });
-    steps.get(line.step).calls.push({
-      method: line.method, args: line.args ?? {}, ok: line.ok, kind: line.kind ?? null, code: line.code ?? null,
-      commit: line.commit ?? null, start: Date.parse(line.start), ms: line.ms,
-    });
-  }
-  for (const step of steps.values()) {
+  const steps = readTrace(trace);
+  for (const step of steps) {
     const number = step.label.slice(0, 3), execs = step.calls.filter((c) => c.method === "sandbox.exec");
     if (!execs.length) continue;
     const runs = printedRuns(builder, number);
@@ -103,5 +94,5 @@ export function readShop({ trace, builder }) {
       call.output = runs[i] ? `${runs[i].stdout ?? ""}${runs[i].stderr ?? ""}` : "";
     });
   }
-  return { steps: [...steps.values()] };
+  return { steps };
 }

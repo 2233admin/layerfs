@@ -76,8 +76,8 @@ if (existsSync(finalFile) && view.project) {
   const lf = new LayerFS(project.name, { sandbox: check });
   try {
     report("order", await orderFailures(final, lf, new LayerFSOperator(lf)), ": every Branch's Commits, forks, merges and publishes as recorded");
-    const tree = await finalTreeFailures(final, lf);
-    report("final tree", tree.failures, `: ${tree.files} tracked files on main as recorded`);
+    const tree = await finalTreeFailures(final, lf, check);
+    report("final tree", tree.failures, `: ${tree.files} tracked files on main as recorded (${tree.varies.stamped} by stamped name, ${tree.varies.content} by presence)`);
   } finally {
     await lf.sandbox.close(check);
   }
