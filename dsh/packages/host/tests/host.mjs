@@ -253,16 +253,16 @@ try {
   const upgraded = new BindingStore(old);
   assert.deepEqual([upgraded.data.version, upgraded.byName("a").folder, upgraded.workspace(FOLDER).lastUsed], [2, FOLDER, "a"]);
 
-  // removal: confirmed by name, refused while a container uses the volume, then volume, home entry and binding
+  // removal: confirmed by name, refused while a running container uses the volume; stopped ones go with it, then volume, home entry and binding
   assert.equal((await call("POST", "/layerfs/project/website/remove", { confirm: "web" })).status, 400);
   const ran = [], dockerWith = (users) => async (file, args) => { ran.push(args.slice(2).join(" ")); return { stdout: args[2] === "ps" ? users : "" }; };
   const forgot = [], fakeTrees = { forget: async (name) => { forgot.push(name); } };
   mkdirSync(join(h.spec.home, "website"), { recursive: true });
-  await assert.rejects(removeProject(h.spec, h.bindings, fakeTrees, "website", dockerWith("abc\n")), { code: "busy" });
-  assert.deepEqual([ran, h.bindings.byName("website") !== null], [["ps -aq --filter volume=dsh-layerfs-website-1"], true]);
+  await assert.rejects(removeProject(h.spec, h.bindings, fakeTrees, "website", dockerWith("abc running\nold exited\n")), { code: "busy" });
+  assert.deepEqual([ran, h.bindings.byName("website") !== null], [["ps -a --filter volume=dsh-layerfs-website-1 --format {{.ID}} {{.State}}"], true]);
   ran.length = 0;
-  assert.deepEqual(await removeProject(h.spec, h.bindings, fakeTrees, "website", dockerWith("")), { removed: "website", volume: "dsh-layerfs-website-1" });
-  assert.deepEqual(ran, ["ps -aq --filter volume=dsh-layerfs-website-1", "volume rm dsh-layerfs-website-1"]);
+  assert.deepEqual(await removeProject(h.spec, h.bindings, fakeTrees, "website", dockerWith("old exited\nnew created\n")), { removed: "website", volume: "dsh-layerfs-website-1" });
+  assert.deepEqual(ran, ["ps -a --filter volume=dsh-layerfs-website-1 --format {{.ID}} {{.State}}", "rm old new", "volume rm dsh-layerfs-website-1"]);
   assert.deepEqual(forgot, ["website", "website"]);
   mkdirSync(join(dir, "website"), { recursive: true });
   assert.equal(prepareInit(h.spec, h.bindings, { folder: dir, source: join(dir, "website") }).project.name, "website", "a removed name is free again at once");
