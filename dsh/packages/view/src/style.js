@@ -65,17 +65,20 @@ export const CSS = `
 .lfs .work.projectview { grid-template-columns: minmax(240px, var(--hist, 55%)) 12px minmax(280px, 1fr); gap: 0; }
 .lfs.lfs-project { container-type: inline-size; }
 .lfs .split { cursor: col-resize; position: relative; touch-action: none; }
-.lfs .split::after { content: ""; position: absolute; top: 0; bottom: 0; left: 5px; width: 2px; border-radius: 1px; background: transparent; transition: background .15s; }
-.lfs .split:hover::after, .lfs .work.dragging .split::after { background: var(--accent); }
+.lfs .split::after { content: ""; position: absolute; top: 0; bottom: 0; left: 5.5px; width: 1px; background: var(--term-border); transition: background .15s, width .15s, left .15s; }
+.lfs .split:hover::after, .lfs .work.dragging .split::after { left: 5px; width: 2px; background: var(--accent); }
+/* one frame: the page's hairline holds both panels; no grey well or panel rings inside it */
+.lfs.lfs-project .work.projectview { background: var(--term); padding: 0; }
+.lfs.lfs-project .term { box-shadow: none; border-radius: 0; }
 .lfs .work.dragging { cursor: col-resize; user-select: none; }
-@container (max-width: 640px) { .lfs .work.projectview { grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(320px, 1fr); gap: 6px; } .lfs .split { display: none; } }
+@container (max-width: 640px) { .lfs .work.projectview { grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(320px, 1fr); } .lfs .split { display: none; } .lfs-project .col + .col { border-top: 1px solid var(--term-border); } }
 .lfs .ptitle { font-size: 12px; font-weight: 500; color: var(--term-text); overflow: hidden; text-overflow: ellipsis; }
 .lfs .work.mainview { grid-template-columns: minmax(240px, .9fr) minmax(300px, 1fr) minmax(320px, 1.4fr); }
 .lfs .work.branchview { grid-template-columns: minmax(240px, 1fr) minmax(300px, 1.55fr) minmax(300px, 1.3fr); }
 .lfs .work.branchview.wide { grid-template-columns: minmax(200px, .7fr) minmax(260px, 1fr) minmax(320px, 1.7fr); }
 .lfs .work.mainview.wide { grid-template-columns: minmax(200px, .7fr) minmax(260px, .8fr) minmax(320px, 1.7fr); }
 .lfs .seg { display: inline-flex; background: var(--well); border-radius: 6px; padding: 2px; gap: 2px; flex: none; }
-.lfs .seg button { border: 0; background: transparent; font: 700 10px var(--mono); letter-spacing: .03em; padding: 2px 8px; border-radius: 4px; cursor: pointer; color: var(--text-2); }
+.lfs .seg button { border: 0; background: transparent; font: 500 11.5px var(--font); padding: 2px 10px; border-radius: 4px; cursor: pointer; color: var(--text-2); }
 .lfs .seg button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 0 0 .5px var(--sep); }
 .lfs .seg button.on.h { color: var(--t-purple); }
 .lfs .seg button.on.f { color: var(--t-green); }
@@ -85,7 +88,7 @@ export const CSS = `
 .lfs .term.bad { box-shadow: 0 0 0 1.5px var(--red), 0 6px 18px rgba(255,59,48,.18); }
 .lfs .term.enter { animation: lfs-grow .35s ease-out; }
 .lfs .thead { height: 30px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px; background: var(--term-head); color: var(--term-text); font-size: 12px; border-bottom: 1px solid var(--term-border); white-space: nowrap; overflow: hidden; }
-.lfs .thead .ttl { font: 12px var(--mono); color: var(--term-dim); overflow: hidden; text-overflow: ellipsis; }
+.lfs .thead .ttl { font: 12px var(--font); color: var(--term-dim); overflow: hidden; text-overflow: ellipsis; }
 .lfs .thead .sp { flex: 1; }
 .lfs .kind { font: 700 10px var(--mono); padding: 1px 5px; border-radius: 4px; letter-spacing: .03em; flex: none; }
 .lfs .kind.fs { background: var(--accent-bg); color: var(--t-blue); }
@@ -190,7 +193,7 @@ export const CSS = `
 .lfs .store .pc { color: var(--t-cyan); }
 .lfs .store .mc { color: var(--orange); }
 /* Files pane (tui.html), stacked for the right column */
-.lfs .fsel { font: 11.5px var(--mono); height: 22px; max-width: 200px; min-width: 70px; border: 1px solid var(--term-border); border-radius: 5px; background: var(--term); color: var(--term-text); padding: 0 4px; }
+.lfs .fsel { font: 12px var(--font); height: 24px; max-width: 200px; min-width: 70px; border: 1px solid var(--term-border); border-radius: 5px; background: var(--term); color: var(--term-text); padding: 0 4px; }
 .lfs .sync { font-size: 11px; line-height: 1; flex: none; }
 .lfs .sync.live { color: var(--t-green); }
 .lfs .sync.pinned { color: var(--term-dim); }

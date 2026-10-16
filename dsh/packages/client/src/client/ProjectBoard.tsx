@@ -34,5 +34,5 @@ export function ProjectBoard({ name, state }: { name: string, state: ProjectStat
     b.render()
   }, [name, state])
 
-  return <div ref={host} style={{ position: 'relative', flex: 1, minHeight: 380, borderRadius: 10, overflow: 'hidden', border: '1px solid var(--dsh-color-border, #8883)' }} />
+  return <div ref={host} style={{ position: 'relative', flex: 1, minHeight: 380, borderRadius: 'var(--dsw-radius-md)', overflow: 'hidden', border: '1px solid var(--dsw-alias-border-l2)' }} />
 }

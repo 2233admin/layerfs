@@ -33,7 +33,8 @@ const T = {
   danger: 'var(--dsw-alias-state-error-primary)', warn: 'var(--dsw-alias-state-warn-primary)',
   sm: 'var(--dsw-radius-sm)', md: 'var(--dsw-radius-md)',
 } as const
-const ROWS = `.lfs-prow { background: transparent; } .lfs-prow:hover { background: ${T.hover}; } .lfs-prow[aria-current='true'] { background: ${T.active}; }`
+const ROWS = `.lfs-prow { background: transparent; } .lfs-prow:hover { background: ${T.hover}; } .lfs-prow[aria-current='true'] { background: ${T.active}; }
+.lfs-bone { border-radius: 4px; background: ${T.well}; animation: lfs-bone 1.2s ease-in-out infinite alternate; } @keyframes lfs-bone { to { opacity: .45; } }`
 // a card: dsh's layer fill (white in light mode) inside a hairline, as dsh's settings cards
 const card = { background: T.card, border: `1px solid ${T.border}`, borderRadius: T.md } as const
 
@@ -76,6 +77,17 @@ function Notice({ title, children }: { title: string, children?: React.ReactNode
     <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 16, padding: 16 }}>
       <img src={ellen} alt="" width={72} height={72} style={{ flex: 'none' }} />
       <div style={{ display: 'grid', gap: 4 }}><div style={{ fontWeight: 500 }}>{title}</div>{children && <div style={{ color: T.text2 }}>{children}</div>}</div>
+    </div>
+  )
+}
+
+/** The board's shape while the project is read: History rows on the left, a file tree on the right. */
+function Skeleton() {
+  const bars = (widths: number[]) => widths.map((w, i) => <div key={i} className="lfs-bone" style={{ height: 12, width: `${w}%` }} />)
+  return (
+    <div aria-label="Reading the project" style={{ ...card, flex: 1, minHeight: 380, display: 'grid', gridTemplateColumns: 'minmax(0, 55fr) minmax(0, 45fr)', overflow: 'hidden' }}>
+      <div style={{ display: 'grid', alignContent: 'start', gap: 16, padding: 16, borderRight: `1px solid ${T.border}` }}>{bars([70, 45, 80, 55, 65, 40, 75])}</div>
+      <div style={{ display: 'grid', alignContent: 'start', gap: 16, padding: 16 }}>{bars([35, 50, 45, 30, 55, 40])}</div>
     </div>
   )
 }
@@ -199,7 +211,7 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
                 </div>
               )}
             {state && <ProjectBoard name={project.name} state={state} />}
-            {!state && !stateError && <div style={{ flex: 1, minHeight: 380, border: `1px dashed ${T.border}`, borderRadius: T.md }} />}
+            {!state && !stateError && <Skeleton />}
           </>
         )}
       </main>

@@ -124,7 +124,7 @@ export function createView(root, o) {
 
   // The right column of either tab: History or Files of that tab's head.
   function rightCol(tab, title, headId, graphHtml) {
-    const mode = v.rightMode[tab] || "history", seg = `<span class="seg"><button class="h${mode === "history" ? " on" : ""}" data-right="${esc(tab)}:history">HISTORY</button><button class="f${mode === "files" ? " on" : ""}" data-right="${esc(tab)}:files">FILES</button></span>`;
+    const mode = v.rightMode[tab] || "history", seg = `<span class="seg"><button class="h${mode === "history" ? " on" : ""}" data-right="${esc(tab)}:history">History</button><button class="f${mode === "files" ? " on" : ""}" data-right="${esc(tab)}:files">Files</button></span>`;
     return `<div class="col"><section class="term"><div class="thead">${seg}<span class="ttl">${esc(title)} @ ${esc(headId)}</span></div>
       ${mode === "history" ? `<div class="graphwrap" data-scroll>${graphHtml}</div>` : files.filesHtml(tab)}${tab === "main" ? files.storeHtml() : ""}</section></div>`;
   }
