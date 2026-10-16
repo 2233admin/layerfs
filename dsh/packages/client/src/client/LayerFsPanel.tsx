@@ -1,6 +1,7 @@
 // The LayerFS sidebar page. On the left, every LayerFS project (with the dsh
 // workspace it is attached to) and "Import project" for workspaces without
-// one (InitDialog); the list folds to a rail of initials, remembered per browser. On the right, the chosen project: a header with its one
+// one (InitDialog). The list can be hidden (remembered per browser); the
+// project header then has the button that shows it again. On the right, the chosen project: a header with its one
 // action, New session, and a menu for Refresh, the attached workspace and
 // Remove (RemoveDialog); tiles for where main is, Branches, Commits, the
 // last publish, and its Store (storage.ts: on disk, saved, the last Commit's
@@ -27,7 +28,7 @@ export interface PanelServices {
 interface Workspace { workspaceId: string, path: string, title: string }
 
 const PRESET = 'layerfs-dsh-minimalist'
-/** Where this browser remembers a folded project list. */
+/** Where this browser remembers that the project list is hidden. */
 const FOLDED = 'dsh-layerfs.projects-folded'
 const readFolded = () => { try { return localStorage.getItem(FOLDED) === '1' } catch { return false } }
 const NO_ITEMS = { items: [] as readonly Workspace[] }
@@ -145,6 +146,8 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
     try { await run() } catch (e) { setError((e as Error).message) } finally { setBusy(null) }
   }
   const project = projects?.find((p) => p.name === selected) ?? null
+  // the list hides only behind a project's header, which has the button that shows it again
+  const hidden = folded && !!project
   const workspace = project?.folder ? items.find((w) => w.path === project.folder) : undefined
   const bare = items.filter((w) => !projects?.some((p) => p.folder === w.path))
   const attach = (folder: string | null) => act(folder ? 'Attaching…' : 'Detaching…', async () => { await api.attach(project!.name, folder); await loadProjects() })()
@@ -180,37 +183,29 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
     : [{ type: 'label', id: 'l', text: 'Every workspace has a project' }]
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `${folded ? '48px' : 'clamp(150px, 18%, 200px)'} minmax(0, 1fr)`, height: '100%', minHeight: 0, fontSize: 13, lineHeight: '20px', color: T.text }}>
+    <div style={{ display: 'grid', gridTemplateColumns: hidden ? 'minmax(0, 1fr)' : 'clamp(150px, 18%, 200px) minmax(0, 1fr)', height: '100%', minHeight: 0, fontSize: 13, lineHeight: '20px', color: T.text }}>
       <style>{ROWS}</style>
-      <nav aria-label="LayerFS projects" style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0, minWidth: 0, padding: folded ? '16px 6px' : '16px 8px', borderRight: `1px solid ${T.border}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: folded ? '0 0 8px' : '0 0 8px 8px', fontWeight: 500, justifyContent: folded ? 'center' : undefined }}>
-          {!folded && <><LayerFsIcon size={16} /><span style={{ flex: 1 }}>LayerFS</span></>}
-          <Button variant="ghost" size="sm" icon={<IconPanelLeftOutlineRegular size={16} />} aria-label={folded ? 'Show the project list' : 'Fold the project list'} aria-expanded={!folded}
-            title={folded ? 'Show the project list' : 'Fold the project list'} onClick={() => fold(!folded)} />
-        </div>
-        <div style={{ display: 'grid', gap: 2, overflowY: 'auto', minHeight: 0 }}>
-          {projects?.map((p) => folded
-            ? (
-              <button key={p.name} className="lfs-prow" aria-current={p.name === selected} aria-label={p.name} onClick={() => setSelected(p.name)} title={`${p.name} · ${folderOf(p) ?? 'Not attached'}`}
-                style={{ height: 32, border: 0, borderRadius: T.sm, color: 'inherit', font: 'inherit', fontWeight: p.name === selected ? 600 : 400, cursor: 'pointer', textTransform: 'uppercase' }}>
-                {p.name.slice(0, 2)}
-              </button>
-            )
-            : (
+      {!hidden && (
+        <nav aria-label="LayerFS projects" style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0, minWidth: 0, padding: '16px 8px', borderRight: `1px solid ${T.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 0 8px 8px', fontWeight: 500 }}>
+            <LayerFsIcon size={16} /><span style={{ flex: 1 }}>LayerFS</span>
+            {project && <Button variant="ghost" size="sm" icon={<IconPanelLeftOutlineRegular size={16} />} aria-label="Hide the project list" title="Hide the project list" onClick={() => fold(true)} />}
+          </div>
+          <div style={{ display: 'grid', gap: 2, overflowY: 'auto', minHeight: 0 }}>
+            {projects?.map((p) => (
               <button key={p.name} className="lfs-prow" aria-current={p.name === selected} onClick={() => setSelected(p.name)} title={p.folder ?? 'Not attached to a workspace'}
                 style={{ display: 'grid', textAlign: 'left', gap: 0, padding: '6px 8px', border: 0, borderRadius: T.sm, color: 'inherit', font: 'inherit', cursor: 'pointer' }}>
                 <span style={{ fontWeight: p.name === selected ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                 <span style={{ fontSize: 12, color: p.folder ? T.text2 : T.caption, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folderOf(p) ?? 'Not attached'}</span>
               </button>
             ))}
-        </div>
-        <div style={{ flex: 1 }} />
-        <Menu open={menu === 'import'} onClose={() => setMenu(null)} items={importMenu} align="start" side="top" portal
-          onSelect={(id) => { setMenu(null); const w = bare.find((x) => x.workspaceId === id); if (w) setInitFor(w) }}
-          anchor={folded
-            ? <Button variant="ghost" size="sm" aria-label="Import project" title="Import project" icon={<IconPlusOutlineRegular size={16} />} onClick={() => setMenu(menu === 'import' ? null : 'import')} style={{ width: '100%' }} />
-            : <Button variant="ghost" size="sm" icon={<IconPlusOutlineRegular size={16} />} onClick={() => setMenu(menu === 'import' ? null : 'import')} style={{ width: '100%', justifyContent: 'flex-start' }}>Import project</Button>} />
-      </nav>
+          </div>
+          <div style={{ flex: 1 }} />
+          <Menu open={menu === 'import'} onClose={() => setMenu(null)} items={importMenu} align="start" side="top" portal
+            onSelect={(id) => { setMenu(null); const w = bare.find((x) => x.workspaceId === id); if (w) setInitFor(w) }}
+            anchor={<Button variant="ghost" size="sm" icon={<IconPlusOutlineRegular size={16} />} onClick={() => setMenu(menu === 'import' ? null : 'import')} style={{ width: '100%', justifyContent: 'flex-start' }}>Import project</Button>} />
+        </nav>
+      )}
 
       <main style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, minHeight: 0, padding: '16px 24px' }}>
         {status && !status.configured && <div style={{ ...card, padding: '8px 12px', color: T.warn }}>LayerFS isn't set up: layerfs-host is missing {status.missing.join(', ')}.</div>}
@@ -218,6 +213,7 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
         {project && (
           <>
             <header style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+              {hidden && <Button variant="ghost" size="sm" icon={<IconPanelLeftOutlineRegular size={16} />} aria-label="Show the project list" title="Show the project list" onClick={() => fold(false)} />}
               <img src={ellen} alt="" width={36} height={36} style={{ flex: 'none', borderRadius: '50%', background: T.well }} />
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: 16, fontWeight: 500, lineHeight: '24px' }}>{project.name}</div>
