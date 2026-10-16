@@ -43,7 +43,7 @@ successful Live run (see [Gates](#gates)). #347 closes when all three have close
 
 | Project | Step records | Stopped Store | Notes |
 | --- | --- | --- | --- |
-| Shop | `issue334/phase-c/` in release `issue334-diagnostic-evidence-20261016` | `volume-exports/` in the same release | 19 MB download; needs the owner's OK |
+| Shop | `issue334/phase-c/` in release `issue334-diagnostic-evidence-20261016` | `volume-exports/` in the same release | 19 MB download |
 | Depot | `~/.codex/issue337-evidence/builder2-raw.tar`: `receipts/steps.jsonl`, `receipts/trace.jsonl`; scripts in `builder2-environment.tar` | `builder2-final/restored` (75 Commits, 7 Layers) | Every command exited 0 |
 | Crew | `core/docs/issues/340/tables/b2-r3-final-analysis-r1/primary-final-r1/b2-r3-steps.csv`, archives in `~/.codex/issue340-evidence/` | `b2-r3-store` | Exclude the zero-contribution startup |
 
@@ -141,8 +141,7 @@ Each iteration runs the same loop: convert → Live Play → diagnose → fix �
 again until the gates pass.
 
 **Iteration 1 — Shop (#348): the shared tooling.**
-1. With the owner's OK, download and verify the #334 release assets into an empty
-   folder, then restore the Builder 2 Store into a disposable home.
+1. Download and verify the #334 release assets into an empty folder, then restore the Builder 2 Store into a disposable home.
 2. Add `live`, `image` and `seed` end to end (scenario, route, client, Host).
 3. Write `replay.mjs` and the converter for Shop's record format.
 4. Generate `dsh/scenarios/shop/`, Play it Live, fix, repeat. Close #348 on a
@@ -185,7 +184,10 @@ again until the gates pass.
 - Every repository commit records production LOC before/after/delta from
   `tools/production_loc.py`. Generated scenario folders are fixtures and do not
   count.
-- Committing `run/` files puts the builders' application source in the repository;
-  the owner confirms that before the first one lands.
-- No push, PR or merge to `main` without the owner's authorization.
+- The owner has authorized this work in full ([HANDOFF.md](HANDOFF.md)):
+  - downloading the #334 evidence;
+  - committing `run/` files with the builders' application source;
+  - pushing `dsh-demo-conversion`;
+  - closing the issues;
+  - the final merge into `main`.
 - Timings and sizes from these runs are diagnostic, not benchmarks.
