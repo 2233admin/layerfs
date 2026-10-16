@@ -26,6 +26,8 @@ import { fileURLToPath } from "node:url";
  * @property {number} pollMs
  * @property {string} sdk file URL of the LayerFS JavaScript SDK entry
  * @property {string} operator file URL of the SDK's operator entry
+ * @property {string} simSdk file URL of the SDK on the simulator (sim/sdk.js), for simulated projects
+ * @property {string} simOperator file URL of its operator entry (sim/operator.js)
  */
 
 /**
@@ -49,6 +51,8 @@ export function resolveConfig(config, profile) {
     pollMs: config.pollMs ?? 400,
     sdk: import.meta.resolve("@layerfs/sdk"),
     operator: import.meta.resolve("@layerfs/sdk/operator"),
+    simSdk: new URL("./sim/sdk.js", import.meta.url).href,
+    simOperator: new URL("./sim/operator.js", import.meta.url).href,
   };
   for (const dir of [spec.stateDir, spec.traceDir]) mkdirSync(dir, { recursive: true });
   mkdirSync(spec.home, { recursive: true, mode: 0o700 });

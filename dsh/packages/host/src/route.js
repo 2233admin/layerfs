@@ -2,7 +2,7 @@
 // Connection's Host/Origin checks and browser authentication, like /api.
 //   GET  /layerfs/status                      configuration and SDK location
 //   GET  /layerfs/workspace?folder=<abs>      the folder's projects
-//   POST /layerfs/init {folder, source?, name?}   start Init LayerFS; answers its job (see jobs.js)
+//   POST /layerfs/init {folder, source?, name?, backend?}   start Init LayerFS (backend "sim": the simulator); answers its job (see jobs.js)
 //   GET  /layerfs/init/<job>                  the Init's step and counts
 //   GET  /layerfs/session/<id>                the root session's project, agents and trace lines
 //   POST /layerfs/session/<id>/project {project}  choose the project (null: none) until locked; answers as GET
@@ -71,7 +71,7 @@ export function registerRoutes(ctx, { spec, bindings, collector, trees, jobs = n
       }
       if (req.method === "POST" && parts[0] === "init" && parts.length === 1) {
         const body = await readJson(req);
-        const prepared = prepareInit(spec, bindings, { folder: body.folder, source: body.source || body.folder, name: body.name || undefined }, jobs.pending());
+        const prepared = prepareInit(spec, bindings, { folder: body.folder, source: body.source || body.folder, name: body.name || undefined, backend: body.backend || undefined }, jobs.pending());
         return send(res, 202, { job: jobs.begin(prepared) });
       }
       if (req.method === "GET" && parts[0] === "init" && parts.length === 2) {

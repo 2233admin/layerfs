@@ -2,7 +2,7 @@
 // entry, the project name, its deployment and the calling agent's trace
 // file. dsh rebuilds the DSH_* namespace for every bash call, so these
 // values always describe the agent that runs the command.
-import { deploymentEnv } from "./layerfs-client.js";
+import { deploymentEnv, isSim } from "./layerfs-client.js";
 import { appendProject } from "./records.js";
 
 const VARIABLES = {
@@ -44,8 +44,8 @@ export function contributor(ctx, spec, bindings, collector) {
       const deploy = deploymentEnv(spec, project);
       return {
         DSH_LAYERFS_PROJECT: project.name,
-        DSH_LAYERFS_SDK: spec.sdk,
-        DSH_LAYERFS_OPERATOR: spec.operator,
+        DSH_LAYERFS_SDK: isSim(project) ? spec.simSdk : spec.sdk,
+        DSH_LAYERFS_OPERATOR: isSim(project) ? spec.simOperator : spec.operator,
         ...Object.fromEntries(Object.entries(deploy).filter(([, v]) => v).map(([k, v]) => [`DSH_LAYERFS_${k}`, v])),
         DSH_LAYERFS_TRACE: collector.track(agent, project),
         DSH_LAYERFS_TRACE_STEP: String(execution.rootCallId ?? execution.callId),

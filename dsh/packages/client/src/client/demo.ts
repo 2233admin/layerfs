@@ -2,8 +2,9 @@
 // bundle, read from the Host's /layerfs-demo route (absent without the
 // bundle). Play gives a demo a fresh run in a new Session that takes the old
 // one's place: the old Session is archived (its work stopped), the demo's
-// project is Inited again from the workspace folder, and the new Session gets
-// the preset, the scenario's mock model, the project and the first message.
+// project is Inited again from the workspace folder (on LayerFS, or on the
+// simulator for Sim), and the new Session gets the preset, the scenario's
+// mock model, the project and the first message.
 import { api, type InitJob } from './api.ts'
 
 export type DemoMode = 'live' | 'sim'
@@ -51,6 +52,24 @@ export const demoApi = {
   info: () => call<DemoInfo>('GET', '').catch((error) => { if (error.status === 404) return null; throw error }),
   demo: (id: string) => call<Demo>('GET', `/${encodeURIComponent(id)}`),
   setSession: (id: string, sessionId: string) => call<Demo>('POST', `/${encodeURIComponent(id)}/session`, { sessionId }),
+}
+
+/** Inits `name` from `folder` (Live) or into the simulator (Sim) and reads its job until it ends, as api.init. */
+async function initProject(folder: string, name: string, mode: DemoMode, onJob: (job: InitJob) => void): Promise<void> {
+  const request = async (method: string, path: string, body?: unknown): Promise<{ job: InitJob }> => {
+    const res = await fetch(`/layerfs${path}`, { method, credentials: 'same-origin', headers: body ? { 'content-type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) throw Object.assign(new Error(data?.message ?? `the LayerFS route answered ${res.status}`), { code: data?.code, status: res.status })
+    return data
+  }
+  let { job } = await request('POST', '/init', { folder, name, source: folder, ...(mode === 'sim' ? { backend: 'sim' } : {}) })
+  for (;;) {
+    onJob(job)
+    if (job.step === 'done') return
+    if (job.step === 'failed') throw Object.assign(new Error(job.error!.message), { code: job.error!.code })
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    job = (await request('GET', `/init/${encodeURIComponent(job.id)}`)).job
+  }
 }
 
 /** The demo's project for a mode: one per demo and mode, Inited again on each Play. */
@@ -110,7 +129,6 @@ export type PlayStep = { step: 'session' } | { step: 'stop' } | { step: 'init', 
  */
 export async function playDemo(services: DemoServices, info: DemoInfo, demo: Demo, mode: DemoMode, onStep: (step: PlayStep) => void): Promise<string> {
   if (!services.remote) throw new Error('this client has no Remote session services')
-  if (mode === 'sim') throw new Error('Simulated LayerFS is not available yet')
   const workspace = await workspaceOf(services, info)
   onStep({ step: 'session' })
   const sessionId = await newSession(services, info, workspace, demo, demo.sessionId ?? undefined)
@@ -121,7 +139,7 @@ export async function playDemo(services: DemoServices, info: DemoInfo, demo: Dem
   }
   onStep({ step: 'init', job: null })
   const project = projectOf(demo.id, mode)
-  await api.init(info.workspace, project, info.workspace, (job) => onStep({ step: 'init', job }))
+  await initProject(info.workspace, project, mode, (job) => onStep({ step: 'init', job }))
   await api.choose(sessionId, project)
   onStep({ step: 'start' })
   await send(services, sessionId, info.prompt)

@@ -9,6 +9,10 @@ import { ProgressBar, jobFraction, jobText, useClock } from './Progress.tsx'
 
 // while a run goes, and slower while waiting for one to start
 const POLL_MS = 700, IDLE_POLL_MS = 2500
+// the last Sim or Live choice, kept in this browser
+const MODE_KEY = 'layerfs-demo-mode'
+const savedMode = (): DemoMode => { try { return localStorage.getItem(MODE_KEY) === 'sim' ? 'sim' : 'live' } catch { return 'live' } }
+const saveMode = (mode: DemoMode) => { try { localStorage.setItem(MODE_KEY, mode) } catch { /* the choice lasts this view only */ } }
 const clock = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
 
 const playText = (step: PlayStep, now: number) => ({
@@ -23,7 +27,7 @@ export interface DemoStripProps { sessionId: string, services: () => DemoService
 export function DemoStrip({ sessionId, services }: DemoStripProps) {
   const [info, setInfo] = useState<DemoInfo | null>(null)
   const [demo, setDemo] = useState<Demo | null>(null)
-  const [mode, setMode] = useState<DemoMode>('live')
+  const [mode, setMode] = useState<DemoMode>(savedMode)
   const [playing, setPlaying] = useState<PlayStep | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -72,7 +76,7 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
   }
 
   const choice = (value: DemoMode, label: string) => (
-    <button type="button" aria-pressed={mode === value} onClick={() => setMode(value)}
+    <button type="button" aria-pressed={mode === value} onClick={() => { setMode(value); saveMode(value) }}
       style={{ border: 0, padding: '2px 10px', font: 'inherit', fontSize: 12, cursor: 'pointer', color: 'inherit', background: mode === value ? 'color-mix(in srgb, currentColor 14%, transparent)' : 'transparent' }}>{label}</button>
   )
   return (

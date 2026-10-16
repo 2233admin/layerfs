@@ -4,10 +4,14 @@
 // The workspace folder, session transcripts and line journals are untouched;
 // sessions that used the project have no LayerFS project afterwards. The home
 // entry is the LayerFS project, so deleting it frees the name for Init at once.
+// A simulated project has no container or volume: its background processes
+// are stopped and its home entry deleted.
 import { execFile } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import { promisify } from "node:util";
+import { isSim } from "./layerfs-client.js";
+import { stopProcesses } from "./sim/binding.js";
 
 const execute = promisify(execFile);
 const refuse = (code, message, status = 409) => Object.assign(new Error(message), { code, status });
@@ -26,6 +30,12 @@ export async function removeProject(spec, bindings, trees, name, run = execute) 
   const home = join(spec.home, project.name), inside = relative(spec.home, home);
   if (!inside || inside.startsWith("..") || inside.includes("/")) throw refuse("invalid-name", `${project.name} is not a project name`);
   await trees.forget(project.name);
+  if (isSim(project)) {
+    stopProcesses(spec.home, project.name);
+    if (existsSync(home)) rmSync(home, { recursive: true, force: true });
+    bindings.remove(project.name);
+    return { removed: project.name, volume: project.volume };
+  }
   const docker = ["-H", `unix://${spec.docker}`];
   const { stdout } = await run("docker", [...docker, "ps", "-aq", "--filter", `volume=${project.volume}`]);
   const users = stdout.split("\n").filter(Boolean).length;

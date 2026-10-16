@@ -125,21 +125,33 @@ With the bundle installed, dsh web gets a workspace for `dsh/demo-workspace` wit
 
 Above the composer of a demo session, one strip shows:
 - a progress bar: the steps every agent has finished out of all the scenario's steps, from the mock's own replies, with the root agent's phase and the elapsed time;
-- Sim or Live;
+- Sim or Live: the simulator or real LayerFS. The choice is kept in the browser;
 - Play, or Replay after a run.
 
 Play runs the demo in a new session that takes the old one's place. In order:
 1. A session is made in the demo workspace, with the preset, the demo's title and its mock model.
 2. The old session is archived, with its turn, subagents and jobs stopped.
-3. The demo's project (`demo-<id>`) is removed and Inited again from `demo-workspace/`, with the Init's progress on the bar.
+3. The demo's projects are removed, and its project for the mode (`demo-<id>`, or `demo-<id>-sim` on Sim) is Inited again from `demo-workspace/`, with the Init's progress on the bar.
 4. The project is chosen, "Run the demo." is sent, and the new session opens.
 
 Each step is attempted once. A refusal, such as a project whose Sandbox is still open, ends Play with its message on the strip.
 
-The Host side is the mock plugin's `/layerfs-demo` route. It serves the workspace folder, the demos, each demo's session (kept in `<profile>/dsh-layerfs-demo/sessions.json`) and each demo's latest run. Sim is not available yet: Play says so on the strip.
+The Host side is the mock plugin's `/layerfs-demo` route. It serves the workspace folder, the demos, each demo's session (kept in `<profile>/dsh-layerfs-demo/sessions.json`) and each demo's latest run.
+
+#### Simulated projects
+
+Sim needs no Docker, image or daemon. `POST /layerfs/init` with `backend: "sim"` imports the folder into the simulator (`packages/host/src/sim/`) instead of a Store. A simulated project's bash calls get the SDK on the simulator as `DSH_LAYERFS_SDK`, so the same scripts run on both:
+- `sim/sdk.js` is the SDK itself with `LAYERFS_NATIVE` set to `sim/binding.js`, a native binding in JavaScript. The SDK's argument checks, refusals and trace lines are unchanged.
+- The binding's decisions (Commits, stale Workspaces, merges, conflict markers, `.lww`, publish) are `sdk_sim`'s model. Its answers have the real binding's shapes and LayerFS's id formats, so the views and checks read both alike.
+- The state is `<LayerFS home>/<project>/sim/state.json`, changed by one call at a time under a lock file.
+- A mounted Workspace is a folder, `sim/ws/<sandbox>/<n>`. Commands run there with `/bin/sh`, and each call reads the folder back. On macOS a GNU-compatible `sed` (`sim/sed.js`) comes first on the command's PATH.
+- Background processes run detached and leave their exit code in `sim/proc/`. Removing the project stops them.
+
+The Host's own reads of a simulated project (Init, state, trees, storage) go to the binding directly. Store sizes are estimates from file text. Sim runs commands on the Host without a container.
 
 Known limits:
 - dsh's sidebar orders sessions by last activity by default, so the demo played last moves to the top. The manual order keeps each demo's place.
+- Sim imports the `sdk_sim` model from this repository, so the Host package needs the repository beside it to Init or read a simulated project.
 - `demo-workspace` is inside this repository. A turn's "Edited" card lists every change made in the repository during the turn, including other work in the checkout.
 
 ## Install into a dsh profile
