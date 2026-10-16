@@ -8,6 +8,7 @@ import { appendProject } from "./records.js";
 const VARIABLES = {
   DSH_LAYERFS_PROJECT: "LayerFS project of this conversation; pass it to new LayerFS(...)",
   DSH_LAYERFS_SDK: "file URL of the LayerFS JavaScript SDK; import it from Node scripts",
+  DSH_LAYERFS_OPERATOR: "file URL of the SDK's operator (background processes in a Sandbox)",
   DSH_LAYERFS_HOME: "LayerFS home the SDK reads its project and Sandbox records from",
   DSH_LAYERFS_DOCKER: "Docker Engine socket the SDK starts Sandboxes through",
   DSH_LAYERFS_IMAGE: "Runtime image digest of LayerFS Sandboxes",
@@ -44,6 +45,7 @@ export function contributor(ctx, spec, bindings, collector) {
       return {
         DSH_LAYERFS_PROJECT: project.name,
         DSH_LAYERFS_SDK: spec.sdk,
+        DSH_LAYERFS_OPERATOR: spec.operator,
         ...Object.fromEntries(Object.entries(deploy).filter(([, v]) => v).map(([k, v]) => [`DSH_LAYERFS_${k}`, v])),
         DSH_LAYERFS_TRACE: collector.track(agent, project),
         DSH_LAYERFS_TRACE_STEP: String(execution.rootCallId ?? execution.callId),

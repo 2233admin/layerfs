@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
  * @property {string} traceDir
  * @property {number} pollMs
  * @property {string} sdk file URL of the LayerFS JavaScript SDK entry
+ * @property {string} operator file URL of the SDK's operator entry
  */
 
 /**
@@ -47,6 +48,7 @@ export function resolveConfig(config, profile) {
     traceDir: config.traceDir || join(temp, "traces"),
     pollMs: config.pollMs ?? 400,
     sdk: import.meta.resolve("@layerfs/sdk"),
+    operator: import.meta.resolve("@layerfs/sdk/operator"),
   };
   for (const dir of [spec.stateDir, spec.traceDir]) mkdirSync(dir, { recursive: true });
   mkdirSync(spec.home, { recursive: true, mode: 0o700 });

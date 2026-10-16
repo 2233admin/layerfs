@@ -9,9 +9,16 @@
     ".": "./index.js",
     "./package.json": "./package.json",
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./locale/*.json": "./locale/*.json"
+    "./locale/*.json": "./locale/*.json",
+    "./presets/*.patch.yml": "./presets/*.patch.yml"
   },
-  "files": ["index.js", "icon.svg", "cordis.patch.yml", "locale/*.json"],
+  "files": [
+    "index.js",
+    "icon.svg",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "presets"
+  ],
   "license": "MIT",
   "engines": {
     "dsh": ">=0.2.1-alpha.4 <0.3.0"
@@ -21,7 +28,10 @@
   },
   "dsh": {
     "bundle": {
-      "patch": "./cordis.patch.yml"
+      "patch": [
+        "./cordis.patch.yml",
+        "./presets/layerfs-dsh-minimalist.patch.yml"
+      ]
     }
   }
 }

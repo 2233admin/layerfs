@@ -24,7 +24,7 @@ console.log("ui-dev: theme on try-ui");`);
 const TESTER = node(`const sb = await lf.sandbox.create();
 const ws = await lf.sandbox.mount(sb, "feature");
 const r = await lf.sandbox.exec(sb, ws.path, "test -f app/hero.txt && echo ok");
-const { LayerFSOperator } = await import(new URL("../operator/index.js", process.env.DSH_LAYERFS_SDK).href);
+const { LayerFSOperator } = await import(process.env.DSH_LAYERFS_OPERATOR);
 const op = new LayerFSOperator(lf);
 const p = await op.process.start(sb, ws.path, "sleep 30");
 await op.process.cancel(sb, p.process);

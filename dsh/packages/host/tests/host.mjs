@@ -55,6 +55,7 @@ try {
   assert.equal(vars.DSH_LAYERFS_PROJECT, "website");
   assert.equal(vars.DSH_LAYERFS_VOLUME, "dsh-layerfs-website-1");
   assert.equal(vars.DSH_LAYERFS_IMAGE, "sha256:img");
+  assert.match(vars.DSH_LAYERFS_OPERATOR, /^file:.*\/operator\/index\.js$/);
   assert.equal(vars.DSH_LAYERFS_TRACE_STEP, "r1");
   assert.equal(vars.DSH_LAYERFS_TRACE, join(h.spec.traceDir, "child-1.jsonl"));
   assert.ok(Object.keys(vars).every((key) => key in h.env.variables), "every value is a declared variable");

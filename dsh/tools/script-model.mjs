@@ -50,6 +50,6 @@ createServer(async (req, res) => {
   const results = Array.isArray(last.content) ? last.content.filter((b) => b.type === "tool_result").map((b) => textOf(b.content)) : [];
   const tools = (request.tools || []).map((t) => t.name);
   const reply = scenario.respond({ first, turn, results, tools, request });
-  if (log) appendFileSync(log, JSON.stringify({ at: new Date().toISOString(), first: first.slice(0, 120), turn, tools, results: results.map((r) => r.slice(0, 400)), reply, ...(calls === 0 ? { schemas: request.tools } : {}) }) + "\n");
+  if (log) appendFileSync(log, JSON.stringify({ at: new Date().toISOString(), first: first.slice(0, 120), turn, tools, results: results.map((r) => r.slice(0, 400)), reply, ...(calls === 0 ? { schemas: request.tools, system: request.system } : {}) }) + "\n");
   answer(res, reply);
 }).listen(Number(port), "127.0.0.1", () => console.log(`script-model on http://127.0.0.1:${port}/v1 (${scenarioPath})`));
