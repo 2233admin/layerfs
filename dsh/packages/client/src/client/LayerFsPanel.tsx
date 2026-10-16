@@ -1,6 +1,6 @@
 // The LayerFS sidebar page. On the left, every LayerFS project (with the dsh
 // workspace it is attached to) and "Import project" for workspaces without
-// one (InitDialog). On the right, the chosen project: a header with its one
+// one (InitDialog); the list folds to a rail of initials, remembered per browser. On the right, the chosen project: a header with its one
 // action, New session, and a menu for Refresh, the attached workspace and
 // Remove (RemoveDialog); tiles for where main is, Branches, Commits, the
 // last publish, and its Store (storage.ts: on disk, saved, the last Commit's
@@ -9,7 +9,7 @@
 // the header, and full size where there is nothing else to show.
 // Colours, borders and radii are dsh's own tokens (--dsw-*, tokens.ts).
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
-import { Button, IconChevronDownOutlineRegular, IconEllipsisOutlineRegular, IconFolderOpenOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular, IconTrashOutlineRegular, Menu, type MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronDownOutlineRegular, IconEllipsisOutlineRegular, IconFolderOpenOutlineRegular, IconPanelLeftOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular, IconTrashOutlineRegular, Menu, type MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import ellen from '../../../../../sdk_sim/avatars/ellen_joe.gif'
 import { api, type Project, type ProjectState, type Status, type Storage } from './api.ts'
 import { InitDialog } from './InitDialog.tsx'
@@ -27,6 +27,9 @@ export interface PanelServices {
 interface Workspace { workspaceId: string, path: string, title: string }
 
 const PRESET = 'layerfs-dsh-minimalist'
+/** Where this browser remembers a folded project list. */
+const FOLDED = 'dsh-layerfs.projects-folded'
+const readFolded = () => { try { return localStorage.getItem(FOLDED) === '1' } catch { return false } }
 const NO_ITEMS = { items: [] as readonly Workspace[] }
 const NOT_LISTED = { getSnapshot: () => NO_ITEMS, subscribe: () => () => {} }
 
@@ -120,6 +123,8 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
   const [initFor, setInitFor] = useState<Workspace | null>(null)
   const [removing, setRemoving] = useState(false)
   const [menu, setMenu] = useState<'project' | 'import' | null>(null)
+  const [folded, setFolded] = useState(readFolded)
+  const fold = (to: boolean) => { setFolded(to); try { localStorage.setItem(FOLDED, to ? '1' : '') } catch { /* the choice lasts this page only */ } }
 
   const loadProjects = useCallback(() => api.projects().then(({ projects }) => { setProjects(projects); return projects }), [])
   useEffect(() => {
@@ -175,23 +180,36 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
     : [{ type: 'label', id: 'l', text: 'Every workspace has a project' }]
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'clamp(150px, 18%, 200px) minmax(0, 1fr)', height: '100%', minHeight: 0, fontSize: 13, lineHeight: '20px', color: T.text }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `${folded ? '48px' : 'clamp(150px, 18%, 200px)'} minmax(0, 1fr)`, height: '100%', minHeight: 0, fontSize: 13, lineHeight: '20px', color: T.text }}>
       <style>{ROWS}</style>
-      <nav aria-label="LayerFS projects" style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0, padding: '16px 8px', borderRight: `1px solid ${T.border}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px 8px', fontWeight: 500 }}><LayerFsIcon size={16} />LayerFS</div>
+      <nav aria-label="LayerFS projects" style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0, minWidth: 0, padding: folded ? '16px 6px' : '16px 8px', borderRight: `1px solid ${T.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: folded ? '0 0 8px' : '0 0 8px 8px', fontWeight: 500, justifyContent: folded ? 'center' : undefined }}>
+          {!folded && <><LayerFsIcon size={16} /><span style={{ flex: 1 }}>LayerFS</span></>}
+          <Button variant="ghost" size="sm" icon={<IconPanelLeftOutlineRegular size={16} />} aria-label={folded ? 'Show the project list' : 'Fold the project list'} aria-expanded={!folded}
+            title={folded ? 'Show the project list' : 'Fold the project list'} onClick={() => fold(!folded)} />
+        </div>
         <div style={{ display: 'grid', gap: 2, overflowY: 'auto', minHeight: 0 }}>
-          {projects?.map((p) => (
-            <button key={p.name} className="lfs-prow" aria-current={p.name === selected} onClick={() => setSelected(p.name)} title={p.folder ?? 'Not attached to a workspace'}
-              style={{ display: 'grid', textAlign: 'left', gap: 0, padding: '6px 8px', border: 0, borderRadius: T.sm, color: 'inherit', font: 'inherit', cursor: 'pointer' }}>
-              <span style={{ fontWeight: p.name === selected ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-              <span style={{ fontSize: 12, color: p.folder ? T.text2 : T.caption, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folderOf(p) ?? 'Not attached'}</span>
-            </button>
-          ))}
+          {projects?.map((p) => folded
+            ? (
+              <button key={p.name} className="lfs-prow" aria-current={p.name === selected} aria-label={p.name} onClick={() => setSelected(p.name)} title={`${p.name} · ${folderOf(p) ?? 'Not attached'}`}
+                style={{ height: 32, border: 0, borderRadius: T.sm, color: 'inherit', font: 'inherit', fontWeight: p.name === selected ? 600 : 400, cursor: 'pointer', textTransform: 'uppercase' }}>
+                {p.name.slice(0, 2)}
+              </button>
+            )
+            : (
+              <button key={p.name} className="lfs-prow" aria-current={p.name === selected} onClick={() => setSelected(p.name)} title={p.folder ?? 'Not attached to a workspace'}
+                style={{ display: 'grid', textAlign: 'left', gap: 0, padding: '6px 8px', border: 0, borderRadius: T.sm, color: 'inherit', font: 'inherit', cursor: 'pointer' }}>
+                <span style={{ fontWeight: p.name === selected ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                <span style={{ fontSize: 12, color: p.folder ? T.text2 : T.caption, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folderOf(p) ?? 'Not attached'}</span>
+              </button>
+            ))}
         </div>
         <div style={{ flex: 1 }} />
         <Menu open={menu === 'import'} onClose={() => setMenu(null)} items={importMenu} align="start" side="top" portal
           onSelect={(id) => { setMenu(null); const w = bare.find((x) => x.workspaceId === id); if (w) setInitFor(w) }}
-          anchor={<Button variant="ghost" size="sm" icon={<IconPlusOutlineRegular size={16} />} onClick={() => setMenu(menu === 'import' ? null : 'import')} style={{ width: '100%', justifyContent: 'flex-start' }}>Import project</Button>} />
+          anchor={folded
+            ? <Button variant="ghost" size="sm" aria-label="Import project" title="Import project" icon={<IconPlusOutlineRegular size={16} />} onClick={() => setMenu(menu === 'import' ? null : 'import')} style={{ width: '100%' }} />
+            : <Button variant="ghost" size="sm" icon={<IconPlusOutlineRegular size={16} />} onClick={() => setMenu(menu === 'import' ? null : 'import')} style={{ width: '100%', justifyContent: 'flex-start' }}>Import project</Button>} />
       </nav>
 
       <main style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, minHeight: 0, padding: '16px 24px' }}>
