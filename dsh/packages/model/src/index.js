@@ -3,6 +3,7 @@
 // Branches, Sandboxes, agent places, poses, fan-out and attribution.
 // Framework-free ESM; the design preview and the dsh client both import it.
 export * from "./terminals.js";
+export * from "./cli.js";
 export * from "./attribution.js";
 export * from "./derive.js";
 export * from "./where.js";

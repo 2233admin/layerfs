@@ -1,48 +1,7 @@
-// What the terminals print: the command line for each call, the outcome
-// lines under it, and the bubble over the agent that made it. Plain data;
-// the views escape and colour it (classes "good", "bad", "mark", "dim").
-
-/** Project terminal lines: Branch and Sandbox lifecycle calls. */
-export const HIST = {
-  "project.init": (a) => `init ${a.name}`,
-  "main.fork": (a) => `fork ${a.name}`,
-  "branch.fork": (a) => `fork ${a.name} --from ${a.branch}`,
-  "branch.merge": (a) => `merge ${a.branch} ${a.with} --name ${a.name}`,
-  "branch.publish": (a) => `publish ${a.branch}`,
-  // name, project and image digest (shortened) as passed to sandbox.create(name, project, image)
-  "sandbox.create": (a = {}) => ["sandbox create", a.name, a.project && `--project ${a.project}`, a.image && `--image ${a.image.replace(/^(sha256:[0-9a-f]{12})[0-9a-f]+$/, "$1")}`].filter(Boolean).join(" "),
-  "sandbox.close": (a) => `sandbox close ${a.sandbox}`,
-};
-
-/** Project terminal reads, printed dim. */
-export const HIST_READ = {
-  "project.list_branches": () => "branches",
-  "branch.list_commits": (a) => `log ${a.branch}`,
-  "branch.diff_commits": (a) => `diff ${a.from} ${a.to}`,
-  "branch.diff_branches": (a) => `diff ${a.from} ${a.to}`,
-};
-
-/** Sandbox lifecycle calls belong to the project, not to a Branch: they print in the project terminal. */
-export const SB_LIFE = new Set(["sandbox.create", "sandbox.close"]);
-
-/** fs terminal lines, one per Branch. */
-export const FS = {
-  "fs.read": (a) => `read ${a.path}`,
-  "fs.edit": (a) => `edit ${a.path} -m "${a.message}"`,
-  "fs.write": (a) => `write ${a.path} -m "${a.message}"`,
-  "fs.apply": (a) => `apply ${a.changes ?? ""} changes -m "${a.message}"`,
-  "fs.mkdir": (a) => `mkdir ${a.path}`,
-  "fs.rm": (a) => `rm ${a.path}`,
-  "fs.cp": (a) => `cp ${a.from} ${a.to}`,
-  "fs.mv": (a) => `mv ${a.from} ${a.to}`,
-  "fs.list": (a) => `ls ${a.path || "/"}`,
-  "fs.stat": (a) => `stat ${a.path}`,
-  "fs.grep": (a) => `grep ${a.pattern}`,
-  "fs.glob": (a) => `glob ${a.pattern}`,
-  "fs.blame": (a) => `blame ${a.path}`,
-  "fs.diff_files": (a) => `diff ${a.leftPath ?? a.path ?? ""}`,
-};
-export const fsText = (call, args) => (FS[call] ? FS[call](args) : call.slice(3));
+// What the terminals print under each command line (cli.js has the command
+// lines and which terminal prints each call), and the bubble over the agent
+// that made it. Plain data; the views escape and colour it (classes "good",
+// "bad", "mark", "dim").
 
 /** Terminal engine line classes, as the views name them. */
 export const LINE_CLASS = { err: "bad", warn: "mark", ok: "good", info: "good" };

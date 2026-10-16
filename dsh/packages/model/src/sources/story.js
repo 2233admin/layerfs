@@ -18,7 +18,8 @@
 //   onFiles(subject, files)  a demo read that names a file opens it
 import { createView, newAgent, outCode, prepare, record } from "../attribution.js";
 import { changedPaths, derive, rootsOf } from "../derive.js";
-import { HIST, callsOf, nodeOf, outLines, outcome } from "../terminals.js";
+import { callsOf, nodeOf, outLines, outcome } from "../terminals.js";
+import { cliOf } from "../cli.js";
 
 /** A view for a story, with the tui.html terminal engine for demo stories. */
 export function storyView(engine, { lead = "main", demo = null, Engine = null } = {}) {
@@ -122,7 +123,7 @@ async function runDemo(W, fr, env) {
   // its own event, so it prints in the project terminal under the agent.
   const liftCreates = (rec) => {
     for (const c of rec.calls.filter((x) => x.call === "sandbox.create")) {
-      W.hist.push({ agent: n, text: HIST["sandbox.create"](c.args), out: outcome(c.call, c.outcome), t: seq, calls: callsOf({ calls: [c] }) });
+      W.hist.push({ agent: n, text: cliOf("sandbox.create", { ...c.args, name: c.args?.name ?? (c.outcome.ok ? c.outcome.result.id : undefined) }), out: outcome(c.call, c.outcome), t: seq, calls: callsOf({ calls: [c] }) });
       if (c.outcome.ok) W.sbBy[c.outcome.result.id] = { made: n };
     }
     return rec;

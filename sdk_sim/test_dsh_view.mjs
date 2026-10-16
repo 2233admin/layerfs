@@ -23,7 +23,7 @@ const DSH = require("./dsh_story.js");
 
 const FIXTURE = SCN[0].steps[0].args.files;
 const EXPECT = {
-  dsh: "c6018a19e1cdb94f", agents: "cb37e03a775e8d07", tour: "ea6e74169092347e", conflicts: "e025475868b12c53", merge: "24f6c59116c79149",
+  dsh: "0d01da039c614451", agents: "cf5710461a5eb4cb", tour: "50a345e71f22e740", conflicts: "34ad1d097e0f681a", merge: "7c251f496e33d86c",
 };
 const CHECKS = { agents: 52, tour: 24, conflicts: 15, merge: 21 };
 

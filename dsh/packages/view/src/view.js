@@ -162,7 +162,7 @@ export function createView(root, o) {
     }).join("") || `<div class="brow idle"><span class="meta">no Branches yet</span></div>`;
     const project = W.engine.s.project ? W.engine.s.project.name : "project";
     return `<div class="col"><section class="term${lastHit("hist")}" data-loc="hist"><div class="thead"><span class="kind history">PROJECT</span><span class="ttl">${W.mainHead ? `${esc(project)} · main @ ${W.mainHead}` : "no project yet"}</span></div>
-        <div class="tbody" data-scroll="hist">${histLines}</div>${inrow("init · branches · log · fork · merge · publish")}</section></div>
+        <div class="tbody" data-scroll="hist">${histLines}</div>${inrow("project · branch · sandbox create/close")}</section></div>
       <div class="col"><section class="term blist"><div class="thead"><span class="kind plain">BRANCHES</span><span class="ttl">${W.order.length} · by activity</span><span class="sp"></span>${counts()}</div>
         <div class="rows">${rows}</div></section>${sandboxesHtml()}</div>
       ${W.mainHead ? rightCol("main", "main", W.mainHead, graph(W, colorOf, null, "main")) : `<div class="col"><div class="empty">No project yet</div></div>`}`;
@@ -184,7 +184,7 @@ export function createView(root, o) {
     for (let n = W.nodes[B.base]; n && n.branch; n = W.nodes[W.branches[n.branch].base]) scope.add(n.branch);
     for (const ob of W.order) { const OB = W.branches[ob]; if (W.nodes[OB.base] && W.nodes[OB.base].branch === b) scope.add(ob); const h = W.nodes[OB.head]; if (h && h.parents.some((p) => W.nodes[p] && W.nodes[p].branch === b)) scope.add(ob); }
     return `<div class="col"><section class="term${lastHit("fs:" + b)}" data-loc="fs:${esc(b)}"><div class="thead"><span class="kind fs">FS</span><span class="ttl">${esc(b)} @ ${headId}</span></div>
-        <div class="tbody" data-scroll>${fsLines}</div>${inrow("read · grep · write · edit · mv · rm")}</section></div>
+        <div class="tbody" data-scroll>${fsLines}</div>${inrow("fs read · grep · write · edit · mv · rm")}</section></div>
       <div class="col">${wss.length ? `<div class="panes" style="grid-template-columns:${cols}">${panes}</div>`
         : `<div class="empty"><div><h3>No Workspace mounted on ${esc(b)}</h3>fs calls edit this Branch directly.<br>A <code>sandbox.mount</code> opens a pane here.${recent ? `<div class="recent">${recent}</div>` : ""}</div></div>`}
         <div class="bench" data-loc="bench" style="border-top:0;min-height:48px;background:var(--term);border-radius:8px;box-shadow:0 0 0 1px var(--term-border)"><b>Recently here</b>${X.recentlyOn(W, b).length ? "" : `<span>nobody in the last ${RECENT_S} s</span>`}</div></div>

@@ -2,7 +2,8 @@
 // each agent is, and the lines each terminal printed. A view `W` holds that
 // beside its engine (the simulator, the live server, or a replayed trace);
 // derive() then reshapes the engine state for the views.
-import { FS, HIST, HIST_READ, SB_LIFE, fsText, nodeOf, outcome } from "./terminals.js";
+import { nodeOf, outcome } from "./terminals.js";
+import { cliOf, routeOf } from "./cli.js";
 import { engWs } from "./derive.js";
 
 export const newAgent = () => ({ lastLoc: { kind: "bench" }, lastT: -99 });
@@ -17,8 +18,8 @@ export function createView(engine, { lead = "main" } = {}) {
   };
 }
 
-/** Calls that run in a mounted Workspace and print in its pane. */
-const PANE = new Set(["sandbox.commit", "sandbox.unmount", "sandbox.status", "process.cancel"]);
+/** Calls that run in a mounted Workspace and print in its pane (cli.js: at "workspace"); mount opens the pane. */
+const inPane = (call) => routeOf(call).at === "workspace" && call !== "sandbox.mount";
 
 /** One agent call before it runs: the Workspace it runs in (the one the step
  * binds or names, else the agent's latest), and its arguments with Sandbox
@@ -29,7 +30,7 @@ export function prepare(W, st) {
   const bind = st.bind || (st.ws ? W.names[st.ws] : A.ws);
   const sb = bind && s.sandboxes[bind.sandbox], mine = sb && sb.workspaces[bind.path];
   const pane = bind && `${bind.sandbox}:${bind.path}`;
-  const paneCall = !!st.sh || PANE.has(call);
+  const paneCall = !!st.sh || inPane(call);
   let branch;
   if (paneCall) { Object.assign(args, bind); branch = mine ? mine.branch : st.branch; }
   if (call === "process.cancel" && !args.process) {
@@ -58,40 +59,40 @@ export function record(W, st, p, o, shOut, calls) {
   if (o.ok && call === "sandbox.close") (W.sbBy[args.sandbox] ||= {}).closed = n;
   if (o.ok && (o.code === "Forked" || o.code === "Merged")) W.attrib["fork:" + o.result.branch] = n;
 
-  if (call.startsWith("fs.")) {
+  // which terminal and which line: cli.js
+  // a create that named no Sandbox (the simulator's) prints the one it made
+  const named = call === "sandbox.create" && !args.name && o.ok ? { ...args, name: o.result.id } : args;
+  const route = routeOf(call), text = cliOf(call, named, st.sh), dim = !!route.dim;
+  if (route.at === "fs") {
     branch = args.branch || args.ref;
-    (W.fsLog[branch] ||= []).push({ agent: n, text: FS[call] ? FS[call](args) : fsText(call, args), out, t: seq, dim: !/^fs\.(write|edit|apply|mkdir|rm|cp|mv)$/.test(call), calls, group });
+    (W.fsLog[branch] ||= []).push({ agent: n, text, out, t: seq, dim, calls, group });
     A.lastLoc = { kind: "fs", branch };
   } else if (call === "sandbox.mount") {
     if (o.ok) {
       A.ws = { sandbox: o.result.sandbox, path: o.result.path };
       if (st.as) W.names[st.as] = A.ws;
       const k = `${A.ws.sandbox}:${A.ws.path}`;
-      W.panes[k] = { agent: n, born: seq, lines: [{ dim: true, text: `mount ${branch}`, out, t: seq, calls, group }] };
+      W.panes[k] = { agent: n, born: seq, lines: [{ dim, text, out, t: seq, calls, group }] };
       A.lastLoc = { kind: "ws", branch, ws: k };
-    } else { W.hist.push({ agent: n, text: `mount ${branch}`, out, t: seq, calls, group }); A.lastLoc = { kind: "hist" }; }
+    } else { W.hist.push({ agent: n, text, out, t: seq, calls, group }); A.lastLoc = { kind: "hist" }; }
   } else if (paneCall) {
+    (W.panes[pane] ||= { agent: n, born: seq, lines: [] }).lines.push({ text, out, t: seq, calls, group, dim });
     if (call === "sandbox.unmount" && o.ok) {
       // the agent may still hold other Workspaces (a script's fan-out): it stays on the latest one
       const left = Object.keys(W.panes).filter((k) => k !== pane && W.panes[k].agent === n && (engWs(s, k) || {}).mounted).pop();
       if (left) { const i = left.indexOf(":"); A.ws = { sandbox: left.slice(0, i), path: left.slice(i + 1) }; A.lastLoc = { kind: "ws", branch: engWs(s, left).branch, ws: left }; }
       else { A.ws = null; A.lastLoc = { kind: "bench" }; }
       A.lastBranch = branch;
-    } else {
-      const text = st.sh ? st.sh + (args.background && !/&\s*$/.test(st.sh) ? " &" : "") : call === "process.cancel" ? `kill ${args.process}` : call === "sandbox.status" ? "status" : `commit -m "${args.message}"`;
-      (W.panes[pane] ||= { agent: n, born: seq, lines: [] }).lines.push({ text, out, t: seq, calls, group, dim: call === "sandbox.status" });
-      A.lastLoc = { kind: "ws", branch, ws: pane };
-    }
+    } else A.lastLoc = { kind: "ws", branch, ws: pane };
   } else {
-    const line = HIST[call] || HIST_READ[call];
-    W.hist.push({ agent: n, text: line ? line(args) : call, out, t: seq, calls, group, ...(HIST[call] ? {} : { dim: true }) });
+    W.hist.push({ agent: n, text, out, t: seq, calls, group, ...(dim ? { dim } : {}) });
     A.lastLoc = { kind: "hist" };
     branch = call === "branch.publish" ? args.branch : args.name;
   }
   A.lastT = W.clock;
   if (A.lastLoc.branch) A.lastBranch = A.lastLoc.branch;
   if (branch && s.branches[branch]) W.touched[branch] = W.clock;
-  W.lastTab = !SB_LIFE.has(call) && (call.startsWith("fs.") || call.startsWith("sandbox.") || paneCall) ? branch : "main";
+  W.lastTab = route.at === "fs" || route.at === "workspace" || paneCall ? branch : "main";
 }
 
 /** The outcome of an agent's last call in a step, for its pose. */

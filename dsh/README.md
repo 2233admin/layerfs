@@ -63,6 +63,23 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
 
   An unbound session shows Setup: pick one of the folder's projects, or Init.
 
+  **Terminals and their command lines.** Every SDK call an agent makes prints one command line in one terminal. The single table for both is [`packages/model/src/cli.js`](packages/model/src/cli.js); `node packages/model/tests/cli.mjs` fails when an SDK or operator method has no row there.
+
+  | Terminal | Prints | Calls |
+  | --- | --- | --- |
+  | project (one per project) | the project, its Branches, Sandboxes' lives | `project.*`, `branch.*`, `sandbox.create`, `sandbox.close`, and a mount that failed (it has no pane) |
+  | fs (one per Branch) | Store reads and writes on that Branch | `fs.*` |
+  | workspace (one pane per mounted Workspace) | the Workspace's life and the commands run in it | `sandbox.mount`, `sandbox.exec`, `sandbox.status`, `sandbox.commit`, `sandbox.unmount`, operator `process.start` and `process.cancel` |
+  | none | the client's own calls and operator reads | `sandbox.service`, the other operator methods |
+
+  A command line is `<group> <method> <required args> [--optional value] [-m "message"]`, using the SDK's own group and method names: `branch merge feature try-ui release -m "join"`, `sandbox create tester docs sha256:2d929c6d66c2`, `fs read /app/page.tsx --start-line 5`, `sandbox commit -m "add hero" --force`.
+  - Required arguments are positional, in SDK order. Optional ones are `--kebab-case` flags shown only when they differ from the SDK default; a true boolean is a bare flag (`--force`, `--discard`).
+  - An image is shortened to `sha256:` and 12 hex digits. File content is never printed, and `fs apply` shows its change count.
+  - A line does not repeat what its terminal names: an fs line drops its Branch, and a workspace line drops its Sandbox and path. `fs diff_files` prints both of its refs.
+  - A command run in a Workspace prints as the shell command itself, and a background start ends with ` &`.
+  - Reads (`list_*`, `diff_*`, `fs read/list/stat/grep/glob/blame/diff_files`, `sandbox status`) and `sandbox mount` are dimmed.
+  - A call with no row prints its own name, dimmed, in the project terminal.
+
   The composer is hidden while the tab shows; switch to Chat to send a message.
 - **The project chip** sits in the New Session row beside the preset chip, drawn like dsh's own chips. Its menu lists the folder's projects and "No LayerFS", with "Import project…" pinned below. Like "Add workspace…", Import opens the directory picker (Finder in dsh web on a Mac); the chosen folder becomes a new project attached to the workspace folder and is chosen for the session. While it imports, a card under the chip shows the percentage, the step with its counts ("Importing 12,000 of 30,000 files · 40 MB of 90 MB") and the elapsed time over a bar. The bar moves without a fraction while the Host counts the source; the Init dialog shows the same.
 - **The LayerFS page** (sidebar) has one tab per project. Each shows:

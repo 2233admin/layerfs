@@ -264,7 +264,7 @@ export function stepOf(E, line, agent) {
       return { ...base, call: "process.cancel", args: { process: a.process }, bind: { sandbox: id, path: p ? p.path : a.path } };
     }
     case "sandbox.commit": case "sandbox.unmount": case "sandbox.status":
-      return { ...base, call: line.method, args: { message: a.message }, bind: bind(a.path) };
+      return { ...base, call: line.method, args: { message: a.message, force: a.force, discard: a.discard }, bind: bind(a.path) };
   }
   const args = Object.fromEntries(Object.entries(a).map(([k, v]) => [k, k === "ref" || k === "from" || k === "to" || k === "commit" ? E.ref(v) : v]));
   return { ...base, call: line.method, args };
