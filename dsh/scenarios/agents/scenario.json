@@ -1,0 +1,57 @@
+{
+  "type": "layerfs-mock-scenario",
+  "version": 2,
+  "title": "5 agents",
+  "blurb": "A lead and five subagents on two Branches at once: each mounts its own Workspace, stale Workspaces merge on commit, .lww makes build output last-writer-wins, and two agents change the same line. The lead merges and publishes.",
+  "fixture": "../fixtures/website",
+  "agents": {
+    "root": [
+      { "phase": "Set up", "say": "Two feature Branches, checkout and search, each with .lww so dependencies and build output never conflict.",
+        "bash": { "description": "Fork checkout and search; add .lww", "script": "scripts/plan.mjs" },
+        "expect": ["Forked", "fs.write:Committed", "Forked", "fs.write:Committed"],
+        "note": "A fork is metadata only. .lww includes .gitignore: node_modules and .next become last-writer-wins." },
+      { "subagent": { "description": "ava", "prompt": "On the checkout Branch: install the dependencies and build in a Workspace of your own, commit, and report." } },
+      { "subagent": { "description": "ben", "prompt": "On the checkout Branch: add the cart page (app/cart/page.tsx) and add --lint to the build script, commit, and report." } },
+      { "subagent": { "description": "cy", "prompt": "On the checkout Branch: add the API route (app/api/route.ts), add --profile to the build script, build, commit, and report." },
+        "note": "ben and cy change the same line of package.json: whoever commits second gets a Conflict in its Workspace." },
+      { "subagent": { "description": "dee", "prompt": "On the search Branch: add the search page (app/search/page.tsx), install, build and test, commit, and report." } },
+      { "subagent": { "description": "eli", "prompt": "On the search Branch: add the tokenizer (lib/tokenize.ts), test the Branch, and report." } },
+      { "reply": "Five agents are working: ava, ben and cy on checkout; dee and eli on search.", "until": ["ava", "ben", "cy", "dee", "eli"] },
+      { "phase": "Release", "say": "All five reported. A last look at who is where.", "list_agents": {} },
+      { "say": "Merging checkout and search into release and publishing it.",
+        "bash": { "description": "Merge into release and publish", "script": "scripts/release.mjs" },
+        "expect": ["Merged", "Added"], "note": "Both Branches installed and built: .lww takes the newer build output instead of a conflict." },
+      { "reply": "release is on main: the cart, the API route, search and the tokenizer, with both build flags. Five agents, two Branches, one Store." }
+    ],
+    "ava": [
+      { "say": "Mounting checkout to install and build.",
+        "bash": { "description": "Install and build on checkout", "script": "scripts/ava.mjs" },
+        "expect": ["Ready", "Mounted", "exit:0", "exit:0", "sandbox.commit:Committed", "Unmounted"] },
+      { "reply": "checkout has the dependencies and a build, committed." }
+    ],
+    "ben": [
+      { "say": "Mounting checkout for the cart page and the lint flag.",
+        "bash": { "description": "Cart page and --lint on checkout", "script": "scripts/ben.mjs" },
+        "expect": ["Ready", "Mounted", "exit:0", "sandbox.commit:Committed", "Unmounted"] },
+      { "reply": "checkout has the cart page and --lint in the build script." }
+    ],
+    "cy": [
+      { "say": "Mounting checkout for the API route and the profile flag.",
+        "bash": { "description": "API route and --profile on checkout", "script": "scripts/cy.mjs" },
+        "expect": ["Ready", "Mounted", "exit:0", "exit:0", "sandbox.commit:Committed", "Unmounted"] },
+      { "reply": "checkout has the API route and --profile in the build script." }
+    ],
+    "dee": [
+      { "say": "Mounting search for the search page; then install, build and test.",
+        "bash": { "description": "Search page; build and test on search", "script": "scripts/dee.mjs" },
+        "expect": ["Ready", "Mounted", "exit:0", "exit:0", "sandbox.commit:Committed", "Unmounted"] },
+      { "reply": "search has the search page, built and tested." }
+    ],
+    "eli": [
+      { "say": "Writing the tokenizer with fs, then testing search in a Sandbox.",
+        "bash": { "description": "Tokenizer on search; test", "script": "scripts/eli.mjs" },
+        "expect": ["fs.apply:Committed", "Ready", "Mounted", "exit:0", "Unmounted"] },
+      { "reply": "search has the tokenizer, and the tests pass." }
+    ]
+  }
+}

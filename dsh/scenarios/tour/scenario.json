@@ -1,0 +1,42 @@
+{
+  "type": "layerfs-mock-scenario",
+  "version": 2,
+  "title": "Build a website",
+  "blurb": "One agent writes code with fs, mounts a Workspace only to install, build and serve, publishes to main, then sees publish overwrite main and merges to keep both.",
+  "fixture": "../fixtures/website",
+  "agents": {
+    "root": [
+      { "phase": "Set up", "say": "I'll fork a Branch for this task, and a second one, late, to show what publish does later.",
+        "bash": { "description": "Fork feature-home and late from main", "script": "scripts/fork.mjs" },
+        "expect": ["Forked", "Forked"], "note": "A fork is metadata only: nothing is copied. Both Branches start from main's first Layer." },
+      { "pause": 500 },
+      { "phase": "Write code", "say": "The headline and an About page are plain file changes, so fs is enough: no Sandbox needed.",
+        "bash": { "description": "Write the headline and About page", "script": "scripts/write-pages.mjs" },
+        "expect": ["fs.edit:Committed", "fs.mkdir:Committed", "fs.write:Committed"], "note": "Each fs write is a Commit on feature-home." },
+      { "pause": 500 },
+      { "phase": "Build", "say": "Installing and building needs a shell, so now I mount feature-home in a Sandbox.",
+        "bash": { "description": "Mount feature-home; install and build", "script": "scripts/build.mjs" },
+        "expect": ["Ready", "Mounted", "exit:0", "exit:1"], "note": "The build fails lint on the unescaped apostrophe in the About page." },
+      { "say": "The lint error is the apostrophe. I'll fix it inside the Workspace and build again.",
+        "bash": { "description": "Fix the apostrophe; build and test", "script": "scripts/fix.mjs" },
+        "expect": ["exit:0", "exit:0", "exit:0"] },
+      { "phase": "Verify", "say": "Serving the site in the background, then trying to unmount while it runs.",
+        "bash": { "description": "Serve the site; try to unmount", "script": "scripts/serve.mjs" },
+        "expect": ["running", "sandbox.unmount:Busy"], "note": "Unmount is refused while a process runs in the Workspace." },
+      { "phase": "Save", "say": "Stopping the server first, then committing the fix with the build output.",
+        "bash": { "description": "Stop the server; commit and clean up", "script": "scripts/save.mjs" },
+        "expect": ["Stopped", "sandbox.commit:Committed", "Unmounted", "Closed"] },
+      { "pause": 500 },
+      { "phase": "Publish", "say": "feature-home is built and verified. Publishing it to main.",
+        "bash": { "description": "Publish feature-home to main", "script": "scripts/publish.mjs" },
+        "expect": ["Added", "UpToDate"], "note": "Publish adds a Layer to main; publishing the same Commit again is UpToDate." },
+      { "phase": "Overwrite", "say": "late was forked before that publish. Watch what publishing it does to main.",
+        "bash": { "description": "Write on late and publish it", "script": "scripts/late.mjs" },
+        "expect": ["fs.write:Committed", "branch.publish:Added"], "note": "Publish overwrites: main now has exactly late's files, so the About page left main. Its Layer stays in history." },
+      { "say": "To keep both, merge before publishing.",
+        "bash": { "description": "Merge feature-home and late; publish", "script": "scripts/merge.mjs" },
+        "expect": ["Merged", "Added"], "note": "Merge never changes its inputs: both is a new Branch holding feature-home's and late's work." },
+      { "reply": "main has the headline, the About page and late's page. Publish replaces main with a Branch, so merge first when main has moved." }
+    ]
+  }
+}

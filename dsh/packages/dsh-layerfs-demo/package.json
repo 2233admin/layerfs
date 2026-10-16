@@ -1,0 +1,30 @@
+{
+  "name": "dsh-layerfs-demo",
+  "version": "0.1.0",
+  "description": "LayerFS × DSH demos: the LayerFS mock model, whose scenarios run real bash and subagents on a LayerFS project. Install beside dsh-layerfs in a demo profile only.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml"
+  ],
+  "license": "MIT",
+  "engines": {
+    "dsh": ">=0.2.1-alpha.4 <0.3.0"
+  },
+  "dependencies": {
+    "@dsh-layerfs/mock": "workspace:*"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}

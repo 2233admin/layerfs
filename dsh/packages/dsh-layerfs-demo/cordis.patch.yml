@@ -1,0 +1,7 @@
+# LayerFS × DSH demos. The mock model ("LayerFS mock · <scenario>") answers
+# from the scenarios folder; dsh's agent loop and tools run every call, so a
+# demo on a real LayerFS project changes that project. Use with dsh-layerfs,
+# in a demo profile only.
+- insert:
+    - id: layerfs-mock
+      name: '@dsh-layerfs/mock'

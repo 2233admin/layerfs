@@ -1,0 +1,58 @@
+{
+  "type": "layerfs-mock-scenario",
+  "version": 2,
+  "title": "Conflicts",
+  "blurb": "Two subagents mount one Branch and retitle the same page. The second commit conflicts, writes markers into its Workspace, and commits once they are fixed. Then two Branches change the same line: the merge is refused until a working fork agrees.",
+  "fixture": "../fixtures/website",
+  "agents": {
+    "root": [
+      { "phase": "Set up", "say": "One Branch, feature, for both subagents; each mounts its own Workspace.",
+        "bash": { "description": "Fork feature from main", "script": "scripts/fork-feature.mjs" }, "expect": ["Forked"] },
+      { "subagent": { "description": "a", "prompt": "Mount the feature Branch in a Sandbox of your own and retitle app/page.tsx to Home; also note the navigation in README.md. Do not commit until I tell you to." } },
+      { "subagent": { "description": "b", "prompt": "Mount the feature Branch in a Sandbox of your own and retitle app/page.tsx to Welcome; also set the page language to en-GB. Do not commit until I tell you to." },
+        "note": "Allowed: each Workspace has its own overlay, and both captured the same base." },
+      { "reply": "a and b are editing feature in their own Workspaces.", "until": ["a", "b"] },
+      { "phase": "Commit", "say": "a commits first.",
+        "send_message": { "agent_id": "@a", "message": "Commit your Workspace now, then unmount and close your Sandbox." } },
+      { "reply": "Waiting for a's commit.", "until": ["a"] },
+      { "say": "feature has moved under b. Now b commits.",
+        "send_message": { "agent_id": "@b", "message": "a has committed to feature. Commit your Workspace now; resolve any conflict in your Workspace." } },
+      { "reply": "Waiting for b.", "until": ["b"] },
+      { "phase": "Merge", "say": "Conflict 2, Branch against Branch: a header Branch changes the same line.",
+        "bash": { "description": "Fork header, change the title, merge", "script": "scripts/branch-conflict.mjs" },
+        "expect": ["Forked", "fs.edit:Committed", "branch.merge:Conflict"],
+        "note": "The merge is refused with each side's line, and nothing is created: feature and header are unchanged." },
+      { "say": "The merge conflict is mine. I'll resolve it on a working fork of header, then merge and publish.",
+        "bash": { "description": "Agree on a working fork; merge and publish", "script": "scripts/agree.mjs" },
+        "expect": ["Forked", "fs.edit:Committed", "Merged", "Added"] },
+      { "reply": "release is on main: a's navigation, b's language and the agreed title. Both conflicts were plain file content, resolved where they arose." }
+    ],
+    "a": [
+      { "say": "Mounting feature and retitling the page to Home.",
+        "bash": { "description": "Mount feature; retitle the page", "script": "scripts/a-edit.mjs" },
+        "expect": ["Ready", "Mounted", "exit:0"], "retry": { "on": "\\bBusy\\b", "times": 3, "wait": 2000 } },
+      { "reply": "My Workspace on feature has the Home title. Ready to commit when you say." },
+      { "say": "Committing my Workspace.",
+        "bash": { "description": "Commit; unmount and close", "script": "scripts/a-commit.mjs" },
+        "expect": ["Committed", "Unmounted", "Closed"] },
+      { "reply": "Committed on feature: the Home title and the README note." }
+    ],
+    "b": [
+      { "say": "Mounting feature and retitling the page to Welcome.",
+        "bash": { "description": "Mount feature; retitle the page", "script": "scripts/b-edit.mjs" },
+        "expect": ["Ready", "Mounted", "exit:0"], "retry": { "on": "\\bBusy\\b", "times": 3, "wait": 2000 } },
+      { "reply": "My Workspace on feature has the Welcome title and en-GB. Ready to commit when you say." },
+      { "say": "a committed first, so my base is behind. Checking, then committing.",
+        "bash": { "description": "Check the Workspace; commit", "script": "scripts/b-commit.mjs" },
+        "expect": ["sandbox.status:ok", "sandbox.commit:Conflict"],
+        "note": "Rejected, nothing committed. The merge is written into b's Workspace: a's README change is applied, and page.tsx holds both titles between markers." },
+      { "say": "The markers are in my Workspace.",
+        "bash": { "description": "Show the markers; try to commit", "script": "scripts/b-markers.mjs" },
+        "expect": ["exit:0", "sandbox.commit:Conflict"], "note": "Commit stays refused while a marker block remains." },
+      { "say": "One title that says both, no markers, then commit on the new head.",
+        "bash": { "description": "Resolve the title; commit and clean up", "script": "scripts/b-resolve.mjs" },
+        "expect": ["exit:0", "sandbox.commit:Committed", "Unmounted", "Closed"] },
+      { "reply": "Resolved and committed on feature: Welcome home, with a's README change and my en-GB." }
+    ]
+  }
+}

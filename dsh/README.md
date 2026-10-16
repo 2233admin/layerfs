@@ -13,6 +13,7 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
 | Agent preset `layerfs-dsh-minimalist` | `dsh-layerfs` (`presets/`) | "LayerFS × DSH minimalist" in the preset menu |
 | View model | `@dsh-layerfs/model` | used by the client and `sdk_sim/dsh_design.html` |
 | Renderer | `@dsh-layerfs/view` | used by the client and `sdk_sim/dsh_design.html` |
+| Mock model `layerfs-mock` (demo bundle `dsh-layerfs-demo`) | `@dsh-layerfs/mock` | "LayerFS mock · …" models in the model picker |
 
 ### Host plugin
 
@@ -82,6 +83,31 @@ The preset has bash with background jobs, subagents (spawn) with their control t
 
 Run the preset's sessions in Workspace Write mode; subagents inherit it.
 
+### Mock model and demos
+
+The `dsh-layerfs-demo` bundle adds the LayerFS mock model: an LLM provider that is explicitly not a language model. Each scenario in `scenarios/` becomes one model, "LayerFS mock · <title>". It replies with scripted calls to the preset's own tools: bash, subagent, send_message, list_agents and the job tools. dsh runs those calls for real, against a real LayerFS project, and subagents inherit the mock model, so they run their own part of the script. No API key is needed.
+
+| Demo | Agents | Shows |
+|---|---|---|
+| `tour` | root | fork, fs edits, build in a Sandbox, a lint failure and fix, a server that keeps unmount Busy, commit, publish, a late Branch, merge |
+| `parallel` | root, header, footer | two subagents on their own Branches; the root publishes one, then asks the other to merge main in first |
+| `conflicts` | root, a, b | a commit Conflict with markers in the Workspace, resolved there; a merge Conflict resolved on a new fork |
+| `sandbox` | root | one Sandbox with two Workspaces, a background build job, and the MountsActive, Busy and Dirty refusals |
+| `agents` | root and five | five subagents on two Branches at once: stale Workspaces, `.lww`, and two agents changing the same line |
+
+A scenario is `scenario.json` (format `layerfs-mock-scenario` version 2) plus its `scripts/`. Each agent has a list of steps:
+- a call step: one preset tool and its arguments. A bash step names a `script` (sent as `node --input-type=module <<'JS'`) or a `command`. `expect` lists the LayerFS outcomes its trace should show, `retry` reruns it on matching output, and `as` names a background job;
+- a reply step: the turn's closing text. `until` makes the agent wait for those subagents to report first;
+- a pause step: milliseconds before the next step.
+
+`@name` in an argument is a subagent or job started earlier. A subagent's `description` is its name in the scenario. `scenarios/fixtures/website` is the shared project; its install, build, test and serve are small shell scripts, not npm.
+
+Running a demo:
+1. Install `dsh-layerfs-demo` beside `dsh-layerfs` in a demo profile.
+2. `node tools/demo.mjs <demo> <folder>` copies the fixture.
+3. Import the folder as a LayerFS project.
+4. Start a session with the preset and the demo's mock model, and send any message.
+
 ## Install into a dsh profile
 
 You need:
@@ -126,10 +152,11 @@ Only dsh web is checked; dsh desktop serves the same web client but was not test
 
 | Command | Does |
 |---|---|
-| `pnpm test` | Host tests and the model's trace replay check |
+| `pnpm test` | Host tests, the mock model's scenario tests, and the model's trace replay check |
 | `node ../sdk_sim/test_dsh_view.mjs sim` | the view model against the simulator's stories |
 | `node tools/init-project.mjs <profile dir> <folder> <image> <daemon>` | Init outside dsh |
-| `node tools/script-model.mjs <port> tools/scenarios/three-agents.mjs <log>` | a scripted model with no API key: a root agent and two subagents fork, write, test in the background, merge and publish |
+| `node tools/demo.mjs [<demo> <folder>]` | lists the demos, or copies a demo's fixture into a workspace folder |
+| `node tools/check-demo.mjs '<dsh web URL with ?token=…>' <session id> <demo>` | checks a finished demo session: every agent ran, and each bash step with `expect` left those LayerFS outcomes on the trace |
 | `node tools/check-session.mjs '<dsh web URL with ?token=…>' <session id>` | checks that a session's tab draws what LayerFS reports: Branches, heads, `main`, Sandboxes, which agent made each Commit and Layer, and bash-call groups |
 
 The design preview `sdk_sim/dsh_design.html` imports the same model and renderer, so it and the tab draw the same thing.
