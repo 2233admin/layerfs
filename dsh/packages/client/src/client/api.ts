@@ -19,6 +19,33 @@ export interface SessionView {
   agents: Record<string, string>
 }
 export interface Status { configured: boolean, missing: string[] }
+export interface Counts { entries: number, files: number, bytes: number }
+/** A running or ended Init on the Host (jobs.js). */
+export interface InitJob {
+  id: string
+  name: string
+  source: string
+  started: number
+  step: 'scan' | 'volume' | 'import' | 'done' | 'failed'
+  scanned: Counts | null
+  totals: Counts | null
+  project: Project | null
+  error: { code: string, message: string } | null
+}
+const POLL_MS = 300
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** Starts an Init and reads its job until it ends; `onProgress` sees each read. */
+async function init(folder: string, name?: string, source?: string, onProgress: (job: InitJob) => void = () => {}): Promise<{ project: Project }> {
+  let { job } = await call<{ job: InitJob }>('POST', '/init', { folder, name, source })
+  for (;;) {
+    onProgress(job)
+    if (job.step === 'done') return { project: job.project! }
+    if (job.step === 'failed') throw Object.assign(new Error(job.error!.message), { code: job.error!.code })
+    await pause(POLL_MS)
+    job = (await call<{ job: InitJob }>('GET', `/init/${encodeURIComponent(job.id)}`)).job
+  }
+}
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/layerfs${path}`, {
@@ -41,7 +68,7 @@ export const api = {
   workspace: (folder: string) => call<{ projects: Project[], lastUsed: string | null }>('GET', `/workspace?folder=${encodeURIComponent(folder)}`),
   session: (id: string) => call<SessionView>('GET', `/session/${sid(id)}`),
   choose: (id: string, project: string | null) => call<SessionView>('POST', `/session/${sid(id)}/project`, { project }),
-  init: (folder: string, name?: string, source?: string) => call<{ project: Project }>('POST', '/init', { folder, name, source }),
+  init,
   projects: () => call<{ projects: Project[] }>('GET', '/projects'),
   projectState: (name: string) => call<ProjectState>('GET', `/project/${encodeURIComponent(name)}/state`),
   projectTree: (name: string, ref: string) => call<{ tree: Record<string, unknown>, partial: string | null }>('GET', `/project/${encodeURIComponent(name)}/tree?ref=${encodeURIComponent(ref)}`),

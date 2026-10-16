@@ -8,7 +8,8 @@
 // choice is fixed once an agent's first bash call has used the project.
 import { useEffect, useRef, useState } from 'react'
 import { IconChevronDownOutlineRegular, IconDatabaseOutlineRegular, IconPlusOutlineRegular, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
-import { api, type SessionView } from './api.ts'
+import { api, type InitJob, type SessionView } from './api.ts'
+import { ProgressBar, jobText, useClock } from './Progress.tsx'
 import { InitDialog, type Directories } from './InitDialog.tsx'
 
 const NONE = '\u0000none'
@@ -49,10 +50,11 @@ export function ProjectPicker({ sessionId, directories }: { sessionId: string, d
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<SessionView | null>(null)
   const [busy, setBusy] = useState(false)
-  const [importing, setImporting] = useState(false)
+  const [job, setJob] = useState<InitJob | null>(null)
   const [error, setError] = useState<string | null>(null)
   const anchor = useRef<HTMLSpanElement>(null)
   useBesidePreset(anchor)
+  const now = useClock(job !== null)
   useEffect(() => {
     let stopped = false
     api.session(sessionId).then((v) => { if (!stopped) setView(v) }, (e: Error) => { if (!stopped) setError(e.message) })
@@ -74,11 +76,10 @@ export function ProjectPicker({ sessionId, directories }: { sessionId: string, d
     await run(async () => {
       const source = desktop ? await desktop.pick() : await dirs!.pickDirectory!()
       if (!source) return view
-      setImporting(true)
       try {
-        const { project } = await api.init(folder, undefined, source)
+        const { project } = await api.init(folder, undefined, source, setJob)
         return await api.choose(sessionId, project.name)
-      } finally { setImporting(false) }
+      } finally { setJob(null) }
     })
   }
   const select = (id: string) => {
@@ -89,7 +90,7 @@ export function ProjectPicker({ sessionId, directories }: { sessionId: string, d
   const locked = !!view.choice?.locked
   const icon = <IconDatabaseOutlineRegular size={16} />
   return (
-    <span ref={anchor} style={{ display: 'inline-flex', alignItems: 'center', minWidth: 0 }}>
+    <span ref={anchor} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', minWidth: 0 }}>
       <Menu
         open={open}
         onClose={() => setOpen(false)}
@@ -110,16 +111,23 @@ export function ProjectPicker({ sessionId, directories }: { sessionId: string, d
             aria-haspopup="menu"
             aria-expanded={open}
             aria-label="LayerFS project"
-            title={error ?? (locked ? 'Fixed: an agent has used this project' : 'LayerFS project for this session')}
+            title={job ? jobText(job, now) : error ?? (locked ? 'Fixed: an agent has used this project' : 'LayerFS project for this session')}
             disabled={busy || locked}
             onClick={() => setOpen((value) => !value)}
           >
             <IconDatabaseOutlineRegular size={16} />
-            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{importing ? 'Importing…' : view.project?.name ?? 'No LayerFS'}</span>
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{job ? `Importing ${job.name}…` : view.project?.name ?? 'No LayerFS'}</span>
             {!locked && <IconChevronDownOutlineRegular size={14} className="lfs-chevron" />}
           </button>
         )}
       />
+      {job && (
+        <span role="status" style={{ position: 'absolute', left: 0, top: '100%', marginTop: 6, zIndex: 20, width: 280, display: 'grid', gap: 8, padding: '10px 12px', borderRadius: 12, background: 'var(--dsw-alias-bg-base, #fff)', border: '1px solid var(--dsw-alias-border-subtle, #8883)', boxShadow: '0 8px 24px rgba(0,0,0,.12)', pointerEvents: 'none' }}>
+          <span style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Importing {job.name}</span>
+          <ProgressBar fraction={null} />
+          <span style={{ fontSize: 12, whiteSpace: 'nowrap', color: 'var(--dsw-alias-label-caption)' }}>{jobText(job, now)}</span>
+        </span>
+      )}
       {initing && <InitDialog folder={folder} directories={directories()} onClose={() => setIniting(false)} onDone={(project) => { setIniting(false); void run(() => api.choose(sessionId, project.name)) }} />}
     </span>
   )

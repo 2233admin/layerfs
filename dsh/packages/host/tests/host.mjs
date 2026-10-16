@@ -21,6 +21,8 @@ const { contributor } = await import("../src/env.js");
 const { registerRoutes } = await import("../src/route.js");
 const { TreeReader } = await import("../src/trees.js");
 const { removeProject } = await import("../src/remove.js");
+const { prepareInit, scanSource } = await import("../src/init.js");
+const { InitJobs } = await import("../src/jobs.js");
 const { CALL, PROJECT } = await import("@dsh-layerfs/model/sources/records.js");
 
 const dir = mkdtempSync(join(tmpdir(), "dsh-layerfs-host-"));
@@ -125,7 +127,9 @@ try {
   // the route answers only requests Connection accepts
   let handler;
   const routeCtx = { ...h.ctx, effect: (fn) => fn(), webServer: { register: (route) => { handler = route.handler; return () => {}; } }, connection: { requestRejection: (req) => (req.headers.cookie ? undefined : 401) } };
-  registerRoutes(routeCtx, { spec: h.spec, bindings: h.bindings, collector: h.collector, trees });
+  const runs = [];
+  const jobs = new InitJobs((prepared, report) => new Promise((resolve, reject) => runs.push({ prepared, report, resolve, reject })));
+  registerRoutes(routeCtx, { spec: h.spec, bindings: h.bindings, collector: h.collector, trees, jobs });
   const call = async (method, url, body, cookie = "dsh=1") => {
     const res = { statusCode: 0, headers: {}, text: "", setHeader(k, v) { this.headers[k] = v; }, end(text = "") { this.text = text; } };
     const req = { method, url, headers: cookie ? { cookie } : {}, async *[Symbol.asyncIterator]() { if (body) yield Buffer.from(JSON.stringify(body)); } };
@@ -170,6 +174,31 @@ try {
   assert.equal((await call("POST", "/layerfs/project/nope/attach", { folder: null })).status, 404);
   await call("POST", "/layerfs/project/website/attach", { folder: FOLDER });
 
+  // Init: the source is counted first; the route answers a job, and the job its steps
+  const src = join(dir, "src-folder");
+  mkdirSync(join(src, "lib"), { recursive: true });
+  writeFileSync(join(src, "a.txt"), "hello");
+  writeFileSync(join(src, "lib", "b.txt"), "abc");
+  const seen = [];
+  assert.deepEqual(await scanSource(src, (c) => seen.push(c.entries)), { entries: 4, files: 2, bytes: 8 });
+  assert.equal(seen.at(-1), 4);
+  const started = await call("POST", "/layerfs/init", { folder: dir, source: src });
+  assert.deepEqual([started.status, started.body.job.name, started.body.job.step], [202, "src-folder", "scan"]);
+  const second = await call("POST", "/layerfs/init", { folder: dir, source: src });
+  assert.equal(second.body.job.name, "src-folder-2", "a running Init keeps its name");
+  assert.equal((await call("POST", "/layerfs/init", { folder: "relative" })).status, 409);
+  const job = (id) => call("GET", `/layerfs/init/${id}`).then((r) => r.body.job);
+  runs[0].report({ step: "import", totals: { entries: 4, files: 2, bytes: 8 } });
+  assert.deepEqual([(await job(started.body.job.id)).step, (await job(started.body.job.id)).totals.files], ["import", 2]);
+  runs[0].resolve({ name: "src-folder" });
+  runs[1].reject(Object.assign(new Error("no Docker"), { code: "docker" }));
+  await tick();
+  assert.deepEqual([(await job(started.body.job.id)).step, (await job(started.body.job.id)).project.name], ["done", "src-folder"]);
+  assert.deepEqual((await job(second.body.job.id)).error, { code: "docker", message: "no Docker" });
+  runs[1].report({ step: "import" });
+  assert.equal((await job(second.body.job.id)).step, "failed", "an ended job takes no more reports");
+  assert.equal((await call("GET", "/layerfs/init/nope")).status, 404);
+
   // who made each node: every journaled session's lines of that project
   const journal = (line) => appendFileSync(join(h.spec.stateDir, "lines", "session-root.jsonl"), JSON.stringify({ agentId: "child-1", agent: "tester", project: "website", ok: true, start: "2026-10-16T00:00:01.000Z", ms: 5, ...line }) + "\n");
   journal({ id: "x-1", method: "fs.write", kind: "Committed", commit: "c".repeat(64) });
@@ -198,6 +227,9 @@ try {
   assert.deepEqual(await removeProject(h.spec, h.bindings, fakeTrees, "website", dockerWith("")), { removed: "website", volume: "dsh-layerfs-website-1" });
   assert.deepEqual(ran, ["ps -aq --filter volume=dsh-layerfs-website-1", "volume rm dsh-layerfs-website-1"]);
   assert.deepEqual(forgot, ["website", "website"]);
+  mkdirSync(join(dir, "website"), { recursive: true });
+  assert.equal(prepareInit(h.spec, h.bindings, { folder: dir, source: join(dir, "website") }).project.name, "website-2", "a removed name is not taken again before dsh restarts");
+  assert.throws(() => prepareInit(h.spec, h.bindings, { folder: dir, name: "website" }), { code: "name-retired" });
   assert.equal(existsSync(join(h.spec.home, "website")), false);
   assert.deepEqual([h.bindings.byName("website"), h.bindings.workspace(FOLDER).lastUsed, h.bindings.session("session-root").project], [null, null, null]);
   assert.equal(h.bindings.projectFor("session-root", FOLDER), null, "a session on a removed project has none");

@@ -4,7 +4,8 @@
 // which is where the session's agents work.
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { api, type Project } from './api.ts'
+import { api, type InitJob, type Project } from './api.ts'
+import { InitProgress } from './Progress.tsx'
 
 interface Entry { name: string, path: string, hidden: boolean }
 interface Listing { path: string, home: string, crumbs: Entry[], entries: Entry[], truncated: boolean }
@@ -28,6 +29,7 @@ export function InitDialog({ folder, directories, onDone, onClose }: {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [job, setJob] = useState<InitJob | null>(null)
 
   const open = async (path?: string) => {
     setError(null)
@@ -48,7 +50,7 @@ export function InitDialog({ folder, directories, onDone, onClose }: {
 
   const init = async () => {
     setBusy(true); setError(null)
-    try { onDone((await api.init(folder, name.trim() || undefined, source)).project) } catch (e) { setError((e as Error).message); setBusy(false) }
+    try { onDone((await api.init(folder, name.trim() || undefined, source, setJob)).project) } catch (e) { setError((e as Error).message); setBusy(false); setJob(null) }
   }
 
   return createPortal(
@@ -97,6 +99,7 @@ export function InitDialog({ folder, directories, onDone, onClose }: {
         <div style={{ color: muted }}>
           The project is attached to the workspace <code style={{ overflowWrap: 'anywhere' }}>{folder}</code>, where the session's agents work{source !== folder ? '; its first version holds the files of the folder above' : ''}.
         </div>
+        {job && busy && <InitProgress job={job} />}
         {error && <div style={{ color: 'var(--dsh-color-fg-danger, #d33)' }}>{error}</div>}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

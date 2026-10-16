@@ -2,7 +2,8 @@
 // Connection's Host/Origin checks and browser authentication, like /api.
 //   GET  /layerfs/status                      configuration and SDK location
 //   GET  /layerfs/workspace?folder=<abs>      the folder's projects
-//   POST /layerfs/init {folder, source?, name?}   Init LayerFS
+//   POST /layerfs/init {folder, source?, name?}   start Init LayerFS; answers its job (see jobs.js)
+//   GET  /layerfs/init/<job>                  the Init's step and counts
 //   GET  /layerfs/session/<id>                the root session's project, agents and trace lines
 //   POST /layerfs/session/<id>/project {project}  choose the project (null: none) until locked; answers as GET
 //   GET  /layerfs/session/<id>/state          the project as LayerFS reports it
@@ -13,7 +14,8 @@
 //   POST /layerfs/project/<name>/attach {folder}  attach to a workspace folder (null: detach)
 //   POST /layerfs/project/<name>/remove {confirm}  remove it (confirm: its name); see remove.js
 import { missingDeployment } from "./config.js";
-import { initProject } from "./init.js";
+import { prepareInit, runInit } from "./init.js";
+import { InitJobs } from "./jobs.js";
 import { projectState } from "./layerfs-client.js";
 import { removeProject } from "./remove.js";
 import { isSavedId } from "./trees.js";
@@ -42,7 +44,7 @@ async function readJson(req) {
  * Registers the route; its disposer runs with the plugin fiber.
  * @param {object} ctx plugin context with webServer and connection
  */
-export function registerRoutes(ctx, { spec, bindings, collector, trees }) {
+export function registerRoutes(ctx, { spec, bindings, collector, trees, jobs = new InitJobs((prepared, report) => runInit(spec, bindings, prepared, report)) }) {
   const sessionView = (id) => {
     const session = ctx.sessions.get(id);
     const agent = session ? collector.agentOf(session) : { id, root: bindings.agent(id)?.root ?? id, cwd: undefined };
@@ -69,8 +71,12 @@ export function registerRoutes(ctx, { spec, bindings, collector, trees }) {
       }
       if (req.method === "POST" && parts[0] === "init" && parts.length === 1) {
         const body = await readJson(req);
-        const project = await initProject(spec, bindings, { folder: body.folder, source: body.source || body.folder, name: body.name || undefined });
-        return send(res, 200, { project });
+        const prepared = prepareInit(spec, bindings, { folder: body.folder, source: body.source || body.folder, name: body.name || undefined }, jobs.pending());
+        return send(res, 202, { job: jobs.begin(prepared) });
+      }
+      if (req.method === "GET" && parts[0] === "init" && parts.length === 2) {
+        const job = jobs.get(decodeURIComponent(parts[1]));
+        return job ? send(res, 200, { job }) : send(res, 404, { code: "not-found", message: "no such Init job" });
       }
       if (req.method === "GET" && parts[0] === "projects" && parts.length === 1) return send(res, 200, { projects: bindings.projects() });
       if (parts[0] === "project" && parts.length === 3) {

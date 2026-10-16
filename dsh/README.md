@@ -32,7 +32,8 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
   |---|---|
   | `GET /layerfs/status` | configuration |
   | `GET /layerfs/workspace?folder=` | a folder's projects |
-  | `POST /layerfs/init {folder, source?, name?}` | Init |
+  | `POST /layerfs/init {folder, source?, name?}` | check the request and start Init; answers its job at once |
+  | `GET /layerfs/init/<job>` | the Init's step (`scan`, `volume`, `import`, `done` or `failed`), the source's file and byte counts, then its project or error |
   | `GET /layerfs/session/<id>` | project, agents and trace lines of the session's root |
   | `POST /layerfs/session/<id>/project {project}` | choose a project, or `null` for none |
   | `GET /layerfs/session/<id>/state` | the project as `inspect.snapshot` reports it |
@@ -43,7 +44,9 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
   | `POST /layerfs/project/<name>/attach {folder}` | attach to a workspace folder, or `null` to detach |
   | `POST /layerfs/project/<name>/remove {confirm}` | remove the project; `confirm` must repeat its name |
 
-  Removal deletes the project's Docker volume and LayerFS home entry, and drops it from the bindings; sessions on it become unbound. It is refused while any container still uses the volume. Workspace files and transcripts stay.
+  Init first counts the source (every entry, links not followed, as LayerFS reads it), then makes the volume, then runs LayerFS's Host Init (scan and import on the Host, then install of the sealed Store into the volume by the Sandbox's daemon). The page reads the job every 300 ms.
+
+  Removal deletes the project's Docker volume and LayerFS home entry, and drops it from the bindings; sessions on it become unbound. It is refused while any container still uses the volume. Workspace files and transcripts stay. The SDK remembers each name it initialized until the Host process ends, so a removed name is not taken again before dsh restarts: Init picks the next free name (`name-2`).
 
   Trees are bounded: 4000 entries, 128 KB per file, 8 MB in all. `node_modules`, `.git`, `.next`, `dist` and `build` are listed but not opened.
 
@@ -58,7 +61,7 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
   An unbound session shows Setup: pick one of the folder's projects, or Init.
 
   The composer is hidden while the tab shows; switch to Chat to send a message.
-- **The project chip** sits in the New Session row beside the preset chip, drawn like dsh's own chips. Its menu lists the folder's projects and "No LayerFS", with "Import project…" pinned below. Like "Add workspace…", Import opens the directory picker (Finder in dsh web on a Mac); the chosen folder becomes a new project attached to the workspace folder and is chosen for the session.
+- **The project chip** sits in the New Session row beside the preset chip, drawn like dsh's own chips. Its menu lists the folder's projects and "No LayerFS", with "Import project…" pinned below. Like "Add workspace…", Import opens the directory picker (Finder in dsh web on a Mac); the chosen folder becomes a new project attached to the workspace folder and is chosen for the session. While it imports, a card under the chip shows the step, the file and byte counts, the elapsed time and a moving bar; the Init dialog shows the same.
 - **The LayerFS page** (sidebar) has one tab per project. Each shows:
   - ellen_joe, with a line on where `main` is and what was published last;
   - the workspace the project is attached to, which you can change or detach (a session already on the project keeps it);

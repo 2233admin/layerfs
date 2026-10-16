@@ -2,6 +2,7 @@
 // Docker volume and binds it to the dsh workspace folder.
 import { execFile } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
+import { lstat, opendir } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
 import { missingDeployment } from "./config.js";
@@ -27,29 +28,66 @@ function freeName(base, taken, home) {
 }
 
 /**
- * Imports `source` (default: the workspace folder) as a LayerFS project and
- * binds it to `folder`. One attempt; a failure leaves no binding, and the
- * volume it made is removed.
+ * Counts what Init will import, before it starts: every entry under `source`
+ * (no ignore rules, links not followed, as Init itself reads it) and the
+ * bytes of its regular files. `report` sees the running counts.
+ * @returns {Promise<{ entries: number, files: number, bytes: number }>}
+ */
+export async function scanSource(source, report = () => {}) {
+  const counts = { entries: 1, files: 0, bytes: 0 }, dirs = [source];
+  while (dirs.length) {
+    const dir = dirs.pop();
+    for await (const entry of await opendir(dir)) {
+      counts.entries++;
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) dirs.push(path);
+      else if (entry.isFile()) { counts.files++; counts.bytes += (await lstat(path)).size; }
+    }
+    report({ ...counts });
+  }
+  return counts;
+}
+
+/**
+ * Checks an Init request and names its project, without changing anything.
  * @param {object} spec resolved Host settings
  * @param {import("./binding.js").BindingStore} bindings
  * @param {{ folder: string, source?: string, name?: string }} request
+ * @param {Set<string>} [pending] names of Inits still running
  */
-export async function initProject(spec, bindings, { folder, source = folder, name }) {
+export function prepareInit(spec, bindings, { folder, source = folder, name }, pending = new Set()) {
   const missing = missingDeployment(spec);
   if (missing.length) throw refuse("not-configured", `LayerFS is not configured: set ${missing.join(" and ")} for layerfs-host in the profile patch`);
   for (const path of [folder, source]) {
     if (!isAbsolute(path) || !existsSync(path) || !statSync(path).isDirectory()) throw refuse("invalid-folder", `${path} is not an absolute directory`);
   }
   if (name !== undefined && !NAME.test(name)) throw refuse("invalid-name", "a project name is 1-63 lowercase letters, digits, _ . - and starts and ends alphanumeric");
-  const project = { name: name ?? freeName(nameFrom(source), bindings.allNames(), spec.home), source, volume: "", created: Date.now() };
-  if (bindings.allNames().has(project.name) || existsSync(join(spec.home, project.name))) throw refuse("name-taken", `a LayerFS project named ${project.name} exists`);
+  if (name !== undefined && bindings.retired.has(name)) throw refuse("name-retired", `${name} was removed while dsh runs; restart dsh to use the name again, or choose another`);
+  const taken = new Set([...bindings.allNames(), ...pending, ...bindings.retired]);
+  const project = { name: name ?? freeName(nameFrom(source), taken, spec.home), source, volume: "", created: Date.now() };
+  if (taken.has(project.name) || existsSync(join(spec.home, project.name))) throw refuse("name-taken", `a LayerFS project named ${project.name} exists`);
   project.volume = `dsh-layerfs-${project.name}-${project.created.toString(36)}`;
+  return { folder, project };
+}
+
+/**
+ * Runs a prepared Init: counts the source, makes the volume, imports the
+ * source (LayerFS's Host Init, then the Store's install into the volume) and
+ * binds the project to `folder`. `report` sees each step: scan, volume,
+ * import. One attempt; a failure leaves no binding, and the volume it made
+ * is removed.
+ */
+export async function runInit(spec, bindings, { folder, project }, report = () => {}) {
+  report({ step: "scan" });
+  const totals = await scanSource(project.source, (counts) => report({ scanned: counts }));
+  report({ step: "volume", totals });
   const docker = ["-H", `unix://${spec.docker}`];
   await run("docker", [...docker, "volume", "create", project.volume]);
+  report({ step: "import" });
   let client;
   try {
     client = await clientFor(spec, project);
-    await client.layerfs.project.init(source);
+    await client.layerfs.project.init(project.source);
   } catch (error) {
     if (client) await release(client).catch(() => {});
     await run("docker", [...docker, "volume", "rm", project.volume]).catch(() => {});
@@ -59,3 +97,6 @@ export async function initProject(spec, bindings, { folder, source = folder, nam
   bindings.addProject(folder, project);
   return project;
 }
+
+/** Imports `source` (default: the workspace folder) as a LayerFS project bound to `folder`. */
+export const initProject = (spec, bindings, request, report) => runInit(spec, bindings, prepareInit(spec, bindings, request), report);
