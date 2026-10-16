@@ -27,8 +27,10 @@ precedent read [#337 README](../337/README.md) and [#337 RESULTS](../337/RESULTS
   `tools/production_loc.py` on the first-parent and staged trees.
 - No push, PR or merge to Git `main` without owner authorization for #340.
 - All timings, storage figures and ratios are diagnostic, not benchmarks.
-- Codex runs with `agents.max_concurrent_threads_per_session = 6`: the team lead and
-  five workers use every slot while the team runs.
+- Phase A2 observed four active agents including the main agent. The lead and
+  at most two workers run concurrently; all five logical worker roles remain in
+  staggered milestone waves. Same-lane pairs overlap. Record this limitation
+  explicitly and do not claim five-worker concurrency.
 
 ## Identity and folders
 
@@ -117,7 +119,8 @@ new freeze revision with its reason; the old one stays archived.
 1. Create the run's volume and HOME; Init the project from an empty folder holding only
    `.gitignore`, `.lww` and a README stub, as its own step; capture initial stats.
 2. Spawn the team lead with `LEAD-PROMPT.md`, the run's settings and the lane briefs.
-   The lead builds L0, then the five workers start together (TEAM T0–T1).
+   The lead builds L0, then schedules all five worker roles within the observed
+   two-active-worker capacity (TEAM T0–T1 and the frozen prompt).
 3. While the team works:
    - answer every `BLOCKER` the lead forwards. Decide whether it is a LayerFS/SDK/skill
      defect, an environment problem, or an application problem the team owns;

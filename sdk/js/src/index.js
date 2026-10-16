@@ -2,7 +2,7 @@
 // calls name their Branch, and Sandbox calls take the Sandbox (or its id).
 // Calls that are not about a Workspace reach the Store through one service
 // Sandbox, created on the first such call unless `sandbox` names one.
-import { invokeClient } from "./client.js";
+import { invokeClient, sandboxId } from "./client.js";
 import { LayerFSError } from "./errors.js";
 import * as fsMethods from "./fs/index.js";
 import { init } from "./project/init.js";
@@ -29,7 +29,8 @@ const bind = (client, methods) =>
 export class LayerFS {
   /** Selects a project without filesystem, native addon or network I/O.
    * `options.trace` names a per-call trace file (overrides LAYERFS_TRACE);
-   * `options.traceStep` labels its lines (overrides LAYERFS_TRACE_STEP). */
+   * `options.traceStep` labels its lines (overrides LAYERFS_TRACE_STEP).
+   * `options.sandbox` selects an existing Sandbox for this client's Store calls. */
   constructor(projectName, options = {}) {
     if (typeof projectName !== "string" || !/^[a-z0-9](?:[a-z0-9_.-]{0,61}[a-z0-9])?$/.test(projectName)) {
       throw new LayerFSError("InvalidInput", "a project name is required", null);
@@ -47,15 +48,16 @@ export class LayerFS {
         daemon: env.LAYERFS_DAEMON,
       },
     };
-    this.sandboxes = new Set();
-    this.serviceSandbox = null;
+    const selected = options.sandbox === undefined ? null : sandboxId(options.sandbox);
+    this.sandboxes = new Set(selected ? [selected] : []);
+    this.serviceSandbox = selected ? Promise.resolve(selected) : null;
     this.fs = bind(this, fsMethods);
     this.project = bind(this, { init, list_branches });
     this.branch = bind(this, { list_commits, diff_commits, diff_branches, fork, merge, publish });
     this.sandbox = bind(this, { create, close, mount, exec, status, commit, unmount });
   }
 
-  /** The Sandbox that serves Store calls, created once on first use. */
+  /** The selected Sandbox, or an automatic service created once on first use. */
   service() {
     this.serviceSandbox ??= invokeClient(this, "sandbox.service", {}).then((value) => { this.sandboxes.add(value.id); return value.id; });
     return this.serviceSandbox;
