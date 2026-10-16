@@ -108,6 +108,7 @@ button { font: inherit; color: inherit; }
 .ln { display: block; white-space: pre-wrap; }
 .ln.new { animation: fadein .35s ease-out; }
 .ln .cmd { color: var(--term-text); }
+.ln .grp { font: 10px var(--mono); color: var(--term-dim); border: 1px dashed var(--term-border); border-radius: 3px; padding: 0 4px; margin-right: 6px; vertical-align: 1px; }
 .ln.dim, .ln.dim .cmd { color: var(--term-dim); }
 .out { display: block; color: var(--term-dim); padding-left: 2ch; }
 .out.good { color: var(--t-green); } .out.bad { color: var(--t-red); } .out.mark { color: var(--t-orange); }
@@ -313,24 +314,32 @@ button.chip { border: 0; color: inherit; cursor: pointer; }
 
 /* crabs */
 #crabs { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
-.crab { position: absolute; left: 0; top: 0; width: 42px; height: 33px; transition: transform .55s ease-in-out; }
-.crab svg { width: 42px; height: 33px; display: block; overflow: visible; shape-rendering: crispEdges; transform-origin: bottom center; transition: transform .3s; }
-.crab.small svg { transform: scale(.55); }
-.crab { transition: transform .55s ease-in-out, opacity .3s; }
+.crab { position: absolute; left: 0; top: 0; width: 36px; height: 48px; transition: transform .55s ease-in-out, opacity .3s; }
+.crab .spr { display: block; width: 36px; height: 48px; background-repeat: no-repeat; transform-origin: 50% 100%; transition: transform .25s; filter: drop-shadow(0 2px 2px rgba(0,0,0,.18)); }
+.crab.flip .spr { transform: scaleX(-1); }
+.crab.small .spr { transform: scale(.5); } .crab.small.flip .spr { transform: scale(-.5, .5); }
 .crab.gone { opacity: 0; }
-.crowd { position: absolute; left: 0; top: 0; font: 700 10.5px var(--mono); color: var(--text-2); background: var(--card); border-radius: 9px; padding: 1px 6px; box-shadow: 0 0 0 .5px var(--sep-strong), 0 2px 6px rgba(0,0,0,.15); animation: fadein .3s; }
-.tab .plus { font: 600 9.5px var(--mono); color: var(--text-3); margin-left: 2px; }
-.pill.roster { border: 0; cursor: pointer; } .pill.roster:hover { background: var(--accent-bg); }
-.roster-menu b, .roster-menu span { white-space: nowrap; }
-.roster-menu { width: 300px; max-height: 360px; overflow: auto; }
-.crab .claw, .crab .leg { transform-box: fill-box; }
-.crab.idle svg { animation: bob 2.4s steps(2) infinite; }
-.crab.walk .leg { animation: claw .14s steps(2) infinite; } .crab.walk .leg.b { animation-delay: .07s; }
-.crab.busy .claw { animation: claw .24s steps(2) infinite; } .crab.busy .claw.r { animation-delay: .12s; }
-.crab .sweat, .crab .bang { display: none; }
-.crab.sweat .sweat, .crab.sweat .bang { display: inline; }
-.crab .name { position: absolute; left: 50%; top: 34px; transform: translateX(-50%); font: 600 9.5px var(--font); color: var(--c); white-space: nowrap; background: color-mix(in srgb, var(--window) 80%, transparent); padding: 0 3px; border-radius: 3px; }
+.crab.idle .spr { animation: avbob 2.6s ease-in-out infinite; }
+.crab.walk .spr { animation: avhop .28s ease-in-out infinite; }
+.crab .fx { display: none; position: absolute; right: -2px; top: 2px; font: 700 13px/1 var(--font); font-style: normal; }
+.crab .fx.bang { color: var(--red); right: 0; top: 0; font-size: 15px; }
+.crab.sweat .fx.sweat, .crab.bang .fx.bang { display: block; animation: avhop .5s ease-in-out infinite; }
+.crab.small .fx { top: 22px; right: 4px; font-size: 10px; }
+.crab .dup, .av .dup { position: absolute; right: -3px; bottom: -2px; font: 700 8px/10px var(--font); font-style: normal; min-width: 10px; text-align: center; border-radius: 5px; background: var(--card); color: var(--text-2); box-shadow: 0 0 0 .5px var(--sep-strong); }
+.crab .dup { bottom: 12px; }
+.av { position: relative; display: inline-block; width: 16px; height: 16px; flex: none; border-radius: 50%; background-repeat: no-repeat; background-color: var(--well); box-shadow: 0 0 0 1px var(--ac); vertical-align: middle; }
+@keyframes avbob { 50% { translate: 0 -1.5px; } }
+@keyframes avhop { 50% { translate: 0 -4px; } }
+.crab .name { position: absolute; left: 50%; top: 48px; transform: translateX(-50%); font: 600 9.5px var(--font); color: var(--c); white-space: nowrap; background: color-mix(in srgb, var(--window) 80%, transparent); padding: 0 3px; border-radius: 3px; }
 .crab.small .name { display: none; }
+/* fan-out: an agent working in several places at once (a script's calls) */
+.crab .fan { display: none; position: absolute; left: -4px; top: 4px; font: 700 9px/13px var(--font); font-style: normal; padding: 0 3px; border-radius: 7px; background: var(--c); color: #fff; box-shadow: 0 0 0 1.5px var(--window); }
+.crab.fanned .fan { display: block; }
+.crab.small .fan { top: 22px; left: 6px; font-size: 8px; line-height: 11px; }
+.crab.ghost { opacity: .42; transition: opacity .3s; }
+.crab.ghost .spr { filter: grayscale(.3); animation: none; }
+.crab.ghost .name { opacity: .8; }
+.crab.ghost.gone { opacity: 0; }
 .bubble { position: fixed; z-index: 45; pointer-events: none; transform: translate(-50%, -100%); font: 600 11px var(--mono); padding: 3px 7px; border-radius: 8px; background: var(--card); color: var(--text); box-shadow: 0 4px 14px rgba(0,0,0,.2), 0 0 0 .5px var(--sep-strong); white-space: nowrap; animation: bubble 1.9s ease-out forwards; }
 .bubble.good { color: var(--t-green); } .bubble.bad { color: var(--t-red); }
 .block { position: fixed; z-index: 44; width: 12px; height: 12px; border-radius: 3px; pointer-events: none; transition: transform .6s cubic-bezier(.4,0,.2,1), opacity .2s .55s; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
@@ -355,7 +364,7 @@ button.chip { border: 0; color: inherit; cursor: pointer; }
   .titlebar { padding: 0 6px 0 10px; gap: 4px; }
 }
 @media (max-width: 520px) { .bname { display: none; } .brand { margin-right: 0; } .storysel { max-width: 92px; } .mode a { padding: 4px 5px; } }
-@media (prefers-reduced-motion: reduce) { .crab, .block { transition: none; } .crab svg, .crab .leg, .crab .claw { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .crab, .block { transition: none; } .crab .spr, .crab .fx { animation: none !important; } }
 </style>
 </head>
 <body>
@@ -397,6 +406,7 @@ button.chip { border: 0; color: inherit; cursor: pointer; }
 <script src="simulation_engine/backend/live.js"></script>
 <script src="scenarios.js"></script>
 <script src="demo.js"></script>
+<script src="avatars/avatars.js"></script>
 <script>
 "use strict";
 // ------------------------------------------------------------------ cast
@@ -425,8 +435,11 @@ const FIXTURE = window.LAYERFS_SCENARIOS[0].steps[0].args.files;
 // ------------------------------------------------------------------ story
 // Each step is one agent's call. dsh runs it on the engine; every outcome
 // (ids, Conflict, merges) comes from the engine, never from this script.
-//   { a, call, args }   an SDK call
-//   { a, sh }           a shell command in the agent's mounted Workspace
+//   { a, call, args }   an SDK call; `as` names what it made (a Sandbox or a
+//                       Workspace) for later steps, and args.sandbox may use that name
+//   { a, sh }           a shell command in the agent's Workspace (`ws` picks one by name)
+//   { a, script, calls } one agent's script: several calls in one step, each an
+//                       event whose `group` is the script's name
 //   { a: "dsh", ... }   dsh itself: spawn agents, a burst of calls, a pause
 const DSH_STORY = [
   { a: "main", call: "project.init", args: { name: "website", files: FIXTURE },
@@ -435,14 +448,16 @@ const DSH_STORY = [
     cap: "The main agent forks a Branch. Branch calls land in the <b>project terminal</b>; a tab chip appears for the new Branch." },
   { a: "dsh", call: "dsh.spawn", args: { agents: ["ui-dev", "tester"] },
     cap: "dsh spawns two subagents. No scope, no assignment: they wait until they act." },
-  { a: "ui-dev", call: "sandbox.mount", args: { branch: "feature-home" },
-    cap: "<b>Follow</b> jumps to the Branch tab. dsh creates ui-dev's Sandbox and mounts a Workspace: a pane owned by ui-dev only." },
+  { a: "ui-dev", call: "sandbox.create", args: {}, as: "box",
+    cap: "Any agent may create a Sandbox (one machine, one localhost). The call lands in the <b>project terminal</b>, tagged with who made it, and the Sandbox joins the list on main." },
+  { a: "ui-dev", call: "sandbox.mount", args: { branch: "feature-home", sandbox: "box" },
+    cap: "<b>Follow</b> jumps to the Branch tab. ui-dev mounts a Workspace in that Sandbox: a pane owned by ui-dev only." },
   { a: "ui-dev", sh: "mkdir -p app/components && echo 'export function Hero() { return <section>Hero</section>; }' > app/components/hero.tsx",
     cap: "Shell commands run in the Workspace (simulated shell). Their writes stay in the Workspace until a commit." },
   { a: "ui-dev", call: "sandbox.commit", args: { message: "add hero" },
     cap: "The commit lands on the Branch: a node in History, an A badge in Files." },
-  { a: "tester", call: "sandbox.mount", args: { branch: "feature-home" },
-    cap: "A second agent mounts its own Workspace on the same Branch. <b>One Branch, many agents; one Workspace, one agent.</b>" },
+  { a: "tester", call: "sandbox.mount", args: { branch: "feature-home", sandbox: "box" },
+    cap: "A second agent mounts its own Workspace on the same Branch, in the same Sandbox. <b>One Branch, many agents; one Workspace, one agent; one Sandbox, many Workspaces.</b>" },
   { a: "main", call: "fs.read", args: { ref: "feature-home", path: "/app/page.tsx" },
     cap: "The main agent uses <code>fs</code> calls. They go to the Branch's <b>fs terminal</b> on the left, tagged by agent." },
   { a: "main", call: "fs.edit", args: { branch: "feature-home", path: "/app/page.tsx", oldText: "Hello world", newText: "Welcome back", message: "headline copy" },
@@ -479,10 +494,22 @@ const DSH_STORY = [
     cap: "Inside a Branch tab the fs terminal caps its crowd too. Only agents on <i>this</i> Branch appear here." },
   { a: "ui-dev", call: "fs.write", args: { branch: "try-a", path: "/app/theme.css", content: ":root { --brand: #d97757; }\n", message: "warm theme" },
     cap: "One agent, many Branches: ui-dev is now on try-a. Its location comes from its last call — nothing was assigned." },
-  { a: "tester", call: "sandbox.mount", args: { branch: "try-b" } },
+  { a: "tester", call: "sandbox.mount", args: { branch: "try-b", sandbox: "box" } },
   { a: "tester", sh: "sed -i 's/<section>/<section className=\"lazy\">/' app/components/hero.tsx" },
   { a: "tester", call: "sandbox.commit", args: { message: "lazy hero" } },
   { a: "tester", call: "sandbox.unmount", args: {} },
+  { a: "tester", script: "matrix.sh", tab: "main", calls: [
+      { call: "sandbox.create", args: {}, as: "ci" },
+      { call: "sandbox.mount", args: { branch: "try-a", sandbox: "ci" }, as: "ci-a" },
+      { call: "sandbox.mount", args: { branch: "try-b", sandbox: "ci" }, as: "ci-b" }],
+    cap: "One agent, many Workspaces: tester runs a script that creates its own Sandbox and mounts try-a and try-b side by side. Each call is still one event; its <b>group</b> names the script, so its lines carry <code>⧉ matrix.sh</code>." },
+  { a: "tester", script: "matrix.sh", tab: "main", calls: [{ ws: "ci-a", sh: "npm test" }, { ws: "ci-b", sh: "npm test" }],
+    cap: "tester stands where its last call ran, with <b>×N</b> for the places it works in at once; a faint copy marks each other Workspace it holds." },
+  { a: "tester", script: "matrix.sh", tab: "main", calls: [
+      { ws: "ci-a", call: "sandbox.unmount", args: {} },
+      { ws: "ci-b", call: "sandbox.unmount", args: {} },
+      { call: "sandbox.close", args: { sandbox: "ci" } }],
+    cap: "The script cleans up: two unmounts, then <b>sandbox close</b>. Not only the main agent: any agent may close a Sandbox once nothing is mounted in it." },
   { a: "main", call: "branch.merge", args: { branch: "try-a", with: "try-b", name: "release" },
     cap: "Merge never changes its inputs: the engine creates a new Branch from two." },
   { a: "main", call: "branch.publish", args: { branch: "release" },
@@ -504,7 +531,29 @@ const DSH_STORY = [
 const STORY_KEY = new URLSearchParams(location.search).get("story") || "dsh";
 const DEMO = (window.LAYERFS_DEMO || {})[STORY_KEY] || null;
 const LEAD = DEMO && DEMO.roster ? "lead" : "main";
-if (DEMO && DEMO.roster) for (const [k, r] of Object.entries(DEMO.roster)) AGENTS[k] = { color: r.color, crown: !!r.crown };
+if (DEMO && DEMO.roster) for (const k of Object.keys(DEMO.roster)) AGENTS[k] = {};
+
+// ------------------------------------------------------------------ avatars (sharky_maid, built by avatars/build.py)
+// The main agent is ellen_joe. Every other agent gets a colour variant picked
+// from a hash of its name, so it is the same on every rewind, reload and
+// backend; no variant repeats until all are in use (then a number tells them
+// apart). An agent's colour (tags, History, cards) is its variant's hair.
+const AV = window.DSH_AVATARS, VARIANTS = Object.keys(AV.chars).filter((c) => c !== AV.main), AV_TAKEN = new Map();
+const nameHash = (s) => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
+function avatar(n) {
+  const a = (AGENTS[n] ||= {});
+  if (a.av) return a;
+  if (n === LEAD) a.av = AV.main;
+  else {
+    const k = nameHash(n) % VARIANTS.length;
+    a.av = VARIANTS.map((_, i) => VARIANTS[(k + i) % VARIANTS.length]).find((v) => !AV_TAKEN.has(v)) || VARIANTS[k];
+  }
+  a.dup = (AV_TAKEN.get(a.av) || 0) + 1; AV_TAKEN.set(a.av, a.dup);
+  a.color = AV.chars[a.av].color;
+  return a;
+}
+// the cast in story order: the lead first, then everyone this story uses
+for (const n of [LEAD, ...(DEMO ? Object.keys((DEMO && DEMO.roster) || {}) : Object.keys(AGENTS))]) avatar(n);
 function demoFrames(story) {
   const escT = (t) => String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
   const out = [{ a: LEAD, call: "project.init", args: { name: "website", files: FIXTURE },
@@ -536,12 +585,14 @@ const STORY = DEMO ? demoFrames(DEMO) : DSH_STORY;
 const newAgent = () => ({ lastLoc: { kind: "bench" }, lastT: -99 });
 const EMPTY_STATE = () => ({ project: null, main: null, roots: {}, commits: {}, layers: {}, branches: {}, branchOrder: [], sandboxes: {}, sandboxOrder: [] });
 const branchRoot = (s, b) => (b.head ? s.commits[b.head].root : s.layers[b.base].root);
+// the engine's Workspace for a pane key "sb_01:/workspaces/2"
+const engWs = (s, k) => { const i = k.indexOf(":"), sb = s.sandboxes[k.slice(0, i)]; return sb && sb.workspaces[k.slice(i + 1)]; };
 function fresh() {
   let engine;
   if (LIVE) { engine = new window.LayerBackendLive.LiveBackend(); engine.state = EMPTY_STATE(); }
   else { engine = new window.LayerBackendSim.SimBackend(); engine.packed = PACKED; engine.packing = PACKING; }
   engine.onchange = rerender;
-  const W = { engine, clock: 0, seq: 0, agents: { [LEAD]: newAgent() }, panes: {}, fsLog: {}, hist: [], attrib: {}, touched: {},
+  const W = { engine, clock: 0, seq: 0, agents: { [LEAD]: newAgent() }, panes: {}, fsLog: {}, hist: [], attrib: {}, touched: {}, names: {}, sbBy: {},
     flash: {}, newNodes: new Set(), lastTab: "main", last: null, check: null };
   if (DEMO) {
     W.demo = { e: new Engine(engine, "website"), fs: {}, sb: {}, st: {}, active: "main", code: {} };
@@ -551,16 +602,20 @@ function fresh() {
   return W;
 }
 const HIST = { "project.init": (a) => `init ${a.name}`, "main.fork": (a) => `fork ${a.name}`, "branch.fork": (a) => `fork ${a.name} --from ${a.branch}`,
-  "branch.merge": (a) => `merge ${a.branch} ${a.with} --name ${a.name}`, "branch.publish": (a) => `publish ${a.branch}` };
+  "branch.merge": (a) => `merge ${a.branch} ${a.with} --name ${a.name}`, "branch.publish": (a) => `publish ${a.branch}`,
+  "sandbox.create": () => "sandbox create", "sandbox.close": (a) => `sandbox close ${a.sandbox}` };
+// Sandbox lifecycle calls belong to the project, not to a Branch: they print in the project terminal.
+const SB_LIFE = new Set(["sandbox.create", "sandbox.close"]);
 const FS = { "fs.read": (a) => `read ${a.path}`, "fs.edit": (a) => `edit ${a.path} -m "${a.message}"`, "fs.write": (a) => `write ${a.path} -m "${a.message}"` };
 
 async function runStep(W, st) {
   const before = rootsOf(W), known = new Set(Object.keys(W.nodes));
-  W.last = null; W.check = null;
+  W.last = null; W.check = null; W.tick = (W.tick || 0) + 1; // one tick per step: poses show this step's outcomes
   if (st.demo) { W.clock += 2; await runDemo(W, st); }
   else if (st.burst) { W.clock += 4; for (const e of st.burst) await runCall(W, e); W.lastTab = st.tab; }
+  else if (st.script) { W.clock += 4; for (const c of st.calls) await runCall(W, { a: st.a, group: st.script, ...c }); if (st.tab) W.lastTab = st.tab; }
   else if (st.call === "dsh.view") W.lastTab = st.tab;
-  else if (st.call === "dsh.spawn") { W.clock += 4; for (const n of st.args.agents) W.agents[n] ||= newAgent(); }
+  else if (st.call === "dsh.spawn") { W.clock += 4; for (const n of st.args.agents) (W.agents[n] ||= newAgent()).spawned = W.tick; }
   else if (st.call === "dsh.idle") W.clock += st.args.seconds;
   else { W.clock += 4; await runCall(W, st); }
   derive(W);
@@ -568,18 +623,33 @@ async function runStep(W, st) {
   W.flash = changedPaths(W, before, rootsOf(W));
 }
 
+// The outcome of an agent's last call in a step, for its pose.
+const outOf = (call, o, tick) => ({ call, code: o.code, ok: o.ok, exit: o.ok && o.result ? o.result.exitCode || 0 : 0, proc: call === "sandbox.exec" && !!(o.ok && o.result && o.result.process), tick });
+// Demo steps: a background start reads as "running", so use the step's code when it says so.
+const outCode = (call, o, code, tick) => ({ ...outOf(call, o, tick), proc: code === "running" || (call === "sandbox.exec" && !!(o.ok && o.result && o.result.process)) });
 // One frame of a demo story, run on the terminal engine; its records become
 // dsh terminal lines, Workspace panes, agent locations and attribution.
 const LINE_CLASS = { err: "bad", warn: "mark", ok: "good", info: "good" };
 const outLines = (rec) => rec.lines.map((x) => ({ t: x.t, c: LINE_CLASS[x.c] || "" }));
-const callsOf = (rec) => rec.calls.map((c) => ({ call: c.call, code: c.outcome.code, timing: c.outcome.timing, script: c.script }));
+const callsOf = (rec, skip) => rec.calls.filter((c) => !skip || !skip.has(c.call)).map((c) => ({ call: c.call, code: c.outcome.code, timing: c.outcome.timing, script: c.script }));
+const LIFTED = new Set(["sandbox.create"]);
 async function runDemo(W, fr) {
   const D = W.demo, e = D.e, st = fr.demo, n = fr.a, seq = ++W.seq, recs = [];
+  // The engine creates a Sandbox inside a mount; dsh reports that create as
+  // its own event, so it prints in the project terminal under the agent.
+  const liftCreates = (rec) => {
+    for (const c of rec.calls.filter((x) => x.call === "sandbox.create")) {
+      W.hist.push({ agent: n, text: HIST["sandbox.create"](), out: outcome(c.call, c.outcome), t: seq, calls: callsOf({ calls: [c] }) });
+      if (c.outcome.ok) W.sbBy[c.outcome.result.id] = { made: n };
+    }
+    return rec;
+  };
   const A = n === "dsh" ? null : (W.agents[n] ||= newAgent());
   const wsBranch = (b) => { const w = b && W.engine.s.sandboxes[b.sandbox] && W.engine.s.sandboxes[b.sandbox].workspaces[b.path]; return w ? w.branch : D.active; };
   const paneLine = (b, line) => { const k = `${b.sandbox}:${b.path}`; (W.panes[k] ||= { agent: n, born: seq, lines: [] }).lines.push({ ...line, t: seq }); return k; };
   const inPane = (b, rec, text, dim) => {
-    const k = paneLine(b, { text, dim, out: outLines(rec), calls: callsOf(rec) }), branch = wsBranch(b);
+    const out = outLines(rec).filter((x) => !/^✓ created sb_/.test(x.t)); // the create printed in the project terminal
+    const k = paneLine(b, { text, dim, out, calls: callsOf(rec, LIFTED) }), branch = wsBranch(b);
     A.lastLoc = rec.unmounted ? { kind: "bench" } : { kind: "ws", branch, ws: k }; A.lastBranch = branch; W.lastTab = branch; W.touched[branch] = W.clock;
   };
   let code = null;
@@ -588,7 +658,7 @@ async function runDemo(W, fr) {
     // dsh spawns the agents; they wait on this Branch's bench until they act
     for (const a of st.agents) {
       D.st[a] = { name: a, branch: st.branch, open: null, sticky: null, server: null };
-      Object.assign((W.agents[a] ||= newAgent()), { lastLoc: { kind: "bench" }, lastT: W.clock, lastBranch: st.branch });
+      Object.assign((W.agents[a] ||= newAgent()), { lastLoc: { kind: "bench" }, lastT: W.clock, lastBranch: st.branch, spawned: W.tick });
     }
     code = "ok"; W.lastTab = st.branch;
   } else if (st.milestone) code = "ok";
@@ -597,7 +667,7 @@ async function runDemo(W, fr) {
     let rec = null;
     if (ev.phase === "stop") rec = await e.agentStop(a);
     else if (ev.phase === "mount") {
-      rec = await e.agentMount(a, st.on);
+      rec = liftCreates(await e.agentMount(a, st.on));
       if (rec.binding && !rec.reused) W.panes[`${rec.binding.sandbox}:${rec.binding.path}`] = { agent: n, born: seq, lines: [] };
       if (rec.binding) inPane(rec.binding, rec, rec.reused ? "reuse the kept Workspace" : `mount ${wsBranch(rec.binding)}`, true);
     } else if (ev.phase === "exec" && b) rec = await e.agentExec(a, ev.line);
@@ -606,10 +676,11 @@ async function runDemo(W, fr) {
     if (rec) { recs.push(rec); if (!(ev.phase === "mount" && a.open)) code = rec.code; }
   } else if (st.ui === "open" || st.ui === "split") {
     const o = await e.openSandbox(D.active, st.ui === "split" ? D.sb[st.from].sandbox : null);
+    liftCreates(o.rec);
     recs.push(o.rec);
     code = o.rec.calls.length ? o.rec.calls[o.rec.calls.length - 1].outcome.code : null;
     if (o.binding) {
-      D.sb[st.as] = o.binding; A.sb ||= o.binding.sandbox;
+      D.sb[st.as] = o.binding;
       W.panes[`${o.binding.sandbox}:${o.binding.path}`] = { agent: n, born: seq, lines: [] };
       inPane(o.binding, o.rec, `${st.ui === "split" ? "split" : "open"} ${D.active}`, true);
     }
@@ -642,6 +713,9 @@ async function runDemo(W, fr) {
     }
   }
   if (A) A.lastT = W.clock;
+  // the call that matters for the pose: a refusal, Commit, merge, publish or command, not the unmount after it
+  const all = recs.flatMap((r) => r.calls), lastCall = all.filter((c) => !c.outcome.ok || ["Committed", "Merged", "Added"].includes(c.outcome.code) || c.call === "sandbox.exec").pop() || all[all.length - 1];
+  if (A && lastCall) A.out = outCode(lastCall.call, lastCall.outcome, D.code[fr.index], W.tick);
   // attribution: each node a call created belongs to the agent that made it
   for (const rec of recs) for (const c of rec.calls) {
     const o = c.outcome, node = nodeOf(o);
@@ -683,22 +757,23 @@ async function runCall(W, st) {
   let s = W.engine.s;
   let call = st.call, args = { ...st.args }, shOut = null, o, branch;
   const calls = [];
-  const mine = A.ws && s.sandboxes[A.ws.sandbox].workspaces[A.ws.path], pane = A.ws && `${A.ws.sandbox}:${A.ws.path}`;
+  // the Workspace a pane call runs in: the one the step names, else the agent's latest
+  const bind = st.ws ? W.names[st.ws] : A.ws, group = st.group || null;
+  const mine = bind && s.sandboxes[bind.sandbox].workspaces[bind.path], pane = bind && `${bind.sandbox}:${bind.path}`;
   const paneCall = !!st.sh || call === "sandbox.commit" || call === "sandbox.unmount" || call === "process.cancel";
-  if (paneCall) { Object.assign(args, A.ws); branch = mine.branch; }
+  if (paneCall) { Object.assign(args, bind); branch = mine.branch; }
   if (call === "process.cancel" && !args.process) {
-    const sb = s.sandboxes[A.ws.sandbox], run = sb.procOrder.map((id) => sb.processes[id]).filter((x) => x.path === A.ws.path && x.status === "running");
-    args = { sandbox: A.ws.sandbox, process: run.length ? run[run.length - 1].id : "none" };
+    const sb = s.sandboxes[bind.sandbox], run = sb.procOrder.map((id) => sb.processes[id]).filter((x) => x.path === bind.path && x.status === "running");
+    args = { sandbox: bind.sandbox, process: run.length ? run[run.length - 1].id : "none" };
   }
-  if (call === "sandbox.mount") {
-    if (!A.sb) A.sb = (await sdkCall(W, calls, "sandbox.create", {})).result.id;
-    args.sandbox = A.sb; branch = args.branch;
-  }
+  // a Sandbox by the name a create step gave it, or by its id
+  if (args.sandbox && typeof W.names[args.sandbox] === "string") args.sandbox = W.names[args.sandbox];
+  if (call === "sandbox.mount") branch = args.branch;
   if (st.sh) {
     call = "sandbox.exec";
     // sim: the shell is simulated and its writes go to the call; live: the
     // command really runs in the Workspace (a trailing & starts a process).
-    const r = LIVE ? liveCommand(st.sh) : simulateShell(st.sh, mine, s.sandboxes[A.ws.sandbox]);
+    const r = LIVE ? liveCommand(st.sh) : simulateShell(st.sh, mine, s.sandboxes[bind.sandbox]);
     shOut = r.out || null;
     if (r.refuse) o = { ok: false, code: "ShellRefused", refusal: { message: r.out.map((x) => x.t).join(" ") } };
     else if (LIVE) { o = await sdkCall(W, calls, call, { ...args, command: r.command, background: r.background || undefined }); shOut = o.ok ? execLines(o.result) : []; }
@@ -709,35 +784,44 @@ async function runCall(W, st) {
   if (LIVE && call === "fs.read" && o.ok && s.branches[args.ref]) o.result.snapshot = `${args.ref} @ ${s.branches[args.ref].head || s.branches[args.ref].base}`;
   const out = outcome(call, o, shOut, args);
   W.last = { agent: n, call, step: st, o, node: nodeOf(o) };
+  A.out = outOf(call, o, W.tick);
   if (W.last.node) W.attrib[W.last.node] = n;
+  if (o.ok && call === "sandbox.create") { W.sbBy[o.result.id] = { made: n }; if (st.as) W.names[st.as] = o.result.id; }
+  if (o.ok && call === "sandbox.close") (W.sbBy[args.sandbox] ||= {}).closed = n;
   if (o.ok && (o.code === "Forked" || o.code === "Merged")) W.attrib["fork:" + o.result.branch] = n;
 
   if (call.startsWith("fs.")) {
     branch = args.branch || args.ref;
-    (W.fsLog[branch] ||= []).push({ agent: n, text: FS[call](args), out, t: seq, dim: call === "fs.read", calls });
+    (W.fsLog[branch] ||= []).push({ agent: n, text: FS[call](args), out, t: seq, dim: call === "fs.read", calls, group });
     A.lastLoc = { kind: "fs", branch };
   } else if (call === "sandbox.mount") {
     if (o.ok) {
       A.ws = { sandbox: o.result.sandbox, path: o.result.path };
+      if (st.as) W.names[st.as] = A.ws;
       const k = `${A.ws.sandbox}:${A.ws.path}`;
-      W.panes[k] = { agent: n, born: seq, lines: [{ dim: true, text: `mount ${branch}`, out, t: seq, calls }] };
+      W.panes[k] = { agent: n, born: seq, lines: [{ dim: true, text: `mount ${branch}`, out, t: seq, calls, group }] };
       A.lastLoc = { kind: "ws", branch, ws: k };
-    } else { W.hist.push({ agent: n, text: `mount ${branch}`, out, t: seq, calls }); A.lastLoc = { kind: "hist" }; }
+    } else { W.hist.push({ agent: n, text: `mount ${branch}`, out, t: seq, calls, group }); A.lastLoc = { kind: "hist" }; }
   } else if (paneCall) {
-    if (call === "sandbox.unmount" && o.ok) { A.ws = null; A.lastLoc = { kind: "bench" }; A.lastBranch = branch; }
-    else {
-      W.panes[pane].lines.push({ text: st.sh || (call === "process.cancel" ? `kill ${args.process}` : `commit -m "${args.message}"`), out, t: seq, calls });
+    if (call === "sandbox.unmount" && o.ok) {
+      // the agent may still hold other Workspaces (a script's fan-out): it stays on the latest one
+      const left = Object.keys(W.panes).filter((k) => k !== pane && W.panes[k].agent === n && (engWs(s, k) || {}).mounted).pop();
+      if (left) { const i = left.indexOf(":"); A.ws = { sandbox: left.slice(0, i), path: left.slice(i + 1) }; A.lastLoc = { kind: "ws", branch: engWs(s, left).branch, ws: left }; }
+      else { A.ws = null; A.lastLoc = { kind: "bench" }; }
+      A.lastBranch = branch;
+    } else {
+      W.panes[pane].lines.push({ text: st.sh || (call === "process.cancel" ? `kill ${args.process}` : `commit -m "${args.message}"`), out, t: seq, calls, group });
       A.lastLoc = { kind: "ws", branch, ws: pane };
     }
   } else {
-    W.hist.push({ agent: n, text: HIST[call](args), out, t: seq, calls });
+    W.hist.push({ agent: n, text: HIST[call](args), out, t: seq, calls, group });
     A.lastLoc = { kind: "hist" };
     branch = call === "branch.publish" ? args.branch : args.name;
   }
   A.lastT = W.clock;
   if (A.lastLoc.branch) A.lastBranch = A.lastLoc.branch;
   if (branch && s.branches[branch]) W.touched[branch] = W.clock;
-  W.lastTab = call.startsWith("fs.") || call.startsWith("sandbox.") || paneCall ? branch : "main";
+  W.lastTab = !SB_LIFE.has(call) && (call.startsWith("fs.") || call.startsWith("sandbox.") || paneCall) ? branch : "main";
 }
 // The node a call created, for attribution and the flying block.
 function nodeOf(o) {
@@ -767,6 +851,8 @@ function outcome(call, o, shOut, args = {}) {
     case "Mounted": return [L(`mounted ${r.branch}@${r.base} → ${r.sandbox}:${r.path}`)];
     case "Unmounted": return [L("unmounted")];
     case "Stopped": return [L(`${r.process} ${r.status || "stopped"}`)];
+    case "Ready": return [L(`Ready ${r.id} · a new machine with its own localhost`, "good")];
+    case "Closed": return [L(`Closed ${r.id}`)];
   }
   if (call === "fs.read") return [L(`${(r.text || "").split("\n").length} lines${r.snapshot ? " · " + r.snapshot : ""}`)];
   if (call === "process.cancel") return [L(`${args.process} stopped`)];
@@ -780,6 +866,8 @@ function bubbleOf(last) {
   if (o.code === "Added") return [`→ ${r.publishedLayer.id}`, "good"];
   if (o.code === "Forked") return ["fork", ""];
   if (o.code === "Mounted") return ["mount", ""];
+  if (o.code === "Ready") return [`+ ${r.id}`, "good"];
+  if (o.code === "Closed") return [`× ${r.id}`, ""];
   if (o.code === "running") return ["● dev server", "good"];
   if (o.code === "Stopped" || last.call === "process.cancel") return ["■ stopped", ""];
   if (last.call === "sandbox.exec" && r && r.process) return ["● dev server", "good"];
@@ -867,13 +955,39 @@ function visibleTabs() {
   return { tabs: W.order.filter((b) => keep.includes(b)), hidden };
 }
 
-// ------------------------------------------------------------------ pixel crab (from tui.html)
+// ------------------------------------------------------------------ avatars: head (tags) and sprite (hosts)
+const AV_N = Object.keys(AV.chars).length;
 function mascot(n, mini) {
-  const r = AGENTS[n], O = r.color, K = "#1d1d1f", px = (x, y, w, h, f, c = "") => `<rect${c ? ` class="${c}"` : ""} x="${x}" y="${y}" width="${w}" height="${h}" fill="${f}"/>`;
-  const crown = r.crown ? px(4, 0, 6, 1, "#f2c94c") + px(4, -1, 1, 1, "#f2c94c") + px(6.5, -1, 1, 1, "#f2c94c") + px(9, -1, 1, 1, "#f2c94c") : "";
-  const body = `${crown}${px(2, 1, 10, 6, O)}<g class="claw l">${px(0, 3, 2, 2, O)}</g><g class="claw r">${px(12, 3, 2, 2, O)}</g>${px(4, 2, 1, 2, K)}${px(9, 2, 1, 2, K)}${px(2, 5, 10, 1, "rgba(0,0,0,.28)")}${px(3, 7, 1, 2, O, "leg a")}${px(5, 7, 1, 2, O, "leg b")}${px(8, 7, 1, 2, O, "leg a")}${px(10, 7, 1, 2, O, "leg b")}`;
-  if (mini) return `<svg viewBox="0 -2 14 11" width="14" height="11" style="shape-rendering:crispEdges;flex:none" aria-hidden="true">${body}</svg>`;
-  return `<svg viewBox="0 -2 14 11" aria-hidden="true">${body}<g class="sweat">${px(1, 0, 1, 2, "#6cc4ff")}</g><g class="bang">${px(13, -2, 1, 2, "#e5484d")}${px(13, 1, 1, 1, "#e5484d")}</g></svg>`;
+  const a = avatar(n), c = AV.chars[a.av], dup = a.dup > 1 ? `<i class="dup">${a.dup}</i>` : "";
+  if (mini) return `<span class="av" style="--ac:${a.color};background-image:url(${AV.heads});background-size:${AV_N * 16}px 16px;background-position:${-c.head * 16}px 0" aria-hidden="true">${dup}</span>`;
+  return `<span class="spr" style="background-image:url(${c.sheet});background-size:${c.poses.length * AV.frame.w}px ${AV.frame.h}px"></span><i class="fx sweat">💦</i><i class="fx bang">!</i><i class="fan"></i>${dup}`;
+}
+// What an agent is doing, as a pose name: the outcome of its call in this
+// step first, then where it is. Variants have these poses; ellen_joe has
+// expressions, mapped below. Conflict and refusals add an overlay.
+const ELLEN = { idle: "shy", sleep: "sleepy", laptop: "thinking", read: "thinking", cheer: "thumbs_up", arms_open: "happy", heart: "smug", serve_tea: "happy", wave: "happy", conflict: "crying", refused: "surprised", failed: "angry" };
+function poseOf(n, mode, acting) {
+  const A = W.agents[n], o = A.out && A.out.tick === W.tick ? A.out : null, l = where(n);
+  const mine = Object.values(W.ws).filter((w) => w.agent === n);
+  if (A.spawned === W.tick) return "wave";
+  if (o && !o.ok) return o.code === "Conflict" ? "conflict" : "refused";
+  if (o && o.code === "Committed") return "cheer";
+  if (o && o.code === "Merged") return "arms_open";
+  if (o && o.code === "Added") return "heart";
+  if (o && o.proc) return "serve_tea";
+  if (o && o.exit) return "failed";
+  if (mine.some((w) => w.bad)) return "conflict";
+  if (mode === "bench") return W.clock - A.lastT > 40 ? "sleep" : "idle";
+  if (acting && l.kind === "ws") return "laptop";
+  if (acting && (l.kind === "fs" || l.kind === "hist")) return "read";
+  if (mine.some((w) => (W.engine.s.sandboxes[w.id.split(":")[0]].procOrder || []).some((p) => { const x = W.engine.s.sandboxes[w.id.split(":")[0]].processes[p]; return x.status === "running" && `${w.id.split(":")[0]}:${x.path}` === w.id; }))) return "serve_tea";
+  return "idle";
+}
+function setPose(el, n, pose) {
+  const a = avatar(n), c = AV.chars[a.av], frame = a.av === AV.main ? ELLEN[pose] || null : c.poses.includes(pose) ? pose : "idle";
+  if (frame) el.querySelector(".spr").style.backgroundPosition = `${-c.poses.indexOf(frame) * AV.frame.w}px 0`;
+  el.classList.toggle("sweat", pose === "conflict");
+  el.classList.toggle("bang", pose === "refused" || pose === "failed");
 }
 const tag = (n) => `<span class="agent-tag" style="--ac:${AGENTS[n].color}">${mascot(n, true)}${esc(n)}</span>`;
 
@@ -963,7 +1077,8 @@ const OPEN_SDK = new Set();
 function lineHtml(l, isNew, prefix) {
   const c = l.calls || [], key = String(l.t) + (l.text || "");
   const sdk = c.length ? `<button class="sdkbtn" data-sdk="${esc(key)}" title="Show the SDK call and inline Node script">sdk${c.length > 1 ? " ×" + c.length : ""}</button><div class="sdk">${c.map((x) => `<span class="code"><b>${esc(x.call)}</b> → ${esc(x.code)}<span class="tm">${esc(timingText(x.timing))}</span></span><pre>${esc(x.script)}</pre>`).join("")}</div>` : "";
-  return `<div class="ln${l.dim ? " dim" : ""}${isNew ? " new" : ""}${OPEN_SDK.has(key) ? " open" : ""}">${prefix}${l.text ? `<span class="cmd">${esc(l.text)}</span>` : ""}${cmdTime(c)}${sdk}</div>`
+  const grp = l.group ? `<span class="grp" title="event group: these calls come from one script of ${esc(l.agent || "this agent")}">⧉ ${esc(l.group)}</span>` : "";
+  return `<div class="ln${l.dim ? " dim" : ""}${isNew ? " new" : ""}${OPEN_SDK.has(key) ? " open" : ""}">${prefix}${grp}${l.text ? `<span class="cmd">${esc(l.text)}</span>` : ""}${cmdTime(c)}${sdk}</div>`
     + (l.out || []).map((o) => `<span class="out${o.c ? " " + o.c : ""}${isNew ? " ln new" : ""}">${esc(o.t)}</span>`).join("");
 }
 const inrow = (ph) => `<div class="inrow"><span class="prompt">you ›</span><span class="caret"></span><span>${esc(ph)}</span></div>`;
@@ -1280,11 +1395,11 @@ function renderStatus() {
 // are dsh operator actions (issue #345), not buttons here.
 function sandboxesHtml() {
   const s = W.engine.s, open = s.sandboxOrder.filter((id) => !s.sandboxes[id].closed);
-  const owner = (id) => Object.keys(W.agents).find((n) => W.agents[n].sb === id);
+  const by = (id) => W.sbBy[id] || {};
   const forBranch = (id) => W.demo && Object.keys(W.demo.e.branchSandbox || {}).find((b) => W.demo.e.branchSandbox[b] === id);
   let nWs = 0, nProc = 0;
   const groups = [...s.sandboxOrder].sort((a, b) => s.sandboxes[a].closed - s.sandboxes[b].closed).map((id) => {
-    const sb = s.sandboxes[id], n = owner(id), br = forBranch(id);
+    const sb = s.sandboxes[id], n = by(id).made, br = forBranch(id);
     const rows = sb.wsOrder.filter((p) => sb.workspaces[p].mounted).map((p) => {
       const w = sb.workspaces[p], k = `${id}:${p}`, v = W.ws[k], agent = v ? v.agent : null, B = W.branches[w.branch];
       const base = w.baseCommit || w.baseLayer, stale = B && (w.baseCommit || "fork:" + w.branch) !== B.head, dirty = W.engine.dirtyOf(w);
@@ -1295,13 +1410,13 @@ function sandboxesHtml() {
         + `<span class="bchip" style="--bc:${B ? `var(${B.color})` : "var(--text-3)"}">${esc(w.branch)}</span><span class="at">@${esc(base)}</span>${dirty ? `<span class="st">+${dirty}</span>` : ""}${state}${run.length ? `<span class="st run">● ${esc(run[0].command)}</span>` : ""}</button>`;
     });
     const branches = new Set(sb.wsOrder.filter((p) => sb.workspaces[p].mounted).map((p) => sb.workspaces[p].branch));
-    const made = n ? `made for ${n}` : br ? `shared by ${br}'s agents` : "made by dsh";
+    const made = (n ? `created by ${n}` : "created outside dsh") + (br ? ` · ${br}'s agents share it` : "") + (sb.closed && by(id).closed ? ` · closed by ${by(id).closed}` : "");
     return `<div class="sbg${sb.closed ? " closed" : ""}" data-sbcol="${esc(id)}" data-sbhl="${esc(id)}"><div class="sbh"><span class="d${sb.closed ? " off" : rows.length ? "" : " idle"}"></span><b>${esc(id)}</b><span class="mk">${n ? mascot(n, true) : ""}${esc(made)}</span><span class="sp"></span>`
       + `<span class="ct">${sb.closed ? "closed" : rows.length ? `${rows.length} Workspace${rows.length === 1 ? "" : "s"}` : "idle"}</span></div>`
       + (branches.size > 1 ? `<div class="dnote">${branches.size} Branches share this machine and its localhost</div>` : "") + rows.join("") + `</div>`;
   });
   return `<section class="term sblist"><div class="thead"><span class="kind sandbox">SANDBOXES</span><span class="ttl">${open.length} · ${nWs} Workspace${nWs === 1 ? "" : "s"} · ${nProc} process${nProc === 1 ? "" : "es"}</span></div>
-    <div class="tbody">${groups.join("") || `<span class="out">no Sandboxes yet · dsh creates one when an agent first mounts a Workspace</span>`}</div></section>`;
+    <div class="tbody">${groups.join("") || `<span class="out">no Sandboxes yet · any agent may create one (sandbox.create)</span>`}</div></section>`;
 }
 // Hovering anything tagged with a Sandbox lights it up: its group on main,
 // and in a Branch tab every pane on that machine.
@@ -1372,10 +1487,18 @@ $("hcard").addEventListener("click", (e) => {
 });
 
 // ------------------------------------------------------------------ crabs
-function crabEl(n) {
-  let el = $("crabs").querySelector(`[data-crab="${n}"]`);
-  if (!el) {
-    el = document.createElement("div"); el.className = "crab idle"; el.dataset.crab = n;
+function crabEl(n, ghost) {
+  const key = ghost ? `${n}|${ghost}` : n;
+  let el = $("crabs").querySelector(ghost ? `[data-ghost="${CSS.escape(key)}"]` : `[data-crab="${n}"]`);
+  if (!el && ghost) {
+    // a ghost appears where it stands, without walking there
+    el = document.createElement("div"); el.className = "crab ghost gone"; el.dataset.ghost = key;
+    el.style.setProperty("--c", AGENTS[n].color);
+    el.innerHTML = mascot(n) + `<span class="name">${esc(n)}</span>`;
+    el.title = `${n} also holds this Workspace`;
+    $("crabs").appendChild(el);
+  } else if (!el) {
+    el = document.createElement("div"); el.className = "crab idle"; el.dataset.crab = n; el.dataset.av = avatar(n).av;
     el.style.setProperty("--c", AGENTS[n].color);
     el.innerHTML = mascot(n) + `<span class="name">${esc(n)}</span>`;
     el.style.transform = `translate(${innerWidth / 2}px, ${innerHeight - 120}px)`;
@@ -1393,47 +1516,90 @@ function targetOf(n) {
   if (l.branch !== active) return { el: chip(l.branch), mode: "chip" };
   return { el: q(l.kind === "ws" ? "ws:" + l.ws : "fs:" + l.branch), mode: l.kind === "ws" ? "pane" : "term" };
 }
+// Fan-out: an agent (say, running a script) may hold several Workspaces at
+// once. It stands where its last call ran; each other Workspace it holds gets
+// a faint copy, and the agent shows ×N for the places it works in.
+function fanOf(n) {
+  const l = where(n), others = Object.values(W.ws).filter((w) => w.agent === n && !(l.kind === "ws" && l.ws === w.id));
+  return { n: others.length + (l.kind === "bench" ? 0 : 1), others };
+}
+function ghostTarget(w) {
+  const q = (s) => document.querySelector(`[data-loc="${s}"]`);
+  if (active === "main") return { el: q("row:" + w.branch), mode: "row" };
+  if (w.branch !== active) return { el: document.querySelector(`[data-tab="${w.branch}"]`), mode: "chip" };
+  return { el: q("ws:" + w.id), mode: "pane" };
+}
 function placeCrabs() {
   const ev = STORY[step - 1], groups = new Map();
+  const view = { top: document.querySelector(".titlebar").getBoundingClientRect().bottom, bottom: Math.min(innerHeight, $("status").getBoundingClientRect().top, document.querySelector(".player").getBoundingClientRect().top) };
   for (const b of $("crabs").querySelectorAll(".crowd")) b.remove();
   // after a rewind, agents not spawned yet at this step have no crab
-  for (const el of $("crabs").querySelectorAll(".crab")) if (!W.agents[el.dataset.crab]) el.classList.add("gone");
+  for (const el of $("crabs").querySelectorAll(".crab")) if (!W.agents[el.dataset.crab || el.dataset.ghost.split("|")[0]]) el.classList.add("gone");
+  const ghosts = new Set();
   // the acting agent first, so a capped host never hides the one doing the work
   const acting = new Set(ev && ev.burst ? ev.burst.map((e) => e.a) : ev ? [ev.a] : []);
   const names = Object.keys(W.agents).sort((x, y) => acting.has(y) - acting.has(x));
+  const join = (t, item) => { if (!groups.has(t.el)) groups.set(t.el, { mode: t.mode, list: [] }); groups.get(t.el).list.push(item); };
+  const fans = {};
   for (const n of names) {
-    const el = crabEl(n), t = targetOf(n);
-    if (!t.el) { el.classList.add("gone"); continue; }
-    if (!groups.has(t.el)) groups.set(t.el, { mode: t.mode, list: [] });
-    groups.get(t.el).list.push(n);
+    const el = crabEl(n), t = targetOf(n), f = (fans[n] = fanOf(n));
+    el.classList.toggle("fanned", f.n > 1); el.querySelector(".fan").textContent = `×${f.n}`;
+    if (!t.el) el.classList.add("gone"); else join(t, { n });
+    // ghosts after everyone real, so a capped host keeps the real crabs
   }
+  for (const n of names) if (fans[n].n > 1) for (const w of fans[n].others) {
+    const t = ghostTarget(w), main = targetOf(n).el;
+    if (!t.el || t.el === main) continue;
+    join(t, { n, ghost: w.id, w }); ghosts.add(`${n}|${w.id}`);
+  }
+  for (const el of $("crabs").querySelectorAll("[data-ghost]")) if (!ghosts.has(el.dataset.ghost)) el.classList.add("gone");
   for (const [host, { mode, list }] of groups) {
     // a Branch row's crabs stand small in its slot, so the list stays compact
     const slot = mode === "row" ? host.querySelector("[data-slot]") : null;
     const r = host.getBoundingClientRect(), sr = slot ? slot.getBoundingClientRect() : r, cap = mode === "pane" ? 1 : CAP[mode];
-    list.forEach((n, k) => {
-      const el = crabEl(n);
+    list.forEach(({ n, ghost, w }, k) => {
+      const el = crabEl(n, ghost);
       if (k >= cap) { el.classList.add("gone"); return; }
       let x, y;
-      if (mode === "chip") { x = r.right - 30; y = r.bottom - 22; }
-      else if (mode === "row") { x = sr.left + k * 24 - 10; y = sr.top + sr.height / 2 - 17; }
-      else if (mode === "bench") { x = r.left + 116 + k * 50; y = r.top + r.height / 2 - 24; }
-      else { x = r.right - 52 - k * 46; y = r.bottom - 74; }
-      el.classList.remove("gone");
+      // the sprite box is 36x48 (small: drawn at half size, centred low in it)
+      if (mode === "chip") { x = r.right - 33; y = r.bottom - 50; }
+      else if (mode === "row") { x = sr.left + k * 22 - 9; y = sr.top + sr.height / 2 - 36; }
+      else if (mode === "bench") { x = r.left + 116 + k * 40; y = r.top + r.height / 2 - 26; }
+      else { x = r.right - 48 - k * 42; y = r.bottom - 89; }
+      // a host scrolled under the title bar or the player hides its agents instead of drawing over them
+      if (mode !== "chip" && (y + 48 > view.bottom || y + 24 < view.top)) { el.classList.add("gone"); return; }
       el.classList.toggle("small", mode === "chip" || mode === "row");
-      const mood = Object.values(W.ws).some((w) => w.agent === n && w.bad) ? "sweat" : acting.has(n) && mode !== "bench" ? "busy" : "idle";
-      el.classList.remove("idle", "busy", "sweat"); el.classList.add(mood);
+      if (ghost) {
+        // what that Workspace is doing: its conflict, its server, or work
+        const id = ghost.split(":")[0], sb = W.engine.s.sandboxes[id];
+        const serving = sb.procOrder.some((p) => sb.processes[p].status === "running" && `${id}:${sb.processes[p].path}` === ghost);
+        if (!el.dataset.pos) { el.style.transition = "none"; void el.offsetWidth; } // first placement: no slide in
+        el.dataset.pos = `${Math.round(x)},${Math.round(y)}`; el.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
+        if (el.style.transition) { void el.offsetWidth; el.style.transition = ""; }
+        el.classList.remove("gone");
+        setPose(el, n, w.bad ? "conflict" : serving ? "serve_tea" : "laptop");
+        return;
+      }
+      el.classList.remove("gone");
+      const pose = poseOf(n, mode, acting.has(n));
+      el.classList.toggle("idle", pose === "idle" || pose === "sleep");
       const pos = `${Math.round(x)},${Math.round(y)}`;
       if (el.dataset.pos !== pos) {
+        // walking: the run pose (ellen_joe hops), facing where it goes
+        const from = (el.dataset.pos || pos).split(",").map(Number);
         el.dataset.pos = pos; el.style.transform = `translate(${x}px,${y}px)`;
-        el.classList.add("walk"); clearTimeout(el.wt); el.wt = setTimeout(() => el.classList.remove("walk"), 560);
+        el.classList.toggle("flip", x > from[0] + 2);
+        el.classList.add("walk"); setPose(el, n, "run");
+        clearTimeout(el.wt); el.wt = setTimeout(() => { el.classList.remove("walk", "flip"); setPose(el, n, el.dataset.pose); }, 560);
       }
+      el.dataset.pose = pose;
+      if (!el.classList.contains("walk")) setPose(el, n, pose);
     });
     if (list.length > cap && mode !== "chip") {
       const b = document.createElement("div"), k = cap;
       b.className = "crowd"; b.textContent = `+${list.length - cap}`;
-      const x = mode === "row" ? sr.left + k * 24 + 2 : mode === "bench" ? r.left + 116 + k * 50 + 4 : r.right - 52 - k * 46 + 10;
-      const y = mode === "row" ? sr.top + sr.height / 2 - 9 : mode === "bench" ? r.top + r.height / 2 - 8 : r.bottom - 58;
+      const x = mode === "row" ? sr.left + k * 22 + 2 : mode === "bench" ? r.left + 116 + k * 40 + 4 : r.right - 48 - k * 42 + 10;
+      const y = mode === "row" ? sr.top + sr.height / 2 - 9 : mode === "bench" ? r.top + r.height / 2 - 8 : r.bottom - 70;
       b.style.transform = `translate(${x}px,${y}px)`; $("crabs").appendChild(b);
     }
   }
@@ -1504,7 +1670,8 @@ function renderPlayer() {
   let cap = ""; for (let i = step - 1; i >= 0 && !cap; i--) if (STORY[i].cap) cap = STORY[i].cap;
   $("p-cap").innerHTML = cap || "Press ▶ to play the story, or step with ← →.";
   const shown = (st) => st.label ? st.label : st.sh ? `sandbox.exec ${JSON.stringify({ command: st.sh })}` : `${st.call} ${JSON.stringify(Object.fromEntries(Object.entries(st.args || {}).filter(([k]) => !["files", "content", "agents"].includes(k))))}`;
-  $("p-ev").innerHTML = ev && ev.burst ? `events · <b>×${ev.burst.length}</b> ${esc([...new Set(ev.burst.map((e) => e.call))].join(", "))} from ${ev.burst.length} agents`
+  $("p-ev").innerHTML = ev && ev.script ? `events · <b>${esc(ev.a)}</b> ×${ev.calls.length} · group <b>${esc(ev.script)}</b> · ${esc(ev.calls.map((c) => c.sh ? "sandbox.exec" : c.call).join(", "))}${W.last ? ` → <span class="${W.last.o.ok ? "" : "bad"}">${esc(W.last.o.code)}</span>` : ""}`
+    : ev && ev.burst ? `events · <b>×${ev.burst.length}</b> ${esc([...new Set(ev.burst.map((e) => e.call))].join(", "))} from ${ev.burst.length} agents`
     : ev && ev.a !== "dsh" ? `event · <b>${esc(ev.a)}</b> ${esc(shown(ev))}${W.last ? ` → <span class="${W.last.o.ok ? "" : "bad"}">${esc(W.last.o.code)}</span>` : ""}`
     : ev ? `dsh · ${esc(ev.label || ev.call.slice(4))}` : "event · —";
   // demo stories: the step's outcome against what demo.js expects
