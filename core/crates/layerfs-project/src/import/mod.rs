@@ -11,6 +11,7 @@ pub(crate) mod init;
 pub(crate) mod metadata;
 #[cfg(unix)]
 pub(crate) mod namespace;
+pub(crate) mod observe;
 #[cfg(unix)]
 pub(crate) mod scan;
 #[cfg(unix)]

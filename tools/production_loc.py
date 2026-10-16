@@ -15,6 +15,12 @@ sdk/js/operator. JavaScript comments are blanked by a scanner that knows line
 and block comments and single, double and template strings. Current regex
 literals contain no comment delimiters or string quotes.
 
+The deepseek-harness plugin is its own scope, `dsh`: the JavaScript and
+TypeScript under dsh/packages/<package>/src, one crate per package
+(@dsh-layerfs/<package>, and the dsh-layerfs bundle). Its tests, build output
+and the untracked dsh/assets art are excluded. TypeScript comments are blanked
+by the same JavaScript scanner.
+
 Runtime SQL is counted for both scopes: a candidate package that ships schema or
 query text under <crate>/sql/ contributes it exactly like the reference schema.
 Per-file reporting uses the same classification as the totals, and prints the
@@ -35,6 +41,8 @@ import re
 import sys
 
 SKIP_DIRS = {"target", "tests", "examples", "benches", "node_modules"}
+DSH_SKIP_DIRS = SKIP_DIRS | {"dist", "assets"}
+JS_SUFFIXES = (".js", ".ts", ".tsx")
 CODE_SUFFIXES = (".rs",)
 
 
@@ -332,12 +340,12 @@ def counted_lines(path: Path) -> int:
         text = blank_inline_tests(blank_rust(text))
     elif path.suffix == ".sql":
         text = blank_sql(text)
-    elif path.suffix == ".js":
+    elif path.suffix in JS_SUFFIXES:
         text = blank_js(text)
     return sum(1 for line in text.splitlines() if line.strip())
 
 
-SCOPES = ("core", "reference", "sdk")
+SCOPES = ("core", "reference", "sdk", "dsh")
 
 
 def scope_base(root: Path, scope: str) -> Path:
@@ -345,6 +353,8 @@ def scope_base(root: Path, scope: str) -> Path:
         return root / "core" / "crates"
     if scope == "sdk":
         return root / "sdk" / "js"
+    if scope == "dsh":
+        return root / "dsh" / "packages"
     return root / "crates"
 
 
@@ -360,6 +370,30 @@ def sdk_files(base: Path) -> list:
     return [path for path in files if not any(part in SKIP_DIRS for part in path.relative_to(base).parts)]
 
 
+def dsh_files(base: Path) -> list:
+    """Each plugin package's src/ JavaScript and TypeScript."""
+    files = []
+    for package in sorted(p for p in base.iterdir() if p.is_dir()):
+        if (package / "src").is_dir():
+            files += sorted(f for f in (package / "src").rglob("*") if f.is_file() and f.suffix in JS_SUFFIXES)
+    return [path for path in files if not any(part in DSH_SKIP_DIRS for part in path.relative_to(base).parts)]
+
+
+def dsh_crate(base: Path, path: Path) -> str:
+    package = path.relative_to(base).parts[0]
+    return package if package == "dsh-layerfs" else f"@dsh-layerfs/{package}"
+
+
+def crate_of(root: Path, scope: str, path: Path) -> str:
+    base = scope_base(root, scope)
+    if scope == "sdk":
+        return sdk_crate(base, path)
+    if scope == "dsh":
+        return dsh_crate(base, path)
+    parts = path.relative_to(root).parts
+    return parts[2] if scope == "core" else parts[1]
+
+
 def sdk_crate(base: Path, path: Path) -> str:
     return "layerfs-node" if path.relative_to(base).parts[0] == "native" else "@layerfs/sdk"
 
@@ -370,6 +404,8 @@ def scope_files(root: Path, scope: str) -> list:
         return []
     if scope == "sdk":
         return sdk_files(base)
+    if scope == "dsh":
+        return dsh_files(base)
     files = []
     for path in sorted(base.rglob("*")):
         if not path.is_file():
@@ -404,11 +440,8 @@ def per_file(root: Path) -> dict:
     """Per-file production LOC and physical lines for both scopes."""
     result = {"root": str(root), "files": []}
     for scope in SCOPES:
-        base = scope_base(root, scope)
         for path in scope_files(root, scope):
-            crate = (
-                sdk_crate(base, path) if scope == "sdk" else path.relative_to(base).parts[0]
-            )
+            crate = crate_of(root, scope, path)
             result["files"].append(
                 {
                     "path": str(path.relative_to(root)),
@@ -429,11 +462,7 @@ def scan(root: Path) -> dict:
         for path in scope_files(root, scope):
             lines = counted_lines(path)
             total += lines
-            parts = path.relative_to(root).parts
-            if scope == "sdk":
-                crate = sdk_crate(scope_base(root, scope), path)
-            else:
-                crate = parts[2] if scope == "core" else parts[1]
+            crate = crate_of(root, scope, path)
             per_crate[crate] = per_crate.get(crate, 0) + lines
         result["scopes"][scope] = {
             "files": len(scope_files(root, scope)),

@@ -13,6 +13,7 @@ pub mod project;
 pub mod sandbox;
 pub use base::failure::{OperationCause, OperationFailure};
 pub use base::sdk::{call, SdkError, SdkResult};
+pub use layerfs_project::{InitCounters, InitCounts, InitStep};
 pub use project::{
     InitError, InitFailure, InitRequest, InstallError, InstallFailure, InstallWork, Installed,
     ProjectApi, SealedProject,

@@ -2,15 +2,15 @@
 use layerfs_bridge::provision::{check_destination, ProviderKind, StoreManifest, StoreProfile};
 use layerfs_history::{
     BranchId, BranchSnapshot, ForkRequest, ForkSource, HistoryCatalog, HistoryCatalogConfig,
-    HistoryError, HistoryName, LayerStackId,
+    HistoryError, HistoryName, InitStatistics, LayerStackId,
 };
 use layerfs_persistence::{
     Handles, PersistenceConfig, SealedStore, SqliteAcquisitionSchema, SqlitePersistenceProfile,
 };
-use layerfs_project::{Initialized, ProjectError};
+use layerfs_project::{InitCounters, InitStep, Initialized, ProjectError};
 use layerfs_storage::{port::PersistenceError, Storage, StorageError, StoragePolicy};
 use layerfs_telemetry::timer::{Active, TimingScope};
-use std::{fmt, path::PathBuf, time::Instant};
+use std::{fmt, path::PathBuf, sync::Arc, time::Instant};
 
 /// One host Project Init. The Store is created once with acquisition tables.
 #[derive(Debug)]
@@ -89,7 +89,9 @@ impl std::error::Error for InitFailure {}
 pub(crate) fn initialize(
     request: InitRequest,
     timer: &TimingScope<'_, Active>,
+    counters: Arc<InitCounters>,
 ) -> Result<SealedProject, Box<InitFailure>> {
+    let started = Instant::now();
     let mut initialized = None;
     let mut branch = None;
     let result = (|| {
@@ -111,7 +113,7 @@ pub(crate) fn initialize(
         let handles = Handles::create(config, request.policy, &request.catalog)
             .map_err(InitError::Persistence)?;
         let storage = Storage::new(handles.storage.clone()).map_err(InitError::Storage)?;
-        let imported = layerfs_project::init(
+        let imported = layerfs_project::init_observed(
             &storage,
             &handles.history,
             layerfs_project::InitRequest {
@@ -123,8 +125,10 @@ pub(crate) fn initialize(
                 deadline: request.deadline,
             },
             timer,
+            Arc::clone(&counters),
         )
         .map_err(InitError::Project)?;
+        counters.step(InitStep::Seal);
         let source = ForkSource::Layer(imported.stack.head_layer);
         initialized = Some(imported);
         branch = Some(
@@ -138,6 +142,20 @@ pub(crate) fn initialize(
                 })
                 .map_err(InitError::History)?,
         );
+        let totals = handles.history.statistics().map_err(InitError::History)?;
+        let counts = counters.read();
+        handles
+            .history
+            .record_init(&InitStatistics {
+                entries: initialized.as_ref().expect("acknowledged Init").entries,
+                files: counts.files,
+                bytes: counts.bytes,
+                canonical: totals.canonical,
+                stored: totals.stored,
+                metadata: totals.metadata,
+                millis: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            })
+            .map_err(InitError::History)?;
         drop(storage);
         let sealed = handles.seal().map_err(InitError::Persistence)?;
         Ok(sealed)
@@ -196,6 +214,17 @@ impl ProjectApi {
         request: InitRequest,
         timer: &TimingScope<'_, Active>,
     ) -> Result<SealedProject, Box<InitFailure>> {
-        initialize(request, timer)
+        initialize(request, timer, Arc::new(InitCounters::new()))
+    }
+    /// As [`ProjectApi::init`], updating `counters` while it runs so another
+    /// thread can show how far it has come; the last step, Seal, covers the
+    /// first Branch and sealing.
+    pub fn init_observed(
+        &self,
+        request: InitRequest,
+        timer: &TimingScope<'_, Active>,
+        counters: Arc<InitCounters>,
+    ) -> Result<SealedProject, Box<InitFailure>> {
+        initialize(request, timer, counters)
     }
 }

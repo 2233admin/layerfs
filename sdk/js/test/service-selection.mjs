@@ -7,6 +7,8 @@ import { native } from '../src/native.js';
 
 process.env.LAYERFS_NATIVE = fileURLToPath(new URL('./fixture/service-native.cjs', import.meta.url));
 process.env.LAYERFS_HOME = '/private/selection-test';
+// an automatic service Sandbox is created like any Sandbox: its deployment settings are checked first
+Object.assign(process.env, { LAYERFS_DOCKER: '/var/run/docker.sock', LAYERFS_IMAGE: 'sha256:selection', LAYERFS_VOLUME: 'selection-store', LAYERFS_DAEMON: '/selection/layerfs-daemon' });
 const binding = native();
 
 test('an explicitly selected existing Sandbox serves the client without automatic discovery', async () => {

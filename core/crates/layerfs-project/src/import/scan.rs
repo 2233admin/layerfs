@@ -170,6 +170,7 @@ pub(crate) fn scan(
         objects,
         previous: None,
     };
+    progress.counters.entry();
     let mut placement = Placement {
         next: 1,
         frontier: 1,
@@ -208,6 +209,7 @@ pub(crate) fn scan(
             let child = child?;
             buffer.push(observe(&child.path(), child.file_name().as_bytes())?);
             count += 1;
+            progress.counters.entry();
             if buffer.len() == WINDOW_ROWS {
                 // A wide directory is ordered by the backing, not by a resident sort.
                 wide = true;

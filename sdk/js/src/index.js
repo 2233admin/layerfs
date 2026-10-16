@@ -2,7 +2,7 @@
 // calls name their Branch, and Sandbox calls take the Sandbox (or its id).
 // Calls that are not about a Workspace reach the Store through one service
 // Sandbox, created on the first such call unless `sandbox` names one.
-import { invokeClient, sandboxId } from "./client.js";
+import { deployment, invoke, invokeClient, sandboxId } from "./client.js";
 import { LayerFSError } from "./errors.js";
 import * as fsMethods from "./fs/index.js";
 import { init } from "./project/init.js";
@@ -28,24 +28,29 @@ const bind = (client, methods) =>
 
 export class LayerFS {
   /** Selects a project without filesystem, native addon or network I/O.
-   * `options.trace` names a per-call trace file (overrides LAYERFS_TRACE);
-   * `options.traceStep` labels its lines (overrides LAYERFS_TRACE_STEP).
-   * `options.sandbox` selects an existing Sandbox for this client's Store calls. */
+   * `options.trace` names a per-call trace file (overrides LAYERFS_TRACE,
+   * then DSH_LAYERFS_TRACE); `options.traceStep` labels its lines
+   * (overrides LAYERFS_TRACE_STEP, then DSH_LAYERFS_TRACE_STEP). Deployment
+   * settings read LAYERFS_HOME, _DOCKER, _IMAGE, _VOLUME and _DAEMON, each
+   * else its DSH_LAYERFS_ twin. `options.sandbox` selects an existing
+   * Sandbox for this client's Store calls. */
   constructor(projectName, options = {}) {
     if (typeof projectName !== "string" || !/^[a-z0-9](?:[a-z0-9_.-]{0,61}[a-z0-9])?$/.test(projectName)) {
       throw new LayerFSError("InvalidInput", "a project name is required", null);
     }
     this.projectName = projectName;
-    const env = process.env;
+    // Each LAYERFS_ setting falls back to its DSH_LAYERFS_ twin, the only
+    // names deepseek-harness may set in a bash call's environment.
+    const env = (name) => process.env[`LAYERFS_${name}`] || process.env[`DSH_LAYERFS_${name}`] || undefined;
     this.options = {
-      home: env.LAYERFS_HOME,
-      trace: options.trace ?? (env.LAYERFS_TRACE || undefined),
+      home: env("HOME"),
+      trace: options.trace ?? env("TRACE"),
       traceStep: options.traceStep,
       deploy: {
-        docker: env.LAYERFS_DOCKER,
-        image: env.LAYERFS_IMAGE,
-        volume: env.LAYERFS_VOLUME,
-        daemon: env.LAYERFS_DAEMON,
+        docker: env("DOCKER"),
+        image: env("IMAGE"),
+        volume: env("VOLUME"),
+        daemon: env("DAEMON"),
       },
     };
     const selected = options.sandbox === undefined ? null : sandboxId(options.sandbox);
@@ -57,9 +62,15 @@ export class LayerFS {
     this.sandbox = bind(this, { create, close, mount, exec, status, commit, unmount });
   }
 
-  /** The selected Sandbox, or an automatic service created once on first use. */
+  /**
+   * The selected Sandbox, or an automatic service created once on first use.
+   * A refused creation is not kept, so the caller's next call is a new attempt.
+   */
   service() {
-    this.serviceSandbox ??= invokeClient(this, "sandbox.service", {}).then((value) => { this.sandboxes.add(value.id); return value.id; });
+    this.serviceSandbox ??= invoke("sandbox.service", { project: this.projectName, home: this.options.home, deploy: deployment(this.options.deploy) }, this.options).then(
+      (value) => { this.sandboxes.add(value.id); return value.id; },
+      (error) => { this.serviceSandbox = null; throw error; },
+    );
     return this.serviceSandbox;
   }
 

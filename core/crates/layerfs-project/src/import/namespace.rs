@@ -23,6 +23,7 @@
 use crate::backing::Backing;
 use crate::error::ProjectError as Failure;
 use crate::error::{content, malformed, storage};
+use crate::import::observe::InitCounters;
 use crate::scan::Scanned;
 use layerfs_content::filesystem::directory::update::{build_directory, empty_directory};
 use layerfs_content::filesystem::inode::update::build_table;
@@ -32,18 +33,22 @@ use layerfs_content::object::inode_leaf::{InodeKind, InodeValue};
 use layerfs_content::{AuthenticatedObjects, FinalizedObject, ObjectId, ObjectRole};
 use layerfs_storage::port::acquisition::WRITE_WINDOW_ROWS;
 use layerfs_storage::{Save, Storage};
+use std::sync::Arc;
 use std::time::Instant;
 
 /// One bounded progress byte on a long host import, separate from result data.
 pub(crate) struct ImportProgress {
     deadline: Instant,
     pub(crate) work: crate::NamespaceWork,
+    /// Live counts a caller may read while Init runs.
+    pub(crate) counters: Arc<InitCounters>,
 }
 impl ImportProgress {
-    pub fn new(deadline: Instant) -> Self {
+    pub fn observed(deadline: Instant, counters: Arc<InitCounters>) -> Self {
         Self {
             deadline,
             work: crate::NamespaceWork::default(),
+            counters,
         }
     }
     pub fn deadline(&self) -> Instant {

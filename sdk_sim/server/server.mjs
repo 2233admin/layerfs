@@ -3,6 +3,7 @@
 // with the mirror of `inspect.snapshot`, over HTTP on 127.0.0.1:
 //
 //   GET  /tui.html?backend=live   the UI (any file of sdk_sim/)
+//   GET  /dsh/packages/model/…    the view model the dsh preview imports
 //   POST /api/reset               close the current project, Init a fresh one
 //   POST /api/call  {name, args}  one call: { outcome, state }
 //   GET  /api/state?since=v       { state } or { unchanged: true }
@@ -18,7 +19,9 @@ import { fileURLToPath } from "node:url";
 import { Session } from "./session.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8" };
+const REPO = join(ROOT, "..");
+const MODEL = join(REPO, "dsh/packages/model");
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".png": "image/png", ".jsonl": "application/x-ndjson" };
 
 export function startServer({ port = 8327, host = "127.0.0.1", log = () => {} } = {}) {
   let session = null, queue = Promise.resolve(), resets = 0;
@@ -82,8 +85,10 @@ export function startServer({ port = 8327, host = "127.0.0.1", log = () => {} } 
         response.writeHead(302, { location: "/tui.html?backend=live" });
         return response.end();
       }
-      const file = normalize(join(ROOT, url.pathname));
-      if (!file.startsWith(ROOT) || file.includes(`${ROOT}/server`) || !TYPES[extname(file)]) return send(404, { error: "not found" });
+      const model = url.pathname.startsWith("/dsh/packages/model/");
+      const file = normalize(join(model ? REPO : ROOT, url.pathname));
+      const inside = model ? file.startsWith(`${MODEL}/`) : file.startsWith(ROOT) && !file.includes(`${ROOT}/server`);
+      if (!inside || !TYPES[extname(file)]) return send(404, { error: "not found" });
       return send(200, await readFile(file), TYPES[extname(file)]);
     } catch (error) {
       if (error.code === "ENOENT") return send(404, { error: "not found" });

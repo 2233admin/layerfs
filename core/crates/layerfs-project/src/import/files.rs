@@ -9,6 +9,7 @@ use crate::error::ProjectError as Failure;
 use crate::error::{content, storage};
 use crate::{
     batch::{BatchProducer, Event, ImportBatch, QUEUE_SLOTS},
+    import::observe::InitStep,
     namespace::ImportProgress,
 };
 use layerfs_content::{construct_stream, ObjectId};
@@ -20,7 +21,7 @@ use std::{
     fs::{self, File},
     os::unix::ffi::{OsStrExt, OsStringExt},
     path::PathBuf,
-    sync::{mpsc, Mutex},
+    sync::{mpsc, Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -54,6 +55,8 @@ pub(crate) fn save_files(
     let policy = store.policy().construction();
     let capacities = policy.capacities();
     let deadline = progress.deadline();
+    progress.counters.step(InitStep::Files);
+    let counters = Arc::clone(&progress.counters);
     let (feed, jobs) = mpsc::sync_channel::<Job>(WINDOW_ROWS);
     let jobs = Mutex::new(jobs);
     let mut host_files = backing.jobs();
@@ -64,10 +67,14 @@ pub(crate) fn save_files(
         for _ in 0..INIT_WORKERS {
             let sender = sender.clone();
             let jobs = &jobs;
+            let counters = &counters;
             workers.spawn(move || {
                 let mut producer = BatchProducer::new(&sender);
                 while let Some(job) = next_job(jobs, &mut producer) {
                     let result = construct_file(&job, policy, &capacities, &mut producer, deadline);
+                    if result.is_ok() {
+                        counters.built(job.stamp.len);
+                    }
                     if producer.done(job.id as usize, result).is_err() {
                         return;
                     }

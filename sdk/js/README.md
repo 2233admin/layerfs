@@ -12,11 +12,11 @@ await layerfs.branch.fork("feature");
 await layerfs.fs.write("feature", "/README.md", "Hello\n", "Update introduction");
 const page = await layerfs.branch.list_commits("feature", 20, 0);
 const text = await layerfs.fs.read("feature", "/README.md", 1, 20);
-const id = await layerfs.sandbox.create(); // save this opaque id for another process
-const mounted = await layerfs.sandbox.mount(id, "feature");
-await layerfs.sandbox.exec(id, mounted.path, "npm test", "Run tests");
-await layerfs.sandbox.commit(id, mounted.path, { message: "Save changes" });
-await layerfs.sandbox.unmount(id, mounted.path);
+const id = await layerfs.sandbox.create("dev", "website", process.env.LAYERFS_IMAGE); // its name
+const path = await layerfs.sandbox.mount(id, "feature"); // "/workspaces/1"
+await layerfs.sandbox.exec(id, path, "npm test", "Run tests");
+await layerfs.sandbox.commit(id, path, "Save changes");
+await layerfs.sandbox.unmount(id, path);
 await layerfs.sandbox.close(id);
 ```
 
@@ -25,6 +25,13 @@ letters, digits, `_`, `-`, `.` and start/end alphanumeric. Init is explicit;
 subsequent clients discover the existing project without reacquiring its source
 or reinstalling over live state. Ordinary Store calls lazily create or reopen a
 private service Sandbox. Mount does not scan or materialize the complete tree.
+A project is its home entry, `LAYERFS_HOME/<name>/`; the binding keeps no other
+record of which names it initialized. Init refuses a name whose entry exists
+(`Exists`). Once that entry is deleted, after the project's Sandboxes are closed,
+any process, including the one that made it, can initialize the name again.
+The SDK has no remove method; a host that removes a project deletes the entry
+and the project's volume itself. `node sdk/js/test/reinit.mjs` checks this with
+the real binding: Init, `Exists`, delete the entry, Init again in one process.
 
 Parallel agents can select their own existing Sandbox for every file, Branch and
 operator Store call with `new LayerFS(project, { sandbox: id })`. The option also
@@ -52,19 +59,52 @@ client when its Sandbox closes; construct a new client for a new Sandbox.
 | Environment | Meaning |
 | --- | --- |
 | `LAYERFS_HOME` | Absolute private directory for sealed provisioning and discovery. Created as 0700; existing directories must be owned by the current effective user with no group/other access. Records are 0600, not symlinks. |
-| `LAYERFS_DOCKER` | Local Engine Unix socket; `/var/run/docker.sock` is the create default. |
-| `LAYERFS_IMAGE` | Exact immutable runtime `sha256:...` digest. |
+| `LAYERFS_DOCKER` | Local Engine Unix socket; `/var/run/docker.sock` is the default for `sandbox.create` and the service Sandbox. |
+| `LAYERFS_IMAGE` | Exact immutable runtime `sha256:...` digest of the service Sandbox that Store calls use. `sandbox.create` takes its image as an argument instead. |
 | `LAYERFS_VOLUME` | Existing named local VM volume shared by the project's daemons. |
 | `LAYERFS_DAEMON` | Host path to the built Linux daemon executable. |
 | `LAYERFS_NATIVE` | Optional addon path; defaults to `native/layerfs.node`. |
 | `LAYERFS_TRACE` | Optional per-call trace file (see [Call trace](#call-trace)); unset means no trace. |
 | `LAYERFS_TRACE_STEP` | Optional step label put on each trace line as `step`; read at every call. |
+| `LAYERFS_TRACE_START` | `1` adds a start line before each traced call; read at every call. |
+| `DSH_LAYERFS_HOME`, `DSH_LAYERFS_DOCKER`, `DSH_LAYERFS_IMAGE`, `DSH_LAYERFS_VOLUME`, `DSH_LAYERFS_DAEMON`, `DSH_LAYERFS_TRACE`, `DSH_LAYERFS_TRACE_STEP`, `DSH_LAYERFS_TRACE_START` | Each is used when its `LAYERFS_` name is unset or empty. A host that may only set `DSH_*` names in a command's environment (deepseek-harness) configures and traces the SDK through these. |
 
-The same authorized home permits a fresh Node process to use a saved Sandbox id
-and mount path directly. Reopening validates the full container id, deployment,
+A Sandbox is named by its caller and bound to one project and one image for its
+life: `sandbox.create(name, project, image)` takes a name of 1–63 lowercase ASCII
+letters, digits, `_`, `-`, `.` that starts and ends alphanumeric, this client's
+project, and a local image digest `sha256:<64 hex>`. Names are unique across the
+home, so a second create of a live name is `Exists`; the name is the Sandbox's id
+in every later call. Its records are `LAYERFS_HOME/_sandboxes/<name>/`, with the
+container id in the plain-text file `container` there (for `docker logs`); the
+private service Sandbox behind Store calls is `_service.<project>`. One Sandbox
+holds several Workspaces at once, each a mount of any Branch of its project:
+`mount(id, branch)` answers the Workspace path (`/workspaces/1`, `/workspaces/2`,
+… numbered per Sandbox), and Exec, status, commit and unmount name the Workspace
+by that path. Close removes the Sandbox's record directory, so its name can be
+created again. Close takes its locks before it removes anything: a named
+Sandbox needs only its own, the service Sandbox also its project's. A close
+refused as `Busy` has removed nothing, so closing again later completes it.
+
+The same authorized home permits a fresh Node process to use a Sandbox name and
+mount path directly. Reopening validates the full container id, deployment,
 volume, topology, loopback endpoint, Noise peer and saved daemon incarnation.
-Discovery mutations use nonblocking OS locks and atomic record replacement.
-An unresolved create intent is `Unknown`; it never authorizes another installation.
+Discovery mutations use nonblocking OS locks and atomic record replacement; a
+mutation another process holds is refused as `Busy`, never waited for. The
+client does not keep a refused service Sandbox, so its next Store call is a new
+attempt. A create intent is written only after the request's inputs are read.
+A create that fails before anything reaches the Store volume (the container
+never became ready, for example a daemon that exits at startup) stops and
+deletes the container it made, once each, removes its intent and frees its
+name, then reports the original failure as `Failed` with `detail.container`
+and `detail.removed`. Before the delete it reads the container's last 20 log
+lines once, at most 2048 bytes, into `detail.log` and the message; a log it
+could not read leaves `detail.log` null and the message says so. One whose effect is
+unknown (an interrupted process, a Store install that failed, an Engine create
+whose outcome was lost, or a container that could not be removed) keeps the
+intent, which records what is known. Every later create of that project is then
+`Unknown`, never another installation, and its message says what to remove
+(`docker ps -a --filter volume=<volume>`, and a new volume when no Store is
+installed yet) before deleting `<home>/<project>/create.intent`.
 Daemon/container restart recovery and replay of uncertain operations are excluded.
 Close refuses mounted Workspaces. Background process ownership is in the native
 executor, including persisted process identity; the filesystem daemon launches
@@ -76,9 +116,10 @@ and supervises no commands.
 | fs reads (7) | `read(ref, path, startLine?, endLine?)`, `list(ref, path?, pageSize?, pagePos?)`, `stat(ref, path)`, `grep(ref, pattern, path?, pageSize?, pagePos?)`, `glob(ref, pattern, path?, pageSize?, pagePos?)`, `diff_files(leftRef, leftPath, rightRef, rightPath)`, `blame(ref, path, fromLine?)` |
 | fs writes (7) | `write(branch, path, content, message?)`, `edit(branch, path, oldText, newText, message?)`, `apply(branch, changes, message?)`, `mkdir(branch, path, message?)`, `rm(branch, path, message?)`, `cp(branch, from, to, message?)`, `mv(branch, from, to, message?)` |
 | branch (6) | `fork(name, fromRef?)`, `list_commits(branch, pageSize?, pagePos?)`, `diff_commits(from, to, pageSize?, pagePos?)`, `diff_branches(from, to, pageSize?, pagePos?)`, `merge(a, b, name, message?)`, `publish(branch, commit?)` |
-| sandbox (7) | `create()`, `mount(id, branch)`, `exec(id, path, command, message?)`, `status(id, path)`, `commit(id, path, {message?, force?}?)`, `unmount(id, path, {discard?}?)`, `close(id)` |
+| sandbox (7) | `create(name, project, image)`, `mount(id, branch)` → path, `exec(id, path, command, message?)`, `status(id, path)`, `commit(id, path, message?, force?)`, `unmount(id, path, discard?)`, `close(id)` |
 
-Every grouped method returns a Promise. A ref is `main`, a Branch name, a Commit
+Every grouped method returns a Promise and takes positional arguments only; no
+method takes an options object. A ref is `main`, a Branch name, a Commit
 id or a Layer id. Filesystem paths are absolute in that view. Main changes only
 through publish. There is no `remove` alias, harness export, agent/call attribution,
 public inspect or public process-control method.
@@ -157,10 +198,11 @@ await operator.store.stats();
 await operator.store.commits("feature", 20, 0);
 await operator.files.stats("feature", "/README.md");
 await operator.files.history("feature", "/README.md", 20, 0);
-await operator.workspace.overlay(id, mounted.path);
-await operator.workspace.changes(id, mounted.path, 20, 0);
+await operator.workspace.overlay(id, path);
+await operator.workspace.changes(id, path, 20, 0);
 await operator.inspect.snapshot();
-const process = await operator.process.start(id, mounted.path, "npm run dev");
+await operator.project.progress(); // while layerfs.project.init runs in this process
+const process = await operator.process.start(id, path, "npm run dev");
 await operator.process.list(id);
 await operator.process.cancel(id, process.process);
 ```
@@ -169,6 +211,16 @@ Operator names are refused by public JS/native/Rust/daemon dispatch. This subpat
 uses its own method table; process control remains exclusively in the binding.
 HTTP exists only in the local demo server, which maps GET reads and POST
 `{args:[...]}` writes at `/api/{sdk|operator}/{group}/{method}`.
+
+`project.progress()` reads the project's Init while `project.init` runs in the
+same process, without a Sandbox: `{ step, entries, files, bytes }`, or null when
+no Init runs. `step` is `scan` (reading the source), `files` (constructing each
+regular file), `tree` (building the namespace), `publish` (genesis Layer) or
+`seal` (first Branch and sealing). `entries` counts source entries scanned,
+including the root; `files` and `bytes` count regular-file identities
+constructed and their bytes, a hardlinked file once. The counts say how far
+Init has come, not its totals; a caller that wants a fraction counts the source
+itself. The install into the volume happens later, at the project's first Sandbox.
 
 Store `logical` sums regular-file sizes across immutable Commit and Layer history
 records, counting each hardlink path. `canonical` counts distinct registered object
@@ -185,8 +237,8 @@ counts are reported without inventing exclusive byte attribution.
 
 ## Call trace
 
-`LAYERFS_TRACE=<file>`, or `new LayerFS(project, { trace: file })` (the option
-wins), appends one JSON line to `file` for every SDK and operator call that
+`LAYERFS_TRACE=<file>` (else `DSH_LAYERFS_TRACE`), or
+`new LayerFS(project, { trace: file })` (the option wins), appends one JSON line to `file` for every SDK and operator call that
 reaches the native binding, including the client's own `sandbox.service` call.
 Unset, nothing is written and nothing changes. A failed trace write is dropped;
 it never changes a value, a refusal or the call count. Argument checks the
@@ -194,7 +246,7 @@ JavaScript methods make before the call (for example `page` bounds) are refused
 without a trace line.
 
 ```json
-{"layerfs_trace":1,"id":"9f3c21aa-12","step":"add product page","method":"fs.write","args":{"branch":"feature","path":"/README.md","contentBytes":6,"message":"Update introduction","sandbox":"sb_…"},"start":"2026-10-15T09:12:01.120Z","scope":"…","ms":41.733,"ok":true,"commit":"…","sizes":{"logical":120,"newCanonical":40,"newStored":30,"newMetadata":8},"daemon":[{"timing":[{"name":"files.bind","ms":1.2,"children":[…]},{"name":"commit","ms":30.4,"children":[…]}],"storage":{…},"construction":{…}}]}
+{"layerfs_trace":1,"id":"9f3c21aa-12","step":"add product page","method":"fs.write","args":{"branch":"feature","path":"/README.md","contentBytes":6,"message":"Update introduction","sandbox":"_service.website"},"start":"2026-10-15T09:12:01.120Z","scope":"…","phase":"end","ms":41.733,"ok":true,"commit":"…","sizes":{"logical":120,"newCanonical":40,"newStored":30,"newMetadata":8},"daemon":[{"timing":[{"name":"files.bind","ms":1.2,"children":[…]},{"name":"commit","ms":30.4,"children":[…]}],"storage":{…},"construction":{…}}]}
 ```
 
 | Field | Meaning |
@@ -206,6 +258,8 @@ without a trace line.
 | `args` | Short summary: text arguments (paths, refs, names, Sandbox id, command, message) cut to 200 characters; numbers and flags; `content`, `bytes`, `oldText` and `newText` as `<name>Bytes` byte counts; `apply` changes as `changes` (count) and `changeBytes`. Never file contents; `project`, `home` and `deploy` are left out. |
 | `start`, `ms` | Wall-clock start (ISO 8601) and elapsed wall milliseconds measured in the calling process, including the native queue and the daemon round trip. |
 | `ok` | `true` for a value; `false` with `code` and `message` for a refusal. |
+| `phase` | `end` on the line written when the call returns; `start` on the optional line written before it (see below). |
+| `branch`, `base`, `head`, `sandbox`, `path`, `baseLayer`, `process`, `exitCode` | Result ids, on a successful end line only. `branch.fork`: the new `branch`, its `base` Layer and its `head` (`null` when forked from main). `branch.merge`: the new `branch` and its `head`. `sandbox.create` (and the client's `sandbox.service`): the `sandbox` id. `sandbox.mount`: the `sandbox`, the Workspace `path`, its `branch`, its `base` Commit (`null` on a Branch with no Commit) and `baseLayer`. `operator.process.start`: the `process` id. A foreground `sandbox.exec`: its `exitCode`; its output is never traced. |
 | `kind`, `commit`, `layer`, `sizes` | The value's `kind`. Every publishing call that succeeds (`fs` write, edit, apply, mkdir, rm, cp, mv, `sandbox.commit`, `branch.merge`, `branch.publish`) names a `commit`: its new Commit, or the head it was `UpToDate` with; `branch.publish` names the published source Commit and the new `layer`. `sizes` (`logical`, `newCanonical`, `newStored`, `newMetadata`) appear only when the reply carries the Commit record (`fs` writes and `sandbox.commit` that commit); join `commit` to `operator.store.commits` for the rest. No call is added to fetch them. |
 | `scope` | 64 hex characters: the fresh daemon observation scope this call's control exchanges carried. |
 | `daemon` | One entry per traced control exchange the call made (a mount makes at least three: Branch lookup, bind, attach). Absent when the call reached no daemon (for example `project.init`). |
@@ -232,7 +286,7 @@ docker logs <container> 2>&1 | python3 tools/decode_observations.py --trace trac
 Each output line is one daemon call: `daemon`, `scope`, `call`, `operation`,
 `complete`, the joined trace `id` as `trace`, and named `sections` (unavailable
 sections are `null`, never zero). Values are cumulative daemon counters at that
-call, not per-call deltas. The container is the Sandbox id without `sb_`.
+call, not per-call deltas. The container is `cat $LAYERFS_HOME/_sandboxes/<name>/container`.
 
 A step label groups lines by the caller's own unit of work, such as an agent's
 step. `LAYERFS_TRACE_STEP` is read at each call, so a long-lived process can
@@ -240,9 +294,22 @@ change it between calls; `new LayerFS(project, { trace, traceStep })`, or
 setting `layerfs.options.traceStep` later, overrides it. Unset or empty, lines
 have no `step`. A label alone traces nothing.
 
+With `LAYERFS_TRACE_START=1` (or `DSH_LAYERFS_TRACE_START=1`), each traced
+call first writes a start line: the same `layerfs_trace`, `id`, `step`, `method`,
+`args`, `start` and `scope` as its end line, with `phase: "start"` and no
+outcome fields. A viewer can show a call while it runs; a start line with no
+end line is a call that has not returned (or a process that ended first).
+Any other value leaves start lines off.
+
 Concurrent calls append whole lines; order follows completion, so join by `id`.
 The trace is diagnostic timing, not a benchmark measurement. Off means no scope,
 no observed exchange, no daemon timing and byte-identical replies.
+
+Checks: `node sdk/js/test/trace.mjs <case>` runs one case (`on`, `off`,
+`failure`, `dsh-env`, `start`, `ids`, `no-content`) over a stand-in binding;
+`node sdk/js/test/verify/trace_real.mjs <file>` traces a fork, mount, exec,
+process, commit and merge on a fresh Disposable Store with only the `DSH_`
+names set.
 
 ## Builds and compatibility
 

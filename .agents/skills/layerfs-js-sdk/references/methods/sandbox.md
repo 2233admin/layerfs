@@ -10,12 +10,14 @@ Bash commands** (install, build, test, run, generators, changes across many file
 every file a command changes is recorded at the Commit. For one small read or edit,
 [`fs.*`](fs-read.md) is cheaper. Examples follow
 [SKILL.md](../../SKILL.md#one-script-for-each-group): `layerfs` is the client, `id` a
-Sandbox id and `ws` a mounted Workspace (`ws.path`) of the Branch `"work"`.
+Sandbox name and `path` a mounted Workspace of the Branch `"work"`, as `mount` returned it.
 
 **Shared rules**
 
-- The Sandbox id is persistent: any later process with the same `LAYERFS_HOME` can use
-  it and its mount paths.
+- A Sandbox's id is the name you gave it at `create`. It persists: any later process
+  with the same `LAYERFS_HOME` can use it and its mount paths.
+- A Sandbox belongs to one project and one image for its whole life. It can hold
+  several Workspaces at once, each mounted from any Branch of that project.
 - One operation at a time per Sandbox. A second process using it at once gets `Busy`.
 - No restart recovery: if the container dies, its Workspaces are gone. Stop and report.
 
@@ -24,8 +26,8 @@ Sandbox id and `ws` a mounted Workspace (`ws.path`) of the Branch `"work"`.
 The same model as [How an agent works in LayerFS](../../SKILL.md#how-an-agent-works-in-layerfs),
 from the Sandbox's side:
 
-- **Each mount is a new Workspace.** `mount` returns a fresh `path` (such as
-  `/workspaces/3`) and a `workspace` id. The `path` is the Workspace's handle: pass it
+- **Each mount is a new Workspace.** `mount` returns a fresh path (such as
+  `/workspaces/3`), numbered per Sandbox. The path is the Workspace's handle: pass it
   to `exec`, `status`, `commit` and `unmount`. Two mounts of one Branch are two separate
   Workspaces, each with its own uncommitted changes. Keep the `path` from the result;
   never build one yourself, and never use one after its unmount.
@@ -46,28 +48,37 @@ from the Sandbox's side:
 One Bash call as one Workspace:
 
 ```js
-const ws = await layerfs.sandbox.mount(id, "work");                  // a NEW Workspace with a new path
-const run = await layerfs.sandbox.exec(id, ws.path, "timeout 110 npm test 2>&1", "step 12");
-await layerfs.sandbox.commit(id, ws.path, { message: `step 12: npm test (exit ${run.exitCode})` });
-await layerfs.sandbox.unmount(id, ws.path);                          // ws.path is now invalid
+const path = await layerfs.sandbox.mount(id, "work");                  // a NEW Workspace with a new path
+const run = await layerfs.sandbox.exec(id, path, "timeout 110 npm test 2>&1", "step 12");
+await layerfs.sandbox.commit(id, path, `step 12: npm test (exit ${run.exitCode})`);
+await layerfs.sandbox.unmount(id, path);                          // path is now invalid
 ```
 
-## `sandbox.create()`
+## `sandbox.create(name, project, image)`
 
-Starts a Sandbox and waits until it's ready.
+Starts a Sandbox named `name`, bound to `project` and running `image`, and waits until
+it's ready.
 
-**Returns:** the Sandbox id, a string such as `"sb_7a1c…"`.
+| Arg | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `name` | string | yes | Unique in this `LAYERFS_HOME`: 1–63 lowercase letters, digits, `_`, `-`, `.`, starting and ending with a letter or digit |
+| `project` | string | yes | The project it serves: this client's project (`layerfs.projectName`) |
+| `image` | string | yes | A local image digest, `sha256:<64 hex>`; `LAYERFS_IMAGE` holds the deployment's |
+
+**Returns:** the Sandbox id, which is `name`.
 
 **Refusals**
 
 | Code | Meaning | Do |
 | --- | --- | --- |
-| `InvalidInput` | A `LAYERFS_*` deployment variable is missing | Check the environment ([SKILL.md](../../SKILL.md#connect-to-a-project)) |
-| `Unknown`, `Failed` | Creation is uncertain or failed | Stop and report; don't create another |
+| `InvalidInput` | A bad name, another client's project, an image that isn't a digest, or a missing `LAYERFS_*` deployment variable | Fix the argument, or check the environment ([SKILL.md](../../SKILL.md#connect-to-a-project)) |
+| `Exists` | A Sandbox with this name is open | Use it, or pick another name |
+| `Failed` | Creation failed. With `detail.removed: true` its container is already removed and nothing of it is left, and `detail.log` holds its daemon's last log lines (also in the message); otherwise it names what stays | Stop and report the message; don't create another |
+| `Unknown` | An earlier creation of this project has an unknown outcome; every create is refused until it is resolved | Stop and report the message, which says what a person must remove; don't remove or retry anything yourself |
 
 ```js
-const id = await layerfs.sandbox.create();   // keep it: later processes can reuse it
-// each sandbox.mount(id, …) in it creates a new Workspace with its own path
+const id = await layerfs.sandbox.create("builder", layerfs.projectName, process.env.LAYERFS_IMAGE);
+// id === "builder"; each sandbox.mount(id, …) in it creates a new Workspace with its own path
 ```
 
 ## `sandbox.mount(id, branch)`
@@ -79,27 +90,13 @@ Mounts a Workspace showing the Branch head at this moment. Doesn't scan or copy 
 | `id` | string | yes | Sandbox id |
 | `branch` | string | yes | Branch to mount. Not `main`: fork a Branch from it |
 
-**Returns:** `{ kind: "Mounted", path, branch, base, baseLayer, root, workspace,
-namespace, sandbox }`. Pass `path` to `exec`, `status`, `commit` and `unmount`. `base`
-is the Commit it shows.
+**Returns:** the Workspace path, a string such as `"/workspaces/1"`. Pass it to
+`exec`, `status`, `commit` and `unmount`; `status` tells which Commit it shows.
 
 **Refusals:** `NoSuchBranch` (fork first), `NoSuchSandbox`, `Busy`.
 
 ```js
-const ws = await layerfs.sandbox.mount(id, "work");   // a NEW Workspace with a new path: use ws.path, never hard-code it
-```
-```json
-{
-  "kind": "Mounted",
-  "path": "/workspaces/1",
-  "workspace": "f4282e27124e…",
-  "namespace": 1,
-  "branch": "work",
-  "base": "125d54ec6a82…",
-  "baseLayer": "32a35edb1f9f…",
-  "root": "024fffcbc8bc…",
-  "sandbox": "sb_256f47dd8daa0d3573e96be4d6ba3f392ee71b97f854341f95c7bacbb4465ee1"
-}
+const path = await layerfs.sandbox.mount(id, "work");   // a NEW Workspace: "/workspaces/1"; never hard-code it
 ```
 
 **Notes:** every call mounts a new Workspace with its own `path`, even on the same
@@ -148,10 +145,10 @@ Runs one shell command in a mounted Workspace and waits for it to end.
 **Run a check and report its output**
 
 ```js
-// ws.path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
-const run = await layerfs.sandbox.exec(id, ws.path, "timeout 110 npm test 2>&1", "cart tests");
+// path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
+const run = await layerfs.sandbox.exec(id, path, "timeout 110 npm test 2>&1", "cart tests");
 console.log(JSON.stringify(run, null, 2));
-const saved = await layerfs.sandbox.commit(id, ws.path, { message: `step 12: npm test (exit ${run.exitCode})` });
+const saved = await layerfs.sandbox.commit(id, path, `step 12: npm test (exit ${run.exitCode})`);
 console.log(saved.kind);                  // "UpToDate" when the command changed nothing
 ```
 ```json
@@ -172,16 +169,16 @@ decide what to change.
 **Big output:** write it to `/tmp` and read the end in a second call.
 
 ```js
-// ws.path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
-await layerfs.sandbox.exec(id, ws.path, "timeout 110 npm run build >/tmp/build.log 2>&1; echo $? >/tmp/build.code", "build");
-const tail = await layerfs.sandbox.exec(id, ws.path, "cat /tmp/build.code; tail -n 60 /tmp/build.log", "build log");
+// path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
+await layerfs.sandbox.exec(id, path, "timeout 110 npm run build >/tmp/build.log 2>&1; echo $? >/tmp/build.code", "build");
+const tail = await layerfs.sandbox.exec(id, path, "cat /tmp/build.code; tail -n 60 /tmp/build.log", "build log");
 ```
 
 **Smoke-test a server:** start, probe and stop in **one** call. Send the server's output
 to `/tmp`, so it doesn't hold `exec` open or land in the Workspace.
 
 ```js
-// ws.path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
+// path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
 const cmd = [
   "timeout 60 bash -c '",
   "node src/main.js >/tmp/server.log 2>&1 & pid=$!;",
@@ -189,7 +186,7 @@ const cmd = [
   "node -e \"fetch(\\\"http://127.0.0.1:3000/health\\\").then(r => { console.log(r.status); process.exit(r.ok ? 0 : 1) }).catch(e => { console.error(e.message); process.exit(1) })\";",
   "s=$?; kill $pid; cat /tmp/server.log; exit $s'",
 ].join(" ");
-const run = await layerfs.sandbox.exec(id, ws.path, cmd, "smoke test");
+const run = await layerfs.sandbox.exec(id, path, cmd, "smoke test");
 ```
 
 **Write a file inside a mounted Workspace:** only when this Workspace must see the
@@ -198,10 +195,10 @@ base64 so the shell doesn't reinterpret it (command lines have an OS length limi
 use this for files up to a few tens of KiB).
 
 ```js
-// ws.path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
+// path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
 const content = "export const TAX = 0.08;\n";
 const b64 = Buffer.from(content).toString("base64");
-const run = await layerfs.sandbox.exec(id, ws.path, `printf '%s' ${b64} | base64 -d > src/tax.js`, "write src/tax.js");
+const run = await layerfs.sandbox.exec(id, path, `printf '%s' ${b64} | base64 -d > src/tax.js`, "write src/tax.js");
 if (run.exitCode !== 0) console.log(run.stderr);
 ```
 
@@ -223,8 +220,8 @@ Describes a mounted Workspace without reading the Store.
 **Refusals:** `NotMounted`, `NoSuchSandbox`, `Busy`.
 
 ```js
-// ws.path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
-const s = await layerfs.sandbox.status(id, ws.path);
+// path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
+const s = await layerfs.sandbox.status(id, path);
 if (s.headMovedSinceMount) console.log("the next commit will merge with", s.branchHead);
 ```
 ```json
@@ -244,15 +241,16 @@ if (s.headMovedSinceMount) console.log("the next commit will merge with", s.bran
 }
 ```
 
-## `sandbox.commit(id, path, { message?, force? }?)`
+## `sandbox.commit(id, path, message?, force?)`
 
 Saves everything changed in the Workspace as one Commit on its Branch. If the Branch
 moved since the mount, it merges first. The Workspace stays mounted.
 
-| Option | Meaning |
+| Arg | Meaning |
 | --- | --- |
+| `id`, `path` | The Sandbox and the Workspace path from `mount` |
 | `message` | Commit message |
-| `force` | Overwrite a newer head with this Workspace's view instead of merging. Drops the other changes; avoid |
+| `force` | `true` to overwrite a newer head with this Workspace's view instead of merging. Drops the other changes; avoid |
 
 **Returns**
 
@@ -269,8 +267,8 @@ moved since the mount, it merges first. The Workspace stays mounted.
 | `NotMounted`, `Busy`, `HeadMoved` | As elsewhere | Check the path; run steps one at a time; commit again after a look at `status` |
 
 ```js
-// ws.path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
-const c = await layerfs.sandbox.commit(id, ws.path, { message: "deps: npm install" });
+// path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
+const c = await layerfs.sandbox.commit(id, path, "deps: npm install");
 ```
 ```json
 {
@@ -312,13 +310,14 @@ conflict detail also exposes `conflictsTruncated`, and individual conflicts mark
 their text. Inspect those files with bounded `sandbox.exec` commands and Commit
 each command. The omission flags never mean the unresolved source is safe to drop.
 
-## `sandbox.unmount(id, path, { discard? }?)`
+## `sandbox.unmount(id, path, discard?)`
 
 Unmounts a Workspace.
 
-| Option | Meaning |
+| Arg | Meaning |
 | --- | --- |
-| `discard` | Drop uncommitted changes instead of refusing |
+| `id`, `path` | The Sandbox and the Workspace path from `mount` |
+| `discard` | `true` to drop uncommitted changes instead of refusing |
 
 **Returns:** `{ kind: "Unmounted" }`.
 
@@ -331,13 +330,14 @@ Unmounts a Workspace.
 | `NotMounted` | Already unmounted, or the wrong path | Use the `path` from `mount` |
 
 ```js
-// ws.path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
-await layerfs.sandbox.unmount(id, ws.path);
+// path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
+await layerfs.sandbox.unmount(id, path);
 ```
 
 ## `sandbox.close(id)`
 
-Stops and deletes the Sandbox container. The project and its history are unaffected.
+Stops and deletes the Sandbox container and frees its name for a new `create`. The
+project and its history are unaffected.
 
 **Returns:** `{ kind: "Closed", id }`.
 
@@ -345,12 +345,12 @@ Stops and deletes the Sandbox container. The project and its history are unaffec
 
 When `LAYERFS_TRACE` is set, preserve the daemon log **before** this call: on the
 host, save `docker logs <container-id> > <run>/daemon-<container-id>.log 2>&1`,
-where `<container-id>` is the Sandbox id with `sb_` removed and `<run>` is the
-folder containing `LAYERFS_TRACE`. Closing deletes the container and its log.
+where `<container-id>` is `$(cat $LAYERFS_HOME/_sandboxes/<id>/container)` and `<run>`
+is the folder containing `LAYERFS_TRACE`. Closing deletes the container and its log.
 This is diagnostic collection; project reads and changes still use the SDK.
 
 Direct Store calls also create or reuse an automatic service Sandbox. At the end,
-after all `fs.*` and Branch calls, obtain its id with `await layerfs.service()`,
+after all `fs.*` and Branch calls, obtain its id (`_service.<project>`) with `await layerfs.service()`,
 save its log, and call `sandbox.close` for that id too. `service()` creates one if
 none exists, so use it to finish a client that has already made Store calls; do
 not use it merely to probe for a service after cleanup. A cached service id on

@@ -15,9 +15,10 @@ pub(crate) use import::init;
 pub(crate) use import::metadata;
 #[cfg(unix)]
 pub(crate) use import::namespace;
+pub use import::observe::{InitCounters, InitCounts, InitStep};
 #[cfg(unix)]
 pub(crate) use import::scan;
-pub use init::{init, InitRequest, Initialized};
+pub use init::{init, init_observed, InitRequest, Initialized};
 
 pub(crate) use import::work as namespace_work;
 pub use namespace_work::NamespaceWork;

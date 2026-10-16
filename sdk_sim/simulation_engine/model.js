@@ -778,20 +778,20 @@
       case "fs.mkdir":case "fs.rm":args=[a.branch,a.path,a.message];break;
       case "fs.cp":case "fs.mv":args=[a.branch,a.from,a.to,a.message];break;
       case "fs.apply":args=[a.branch,a.changes.map(({kind,...rest})=>({op:kind==="remove"?"rm":kind,...rest})),a.message];break;
-      case "sandbox.create":break;
+      case "sandbox.create":args=[a.name||"box-1",project,{raw:"process.env.LAYERFS_IMAGE"}];break;
       case "sandbox.mount":args=[a.sandbox,a.branch];break;
       case "sandbox.status":args=[a.sandbox,a.path];break;
       case "sandbox.close":args=[a.sandbox];break;
       case "sandbox.exec":args=[a.sandbox,a.path,a.command,a.message];if(a.background){target="operator";method="process.start";args=args.slice(0,3);}break;
       case "sandbox.list_processes":target="operator";method="process.list";args=[a.sandbox];break;
       case "process.cancel":target="operator";args=[a.sandbox,a.process];break;
-      case "sandbox.commit":args=[a.sandbox,a.path,{force:a.force,message:a.message}];break;
-      case "sandbox.unmount":args=[a.sandbox,a.path,{discard:a.discard}];break;
+      case "sandbox.commit":args=[a.sandbox,a.path,a.message,!!a.force];break;
+      case "sandbox.unmount":args=[a.sandbox,a.path,!!a.discard];break;
       default:return `// ${method} is a UI action`;
     }
     while(args.length&&args[args.length-1]===undefined)args.pop();
     const imports=target==="operator"?'\nimport { LayerFSOperator } from "@layerfs/sdk/operator";':"";
-    return `node --input-type=module <<'JS'\nimport { LayerFS } from "@layerfs/sdk";${imports}\nconst layerfs = new LayerFS(${J(project)});\n${target==="operator"?"const operator = new LayerFSOperator(layerfs);\n":""}const result = await ${target}.${method}(${args.map(v=>v===undefined?"undefined":J(v)).join(", ")});\nconsole.log(JSON.stringify(result));\nJS`;
+    return `node --input-type=module <<'JS'\nimport { LayerFS } from "@layerfs/sdk";${imports}\nconst layerfs = new LayerFS(${J(project)});\n${target==="operator"?"const operator = new LayerFSOperator(layerfs);\n":""}const result = await ${target}.${method}(${args.map(v=>v===undefined?"undefined":v&&v.raw?v.raw:J(v)).join(", ")});\nconsole.log(JSON.stringify(result));\nJS`;
   }
 
   // ---------------------------------------------------------------- scenarios

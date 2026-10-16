@@ -17,6 +17,8 @@ export class LayerFSOperator {
       changes: (sandbox,path,pageSize,pagePos) => call("workspace.changes", { path,...page(pageSize,pagePos) },sandbox),
     };
     this.inspect = { snapshot: (since) => snapshot(client,since) };
+    // the running Init of this project, read while project.init runs (no Sandbox): { step, entries, files, bytes } or null
+    this.project = { progress: () => invokeOperator("operator.project.progress", { project: client.projectName }, client.options) };
     this.process = {
       start: (sandbox,path,command) => call("process.start", { path,command,background:true },sandbox),
       list: (sandbox) => call("process.list", {},sandbox),

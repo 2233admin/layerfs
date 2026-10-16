@@ -1,5 +1,5 @@
 // Per-call trace checks over a stand-in binding; each case is one command:
-//   node sdk/js/test/trace.mjs on|off|failure
+//   node sdk/js/test/trace.mjs on|off|failure|dsh-env|start|ids|no-content|service
 // No Docker, Store or daemon is used.
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -12,13 +12,17 @@ Object.assign(process.env, {
   LAYERFS_NATIVE: FAKE, LAYERFS_HOME: "/private/trace-home", LAYERFS_DOCKER: "/fake.sock",
   LAYERFS_IMAGE: "fake-image", LAYERFS_VOLUME: "fake-volume", LAYERFS_DAEMON: "/fake/daemon",
 });
-delete process.env.LAYERFS_TRACE;
-delete process.env.LAYERFS_TRACE_STEP;
+for (const name of ["TRACE", "TRACE_STEP", "TRACE_START"]) {
+  delete process.env[`LAYERFS_${name}`];
+  delete process.env[`DSH_LAYERFS_${name}`];
+}
 const { LayerFS } = await import("@layerfs/sdk");
 const { LayerFSOperator } = await import("@layerfs/sdk/operator");
 
 const BIG = "x".repeat(10000);
 /** Every SDK group once, plus one refusal; returns each call's value or code. */
+const pick = (line, fields) => Object.fromEntries(fields.filter((field) => field in line).map((field) => [field, line[field]]));
+
 async function script(client) {
   const op = new LayerFSOperator(client);
   const steps = [
@@ -44,11 +48,11 @@ async function script(client) {
     () => client.branch.diff_branches("main", "feature"),
     () => client.branch.merge("main", "feature", "merged"),
     () => client.branch.publish("feature"),
-    () => client.sandbox.create(),
+    () => client.sandbox.create("box", "website", "sha256:" + "a".repeat(64)),
     () => client.sandbox.mount("sb_fake", "feature"),
     () => client.sandbox.exec("sb_fake", "/workspaces/w1", "npm test"),
     () => client.sandbox.status("sb_fake", "/workspaces/w1"),
-    () => client.sandbox.commit("sb_fake", "/workspaces/w1", { message: "Save" }),
+    () => client.sandbox.commit("sb_fake", "/workspaces/w1", "Save"),
     () => client.sandbox.unmount("sb_fake", "/workspaces/w1"),
     () => client.sandbox.close("sb_fake"),
     () => client.fs.read("main", "/missing"),
@@ -67,6 +71,8 @@ async function script(client) {
   for (const step of steps) results.push(await step().then((value) => ({ value }), (error) => ({ code: error.code })));
   return results;
 }
+
+const read = (path) => readFileSync(path, "utf8").trimEnd().split("\n").map((line) => JSON.parse(line));
 
 const dir = mkdtempSync(join(tmpdir(), "layerfs-trace-"));
 const file = join(dir, "trace.jsonl");
@@ -159,8 +165,108 @@ try {
     const reference = await script(new LayerFS("website"));
     const traced = await script(new LayerFS("website", { trace: join(dir, "absent/dir/trace.jsonl") }));
     assert.deepEqual(traced, reference);
+  } else if (selected === "dsh-env") {
+    // With only the DSH_ names set (as dsh sets them in a bash call), the
+    // same lines appear, labelled by DSH_LAYERFS_TRACE_STEP.
+    process.env.DSH_LAYERFS_TRACE = file;
+    process.env.DSH_LAYERFS_TRACE_STEP = "call_7";
+    const results = await script(new LayerFS("website"));
+    const lines = read(file);
+    assert.equal(lines.length, results.length + 1, "one line per call plus the service Sandbox");
+    assert.ok(lines.every((line) => line.step === "call_7" && line.phase === "end"));
+    // The LAYERFS_ names win over their DSH_ twins.
+    const own = join(dir, "own.jsonl");
+    process.env.LAYERFS_TRACE = own;
+    process.env.LAYERFS_TRACE_STEP = "own step";
+    await new LayerFS("website").project.list_branches();
+    assert.deepEqual(read(own).map((line) => line.step), ["own step", "own step"]);
+    assert.equal(read(file).length, lines.length);
+    // Deployment settings fall back to their DSH_ twins the same way.
+    const saved = {};
+    for (const name of ["HOME", "DOCKER", "IMAGE", "VOLUME", "DAEMON"]) {
+      saved[name] = process.env[`LAYERFS_${name}`];
+      delete process.env[`LAYERFS_${name}`];
+      process.env[`DSH_LAYERFS_${name}`] = `dsh-${name.toLowerCase()}`;
+    }
+    const twin = new LayerFS("website");
+    assert.equal(twin.options.home, "dsh-home");
+    assert.deepEqual(twin.options.deploy, { docker: "dsh-docker", image: "dsh-image", volume: "dsh-volume", daemon: "dsh-daemon" });
+    for (const [name, value] of Object.entries(saved)) { process.env[`LAYERFS_${name}`] = value; delete process.env[`DSH_LAYERFS_${name}`]; }
+    assert.equal(new LayerFS("website").options.deploy.image, "fake-image");
+  } else if (selected === "start") {
+    // Start lines precede their end lines and share id, step, method, args, start and scope.
+    process.env.LAYERFS_TRACE = file;
+    process.env.DSH_LAYERFS_TRACE_START = "1";
+    process.env.LAYERFS_TRACE_STEP = "with starts";
+    const results = await script(new LayerFS("website"));
+    const lines = read(file);
+    assert.equal(lines.length, 2 * (results.length + 1));
+    const starts = lines.filter((line) => line.phase === "start");
+    const ends = lines.filter((line) => line.phase === "end");
+    assert.equal(starts.length, ends.length);
+    for (const begin of starts) {
+      const end = ends.find((line) => line.id === begin.id);
+      assert.ok(lines.indexOf(begin) < lines.indexOf(end), begin.method);
+      for (const field of ["layerfs_trace", "step", "method", "args", "start", "scope"]) assert.deepEqual(begin[field], end[field], field);
+      for (const field of ["ms", "ok", "code", "commit", "daemon"]) assert.ok(!(field in begin), field);
+    }
+    // Only "1" turns them on.
+    const other = join(dir, "other.jsonl");
+    process.env.DSH_LAYERFS_TRACE_START = "true";
+    await new LayerFS("website", { trace: other }).project.list_branches();
+    assert.ok(read(other).every((line) => line.phase === "end"));
+  } else if (selected === "ids") {
+    // Lines name what a call made: Branches, heads, Sandboxes, Workspaces, processes, exit codes.
+    process.env.LAYERFS_TRACE = file;
+    await script(new LayerFS("website"));
+    const lines = read(file);
+    const of = (method) => lines.find((line) => line.method === method);
+    assert.equal(of("sandbox.service").sandbox, "sb_fake");
+    assert.deepEqual(pick(of("branch.fork"), ["branch", "base", "head"]), { branch: "feature", base: "lay0", head: "not-a-publication" });
+    assert.deepEqual(pick(of("branch.merge"), ["branch", "head", "commit"]), { branch: "merged", head: "m3rge", commit: "m3rge" });
+    assert.equal(of("sandbox.create").sandbox, "sb_fake");
+    assert.deepEqual(pick(of("sandbox.mount"), ["sandbox", "path", "branch", "base", "baseLayer"]), { sandbox: "sb_fake", path: "/workspaces/w1", branch: "feature", base: "b4se", baseLayer: "lay0" });
+    assert.equal(of("sandbox.exec").exitCode, 3);
+    assert.equal(of("operator.process.start").process, "proc_1");
+    assert.equal(of("operator.process.cancel").process, undefined, "a cancel names its process in args only");
+    // Calls that make nothing carry no result ids.
+    const IDS = ["branch", "base", "head", "sandbox", "path", "baseLayer", "process", "exitCode"];
+    for (const method of ["fs.read", "fs.list", "sandbox.status", "sandbox.unmount", "sandbox.close", "operator.store.stats"]) {
+      assert.deepEqual(pick(of(method), IDS), {}, method);
+    }
+  } else if (selected === "no-content") {
+    // File content, exec output and the root hash never reach a line, with or without start lines.
+    process.env.LAYERFS_TRACE = file;
+    process.env.LAYERFS_TRACE_START = "1";
+    await script(new LayerFS("website"));
+    const text = readFileSync(file, "utf8");
+    assert.ok(!text.includes("xxxx"), "no file content or exec output");
+    assert.ok(!text.includes("r00t"), "no root hash");
+    for (const line of read(file)) {
+      for (const field of ["stdout", "stderr", "content", "root", "value"]) assert.ok(!(field in line), `${line.method} ${field}`);
+    }
+  } else if (selected === "service") {
+    // A refused service Sandbox is not kept: the caller's next call creates it.
+    const native = (await import(FAKE)).default;
+    process.env.LAYERFS_TRACE = file;
+    native.busyServices = 1;
+    const client = new LayerFS("website");
+    await assert.rejects(client.project.list_branches(), { code: "Busy" });
+    assert.equal(client.serviceSandbox, null);
+    await client.project.list_branches();
+    assert.deepEqual(read(file).map((line) => [line.method, line.code ?? line.kind]), [["sandbox.service", "Busy"], ["sandbox.service", "Ready"], ["project.list_branches", undefined]]);
+    // The service Sandbox resolves its deployment like sandbox.create: the
+    // default Docker socket, and a missing setting refused before the binding.
+    delete process.env.LAYERFS_DOCKER;
+    const before = native.deploys.length;
+    await new LayerFS("website").project.list_branches();
+    assert.equal(native.deploys[before].docker, "/var/run/docker.sock");
+    delete process.env.LAYERFS_IMAGE;
+    const calls = native.calls.length;
+    await assert.rejects(new LayerFS("website").project.list_branches(), { code: "InvalidInput", message: /deploy\.image/ });
+    assert.equal(native.calls.length, calls);
   } else {
-    console.error("usage: trace.mjs on|off|failure");
+    console.error("usage: trace.mjs on|off|failure|dsh-env|start|ids|no-content|service");
     process.exit(2);
   }
   console.log(`PASS trace ${selected}`);

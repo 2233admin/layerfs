@@ -828,7 +828,7 @@
     return err(`npm error Missing script: "${sub}"`);
   }
 
-  const api = { Engine, tokenize, simulateShell, liveCommand };
+  const api = { Engine, tokenize, simulateShell, liveCommand, execLines };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else global.LayerTerm = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

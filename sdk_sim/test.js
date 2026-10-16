@@ -1,7 +1,7 @@
 // Headless check: runs every scenario and reports each step's outcome.
 // Usage: node sdk_sim/test.js
 "use strict";
-const { runScenario } = require("./model.js");
+const { runScenario } = require("./simulation_engine/model.js");
 const SCENARIOS = require("./scenarios.js");
 
 let failed = 0, total = 0;

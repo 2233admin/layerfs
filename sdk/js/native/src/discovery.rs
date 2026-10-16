@@ -69,6 +69,57 @@ pub(crate) fn directory(path: &Path) -> Result<()> {
     }
     private(path, true)
 }
+/// Where Sandboxes live: `LAYERFS_HOME/_sandboxes/<name>/`, one directory per
+/// name across every project. `_sandboxes` is never a project name (those
+/// start alphanumeric), and claiming a name is one atomic `mkdir`.
+const SANDBOXES: &str = "_sandboxes";
+/// The prefix of a project's service Sandbox name; no user name starts with it.
+pub(crate) const SERVICE: &str = "_service.";
+
+/// A Sandbox name a caller chooses: as a project name, 1–63 lowercase ASCII
+/// letters, digits, `_`, `-`, `.`, starting and ending alphanumeric.
+pub(crate) fn check_name(name: &str) -> Result<()> {
+    let bytes = name.as_bytes();
+    let edge = |b: &u8| b.is_ascii_lowercase() || b.is_ascii_digit();
+    let ok = (1..=63).contains(&bytes.len())
+        && bytes.first().is_some_and(edge)
+        && bytes.last().is_some_and(edge)
+        && bytes
+            .iter()
+            .all(|b| edge(b) || matches!(b, b'_' | b'-' | b'.'));
+    if !ok {
+        return Err(refused(
+            "InvalidInput",
+            "a Sandbox name is 1-63 lowercase letters, digits, _ . - and starts and ends alphanumeric",
+        ));
+    }
+    Ok(())
+}
+/// The directory of the Sandbox `name` (a caller's name or a service name).
+pub(crate) fn sandbox_dir(args: &SdkValue, name: &str) -> Result<PathBuf> {
+    match name.strip_prefix(SERVICE) {
+        Some(project) => layerfs_history::HistoryName::new(project)
+            .map(|_| ())
+            .map_err(|_| refused("InvalidInput", "service Sandbox name"))?,
+        None => check_name(name)?,
+    }
+    let root = home(args)?.join(SANDBOXES);
+    directory(&root)?;
+    Ok(root.join(name))
+}
+/// Claims `name` for a new Sandbox: its directory, made once. A name in use is `Exists`.
+pub(crate) fn claim(args: &SdkValue, name: &str) -> Result<PathBuf> {
+    let path = sandbox_dir(args, name)?;
+    match fs::DirBuilder::new().mode(0o700).create(&path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(refused("Exists", format!("a Sandbox named {name} exists")))
+        }
+        Err(e) => return Err(failed(e)),
+    }
+    private(&path, true)?;
+    Ok(path)
+}
 pub(crate) fn project_dir(args: &SdkValue) -> Result<PathBuf> {
     let name = registry::text(args, "project")?;
     layerfs_history::HistoryName::new(name).map_err(failed)?;
@@ -127,6 +178,18 @@ pub(crate) fn save(path: &Path, value: SdkValue) -> Result<()> {
     file.write_all(&bytes).map_err(failed)?;
     drop(file);
     fs::rename(temp, path).map_err(failed)
+}
+/// A small private text file, written once (0600, not a symlink).
+pub(crate) fn save_text(path: &Path, text: &str) -> Result<()> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .custom_flags(no_follow())
+        .open(path)
+        .map_err(failed)?;
+    file.write_all(format!("{text}\n").as_bytes())
+        .map_err(failed)
 }
 pub(crate) fn load(path: &Path) -> Result<SdkValue> {
     private(path, false)?;
@@ -236,17 +299,16 @@ pub(crate) fn save_sandbox(
 }
 pub(crate) fn reopen(args: &SdkValue) -> Result<Arc<SandboxState>> {
     let id = registry::text(args, "sandbox")?;
-    if !id.starts_with("sb_") || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
-        return Err(refused("InvalidInput", "Sandbox id"));
+    let directory = sandbox_dir(args, id)?;
+    if !directory.join("sandbox.record").exists() {
+        return Err(refused("NoSuchSandbox", format!("no Sandbox named {id}")));
     }
-    let directory = project_dir(args)?.join(id);
     private(&directory, true)?;
     let value = load(&directory.join("sandbox.record"))?;
-    if registry::text(&value, "id")? != id
-        || registry::text(&value, "project")? != registry::text(args, "project")?
-    {
-        return Err(refused("Unauthorized", "Sandbox project mismatch"));
+    if registry::text(&value, "id")? != id {
+        return Err(refused("Unauthorized", "Sandbox record mismatch"));
     }
+    let project = registry::text(&value, "project")?;
     let docker =
         Docker::new(registry::text(&value, "docker")?, Duration::from_secs(30)).map_err(failed)?;
     let runtime = Sandbox::reopen(
@@ -285,7 +347,7 @@ pub(crate) fn reopen(args: &SdkValue) -> Result<Arc<SandboxState>> {
     }
     let state = Arc::new(SandboxState {
         id: id.to_owned(),
-        project: registry::text(args, "project")?.to_owned(),
+        project: project.to_owned(),
         directory,
         runtime,
         identity: CommandIdentity { uid: 501, gid: 20 },

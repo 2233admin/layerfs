@@ -32,6 +32,13 @@ CREATE TABLE store_totals (
  logical INTEGER NOT NULL DEFAULT 0 CHECK(logical>=0),
  canonical INTEGER NOT NULL DEFAULT 0 CHECK(canonical>=0),
  stored INTEGER NOT NULL DEFAULT 0 CHECK(stored>=0),
- metadata INTEGER NOT NULL DEFAULT 0 CHECK(metadata>=0)
+ metadata INTEGER NOT NULL DEFAULT 0 CHECK(metadata>=0),
+ init_entries INTEGER NOT NULL DEFAULT 0 CHECK(init_entries>=0),
+ init_files INTEGER NOT NULL DEFAULT 0 CHECK(init_files>=0),
+ init_bytes INTEGER NOT NULL DEFAULT 0 CHECK(init_bytes>=0),
+ init_canonical INTEGER NOT NULL DEFAULT 0 CHECK(init_canonical>=0),
+ init_stored INTEGER NOT NULL DEFAULT 0 CHECK(init_stored>=0),
+ init_metadata INTEGER NOT NULL DEFAULT 0 CHECK(init_metadata>=0),
+ init_millis INTEGER NOT NULL DEFAULT 0 CHECK(init_millis>=0)
 ) STRICT;
 INSERT INTO store_totals(id) VALUES(1);

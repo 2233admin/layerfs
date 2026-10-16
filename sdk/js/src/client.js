@@ -36,18 +36,22 @@ export function sandboxId(sandbox) {
   return id;
 }
 
-/** Deployment settings from the client options, else the environment. */
-export function deployment(options = {}) {
-  const env = process.env;
+/** Deployment settings from the client options, else the environment
+ * (LAYERFS_<NAME>, else DSH_LAYERFS_<NAME>). `needsImage` is false for
+ * sandbox.create, which names its own image; the service Sandbox needs it. */
+export function deployment(options = {}, needsImage = true) {
+  const env = (name) => process.env[`LAYERFS_${name}`] || process.env[`DSH_LAYERFS_${name}`] || undefined;
   const deploy = {
-    docker: options.docker ?? env.LAYERFS_DOCKER ?? "/var/run/docker.sock",
-    image: options.image ?? env.LAYERFS_IMAGE,
-    volume: options.volume ?? env.LAYERFS_VOLUME,
-    daemon: options.daemon ?? env.LAYERFS_DAEMON,
+    docker: options.docker ?? env("DOCKER") ?? "/var/run/docker.sock",
+    image: options.image ?? env("IMAGE"),
+    volume: options.volume ?? env("VOLUME"),
+    daemon: options.daemon ?? env("DAEMON"),
   };
   for (const [name, value] of Object.entries(deploy)) {
+    if (name === "image" && !needsImage) continue;
     if (!value) throw new LayerFSError("InvalidInput", `deploy.${name} is not configured (LAYERFS_${name.toUpperCase()})`, null);
   }
+  if (!deploy.image) delete deploy.image;
   return deploy;
 }
 

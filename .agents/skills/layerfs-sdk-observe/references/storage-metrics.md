@@ -7,7 +7,7 @@
 
 | Source | Gives | When |
 | --- | --- | --- |
-| `operator.store.stats()` | Store totals: `logical`, `canonical`, `stored`, `metadata`, `file`, `free`, `dedupe`, `compression` | Snapshot at start, every N Commits, end |
+| `operator.store.stats()` | Store totals: `logical`, `canonical`, `stored`, `metadata`, `file`, `free`, `dedupe`, `compression`, and `init`, the import counts and Store totals Init left | Snapshot at start, every N Commits, end |
 | `operator.store.commits(branch, pageSize, pagePos)` | Per Commit, newest first along first parents: `commit`, `logical`, `newCanonical`, `newStored`, `newMetadata` | Once after the run, for every Branch; dedupe by `commit` |
 | Trace `commit` and `sizes` | The same per-Commit counters on the line of the call that made the Commit, plus its step and time | During the run, free |
 

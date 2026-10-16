@@ -19,8 +19,13 @@ methods take a Sandbox id and a mount path.
 
 Store totals. Terms are defined in [storage metrics](storage-metrics.md#sources).
 
-**Returns:** `{ logical, canonical, stored, metadata, file, free, dedupe, compression }`.
+**Returns:** `{ logical, canonical, stored, metadata, file, free, dedupe, compression, init }`.
 Bytes are integers; `dedupe` and `compression` are numbers or `null`.
+`init` is what Init imported and what it cost, recorded once when Init sealed the
+Store: `{ entries, files, bytes, canonical, stored, metadata, millis }`. `files` counts
+regular-file identities (hardlinks once) and `bytes` their size; `canonical`,
+`stored` and `metadata` are the Store totals Init left; `millis` is Init's wall time.
+It is `null` for a Store built before Init recorded it.
 
 ```json
 {
@@ -31,7 +36,8 @@ Bytes are integers; `dedupe` and `compression` are numbers or `null`.
   "file": 270336,
   "free": 0,
   "dedupe": 0.762328,
-  "compression": 2.265905
+  "compression": 2.265905,
+  "init": { "entries": 11, "files": 9, "bytes": 2012, "canonical": 8012, "stored": 4780, "metadata": 161720, "millis": 13 }
 }
 ```
 
