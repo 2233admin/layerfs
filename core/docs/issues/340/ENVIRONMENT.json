@@ -1,7 +1,7 @@
 {
-  "status": "Frozen revision 2 diagnostic environment after closed B1 P003 halt",
+  "status": "Frozen revision 3 diagnostic environment after completed run and actual native R4 rebuild",
   "starting_main": "5d9008e479229f6d29b70923ca76d70bb2744e23",
-  "product_source": "e6650057906f41c47327a4b67d8cb80f6d2a6bb9",
+  "product_source": "71c84b54323d19f55c536021acbf14a3b149399c",
   "runtime_image": "sha256:091f785ba7d5d036dfa350e8fd69ee1fcd2d8320c3706841c8c95e6411eee9d2",
   "platform": "linux/arm64 runtime; darwin/arm64 addon",
   "node": "22.23.1",
@@ -21,7 +21,7 @@
   "actual_concurrent_agents_total": 4,
   "active_workers_with_main_and_lead": 2,
   "cache": "unknown OS cache state; tracing enabled; all numbers diagnostic, not benchmarks",
-  "binary_reuse": "Initial r0 copied unchanged337; r1 actualrelease rebuilt at9f3f466; r2 actualincremental locked/offline release at123fee2 after ownerrequested343. Native addon unchangedRust reusedowncompiledinputs; Linuxdaemon rebuilt. All revisions retained. R3 actual incremental locked/offline builds at e66500579 after P003/P002; original R2 records/artifacts preserved. Host API/node recompiled, daemon unchanged and actual Cargo build invoked.",
+  "binary_reuse": "Initial r0 copied unchanged337; r1 actualrelease rebuilt at9f3f466; r2 actualincremental locked/offline release at123fee2 after ownerrequested343. Native addon unchangedRust reusedowncompiledinputs; Linuxdaemon rebuilt. All revisions retained. R3 actual incremental locked/offline builds at e66500579 after P003/P002; original R2 records/artifacts preserved. Host API/node recompiled, daemon unchanged and actual Cargo build invoked. R4 actually invoked both locked/offline incremental release Cargo builds after completed stopped run; neither reported Rust crate recompilation and both artifact hashes equal R3. Original build records retained; no cold compilation claim.",
   "binaries": {
     "layerfs-daemon": {
       "sha256": "47f354e5d92ea9e70032a8a28fbda052292ca761c76dd1e0a076b984247ceb8f",
@@ -44,7 +44,7 @@
   "chromedriver_path": "/usr/bin/chromedriver",
   "runtime_node_path": "/opt/node/bin/node",
   "command_shell": "bash -c; login shell discards /opt/node/bin and cannot find node/npm",
-  "product_tree": "3e495801d73a94d43a75c502ada0d1d7653c4e52",
+  "product_tree": "cf7a6116066a7c88945194056fa93e893f989850",
   "initial_reuse_product_unchanged_at_starting_main": true,
   "main_after_owner_diff_fix": "b0f8e33305f47b37c0b3c66b061318b034434081",
   "team_service_rule": "Coordinator creates Sandboxes serially; each agent selects own existing Bash Sandbox via new LayerFS(project,{sandbox:id}); no shared automatic service for team",
@@ -52,5 +52,7 @@
   "native_rust": "1.85.1",
   "a3_live_receipts": "core/target/issue340/phase-a/a3/final-summary.json",
   "host_node_path": "/usr/local/bin/node",
-  "native_build_receipt": "core/target/issue340/builds/r3/BUILD-IDENTITY.json"
+  "native_build_receipt": "core/target/issue340/builds/r4/BUILD-IDENTITY.json",
+  "product_code_source": "e6650057906f41c47327a4b67d8cb80f6d2a6bb9",
+  "product_code_tree": "3e495801d73a94d43a75c502ada0d1d7653c4e52"
 }
