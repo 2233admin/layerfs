@@ -2,7 +2,8 @@
 // retry. It refuses while any container (a Sandbox) still uses the project's
 // volume; it never stops one. The Host's own cached client is released first.
 // The workspace folder, session transcripts and line journals are untouched;
-// sessions that used the project have no LayerFS project afterwards.
+// sessions that used the project have no LayerFS project afterwards. The home
+// entry is the LayerFS project, so deleting it frees the name for Init at once.
 import { execFile } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";

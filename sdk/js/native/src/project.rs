@@ -4,7 +4,7 @@
 //! of the project installs it into the shared volume. Init's first Branch is
 //! named `main` and the SDK never shows it: `main` is the line of Layers.
 use crate::job::{failed, refused, Outcome};
-use crate::registry::{lock, random, text, Project, INITS, PROJECTS};
+use crate::registry::{lock, random, text, Project, INITS};
 use layerfs_api::{InitCounters, InitRequest, InitStep, ProjectApi};
 use layerfs_bridge::control::SdkValue;
 use layerfs_bridge::sdk_values::hex;
@@ -13,7 +13,7 @@ use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
 use layerfs_storage::StoragePolicy;
 use layerfs_telemetry::timer::Timing;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Where the daemon opens the installed Store inside its Sandbox.
@@ -31,16 +31,16 @@ pub(crate) fn init(args: &SdkValue) -> Outcome {
     let name = text(args, "name")?;
     let source = PathBuf::from(text(args, "path")?);
     let home = crate::discovery::home(args)?;
-    if lock(&PROJECTS)?.contains_key(name) {
-        return Err(refused(
-            "Exists",
-            format!("project {name} already initialized"),
-        ));
-    }
     let directory = home.join(name);
-
-    std::fs::create_dir(&directory)
-        .map_err(|error| refused("Exists", format!("{}: {error}", directory.display())))?;
+    // The home entry is the project: creating it is the one existence check,
+    // so a name whose entry was removed can be initialized again.
+    std::fs::create_dir(&directory).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::AlreadyExists {
+            refused("Exists", format!("project {name} already initialized"))
+        } else {
+            failed(error)
+        }
+    })?;
     std::fs::set_permissions(&directory, {
         use std::os::unix::fs::PermissionsExt;
         std::fs::Permissions::from_mode(0o700)
@@ -96,7 +96,6 @@ pub(crate) fn init(args: &SdkValue) -> Outcome {
         installed: None,
     };
     crate::discovery::save_project(&directory, &project)?;
-    lock(&PROJECTS)?.insert(name.to_owned(), Arc::new(Mutex::new(project)));
     Ok(answer)
 }
 

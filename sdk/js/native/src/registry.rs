@@ -1,4 +1,6 @@
-//! What this process owns: the projects it initialized and its live Sandboxes.
+//! What this process owns: its running Inits and its live Sandboxes. A
+//! project itself is only its home entry (`<home>/<name>/`), so a project
+//! removed there can be initialized again without a restart.
 //!
 //! A Sandbox is one container and its daemon. Its runtime runs commands
 //! directly; its control owner answers one request at a time, so concurrent
@@ -13,7 +15,7 @@ use layerfs_sandbox::{backend::docker::Sandbox, CommandIdentity};
 use std::collections::BTreeMap;
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
 
-/// One project initialized by this process.
+/// One project, read from or saved to its home entry.
 pub(crate) struct Project {
     pub(crate) store: layerfs_persistence::SealedStore,
     pub(crate) manifest: StoreManifest,
@@ -48,8 +50,6 @@ pub(crate) struct SandboxState {
     pub(crate) processes: Mutex<BTreeMap<String, Process>>,
 }
 
-pub(crate) static PROJECTS: LazyLock<Mutex<BTreeMap<String, Arc<Mutex<Project>>>>> =
-    LazyLock::new(Default::default);
 /// The live counts of each Init still running, by project name.
 pub(crate) static INITS: LazyLock<Mutex<BTreeMap<String, Arc<layerfs_api::InitCounters>>>> =
     LazyLock::new(Default::default);

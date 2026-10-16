@@ -30,12 +30,6 @@ export class BindingStore {
   constructor(stateDir) {
     this.file = join(stateDir, "bindings.json");
     this.data = existsSync(this.file) ? upgrade(JSON.parse(readFileSync(this.file, "utf8"))) : { version: 2, projects: {}, workspaces: {}, sessions: {}, agents: {} };
-    /**
-     * Names removed while this Host runs. The SDK's native binding remembers
-     * each name it initialized until the process ends, so Init does not take
-     * them again before dsh restarts. Not saved.
-     */
-    this.retired = new Set();
   }
 
   save() {
@@ -134,7 +128,6 @@ export class BindingStore {
    */
   remove(name) {
     delete this.data.projects[name];
-    this.retired.add(name);
     for (const w of Object.values(this.data.workspaces)) if (w.lastUsed === name) w.lastUsed = null;
     for (const choice of Object.values(this.data.sessions)) if (choice.project === name) choice.project = null;
     this.save();

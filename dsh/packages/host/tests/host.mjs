@@ -248,8 +248,8 @@ try {
   assert.deepEqual(ran, ["ps -aq --filter volume=dsh-layerfs-website-1", "volume rm dsh-layerfs-website-1"]);
   assert.deepEqual(forgot, ["website", "website"]);
   mkdirSync(join(dir, "website"), { recursive: true });
-  assert.equal(prepareInit(h.spec, h.bindings, { folder: dir, source: join(dir, "website") }).project.name, "website-2", "a removed name is not taken again before dsh restarts");
-  assert.throws(() => prepareInit(h.spec, h.bindings, { folder: dir, name: "website" }), { code: "name-retired" });
+  assert.equal(prepareInit(h.spec, h.bindings, { folder: dir, source: join(dir, "website") }).project.name, "website", "a removed name is free again at once");
+  assert.equal(prepareInit(h.spec, h.bindings, { folder: dir, name: "website" }).project.name, "website");
   assert.equal(existsSync(join(h.spec.home, "website")), false);
   assert.deepEqual([h.bindings.byName("website"), h.bindings.workspace(FOLDER).lastUsed, h.bindings.session("session-root").project], [null, null, null]);
   assert.equal(h.bindings.projectFor("session-root", FOLDER), null, "a session on a removed project has none");

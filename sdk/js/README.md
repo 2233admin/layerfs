@@ -25,6 +25,13 @@ letters, digits, `_`, `-`, `.` and start/end alphanumeric. Init is explicit;
 subsequent clients discover the existing project without reacquiring its source
 or reinstalling over live state. Ordinary Store calls lazily create or reopen a
 private service Sandbox. Mount does not scan or materialize the complete tree.
+A project is its home entry, `LAYERFS_HOME/<name>/`; the binding keeps no other
+record of which names it initialized. Init refuses a name whose entry exists
+(`Exists`). Once that entry is deleted, after the project's Sandboxes are closed,
+any process, including the one that made it, can initialize the name again.
+The SDK has no remove method; a host that removes a project deletes the entry
+and the project's volume itself. `node sdk/js/test/reinit.mjs` checks this with
+the real binding: Init, `Exists`, delete the entry, Init again in one process.
 
 | Environment | Meaning |
 | --- | --- |

@@ -64,8 +64,7 @@ export function prepareInit(spec, bindings, { folder, source = folder, name }, p
     if (!isAbsolute(path) || !existsSync(path) || !statSync(path).isDirectory()) throw refuse("invalid-folder", `${path} is not an absolute directory`);
   }
   if (name !== undefined && !NAME.test(name)) throw refuse("invalid-name", "a project name is 1-63 lowercase letters, digits, _ . - and starts and ends alphanumeric");
-  if (name !== undefined && bindings.retired.has(name)) throw refuse("name-retired", `${name} was removed while dsh runs; restart dsh to use the name again, or choose another`);
-  const taken = new Set([...bindings.allNames(), ...pending, ...bindings.retired]);
+  const taken = new Set([...bindings.allNames(), ...pending]);
   const project = { name: name ?? freeName(nameFrom(source), taken, spec.home), source, volume: "", created: Date.now() };
   if (taken.has(project.name) || existsSync(join(spec.home, project.name))) throw refuse("name-taken", `a LayerFS project named ${project.name} exists`);
   project.volume = `dsh-layerfs-${project.name}-${project.created.toString(36)}`;
