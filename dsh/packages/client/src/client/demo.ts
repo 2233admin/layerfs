@@ -32,6 +32,8 @@ export interface DemoServices {
   uiWorkspace?: { openSession(sessionId: string): void }
   /** dsh's Workspace list, for its archived Sessions */
   workspaces?: { list: { getSnapshot(): WorkspaceList, subscribe(listener: () => void): () => void } }
+  /** dsh's Session status, for whether a run's root Session still runs */
+  uiSession?: { sessionStatus: { getSnapshot(): ReadonlyMap<string, { running?: boolean }>, subscribe(listener: () => void): () => void } }
 }
 interface WorkspaceList { phase?: 'pending' | 'ready', archivedSessionIds?: readonly string[] }
 
@@ -121,9 +123,10 @@ const send = async (services: DemoServices, sessionId: string, text: string) =>
  * removed). Made in reverse so the list reads in scenario order. Each opens
  * with the intro question, which the mock model answers with what the demo
  * shows: the sidebar lists no Session before its first turn.
+ * @returns the demo workspace's dsh Workspace id, or null without the Remote services
  */
-export async function ensureDemoSessions(services: DemoServices, info: DemoInfo): Promise<void> {
-  if (!services.remote) return
+export async function ensureDemoSessions(services: DemoServices, info: DemoInfo): Promise<string | null> {
+  if (!services.remote) return null
   const workspace = await workspaceOf(services, info), gone = await archived(services)
   const present = new Set((workspace.sessionIds ?? []).filter((id) => !gone.has(id)))
   for (const demo of [...info.demos].reverse()) {
@@ -132,6 +135,7 @@ export async function ensureDemoSessions(services: DemoServices, info: DemoInfo)
     await demoApi.setSession(demo.id, sessionId)
     await send(services, sessionId, info.intro)
   }
+  return workspace.workspaceId
 }
 
 /** The step Play is on, for the strip. */

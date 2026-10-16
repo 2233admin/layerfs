@@ -132,6 +132,8 @@ The tour, conflicts, merge and agents demos are the design preview's stories ([`
 
 With the bundle installed, dsh web gets a workspace for `dsh/demo-workspace` with one session per demo, in scenario order. The client registers the workspace and makes any missing session when it loads. Each session opens with "What does this demo show?", which the mock answers with the demo's blurb and agents; dsh's sidebar lists no session before its first turn.
 
+The demo sessions belong to their demos, so the client hides dsh's controls that would add, fork, archive, pin, rename or move one: the workspace row's New session and menu, each session row's menu, Archive and Pin, rename by double-click, dragging, the chat's Branch button, and the fork, archive and rename shortcuts while a demo session is open. The workspace's folder row has a violet gradient and a DEMO badge. dsh has no per-workspace setting for these: a stylesheet keyed to the sidebar's row keys and the chat's session attribute hides them, and the client's key listener runs before dsh's.
+
 Above the composer of a demo session, one strip shows:
 - a progress bar: the steps every agent has finished out of all the scenario's steps, from the mock's own replies, with the root agent's phase and the elapsed time;
 - Sim or Live: the simulator or real LayerFS. The choice is kept in the browser;
@@ -143,7 +145,7 @@ Play (Replay after a run, also allowed while one goes) runs the demo in a new se
 3. The demo's projects are removed, and its project for the mode (`demo-<id>`, or `demo-<id>-sim` on Sim) is Inited again from `demo-workspace/`, with the Init's progress on the bar. Removal stops the Sandboxes a stopped run left open (only Play asks for that; removing other projects still refuses while a Sandbox runs) and clears their records in the LayerFS home.
 4. The new session becomes the demo's, the project is chosen, "Run the demo." is sent, and the new session opens.
 
-Each step is attempted once. A failure before step 4 unarchives the old session, which stays the demo's, archives the unused new one, and shows the message on the strip. The strip reads the demo again as soon as Play ends. A run stops on the strip when a request of it is aborted; a stop between requests is not seen, but Replay works either way. When the client loads, a demo whose session is gone or archived gets a new one, opened with the intro question.
+Each step is attempted once. A failure before step 4 unarchives the old session, which stays the demo's, archives the unused new one, and shows the message on the strip. The strip reads the demo again as soon as Play ends. A run stops on the strip when a request of it is aborted, or, for a stop between requests, which the mock does not see, once dsh says the root session is not running and no step has finished for 4 seconds. When the client loads, a demo whose session is gone or archived gets a new one, opened with the intro question.
 
 The Host side is the mock plugin's `/layerfs-demo` route. It serves the workspace folder, the demos, each demo's session (kept in `<profile>/dsh-layerfs-demo/sessions.json`) and each demo's latest run.
 

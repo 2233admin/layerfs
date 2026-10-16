@@ -2,13 +2,19 @@
 // how far the run got (the mock model's steps of every agent, and the root
 // agent's phase), Sim or Live, and Play, which replays the demo in a new
 // Session (demo.ts). Other Sessions render nothing.
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Button, IconPlayOutlineRegular, IconRefreshOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { demoApi, playDemo, type Demo, type DemoInfo, type DemoMode, type DemoServices, type PlayStep } from './demo.ts'
+import { useDemoSessionLock } from './lockdown.ts'
 import { ProgressBar, jobFraction, jobText, useClock } from './Progress.tsx'
 
 // while a run goes, and slower while waiting for one to start
 const POLL_MS = 700, IDLE_POLL_MS = 2500
+// a run whose root Session stopped between model requests is never told by
+// the mock model; it reads as stopped once dsh says the Session is not
+// running and no step has played for this long
+const HALT_MS = 4000
+const unsubscribed = () => () => {}
 // the last Sim or Live choice, kept in this browser
 const MODE_KEY = 'layerfs-demo-mode'
 const savedMode = (): DemoMode => { try { return localStorage.getItem(MODE_KEY) === 'sim' ? 'sim' : 'live' } catch { return 'live' } }
@@ -49,6 +55,12 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
     return () => clearInterval(timer)
   }, [demo?.id, running])
   const now = useClock(running || playing !== null)
+  useDemoSessionLock(demo ? sessionId : null)
+  const status = services().uiSession?.sessionStatus
+  const rootRunning = useSyncExternalStore(status?.subscribe ?? unsubscribed, () => status?.getSnapshot().get(sessionId)?.running)
+  const [movedAt, setMovedAt] = useState(Date.now)
+  useEffect(() => { setMovedAt(Date.now()) }, [run?.done, rootRunning])
+  const halted = running && rootRunning === false && now - movedAt > HALT_MS
 
   if (!info || !demo) return null
 
@@ -70,7 +82,8 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
   } else if (run) {
     fraction = run.of ? run.done / run.of : 0
     const steps = `${run.done} of ${run.of} steps`
-    line = run.state === 'running' ? `${run.phase ?? 'Running'} · ${steps} · ${clock(now - run.started)}`
+    line = halted ? `Stopped · ${steps} · the session is not running`
+      : run.state === 'running' ? `${run.phase ?? 'Running'} · ${steps} · ${clock(now - run.started)}`
       : run.state === 'done' ? `Finished · ${steps} · ${clock((run.ended ?? now) - run.started)}`
         : `Stopped · ${run.error ?? ''}`
   } else {
@@ -85,7 +98,7 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
     <div style={{ display: 'grid', gap: 6, margin: '0 0 6px', padding: '8px 12px', borderRadius: 10, border: '1px solid color-mix(in srgb, currentColor 12%, transparent)' }}>
       <ProgressBar fraction={fraction} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: error || run?.state === 'stopped' ? 'var(--dsh-color-fg-danger, #d14343)' : 'var(--dsh-color-fg-muted, inherit)' }}
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: error || halted || run?.state === 'stopped' ? 'var(--dsh-color-fg-danger, #d14343)' : 'var(--dsh-color-fg-muted, inherit)' }}
           title={error ?? line}>{error ?? line}</span>
         <span role="group" aria-label="LayerFS" style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid color-mix(in srgb, currentColor 18%, transparent)' }}>
           {choice('sim', 'Sim')}{choice('live', 'Live')}

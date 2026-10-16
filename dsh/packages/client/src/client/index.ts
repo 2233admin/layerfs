@@ -6,6 +6,7 @@ import { demoApi, ensureDemoSessions, type DemoServices } from './demo.ts'
 import { DemoStrip } from './DemoStrip.tsx'
 import { LayerFsIcon, LayerFsPanel, type PanelServices } from './LayerFsPanel.tsx'
 import { LayerFsView } from './LayerFsView.tsx'
+import { lockDemoWorkspace } from './lockdown.ts'
 import { ProjectPicker } from './ProjectPicker.tsx'
 
 export const inject = ['slots']
@@ -27,18 +28,22 @@ export function apply(ctx: any): void {
   const services = (): PanelServices => ({ workspaces: ctx.get('workspaces'), uiWorkspace: ctx.get('uiWorkspace') })
   // the Remote services, while the scope that injects them is up
   let remote: DemoServices['remote']
-  const demoServices = (): DemoServices => ({ remote, uiWorkspace: ctx.get('uiWorkspace'), workspaces: ctx.get('workspaces') })
+  const demoServices = (): DemoServices => ({ remote, uiWorkspace: ctx.get('uiWorkspace'), workspaces: ctx.get('workspaces'), uiSession: ctx.get('uiSession') })
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
     name: 'conversation.input.dock',
     id: 'layerfs-demo',
     order: 5,
     inject: (sessionId: string) => ({ sessionId, services: demoServices }),
   }, DemoStrip))
-  // once the Remote session services are up: every demo gets its Session
+  // once the Remote session services are up: every demo gets its Session,
+  // and the demo workspace's sidebar rows lose their Session actions
   ctx.inject(['remote', 'remote.session', 'remote.workspace'], (scope: any) => {
     remote = scope.remote
-    scope.effect(() => () => { remote = undefined }, 'layerfs-client: demo Remote services')
-    demoApi.info().then((info) => info && ensureDemoSessions(demoServices(), info)).catch((error) => {
+    let unlock: (() => void) | null = null, up = true
+    scope.effect(() => () => { remote = undefined; up = false; unlock?.() }, 'layerfs-client: demo Remote services')
+    demoApi.info().then((info) => info && ensureDemoSessions(demoServices(), info)).then((workspaceId) => {
+      if (workspaceId && up) unlock = lockDemoWorkspace(workspaceId)
+    }).catch((error) => {
       console.warn('layerfs-client: demo Sessions were not made:', error)
     })
   })
