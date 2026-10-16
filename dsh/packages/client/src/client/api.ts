@@ -41,10 +41,11 @@ export const api = {
   workspace: (folder: string) => call<{ projects: Project[], lastUsed: string | null }>('GET', `/workspace?folder=${encodeURIComponent(folder)}`),
   session: (id: string) => call<SessionView>('GET', `/session/${sid(id)}`),
   choose: (id: string, project: string | null) => call<SessionView>('POST', `/session/${sid(id)}/project`, { project }),
-  init: (folder: string, name?: string) => call<{ project: Project }>('POST', '/init', { folder, name }),
+  init: (folder: string, name?: string, source?: string) => call<{ project: Project }>('POST', '/init', { folder, name, source }),
   projects: () => call<{ projects: Project[] }>('GET', '/projects'),
   projectState: (name: string) => call<ProjectState>('GET', `/project/${encodeURIComponent(name)}/state`),
   projectTree: (name: string, ref: string) => call<{ tree: Record<string, unknown>, partial: string | null }>('GET', `/project/${encodeURIComponent(name)}/tree?ref=${encodeURIComponent(ref)}`),
+  remove: (name: string) => call<{ removed: string, volume: string }>('POST', `/project/${encodeURIComponent(name)}/remove`, { confirm: name }),
   attach: (name: string, folder: string | null) => call<{ project: Project }>('POST', `/project/${encodeURIComponent(name)}/attach`, { folder }),
   tree: (id: string, ref: string) => call<{ tree: Record<string, unknown>, partial: string | null }>('GET', `/session/${sid(id)}/tree?ref=${encodeURIComponent(ref)}`),
 }

@@ -1,16 +1,19 @@
 // The LayerFS sidebar page: every LayerFS project, the dsh workspace each is
 // attached to (change or detach it), its History and Files, and a new
-// session on the LayerFS preset; workspaces without a project offer Init.
-// ellen_joe keeps the page company.
+// session on the LayerFS preset; a project can be removed (RemoveDialog).
+// Workspaces without a project offer Init (InitDialog). ellen_joe keeps the
+// page company.
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import ellen from '../../../../../sdk_sim/avatars/ellen_joe.gif'
 import { api, type Project, type ProjectState, type Status } from './api.ts'
+import { InitDialog } from './InitDialog.tsx'
 import { ProjectBoard } from './ProjectBoard.tsx'
+import { RemoveDialog } from './RemoveDialog.tsx'
 
 /** What the panel uses of dsh's workspace services (read with ctx.get). */
 export interface PanelServices {
   workspaces?: { list: { getSnapshot(): { items: readonly Workspace[] }, subscribe(listener: () => void): () => void } }
-  uiWorkspace?: { startSession(workspaceId?: string, options?: { agentPreset?: string }): void }
+  uiWorkspace?: { startSession(workspaceId?: string, options?: { agentPreset?: string }): void, listDirectory(path?: string): Promise<any> }
 }
 interface Workspace { workspaceId: string, path: string, title: string }
 
@@ -60,6 +63,8 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reads, setReads] = useState(0)
+  const [initFor, setInitFor] = useState<Workspace | null>(null)
+  const [removing, setRemoving] = useState(false)
 
   const loadProjects = useCallback(() => api.projects().then(({ projects }) => { setProjects(projects); return projects }), [])
   useEffect(() => {
@@ -82,11 +87,6 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
   const workspace = project?.folder ? items.find((w) => w.path === project.folder) : undefined
   const bare = items.filter((w) => !projects?.some((p) => p.folder === w.path))
   const attach = (folder: string | null) => act(folder ? 'Attaching…' : 'Detaching…', async () => { await api.attach(project!.name, folder); await loadProjects() })()
-  const init = (w: Workspace) => act(`Initializing ${w.title}…`, async () => {
-    const { project: made } = await api.init(w.path)
-    await loadProjects()
-    setSelected(made.name)
-  })
   const newSession = act('Opening a session…', async () => {
     await api.attach(project!.name, project!.folder) // the folder's project for the new session
     uiWorkspace!.startSession(workspace!.workspaceId, { agentPreset: PRESET })
@@ -126,6 +126,7 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
               </select>
               <span title={project.volume}>imported from {short(project.source)} · {new Date(project.created).toLocaleDateString()}</span>
               <button style={button} onClick={() => setReads((n) => n + 1)} title="Read the project again">Refresh</button>
+              <button style={{ ...button, color: 'var(--dsh-color-fg-danger, #d33)' }} disabled={!!busy} onClick={() => setRemoving(true)}>Remove project…</button>
             </div>
           )}
         </div>
@@ -144,12 +145,17 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', color: muted, borderTop: `1px solid ${line}`, paddingTop: 10 }}>
           <span>No project yet:</span>
           {bare.map((w) => (
-            <button key={w.workspaceId} style={button} disabled={!!busy || !status?.configured} onClick={() => { void init(w)() }} title={`Init LayerFS from ${w.path}`}>
+            <button key={w.workspaceId} style={button} disabled={!!busy || !status?.configured} onClick={() => setInitFor(w)} title={`Init LayerFS for ${w.path}`}>
               Init {w.title}
             </button>
           ))}
         </div>
       )}
+      {removing && project && <RemoveDialog project={project} onClose={() => setRemoving(false)} onDone={() => {
+        setRemoving(false)
+        void loadProjects().then((all) => setSelected((all.find((p) => p.folder) ?? all[0])?.name ?? null))
+      }} />}
+      {initFor && <InitDialog folder={initFor.path} directories={uiWorkspace} onClose={() => setInitFor(null)} onDone={(made) => { setInitFor(null); void loadProjects().then(() => setSelected(made.name)) }} />}
     </div>
   )
 }

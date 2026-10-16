@@ -10,22 +10,24 @@ const PANEL = 'layerfs'
 
 // any: this bundle builds outside the dsh workspace, without its Context types
 export function apply(ctx: any): void {
+  const directories = () => ctx.get('uiWorkspace')
   ctx.slots.inject('conversation.view', () => ctx.slots.register({
     name: 'conversation.view',
     id: 'layerfs',
     order: 20,
     label: () => 'LayerFS',
-    inject: (sessionId: string) => ({ sessionId }),
+    inject: (sessionId: string) => ({ sessionId, directories }),
   }, LayerFsView))
+  // workspace services are optional: without them the panel lists no
+  // workspaces and Init offers only the workspace folder as its source
+  const services = (): PanelServices => ({ workspaces: ctx.get('workspaces'), uiWorkspace: ctx.get('uiWorkspace') })
   ctx.slots.inject('conversation.hero.options', () => ctx.slots.register({
     name: 'conversation.hero.options',
     id: 'layerfs-project',
     order: 50,
     label: () => 'LayerFS project',
-    inject: (sessionId: string) => ({ sessionId }),
+    inject: (sessionId: string) => ({ sessionId, directories }),
   }, ProjectPicker))
-  // workspace services are optional: the panel lists none without them
-  const services = (): PanelServices => ({ workspaces: ctx.get('workspaces'), uiWorkspace: ctx.get('uiWorkspace') })
   ctx.slots.inject('main', () => ctx.slots.register({
     name: 'main',
     key: PANEL,

@@ -121,6 +121,18 @@ export class BindingStore {
     return true;
   }
 
+  /**
+   * Forgets a removed project: no folder uses it, and sessions that chose it
+   * have no project (a later project of the same name is not theirs).
+   * @param {string} name
+   */
+  remove(name) {
+    delete this.data.projects[name];
+    for (const w of Object.values(this.data.workspaces)) if (w.lastUsed === name) w.lastUsed = null;
+    for (const choice of Object.values(this.data.sessions)) if (choice.project === name) choice.project = null;
+    this.save();
+  }
+
   /** Locks a session's project at its first LayerFS-bound bash call. */
   lock(rootId, name, folder) {
     const current = this.session(rootId);

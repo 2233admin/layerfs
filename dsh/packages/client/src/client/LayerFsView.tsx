@@ -9,6 +9,7 @@ import { createView, injectStyle } from '../../../view/src/index.js'
 import { api, type SessionView } from './api.ts'
 import { AVATARS } from './avatars.ts'
 import { Setup } from './Setup.tsx'
+import type { Directories } from './InitDialog.tsx'
 import { linesKey, replay, treeLoader, type TreeCache } from './replay.ts'
 import { MESSAGE } from './ui.ts'
 import { useHiddenComposer } from './composer.ts'
@@ -40,16 +41,16 @@ export function useSessionView(sessionId: string) {
   return { view, error, refresh: (next?: SessionView) => { if (next) setView(next); setTick((n) => n + 1) } }
 }
 
-export function LayerFsView({ sessionId }: { sessionId: string }) {
+export function LayerFsView({ sessionId, directories }: { sessionId: string, directories: () => Directories | undefined }) {
   const anchor = useRef<HTMLDivElement>(null)
   useHiddenComposer(anchor)
-  return <div ref={anchor} style={{ display: 'contents' }}><TabBody sessionId={sessionId} /></div>
+  return <div ref={anchor} style={{ display: 'contents' }}><TabBody sessionId={sessionId} directories={directories} /></div>
 }
 
-function TabBody({ sessionId }: { sessionId: string }) {
+function TabBody({ sessionId, directories }: { sessionId: string, directories: () => Directories | undefined }) {
   const { view, error, refresh } = useSessionView(sessionId)
   if (!view) return <div style={MESSAGE}>{error ? `LayerFS is not available: ${error}` : 'Loading LayerFS…'}</div>
-  if (!view.project) return <Setup sessionId={sessionId} view={view} onChange={refresh} />
+  if (!view.project) return <Setup sessionId={sessionId} view={view} onChange={refresh} directories={directories} />
   if (!view.lines.length) {
     return (
       <div style={MESSAGE}>

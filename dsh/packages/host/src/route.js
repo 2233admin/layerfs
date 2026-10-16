@@ -11,9 +11,11 @@
 //   GET  /layerfs/project/<name>/state        the project as LayerFS reports it, with who made each node
 //   GET  /layerfs/project/<name>/tree?ref=<id>  as the session's tree route
 //   POST /layerfs/project/<name>/attach {folder}  attach to a workspace folder (null: detach)
+//   POST /layerfs/project/<name>/remove {confirm}  remove it (confirm: its name); see remove.js
 import { missingDeployment } from "./config.js";
 import { initProject } from "./init.js";
 import { projectState } from "./layerfs-client.js";
+import { removeProject } from "./remove.js";
 import { isSavedId } from "./trees.js";
 
 const PREFIX = "/layerfs";
@@ -80,6 +82,11 @@ export function registerRoutes(ctx, { spec, bindings, collector, trees }) {
           const body = await readJson(req);
           if (body.folder !== null && typeof body.folder !== "string") return send(res, 400, { code: "invalid-folder", message: "folder is a path or null" });
           return send(res, 200, { project: bindings.attach(project.name, body.folder) });
+        }
+        if (req.method === "POST" && parts[2] === "remove") {
+          const body = await readJson(req);
+          if (body.confirm !== project.name) return send(res, 400, { code: "not-confirmed", message: `confirm with the project's name, ${project.name}` });
+          return send(res, 200, await removeProject(spec, bindings, trees, project.name));
         }
       }
       if (parts[0] === "session" && parts.length >= 2) {

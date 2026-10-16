@@ -67,6 +67,16 @@ export class TreeReader {
     await release(await entry.client).catch(() => {});
   }
 
+  /** Drops a project's trees and releases its client now (before removal). */
+  async forget(name) {
+    for (const key of [...this.trees.keys()]) if (key.startsWith(`${name}\n`)) this.trees.delete(key);
+    const entry = this.clients.get(name);
+    if (!entry) return;
+    this.clients.delete(name);
+    clearTimeout(entry.timer);
+    await entry.client.then(release).catch(() => {});
+  }
+
   /** Releases every client; runs with the plugin fiber. */
   async dispose() {
     const entries = [...this.clients.entries()];

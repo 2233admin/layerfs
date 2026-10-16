@@ -24,7 +24,7 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
   The SDK reads the `DSH_LAYERFS_*` names as fallbacks for its own `LAYERFS_*` settings.
 - **Records.** Each finished SDK call becomes a `plugin:layerfs/call` record in the calling agent's own session. The root session gets one `plugin:layerfs/project` record.
 - **Journal.** Finished lines are also journaled per root session under the state folder, because trace files live in temporary storage.
-- **Projects.** Each project is attached to at most one workspace folder, or detached; a folder can have several. Init imports the folder and attaches the new project to it. A session uses the folder's only (or last used) project unless it picks another or none. The choice is fixed at the first bash call that uses it.
+- **Projects.** Each project is attached to at most one workspace folder, or detached; a folder can have several. Init imports a source folder (the workspace folder unless another is chosen) and attaches the new project to the workspace folder. A session uses the folder's only (or last used) project unless it picks another or none. The choice is fixed at the first bash call that uses it.
 - **Agent names.** Subagents are named by the label their parent gave them.
 - **Web route.** `/layerfs` sits behind dsh's own connection checks:
 
@@ -41,6 +41,9 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
   | `GET /layerfs/project/<name>/state` | the project as `inspect.snapshot` reports it, plus who made each node and when Layers and forks happened, from the journals |
   | `GET /layerfs/project/<name>/tree?ref=<saved id>` | as the session's tree route |
   | `POST /layerfs/project/<name>/attach {folder}` | attach to a workspace folder, or `null` to detach |
+  | `POST /layerfs/project/<name>/remove {confirm}` | remove the project; `confirm` must repeat its name |
+
+  Removal deletes the project's Docker volume and LayerFS home entry, and drops it from the bindings; sessions on it become unbound. It is refused while any container still uses the volume. Workspace files and transcripts stay.
 
   Trees are bounded: 4000 entries, 128 KB per file, 8 MB in all. `node_modules`, `.git`, `.next`, `dist` and `build` are listed but not opened.
 
@@ -55,14 +58,16 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
   An unbound session shows Setup: pick one of the folder's projects, or Init.
 
   The composer is hidden while the tab shows; switch to Chat to send a message.
-- **The project picker** sits in the New Session row: a project of the folder or none, and a separate "+ Init" button.
+- **The project picker** sits in the New Session row: a project of the folder or none, and a separate "+ Init" button that opens the Init dialog.
 - **The LayerFS page** (sidebar) has one tab per project. Each shows:
   - ellen_joe, with a line on where `main` is and what was published last;
   - the workspace the project is attached to, which you can change or detach (a session already on the project keeps it);
   - History and Files side by side, where clicking a History node shows Files at that point;
-  - "New LayerFS session" in the attached workspace, on the preset.
+  - "New LayerFS session" in the attached workspace, on the preset;
+  - "Remove project…", which asks for the project's name before removing it.
 
   Workspaces without a project offer Init.
+- **The Init dialog** (Setup, the picker and the page) imports the workspace folder by default. "Choose folder…" browses for another source: in the page where dsh offers it, otherwise with the native picker. The project is attached to the workspace folder either way. The name is optional and defaults to the source folder's.
 
 ### Preset
 

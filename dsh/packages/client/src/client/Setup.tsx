@@ -3,15 +3,16 @@
 // uses it; after that the session's project is fixed.
 import { useEffect, useState } from 'react'
 import { api, type SessionView, type Status } from './api.ts'
+import { InitDialog, type Directories } from './InitDialog.tsx'
 import { MESSAGE } from './ui.ts'
 
 const button = { font: 'inherit', fontSize: 13, padding: '5px 12px', borderRadius: 6, border: '1px solid var(--dsh-color-border, #8884)', background: 'transparent', color: 'inherit', cursor: 'pointer' } as const
 
-export function Setup({ sessionId, view, onChange }: { sessionId: string, view: SessionView, onChange: (next?: SessionView) => void }) {
+export function Setup({ sessionId, view, onChange, directories }: { sessionId: string, view: SessionView, onChange: (next?: SessionView) => void, directories: () => Directories | undefined }) {
   const [status, setStatus] = useState<Status | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [name, setName] = useState('')
+  const [initing, setIniting] = useState(false)
   useEffect(() => { api.status().then(setStatus, (e: Error) => setError(e.message)) }, [])
 
   const act = (label: string, run: () => Promise<SessionView | void>) => async () => {
@@ -19,10 +20,6 @@ export function Setup({ sessionId, view, onChange }: { sessionId: string, view: 
     try { onChange((await run()) || undefined) } catch (e) { setError((e as Error).message) } finally { setBusy(null) }
   }
   const choose = (project: string | null) => act(project ? `Choosing ${project}…` : 'Saving…', () => api.choose(sessionId, project))
-  const init = act('Initializing LayerFS from this folder…', async () => {
-    const { project } = await api.init(view.folder!, name.trim() || undefined)
-    return api.choose(sessionId, project.name)
-  })
 
   if (!view.folder) return <div style={MESSAGE}>This session has no workspace folder, so it has no LayerFS project.</div>
   if (status && !status.configured) {
@@ -45,17 +42,10 @@ export function Setup({ sessionId, view, onChange }: { sessionId: string, view: 
           </div>
         </div>
       )}
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="project name (optional)"
-          aria-label="Project name"
-          disabled={!!busy}
-          style={{ ...button, cursor: 'text', minWidth: 200 }}
-        />
-        <button style={button} disabled={!!busy || locked} onClick={init}>Init LayerFS from this folder</button>
+      <div>
+        <button style={button} disabled={!!busy || locked} onClick={() => setIniting(true)}>Init LayerFS…</button>
       </div>
+      {initing && <InitDialog folder={view.folder} directories={directories()} onClose={() => setIniting(false)} onDone={(project) => { setIniting(false); void act(`Choosing ${project.name}…`, () => api.choose(sessionId, project.name))() }} />}
       {busy && <div>{busy}</div>}
       {error && <div style={{ color: 'var(--dsh-color-fg-danger, #d33)' }}>{error}</div>}
     </div>

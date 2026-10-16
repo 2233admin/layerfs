@@ -3,7 +3,7 @@
 // dsh's appendPluginRecord is replaced by a stand-in that keeps each record
 // on the fake Session; Sessions, the web server and Connection are fakes.
 import assert from "node:assert/strict";
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { register } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +20,7 @@ const { Collector } = await import("../src/collector.js");
 const { contributor } = await import("../src/env.js");
 const { registerRoutes } = await import("../src/route.js");
 const { TreeReader } = await import("../src/trees.js");
+const { removeProject } = await import("../src/remove.js");
 const { CALL, PROJECT } = await import("@dsh-layerfs/model/sources/records.js");
 
 const dir = mkdtempSync(join(tmpdir(), "dsh-layerfs-host-"));
@@ -185,6 +186,22 @@ try {
   writeFileSync(join(old, "bindings.json"), JSON.stringify({ version: 1, workspaces: { [FOLDER]: { projects: [{ name: "a", source: FOLDER, volume: "v", created: 1 }], lastUsed: "a" } }, sessions: {}, agents: {} }));
   const upgraded = new BindingStore(old);
   assert.deepEqual([upgraded.data.version, upgraded.byName("a").folder, upgraded.workspace(FOLDER).lastUsed], [2, FOLDER, "a"]);
+
+  // removal: confirmed by name, refused while a container uses the volume, then volume, home entry and binding
+  assert.equal((await call("POST", "/layerfs/project/website/remove", { confirm: "web" })).status, 400);
+  const ran = [], dockerWith = (users) => async (file, args) => { ran.push(args.slice(2).join(" ")); return { stdout: args[2] === "ps" ? users : "" }; };
+  const forgot = [], fakeTrees = { forget: async (name) => { forgot.push(name); } };
+  mkdirSync(join(h.spec.home, "website"), { recursive: true });
+  await assert.rejects(removeProject(h.spec, h.bindings, fakeTrees, "website", dockerWith("abc\n")), { code: "busy" });
+  assert.deepEqual([ran, h.bindings.byName("website") !== null], [["ps -aq --filter volume=dsh-layerfs-website-1"], true]);
+  ran.length = 0;
+  assert.deepEqual(await removeProject(h.spec, h.bindings, fakeTrees, "website", dockerWith("")), { removed: "website", volume: "dsh-layerfs-website-1" });
+  assert.deepEqual(ran, ["ps -aq --filter volume=dsh-layerfs-website-1", "volume rm dsh-layerfs-website-1"]);
+  assert.deepEqual(forgot, ["website", "website"]);
+  assert.equal(existsSync(join(h.spec.home, "website")), false);
+  assert.deepEqual([h.bindings.byName("website"), h.bindings.workspace(FOLDER).lastUsed, h.bindings.session("session-root").project], [null, null, null]);
+  assert.equal(h.bindings.projectFor("session-root", FOLDER), null, "a session on a removed project has none");
+  await assert.rejects(removeProject(h.spec, h.bindings, fakeTrees, "website", dockerWith("")), { code: "not-found" });
   console.log("host: ok");
 } finally {
   rmSync(dir, { recursive: true, force: true });
