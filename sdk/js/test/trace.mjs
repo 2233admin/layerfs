@@ -181,6 +181,18 @@ try {
     await new LayerFS("website").project.list_branches();
     assert.deepEqual(read(own).map((line) => line.step), ["own step", "own step"]);
     assert.equal(read(file).length, lines.length);
+    // Deployment settings fall back to their DSH_ twins the same way.
+    const saved = {};
+    for (const name of ["HOME", "DOCKER", "IMAGE", "VOLUME", "DAEMON"]) {
+      saved[name] = process.env[`LAYERFS_${name}`];
+      delete process.env[`LAYERFS_${name}`];
+      process.env[`DSH_LAYERFS_${name}`] = `dsh-${name.toLowerCase()}`;
+    }
+    const twin = new LayerFS("website");
+    assert.equal(twin.options.home, "dsh-home");
+    assert.deepEqual(twin.options.deploy, { docker: "dsh-docker", image: "dsh-image", volume: "dsh-volume", daemon: "dsh-daemon" });
+    for (const [name, value] of Object.entries(saved)) { process.env[`LAYERFS_${name}`] = value; delete process.env[`DSH_LAYERFS_${name}`]; }
+    assert.equal(new LayerFS("website").options.deploy.image, "fake-image");
   } else if (selected === "start") {
     // Start lines precede their end lines and share id, step, method, args, start and scope.
     process.env.LAYERFS_TRACE = file;

@@ -1,0 +1,59 @@
+// LayerFS SDK clients the Host uses for a project: Init, and the project
+// state the views draw (inspect.snapshot through the model's mirror). The
+// SDK captures its deployment from the environment at construction, so the
+// project's settings are set for that synchronous step only.
+import { Mirror } from "@dsh-layerfs/model/mirror.js";
+
+/** The environment one project's SDK client and its agents' bash calls use. */
+export function deploymentEnv(spec, project) {
+  return {
+    HOME: spec.home,
+    DOCKER: spec.docker,
+    IMAGE: spec.image ?? "",
+    DAEMON: spec.daemon ?? "",
+    VOLUME: project.volume,
+  };
+}
+
+/** Constructs a LayerFS client and operator for one project. */
+export async function clientFor(spec, project) {
+  const { LayerFS } = await import(spec.sdk);
+  const { LayerFSOperator } = await import(new URL("../operator/index.js", spec.sdk).href);
+  const env = deploymentEnv(spec, project), saved = {};
+  for (const [name, value] of Object.entries(env)) { saved[name] = process.env[`LAYERFS_${name}`]; process.env[`LAYERFS_${name}`] = value; }
+  try {
+    const layerfs = new LayerFS(project.name);
+    return { layerfs, operator: new LayerFSOperator(layerfs) };
+  } finally {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[`LAYERFS_${name}`];
+      else process.env[`LAYERFS_${name}`] = value;
+    }
+  }
+}
+
+/** Closes every Sandbox a Host client opened (its service Sandbox). */
+export async function release({ layerfs }) {
+  for (const id of [...layerfs.sandboxes]) await layerfs.sandbox.close(id);
+}
+
+/**
+ * The project as the views draw it: the mirror of one inspect.snapshot, with
+ * the Sandboxes the traced calls created (ids from the trace lines).
+ * @param {object} spec @param {object} project @param {string[]} sandboxes real Sandbox ids
+ */
+export async function projectState(spec, project, sandboxes) {
+  const client = await clientFor(spec, project);
+  try {
+    const snap = await client.operator.inspect.snapshot();
+    const m = new Mirror(), boxes = [];
+    for (const real of sandboxes) {
+      const listed = (snap.sandboxes || []).find((x) => x.id === real);
+      boxes.push({ label: m.label("sb", real), real, closed: !listed, workspaces: {}, processes: [] });
+    }
+    m.absorb(snap, boxes);
+    return { s: { ...m.s, roots: {} }, labels: Object.fromEntries(m.toLabel) };
+  } finally {
+    await release(client);
+  }
+}

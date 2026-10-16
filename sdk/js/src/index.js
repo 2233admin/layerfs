@@ -30,22 +30,26 @@ export class LayerFS {
   /** Selects a project without filesystem, native addon or network I/O.
    * `options.trace` names a per-call trace file (overrides LAYERFS_TRACE,
    * then DSH_LAYERFS_TRACE); `options.traceStep` labels its lines
-   * (overrides LAYERFS_TRACE_STEP, then DSH_LAYERFS_TRACE_STEP). */
+   * (overrides LAYERFS_TRACE_STEP, then DSH_LAYERFS_TRACE_STEP). Deployment
+   * settings read LAYERFS_HOME, _DOCKER, _IMAGE, _VOLUME and _DAEMON, each
+   * else its DSH_LAYERFS_ twin. */
   constructor(projectName, options = {}) {
     if (typeof projectName !== "string" || !/^[a-z0-9](?:[a-z0-9_.-]{0,61}[a-z0-9])?$/.test(projectName)) {
       throw new LayerFSError("InvalidInput", "a project name is required", null);
     }
     this.projectName = projectName;
-    const env = process.env;
+    // Each LAYERFS_ setting falls back to its DSH_LAYERFS_ twin, the only
+    // names deepseek-harness may set in a bash call's environment.
+    const env = (name) => process.env[`LAYERFS_${name}`] || process.env[`DSH_LAYERFS_${name}`] || undefined;
     this.options = {
-      home: env.LAYERFS_HOME,
-      trace: options.trace ?? (env.LAYERFS_TRACE || env.DSH_LAYERFS_TRACE || undefined),
+      home: env("HOME"),
+      trace: options.trace ?? env("TRACE"),
       traceStep: options.traceStep,
       deploy: {
-        docker: env.LAYERFS_DOCKER,
-        image: env.LAYERFS_IMAGE,
-        volume: env.LAYERFS_VOLUME,
-        daemon: env.LAYERFS_DAEMON,
+        docker: env("DOCKER"),
+        image: env("IMAGE"),
+        volume: env("VOLUME"),
+        daemon: env("DAEMON"),
       },
     };
     this.sandboxes = new Set();

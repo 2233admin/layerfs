@@ -1,0 +1,26 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: false
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .: {}
+
+  packages/dsh-layerfs:
+    dependencies:
+      '@dsh-layerfs/host':
+        specifier: workspace:*
+        version: link:../host
+
+  packages/host:
+    dependencies:
+      '@dsh-layerfs/model':
+        specifier: workspace:*
+        version: link:../model
+      '@layerfs/sdk':
+        specifier: link:../../../sdk/js
+        version: link:../../../sdk/js
+
+  packages/model: {}

@@ -1,0 +1,13 @@
+{
+  "name": "dsh-layerfs-workspace",
+  "private": true,
+  "description": "LayerFS × DSH: the dsh-layerfs plugin bundle and its packages",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.19"
+  },
+  "scripts": {
+    "test": "node packages/host/tests/run.mjs"
+  }
+}

@@ -37,7 +37,7 @@ private service Sandbox. Mount does not scan or materialize the complete tree.
 | `LAYERFS_TRACE` | Optional per-call trace file (see [Call trace](#call-trace)); unset means no trace. |
 | `LAYERFS_TRACE_STEP` | Optional step label put on each trace line as `step`; read at every call. |
 | `LAYERFS_TRACE_START` | `1` adds a start line before each traced call; read at every call. |
-| `DSH_LAYERFS_TRACE`, `DSH_LAYERFS_TRACE_STEP`, `DSH_LAYERFS_TRACE_START` | Used when the `LAYERFS_` name is unset or empty. A host that may only set `DSH_*` names in a command's environment (deepseek-harness) traces through these. |
+| `DSH_LAYERFS_HOME`, `DSH_LAYERFS_DOCKER`, `DSH_LAYERFS_IMAGE`, `DSH_LAYERFS_VOLUME`, `DSH_LAYERFS_DAEMON`, `DSH_LAYERFS_TRACE`, `DSH_LAYERFS_TRACE_STEP`, `DSH_LAYERFS_TRACE_START` | Each is used when its `LAYERFS_` name is unset or empty. A host that may only set `DSH_*` names in a command's environment (deepseek-harness) configures and traces the SDK through these. |
 
 The same authorized home permits a fresh Node process to use a saved Sandbox id
 and mount path directly. Reopening validates the full container id, deployment,
