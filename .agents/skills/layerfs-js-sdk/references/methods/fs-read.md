@@ -65,7 +65,7 @@ Reads a line range of a text file.
 **Limits:** one answer holds at most 2000 lines and 48 KiB. A huge single line comes
 back as a prefix; the rest of that line can't be read with `fs.read` (use `sandbox.exec`).
 
-**Refusals:** `IsDirectory`, `NotText` (binary: inspect it with `sandbox.exec`), plus
+**Refusals:** `IsDirectory`, `Binary` (NUL or invalid UTF-8: inspect it with `sandbox.exec`), plus
 the shared ones.
 
 ```js

@@ -6,6 +6,9 @@ exports.call = async (op, args) => {
   if (args.sandbox === 'sb_missing') {
     return { refused: { code: 'NoSuchSandbox', message: 'selected Sandbox absent', detail: null } };
   }
+  if (op === 'fs.read' && args.path === '/binary.dat') {
+    return { refused: { code: 'Binary', message: 'text contains NUL or invalid UTF-8', detail: null } };
+  }
   return { value: { sandbox: args.sandbox, text: 'selected route', items: [], hasMore: false } };
 };
 exports.operatorCall = async (op, args) => {

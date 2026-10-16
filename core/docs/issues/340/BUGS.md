@@ -69,6 +69,12 @@ original evidence; later understanding is added, never rewritten.
   Scoped formatting passed; whole-core formatting exposed the unrelated existing
   test formatting recorded in E-026. Git commit/LOC and rebuilt installed/live
   verification are recorded separately when available.
+- Repository fix: `59f05450b066b738003b680df6b370d9ad71361a` at tree
+  `2f3c0a237a43c063fc6dbf00a9866fc54c3b34c1`. Production LOC:
+  87681 -> 87702 (delta +21), core 85836 -> 85857, SDK 1845 unchanged,
+  reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).
+  Exact first-parent/staged-tree comparison uses the pinned production counter;
+  the committed tree equals the counted staged tree. Rebuild/live proof pending.
 
 ### E-023 — Host result projection continued after a failed fs.apply
 
@@ -133,6 +139,20 @@ original evidence; later understanding is added, never rewritten.
   source. Scoped formatting of both changed Rust files passes. API tests,
   warning-denying API Clippy, boundary guard and 50 self-tests pass; none is
   represented as a whole-repository green result.
+
+### E-027 — Standalone SDK checks were incorrectly invoked as Node test files
+
+- Found: root P-002 verification, `p002-after-tests.*`, exit one.
+- Diagnosis: service-selection.mjs is a Node test suite, while packaging.mjs and
+  trace.mjs are standalone case-selected programs. Running all three under
+  `node --test` omitted required `lazy|dispatch` and `on|off|failure` arguments.
+- Evidence: all eight service-selection leaves passed, including Binary catalog
+  membership. The two standalone program entries failed on their explicit usage
+  guards. This overall command stays failed; it does not establish an SDK defect.
+- Changed follow-up: inspect their actual source/arguments, then packaging/lazy
+  and trace/on, trace/off and trace/failure each passed as its own bounded command.
+  Packaging/dispatch waits for the rebuilt native binding. The unchanged passing
+  service-selection suite was not replayed to replace the failed combined run.
 
 ### E-022 — Worker quote repair was followed by an unchanged failed-command replay
 
@@ -742,19 +762,22 @@ original evidence; later understanding is added, never rewritten.
 - Diagnosis: public refusal-code catalog and guide drifted from the daemon's
   implemented stable code. Runtime LayerFSError/isRefusal handling already accepts
   Binary. This is not a transport, data-integrity or text-reader failure.
-- Planned fix: at the planned fully closed Build 1 boundary, add Binary to CODES
-  while retaining historical NotText compatibility, correct the guide, commit
-  with exact product LOC comparison, rebuild, and issue an archived new freeze
-  before independent Build 2. Current team copies remain unchanged until close.
+- Fix: after all Build 1 Sandboxes closed at the P-003 halt, add Binary to CODES
+  while retaining historical NotText compatibility and correct both read/edit
+  guide entries. Revision 1 is archived unchanged. The existing installed Build 1
+  files remain unchanged; new installed paths/clients follow the rebuild/freeze.
 - Regression: external service-selection test simulates the exact observed daemon
   refusal, asserts typed Binary preservation, advertised CODES membership and one
   selected-route native call with no fallback/replay. Both JS targets prepared
   with node --check. Before correction: seven pass/one fail; the failure is exactly
-  CODES membership. Tests and fixture changed only; no deployed product change yet.
-- Verification: correction/after test/LOC/build/freeze are pending, not PASS.
-- Effect on the run: root notified the lead this nonblocking catalog/guidance repair
-  will use the scheduled closed-resource boundary. Team continues its application
-  work with the frozen SDK and skill; no mid-run artifact replacement or reset.
+  CODES membership. After correction all eight leaves pass in the retained combined
+  attempt described in E-027. Syntax preparation passed for product/test/fixture;
+  packaging/lazy and all three actual trace cases pass. No fallback/replay occurs.
+- Verification: repository LOC/commit, native rebuild, installed identity and new
+  freeze remain pending at this entry. Existing runtime refusal handling did not
+  change. Live binary editing was not executed by this catalog correction.
+- Effect on the run: the repair uses the explicitly halted, closed-resource
+  boundary. No old selected client is reused and no Store/Branch reset occurs.
 - Source follow-up: fs-write guide line 72 also names NotText for binary editing,
   while daemon sdk/edit.rs lines 45/48 return Binary. Correct that guide entry at
   the same boundary. This additional guide path is source-checked; no new live

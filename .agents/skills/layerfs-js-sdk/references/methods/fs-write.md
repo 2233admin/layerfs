@@ -76,7 +76,7 @@ the cheap way to change a few lines of a big file.
 | --- | --- | --- |
 | `NoMatch` | `oldText` doesn't occur | `fs.read` the area; the text differs (whitespace, an earlier edit) |
 | `AmbiguousMatch` | `oldText` occurs more than once | Include more surrounding lines to make it unique |
-| `NotText` | Binary file | Use `fs.write` |
+| `Binary` | The text being edited contains NUL or invalid UTF-8 | Use the Sandbox for binary changes |
 | shared | | See above |
 
 ```js

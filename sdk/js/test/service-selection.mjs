@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { LayerFS } from '../src/index.js';
+import { CODES, isRefusal, LayerFS } from '../src/index.js';
 import { LayerFSOperator } from '../operator/index.js';
 import { native } from '../src/native.js';
 
@@ -49,6 +49,19 @@ test('a refused selected route remains refused without creating or replaying a s
   const client = new LayerFS('selection', { sandbox: 'sb_missing' });
   await assert.rejects(client.fs.read('work', '/README.md'), { code: 'NoSuchSandbox' });
   assert.deepEqual(binding.calls.map(v => v.op), ['fs.read']);
+});
+
+test('binary text reads preserve the daemon refusal and advertise its stable code', async () => {
+  binding.calls.length = 0;
+  const client = new LayerFS('selection', { sandbox: 'sb_worker' });
+  await assert.rejects(client.fs.read('work', '/binary.dat'), error => {
+    assert.equal(isRefusal(error, 'Binary'), true);
+    assert.equal(error.detail, null);
+    assert.equal(CODES.includes(error.code), true);
+    return true;
+  });
+  assert.deepEqual(binding.calls.map(v => v.op), ['fs.read']);
+  assert.equal(binding.calls[0].args.sandbox, 'sb_worker');
 });
 
 test('invalid explicit selections are rejected before any native call', () => {
