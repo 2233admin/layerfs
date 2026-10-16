@@ -4,7 +4,7 @@
 // (simulator) and test_live.js (live). `shape` is the graph a story leaves,
 // for comparing the two backends (VERIFICATION D3).
 "use strict";
-const { Engine } = require("./terminal.js");
+const { Engine } = require("./simulation_engine/terminal.js");
 const STORIES = require("./demo.js");
 
 /** Runs every step once; returns [{ index, label, code, expect, ok, lines }]. */

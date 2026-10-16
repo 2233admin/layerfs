@@ -1,7 +1,7 @@
 // Headless run of every demo story on the simulator. Usage: node sdk_sim/test_demo.js
 // TRACE=11,17 prints the lines of those steps.
 "use strict";
-const { SimBackend } = require("./backend/sim.js");
+const { SimBackend } = require("./simulation_engine/backend/sim.js");
 const SCN = require("./scenarios.js");
 const { playStory, STORIES } = require("./stories.js");
 

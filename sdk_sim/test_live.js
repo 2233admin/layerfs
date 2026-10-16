@@ -14,8 +14,8 @@
 const { execFileSync } = require("child_process");
 const { mkdirSync, writeFileSync } = require("fs");
 const { join } = require("path");
-const { LiveBackend } = require("./backend/live.js");
-const { SimBackend } = require("./backend/sim.js");
+const { LiveBackend } = require("./simulation_engine/backend/live.js");
+const { SimBackend } = require("./simulation_engine/backend/sim.js");
 const SCN = require("./scenarios.js");
 const { playStory, shape, STORIES } = require("./stories.js");
 

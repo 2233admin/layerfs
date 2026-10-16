@@ -1,7 +1,7 @@
 // Headless walk-through of the three CLIs. Usage: node sdk_sim/test_terminal.js
 "use strict";
-const { SimBackend } = require("./backend/sim.js");
-const { Engine } = require("./terminal.js");
+const { SimBackend } = require("./simulation_engine/backend/sim.js");
+const { Engine } = require("./simulation_engine/terminal.js");
 const SCN = require("./scenarios.js");
 (async () => {
 const sim = new SimBackend();
