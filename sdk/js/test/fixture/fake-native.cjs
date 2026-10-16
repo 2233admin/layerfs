@@ -1,7 +1,12 @@
 // A stand-in native binding for trace checks: no Docker, Store or daemon.
-// Every call resolves like the real binding; a path "/missing" is refused.
+// Every call resolves like the real binding; a path "/missing" is refused, and
+// so are the next `busyServices` service Sandbox creations (Busy).
 const commit = { id: "c0ffee", logical: 120, newCanonical: 40, newStored: 30, newMetadata: 8 };
 const answer = (op, args) => {
+  if (op === "sandbox.service" && exports.busyServices > 0) {
+    exports.busyServices -= 1;
+    return { refused: { code: "Busy", message: "another process owns this discovery mutation", detail: null } };
+  }
   if (args.path === "/missing") return { refused: { code: "NoSuchPath", message: "/missing does not exist", detail: null } };
   if (op === "sandbox.service" || op === "sandbox.create") return { value: { kind: "Ready", id: "sb_fake" } };
   if (op === "sandbox.mount") return { value: { kind: "Mounted", path: "/workspaces/w1", branch: args.branch, base: "b4se", baseLayer: "lay0", root: "r00t" } };
@@ -25,9 +30,12 @@ const telemetry = (op) => [{
 }];
 exports.calls = [];
 exports.observed = [];
+exports.deploys = [];
+exports.busyServices = 0;
 const traced = (op, args) => {
   exports.calls.push(op);
   exports.observed.push(args.observe ?? null);
+  if (args.deploy) exports.deploys.push(args.deploy);
   const plain = answer(op, args);
   return args.observe ? { ...plain, telemetry: telemetry(op) } : plain;
 };

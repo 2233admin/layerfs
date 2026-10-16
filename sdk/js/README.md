@@ -29,7 +29,7 @@ private service Sandbox. Mount does not scan or materialize the complete tree.
 | Environment | Meaning |
 | --- | --- |
 | `LAYERFS_HOME` | Absolute private directory for sealed provisioning and discovery. Created as 0700; existing directories must be owned by the current effective user with no group/other access. Records are 0600, not symlinks. |
-| `LAYERFS_DOCKER` | Local Engine Unix socket; `/var/run/docker.sock` is the create default. |
+| `LAYERFS_DOCKER` | Local Engine Unix socket; `/var/run/docker.sock` is the default for `sandbox.create` and the service Sandbox. |
 | `LAYERFS_IMAGE` | Exact immutable runtime `sha256:...` digest. |
 | `LAYERFS_VOLUME` | Existing named local VM volume shared by the project's daemons. |
 | `LAYERFS_DAEMON` | Host path to the built Linux daemon executable. |
@@ -42,8 +42,11 @@ private service Sandbox. Mount does not scan or materialize the complete tree.
 The same authorized home permits a fresh Node process to use a saved Sandbox id
 and mount path directly. Reopening validates the full container id, deployment,
 volume, topology, loopback endpoint, Noise peer and saved daemon incarnation.
-Discovery mutations use nonblocking OS locks and atomic record replacement.
-An unresolved create intent is `Unknown`; it never authorizes another installation.
+Discovery mutations use nonblocking OS locks and atomic record replacement; a
+mutation another process holds is refused as `Busy`, never waited for. The
+client does not keep a refused service Sandbox, so its next Store call is a new
+attempt. A create intent is written only after the request's inputs are read;
+an unresolved one is `Unknown` and never authorizes another installation.
 Daemon/container restart recovery and replay of uncertain operations are excluded.
 Close refuses mounted Workspaces. Background process ownership is in the native
 executor, including persisted process identity; the filesystem daemon launches

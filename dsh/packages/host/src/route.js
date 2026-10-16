@@ -38,7 +38,8 @@ export function registerRoutes(ctx, { spec, bindings, collector }) {
   const sessionView = (id) => {
     const session = ctx.sessions.get(id);
     const agent = session ? collector.agentOf(session) : { id, root: bindings.agent(id)?.root ?? id, cwd: undefined };
-    const folder = agent.cwd ?? null, choice = bindings.session(agent.root);
+    // a Session that is not loaded has no header here; its choice keeps the folder
+    const choice = bindings.session(agent.root), folder = agent.cwd ?? choice?.folder ?? null;
     const project = bindings.projectFor(agent.root, folder);
     return { session: id, root: agent.root, folder, choice, project, choices: folder ? bindings.workspace(folder) : { projects: [], lastUsed: null } };
   };

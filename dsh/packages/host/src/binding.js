@@ -49,7 +49,7 @@ export class BindingStore {
     return this.workspace(folder).projects.find((p) => p.name === name) ?? null;
   }
 
-  /** The session's own choice: { project, locked }, or null before one is made. */
+  /** The session's own choice: { project, locked, folder }, or null before one is made. */
   session(rootId) {
     return this.data.sessions[rootId] ?? null;
   }
@@ -62,7 +62,7 @@ export class BindingStore {
    */
   projectFor(rootId, folder) {
     const chosen = this.session(rootId);
-    if (chosen) return chosen.project ? this.project(folder, chosen.project) : null;
+    if (chosen) return chosen.project ? this.project(chosen.folder ?? folder, chosen.project) : null;
     if (!folder) return null;
     const { projects, lastUsed } = this.workspace(folder);
     return projects.length === 1 ? projects[0] : projects.find((p) => p.name === lastUsed) ?? null;
@@ -76,17 +76,17 @@ export class BindingStore {
     const current = this.session(rootId);
     if (current && current.locked) return false;
     if (name !== null && !this.project(folder, name)) throw Object.assign(new Error(`no LayerFS project ${name} in ${folder}`), { code: "not-found" });
-    this.data.sessions[rootId] = { project: name, locked: false };
+    this.data.sessions[rootId] = { project: name, locked: false, folder };
     if (name !== null) this.data.workspaces[folder].lastUsed = name;
     this.save();
     return true;
   }
 
   /** Locks a session's project at its first LayerFS-bound bash call. */
-  lock(rootId, name) {
+  lock(rootId, name, folder) {
     const current = this.session(rootId);
     if (current && current.locked) return;
-    this.data.sessions[rootId] = { project: name, locked: true };
+    this.data.sessions[rootId] = { project: name, locked: true, folder };
     this.save();
   }
 

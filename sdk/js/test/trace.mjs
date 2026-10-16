@@ -1,5 +1,5 @@
 // Per-call trace checks over a stand-in binding; each case is one command:
-//   node sdk/js/test/trace.mjs on|off|failure|dsh-env|start|ids|no-content
+//   node sdk/js/test/trace.mjs on|off|failure|dsh-env|start|ids|no-content|service
 // No Docker, Store or daemon is used.
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -245,8 +245,28 @@ try {
     for (const line of read(file)) {
       for (const field of ["stdout", "stderr", "content", "root", "value"]) assert.ok(!(field in line), `${line.method} ${field}`);
     }
+  } else if (selected === "service") {
+    // A refused service Sandbox is not kept: the caller's next call creates it.
+    const native = (await import(FAKE)).default;
+    process.env.LAYERFS_TRACE = file;
+    native.busyServices = 1;
+    const client = new LayerFS("website");
+    await assert.rejects(client.project.list_branches(), { code: "Busy" });
+    assert.equal(client.serviceSandbox, null);
+    await client.project.list_branches();
+    assert.deepEqual(read(file).map((line) => [line.method, line.code ?? line.kind]), [["sandbox.service", "Busy"], ["sandbox.service", "Ready"], ["project.list_branches", undefined]]);
+    // The service Sandbox resolves its deployment like sandbox.create: the
+    // default Docker socket, and a missing setting refused before the binding.
+    delete process.env.LAYERFS_DOCKER;
+    const before = native.deploys.length;
+    await new LayerFS("website").project.list_branches();
+    assert.equal(native.deploys[before].docker, "/var/run/docker.sock");
+    delete process.env.LAYERFS_IMAGE;
+    const calls = native.calls.length;
+    await assert.rejects(new LayerFS("website").project.list_branches(), { code: "InvalidInput", message: /deploy\.image/ });
+    assert.equal(native.calls.length, calls);
   } else {
-    console.error("usage: trace.mjs on|off|failure|dsh-env|start|ids|no-content");
+    console.error("usage: trace.mjs on|off|failure|dsh-env|start|ids|no-content|service");
     process.exit(2);
   }
   console.log(`PASS trace ${selected}`);

@@ -77,6 +77,11 @@ fn create_selected(args: &SdkValue, service: bool) -> Outcome {
         return Ok(SdkValue::map([("id", SdkValue::text(&state.id))]));
     }
     let mut project = crate::discovery::project(args)?;
+    // Inputs are read first, so a refused request leaves no creation intent.
+    let docker = text(deploy, "docker")?;
+    let image = text(deploy, "image")?.to_owned();
+    let store_volume = text(deploy, "volume")?.to_owned();
+    let executable = PathBuf::from(text(deploy, "daemon")?);
     // An interrupted first installation is never silently attempted again.
     if directory.join("create.intent").exists() {
         return Err(refused(
@@ -96,16 +101,16 @@ fn create_selected(args: &SdkValue, service: bool) -> Outcome {
         manifest.daemon_sqlite = installed.daemon_sqlite.clone();
         manifest
     });
-    let docker = Docker::new(text(deploy, "docker")?, ENGINE).map_err(failed)?;
+    let docker = Docker::new(docker, ENGINE).map_err(failed)?;
     let created = SandboxApi::new(docker).create_file(
         SandboxCreate {
             deployment: SandboxRequest {
-                image: text(deploy, "image")?.to_owned(),
-                store_volume: text(deploy, "volume")?.to_owned(),
+                image,
+                store_volume,
                 port: PORT,
             },
             setup: daemon_setup,
-            executable: PathBuf::from(text(deploy, "daemon")?),
+            executable,
             controller_private: controller.private,
             daemon_peer: daemon.public,
             startup_wait: STARTUP,

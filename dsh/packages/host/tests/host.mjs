@@ -58,7 +58,7 @@ try {
   assert.equal(vars.DSH_LAYERFS_TRACE_STEP, "r1");
   assert.equal(vars.DSH_LAYERFS_TRACE, join(h.spec.traceDir, "child-1.jsonl"));
   assert.ok(Object.keys(vars).every((key) => key in h.env.variables), "every value is a declared variable");
-  assert.deepEqual(h.bindings.session("session-root"), { project: "website", locked: true });
+  assert.deepEqual(h.bindings.session("session-root"), { project: "website", locked: true, folder: FOLDER });
   assert.equal(h.bindings.choose("session-root", FOLDER, null), false, "a locked choice is refused");
   assert.deepEqual(root.records.map((r) => r.type), [PROJECT]);
   h.env.resolve({ agent: { session: root }, callId: "c2" });
@@ -120,6 +120,9 @@ try {
   const view = await call("GET", "/layerfs/session/child-1");
   assert.deepEqual([view.status, view.body.root, view.body.project.name, view.body.lines.length], [200, "session-root", "website", 2]);
   assert.equal((await call("POST", "/layerfs/session/session-root/project", { project: null })).status, 409);
+  h.live.clear(); // Sessions that are not loaded: the binding keeps the folder
+  const cold = await call("GET", "/layerfs/session/child-1");
+  assert.deepEqual([cold.body.root, cold.body.folder, cold.body.project.name, cold.body.agents["child-1"]], ["session-root", FOLDER, "website", "tester"]);
   assert.equal((await call("GET", "/layerfs/nope")).status, 404);
   console.log("host: ok");
 } finally {

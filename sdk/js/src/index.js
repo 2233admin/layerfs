@@ -2,7 +2,7 @@
 // calls name their Branch, and Sandbox calls take the Sandbox (or its id).
 // Calls that are not about a Workspace reach the Store through one service
 // Sandbox, created on the first such call unless `sandbox` names one.
-import { invokeClient } from "./client.js";
+import { deployment, invoke, invokeClient } from "./client.js";
 import { LayerFSError } from "./errors.js";
 import * as fsMethods from "./fs/index.js";
 import { init } from "./project/init.js";
@@ -60,9 +60,15 @@ export class LayerFS {
     this.sandbox = bind(this, { create, close, mount, exec, status, commit, unmount });
   }
 
-  /** The Sandbox that serves Store calls, created once on first use. */
+  /**
+   * The Sandbox that serves Store calls, created once on first use. A refused
+   * creation is not kept, so the caller's next call is a new attempt.
+   */
   service() {
-    this.serviceSandbox ??= invokeClient(this, "sandbox.service", {}).then((value) => { this.sandboxes.add(value.id); return value.id; });
+    this.serviceSandbox ??= invoke("sandbox.service", { project: this.projectName, home: this.options.home, deploy: deployment(this.options.deploy) }, this.options).then(
+      (value) => { this.sandboxes.add(value.id); return value.id; },
+      (error) => { this.serviceSandbox = null; throw error; },
+    );
     return this.serviceSandbox;
   }
 

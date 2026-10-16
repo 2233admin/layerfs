@@ -35,7 +35,7 @@ export function contributor(ctx, spec, bindings, collector) {
       const project = bindings.projectFor(agent.root, agent.cwd);
       if (!project) return {};
       const before = bindings.session(agent.root);
-      bindings.lock(agent.root, project.name);
+      bindings.lock(agent.root, project.name, agent.cwd);
       if (!before || !before.locked) {
         const root = ctx.sessions.get(agent.root);
         if (root) appendProject(root, { project: project.name, folder: agent.cwd, volume: project.volume });
