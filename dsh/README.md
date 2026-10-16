@@ -49,6 +49,8 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
   - the status bar and the avatars.
 
   An unbound session shows Setup: pick one of the folder's projects, or Init.
+
+  The composer is hidden while the tab shows; switch to Chat to send a message.
 - **The project picker** sits in the New Session row: a project of the folder, none, or Init from the folder.
 - **The LayerFS panel** in the sidebar lists dsh's workspaces with their projects. It offers Init and a new session on the preset.
 

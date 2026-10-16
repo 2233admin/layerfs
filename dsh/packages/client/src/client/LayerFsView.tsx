@@ -11,6 +11,7 @@ import { AVATARS } from './avatars.ts'
 import { Setup } from './Setup.tsx'
 import { linesKey, replay, treeLoader, type TreeCache } from './replay.ts'
 import { MESSAGE } from './ui.ts'
+import { useHiddenComposer } from './composer.ts'
 
 const POLL_MS = 1500
 
@@ -39,6 +40,12 @@ export function useSessionView(sessionId: string) {
 }
 
 export function LayerFsView({ sessionId }: { sessionId: string }) {
+  const anchor = useRef<HTMLDivElement>(null)
+  useHiddenComposer(anchor)
+  return <div ref={anchor} style={{ display: 'contents' }}><TabBody sessionId={sessionId} /></div>
+}
+
+function TabBody({ sessionId }: { sessionId: string }) {
   const { view, error, refresh } = useSessionView(sessionId)
   if (!view) return <div style={MESSAGE}>{error ? `LayerFS is not available: ${error}` : 'Loading LayerFS…'}</div>
   if (!view.project) return <Setup sessionId={sessionId} view={view} onChange={refresh} />
