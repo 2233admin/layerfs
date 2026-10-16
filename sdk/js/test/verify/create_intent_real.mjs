@@ -16,11 +16,11 @@ try {
   await layerfs.project.init(ctx.source);
   const { docker, ...partial } = ctx.deploy;
   for (const op of ["sandbox.create", "sandbox.service"]) {
-    const refused = await refusal(invoke(op, { project: layerfs.projectName, home: layerfs.options.home, deploy: partial }, {}));
+    const refused = await refusal(invoke(op, { name: "intent-box", image: ctx.deploy.image, project: layerfs.projectName, home: layerfs.options.home, deploy: partial }, {}));
     assert.equal(refused?.code, "InvalidInput", op);
     assert.ok(!existsSync(join(layerfs.options.home, layerfs.projectName, "create.intent")), `${op}: no creation intent`);
   }
-  assert.match(await layerfs.sandbox.create(), /^sb_/);
+  assert.equal(await layerfs.sandbox.create("intent-box", layerfs.projectName, ctx.deploy.image), "intent-box");
 } finally {
   problems = await teardown(ctx);
 }

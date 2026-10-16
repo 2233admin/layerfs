@@ -136,7 +136,7 @@ process of one run must see the same values.
 | --- | --- |
 | `LAYERFS_HOME` | Private folder where LayerFS records your project and Sandboxes |
 | `LAYERFS_DOCKER` | Docker daemon Unix socket/endpoint, such as `/var/run/docker.sock`; use the `docker` executable for log collection |
-| `LAYERFS_IMAGE` | Runtime image id or digest |
+| `LAYERFS_IMAGE` | Runtime image digest, `sha256:…`: the service Sandbox's, and the one to pass to `sandbox.create` |
 | `LAYERFS_VOLUME` | Existing named Docker volume for this project's Store |
 | `LAYERFS_DAEMON` | Host path to the built Linux daemon executable |
 
@@ -147,7 +147,7 @@ const layerfs = new LayerFS("shop");   // a project name; no I/O happens yet
 A new project needs `project.init(folder)` once. After that, `new LayerFS("shop")` in
 any later process connects to the same project. Store calls (`fs.*`, Branch calls
 and branch listing) automatically start or reuse a service Sandbox. The client's
-`await layerfs.service()` returns its id, creating that service if none exists.
+`await layerfs.service()` returns its id, `_service.<project>`, creating that service if none exists.
 Close it last during final cleanup, after all Store reads and publications:
 `const serviceId = await layerfs.service();` then preserve its daemon log and
 `await layerfs.sandbox.close(serviceId)`. Close explicit Bash Sandboxes too. After
@@ -235,16 +235,16 @@ console.log('hello, shop');
 import { LayerFS } from "@layerfs/sdk";
 
 const layerfs = new LayerFS("shop");
-const id = await layerfs.sandbox.create();
-const ws = await layerfs.sandbox.mount(id, "work");   // a NEW Workspace with a new path: use ws.path, never hard-code it
+const id = await layerfs.sandbox.create("hello", "shop", process.env.LAYERFS_IMAGE);   // its name
+const path = await layerfs.sandbox.mount(id, "work");   // a NEW Workspace path, "/workspaces/1": never hard-code it
 
-const run = await layerfs.sandbox.exec(id, ws.path, "node hello.js | tee hello.txt", "run hello");
+const run = await layerfs.sandbox.exec(id, path, "node hello.js | tee hello.txt", "run hello");
 console.log(run.exitCode, run.stdout);
 
-const saved = await layerfs.sandbox.commit(id, ws.path, { message: "save hello.txt" });
+const saved = await layerfs.sandbox.commit(id, path, "save hello.txt");
 console.log(saved.kind);
 
-await layerfs.sandbox.unmount(id, ws.path);
+await layerfs.sandbox.unmount(id, path);
 await layerfs.sandbox.close(id);
 
 const published = await layerfs.branch.publish("work");
@@ -310,7 +310,7 @@ method, its arguments, result fields, refusals with what to do, limits and examp
 | [fs reads](references/methods/fs-read.md) | `read(ref, path, startLine?, endLine?)`, `list(ref, path?, pageSize?, pagePos?)`, `stat(ref, path)`, `grep(ref, pattern, path?, pageSize?, pagePos?)`, `glob(ref, pattern, path?, pageSize?, pagePos?)`, `diff_files(leftRef, leftPath, rightRef, rightPath)`, `blame(ref, path, fromLine?)` |
 | [fs writes](references/methods/fs-write.md) | `write(branch, path, content, message?)`, `edit(branch, path, oldText, newText, message?)`, `apply(branch, changes, message?)`, `mkdir(branch, path, message?)`, `rm(branch, path, message?)`, `cp(branch, from, to, message?)`, `mv(branch, from, to, message?)` |
 | [branch](references/methods/branch.md) | `fork(name, fromRef?)`, `list_commits(branch, pageSize?, pagePos?)`, `diff_commits(from, to, pageSize?, pagePos?)`, `diff_branches(from, to, pageSize?, pagePos?)`, `merge(a, b, name, message?)`, `publish(branch, commit?)` |
-| [sandbox](references/methods/sandbox.md) | `create()`, `mount(id, branch)`, `exec(id, path, command, message?)`, `status(id, path)`, `commit(id, path, {message?, force?}?)`, `unmount(id, path, {discard?}?)`, `close(id)` |
+| [sandbox](references/methods/sandbox.md) | `create(name, project, image)`, `mount(id, branch)` → path, `exec(id, path, command, message?)`, `status(id, path)`, `commit(id, path, message?, force?)`, `unmount(id, path, discard?)`, `close(id)` |
 
 A `ref` is `main`, a Branch name, a Commit id or a Layer id. Paths are absolute in the
 view (`/src/index.js`). Pages are `{ items, hasMore }`; advance with

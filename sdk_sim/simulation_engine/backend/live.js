@@ -144,7 +144,7 @@
       "branch.diff_commits":[a.from,a.to,a.pageSize,a.pagePos],"branch.diff_branches":[a.from,a.to,a.pageSize,a.pagePos],"branch.publish":[a.branch,a.commit],"branch.merge":[a.branch,a.with,a.name,a.message],
       "fs.read":[a.commit||a.ref,a.path,a.startLine,a.endLine],"fs.list":[a.ref,a.path,a.pageSize,a.pagePos],"fs.stat":[a.ref,a.path],"fs.grep":[a.ref,a.pattern,a.path,a.pageSize,a.pagePos],"fs.blame":[a.commit||a.ref,a.path,a.fromLine],
       "fs.write":[a.branch,a.path,a.content,a.message],"fs.edit":[a.branch,a.path,a.oldText,a.newText,a.message],"fs.mkdir":[a.branch,a.path,a.message],"fs.rm":[a.branch,a.path,a.message],"fs.cp":[a.branch,a.from,a.to,a.message],"fs.mv":[a.branch,a.from,a.to,a.message],"fs.apply":[a.branch,a.changes,a.message],
-      "sandbox.create":[],"sandbox.mount":[a.sandbox,a.branch],"sandbox.exec":[a.sandbox,a.path,a.command,a.message],"sandbox.status":[a.sandbox,a.path],"sandbox.commit":[a.sandbox,a.path,{force:a.force,message:a.message}],"sandbox.unmount":[a.sandbox,a.path,{discard:a.discard}],"sandbox.close":[a.sandbox],
+      "sandbox.create":[a.name,a.project,a.image],"sandbox.mount":[a.sandbox,a.branch],"sandbox.exec":[a.sandbox,a.path,a.command,a.message],"sandbox.status":[a.sandbox,a.path],"sandbox.commit":[a.sandbox,a.path,a.message,!!a.force],"sandbox.unmount":[a.sandbox,a.path,!!a.discard],"sandbox.close":[a.sandbox],
     };
     if(group==="fs"&&method==="diff_files")keys[name]=[a.left.commit||a.ref,a.left.path,a.right.commit||a.ref,a.right.path];
     const read=new Set(["list_branches","list_commits","diff_commits","diff_branches","read","list","stat","grep","glob","diff_files","blame","status"]).has(method);

@@ -31,7 +31,7 @@ export const STANDARD={
     check(ctx,"Workspace change pages",dirty.items.length===2&&(dirty.hasMore||dirty.nextPagePos!==null),dirty);
     const overlay=await o.workspace.overlay(sandbox,ws.path);
     check(ctx,"real overlay payload",overlay.payload>300000&&overlay.inodes>100,overlay);
-    await l.sandbox.commit(sandbox,ws.path,{message:"Tree and huge line"});
+    await l.sandbox.commit(sandbox,ws.path,"Tree and huge line");
     const huge=await l.fs.read("feature","/huge",1,1);
     check(ctx,"huge line prefix disclosed",huge.lineTruncated&&Buffer.byteLength(huge.text)<=49152&&huge.endLine===1,huge.text.length);
     const next=await l.fs.read("feature","/huge",2,3);
@@ -57,12 +57,12 @@ export const STANDARD={
   },
   async XPROCESS(ctx){
     const l=ctx.layerfs;await l.project.init(ctx.source);await l.branch.fork("feature");
-    const sandbox=await l.sandbox.create();const ws=await mount(ctx,sandbox,"feature");
+    const sandbox=await l.sandbox.create("standard-box",l.projectName,ctx.deploy.image);const ws=await mount(ctx,sandbox,"feature");
     const proc=await ctx.operator.process.start(sandbox,ws.path,"sleep 30");
     const script=`import {LayerFS} from ${JSON.stringify(join(REPO,"sdk/js/src/index.js"))};import {LayerFSOperator} from ${JSON.stringify(join(REPO,"sdk/js/operator/index.js"))};
       const l=new LayerFS("website"),o=new LayerFSOperator(l);const id=${JSON.stringify(sandbox)},path=${JSON.stringify(ws.path)};
       const status=await l.sandbox.status(id,path);const exec=await l.sandbox.exec(id,path,"echo cross-process > cross.txt","External process");
-      const commit=await l.sandbox.commit(id,path,{message:"Second process"});const processes=await o.process.list(id);await o.process.cancel(id,${JSON.stringify(proc.process)});
+      const commit=await l.sandbox.commit(id,path,"Second process");const processes=await o.process.list(id);await o.process.cancel(id,${JSON.stringify(proc.process)});
       const read=await l.fs.read("feature","/cross.txt");console.log(JSON.stringify({status:status.kind,exit:exec.exitCode,commit:commit.kind,text:read.text,processes:processes.items.length}));`;
     const out=execFileSync(process.execPath,["--input-type=module","-e",script],{encoding:"utf8",timeout:60000});const value=JSON.parse(out.trim());
     check(ctx,"fresh Node uses saved project and Sandbox without Init/install",value.status==="ok"&&value.exit===0&&value.commit==="Committed"&&value.text==="cross-process\n"&&value.processes===1,value);

@@ -24,7 +24,7 @@ traces nothing.
   "step": "005 A: sandbox group",
   "method": "sandbox.commit",
   "args": {
-    "sandbox": "sb_2f8874ceab4c25ed246aeaf7f100a03cb6b241a6949b87ec6da5bece5bda40e8",
+    "sandbox": "hello",
     "path": "/workspaces/1",
     "message": "save hello.txt",
     "force": false

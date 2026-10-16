@@ -20,10 +20,10 @@ let expect;
 try {
   await layerfs.project.init(ctx.source);
   await layerfs.branch.fork("feature");
-  const box = await layerfs.sandbox.create();
+  const box = await layerfs.sandbox.create("box", layerfs.projectName, ctx.deploy.image);
   const ws = await mount(ctx, box, "feature");
   await sh(ctx, ws, "mkdir -p app && printf 'hero\\n' > app/hero.txt");
-  await layerfs.sandbox.commit(box, ws.path, { message: "add hero" });
+  await layerfs.sandbox.commit(box, ws.path, "add hero");
   const proc = await sh(ctx, ws, "sleep 30", { background: true });
   await operator.process.cancel(box, proc.process);
   await unmount(ctx, ws);

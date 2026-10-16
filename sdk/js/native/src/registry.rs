@@ -81,10 +81,9 @@ pub(crate) fn sandbox(args: &SdkValue) -> Result<Arc<SandboxState>, SdkRefusal> 
             state
         }
     };
-    if state.project != text(args, "project")?
-        || state.directory != crate::discovery::project_dir(args)?.join(id)
-    {
-        return Err(refused("Unauthorized", "Sandbox/project/home mismatch"));
+    // a Sandbox is found by its name alone; its project comes from its record
+    if state.directory != crate::discovery::sandbox_dir(args, id)? {
+        return Err(refused("Unauthorized", "Sandbox/home mismatch"));
     }
     crate::discovery::refresh(&state)?;
     Ok(state)

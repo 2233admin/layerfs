@@ -12,11 +12,11 @@ await layerfs.branch.fork("feature");
 await layerfs.fs.write("feature", "/README.md", "Hello\n", "Update introduction");
 const page = await layerfs.branch.list_commits("feature", 20, 0);
 const text = await layerfs.fs.read("feature", "/README.md", 1, 20);
-const id = await layerfs.sandbox.create(); // save this opaque id for another process
-const mounted = await layerfs.sandbox.mount(id, "feature");
-await layerfs.sandbox.exec(id, mounted.path, "npm test", "Run tests");
-await layerfs.sandbox.commit(id, mounted.path, { message: "Save changes" });
-await layerfs.sandbox.unmount(id, mounted.path);
+const id = await layerfs.sandbox.create("dev", "website", process.env.LAYERFS_IMAGE); // its name
+const path = await layerfs.sandbox.mount(id, "feature"); // "/workspaces/1"
+await layerfs.sandbox.exec(id, path, "npm test", "Run tests");
+await layerfs.sandbox.commit(id, path, "Save changes");
+await layerfs.sandbox.unmount(id, path);
 await layerfs.sandbox.close(id);
 ```
 
@@ -37,7 +37,7 @@ the real binding: Init, `Exists`, delete the entry, Init again in one process.
 | --- | --- |
 | `LAYERFS_HOME` | Absolute private directory for sealed provisioning and discovery. Created as 0700; existing directories must be owned by the current effective user with no group/other access. Records are 0600, not symlinks. |
 | `LAYERFS_DOCKER` | Local Engine Unix socket; `/var/run/docker.sock` is the default for `sandbox.create` and the service Sandbox. |
-| `LAYERFS_IMAGE` | Exact immutable runtime `sha256:...` digest. |
+| `LAYERFS_IMAGE` | Exact immutable runtime `sha256:...` digest of the service Sandbox that Store calls use. `sandbox.create` takes its image as an argument instead. |
 | `LAYERFS_VOLUME` | Existing named local VM volume shared by the project's daemons. |
 | `LAYERFS_DAEMON` | Host path to the built Linux daemon executable. |
 | `LAYERFS_NATIVE` | Optional addon path; defaults to `native/layerfs.node`. |
@@ -46,8 +46,22 @@ the real binding: Init, `Exists`, delete the entry, Init again in one process.
 | `LAYERFS_TRACE_START` | `1` adds a start line before each traced call; read at every call. |
 | `DSH_LAYERFS_HOME`, `DSH_LAYERFS_DOCKER`, `DSH_LAYERFS_IMAGE`, `DSH_LAYERFS_VOLUME`, `DSH_LAYERFS_DAEMON`, `DSH_LAYERFS_TRACE`, `DSH_LAYERFS_TRACE_STEP`, `DSH_LAYERFS_TRACE_START` | Each is used when its `LAYERFS_` name is unset or empty. A host that may only set `DSH_*` names in a command's environment (deepseek-harness) configures and traces the SDK through these. |
 
-The same authorized home permits a fresh Node process to use a saved Sandbox id
-and mount path directly. Reopening validates the full container id, deployment,
+A Sandbox is named by its caller and bound to one project and one image for its
+life: `sandbox.create(name, project, image)` takes a name of 1–63 lowercase ASCII
+letters, digits, `_`, `-`, `.` that starts and ends alphanumeric, this client's
+project, and a local image digest `sha256:<64 hex>`. Names are unique across the
+home, so a second create of a live name is `Exists`; the name is the Sandbox's id
+in every later call. Its records are `LAYERFS_HOME/_sandboxes/<name>/`, with the
+container id in the plain-text file `container` there (for `docker logs`); the
+private service Sandbox behind Store calls is `_service.<project>`. One Sandbox
+holds several Workspaces at once, each a mount of any Branch of its project:
+`mount(id, branch)` answers the Workspace path (`/workspaces/1`, `/workspaces/2`,
+… numbered per Sandbox), and Exec, status, commit and unmount name the Workspace
+by that path. Close removes the Sandbox's record directory, so its name can be
+created again.
+
+The same authorized home permits a fresh Node process to use a Sandbox name and
+mount path directly. Reopening validates the full container id, deployment,
 volume, topology, loopback endpoint, Noise peer and saved daemon incarnation.
 Discovery mutations use nonblocking OS locks and atomic record replacement; a
 mutation another process holds is refused as `Busy`, never waited for. The
@@ -65,9 +79,10 @@ and supervises no commands.
 | fs reads (7) | `read(ref, path, startLine?, endLine?)`, `list(ref, path?, pageSize?, pagePos?)`, `stat(ref, path)`, `grep(ref, pattern, path?, pageSize?, pagePos?)`, `glob(ref, pattern, path?, pageSize?, pagePos?)`, `diff_files(leftRef, leftPath, rightRef, rightPath)`, `blame(ref, path, fromLine?)` |
 | fs writes (7) | `write(branch, path, content, message?)`, `edit(branch, path, oldText, newText, message?)`, `apply(branch, changes, message?)`, `mkdir(branch, path, message?)`, `rm(branch, path, message?)`, `cp(branch, from, to, message?)`, `mv(branch, from, to, message?)` |
 | branch (6) | `fork(name, fromRef?)`, `list_commits(branch, pageSize?, pagePos?)`, `diff_commits(from, to, pageSize?, pagePos?)`, `diff_branches(from, to, pageSize?, pagePos?)`, `merge(a, b, name, message?)`, `publish(branch, commit?)` |
-| sandbox (7) | `create()`, `mount(id, branch)`, `exec(id, path, command, message?)`, `status(id, path)`, `commit(id, path, {message?, force?}?)`, `unmount(id, path, {discard?}?)`, `close(id)` |
+| sandbox (7) | `create(name, project, image)`, `mount(id, branch)` → path, `exec(id, path, command, message?)`, `status(id, path)`, `commit(id, path, message?, force?)`, `unmount(id, path, discard?)`, `close(id)` |
 
-Every grouped method returns a Promise. A ref is `main`, a Branch name, a Commit
+Every grouped method returns a Promise and takes positional arguments only; no
+method takes an options object. A ref is `main`, a Branch name, a Commit
 id or a Layer id. Filesystem paths are absolute in that view. Main changes only
 through publish. There is no `remove` alias, harness export, agent/call attribution,
 public inspect or public process-control method.
@@ -138,11 +153,11 @@ await operator.store.stats();
 await operator.store.commits("feature", 20, 0);
 await operator.files.stats("feature", "/README.md");
 await operator.files.history("feature", "/README.md", 20, 0);
-await operator.workspace.overlay(id, mounted.path);
-await operator.workspace.changes(id, mounted.path, 20, 0);
+await operator.workspace.overlay(id, path);
+await operator.workspace.changes(id, path, 20, 0);
 await operator.inspect.snapshot();
 await operator.project.progress(); // while layerfs.project.init runs in this process
-const process = await operator.process.start(id, mounted.path, "npm run dev");
+const process = await operator.process.start(id, path, "npm run dev");
 await operator.process.list(id);
 await operator.process.cancel(id, process.process);
 ```
@@ -186,7 +201,7 @@ JavaScript methods make before the call (for example `page` bounds) are refused
 without a trace line.
 
 ```json
-{"layerfs_trace":1,"id":"9f3c21aa-12","step":"add product page","method":"fs.write","args":{"branch":"feature","path":"/README.md","contentBytes":6,"message":"Update introduction","sandbox":"sb_…"},"start":"2026-10-15T09:12:01.120Z","scope":"…","phase":"end","ms":41.733,"ok":true,"commit":"…","sizes":{"logical":120,"newCanonical":40,"newStored":30,"newMetadata":8},"daemon":[{"timing":[{"name":"files.bind","ms":1.2,"children":[…]},{"name":"commit","ms":30.4,"children":[…]}],"storage":{…},"construction":{…}}]}
+{"layerfs_trace":1,"id":"9f3c21aa-12","step":"add product page","method":"fs.write","args":{"branch":"feature","path":"/README.md","contentBytes":6,"message":"Update introduction","sandbox":"_service.website"},"start":"2026-10-15T09:12:01.120Z","scope":"…","phase":"end","ms":41.733,"ok":true,"commit":"…","sizes":{"logical":120,"newCanonical":40,"newStored":30,"newMetadata":8},"daemon":[{"timing":[{"name":"files.bind","ms":1.2,"children":[…]},{"name":"commit","ms":30.4,"children":[…]}],"storage":{…},"construction":{…}}]}
 ```
 
 | Field | Meaning |
@@ -226,7 +241,7 @@ docker logs <container> 2>&1 | python3 tools/decode_observations.py --trace trac
 Each output line is one daemon call: `daemon`, `scope`, `call`, `operation`,
 `complete`, the joined trace `id` as `trace`, and named `sections` (unavailable
 sections are `null`, never zero). Values are cumulative daemon counters at that
-call, not per-call deltas. The container is the Sandbox id without `sb_`.
+call, not per-call deltas. The container is `cat $LAYERFS_HOME/_sandboxes/<name>/container`.
 
 A step label groups lines by the caller's own unit of work, such as an agent's
 step. `LAYERFS_TRACE_STEP` is read at each call, so a long-lived process can

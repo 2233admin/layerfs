@@ -1,5 +1,5 @@
-// sandbox.mount: one positional SDK operation.
+// sandbox.mount: one positional SDK operation; the new Workspace's path.
 import { invokeClient, sandboxId } from "../client.js";
-export function mount(client, sandbox, branch) {
-  return invokeClient(client, "sandbox.mount", { sandbox: sandboxId(sandbox), branch });
+export async function mount(client, sandbox, branch) {
+  return (await invokeClient(client, "sandbox.mount", { sandbox: sandboxId(sandbox), branch })).path;
 }

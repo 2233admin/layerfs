@@ -31,7 +31,7 @@ For an agent run you want to analyse afterwards:
    the end.
 4. After the run, before closing the Sandboxes: page `operator.store.commits(branch)`
    for every Branch, and save `docker logs <container>` for every Sandbox (the container
-   identifier is the Sandbox id without `sb_`).
+   identifier is in `$LAYERFS_HOME/_sandboxes/<sandbox name>/container`).
 5. Decode and join: see [daemon logs](references/daemon-logs.md). Build the per-step
    table: see [storage metrics](references/storage-metrics.md#one-row-per-step).
 

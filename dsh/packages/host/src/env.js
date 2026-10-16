@@ -11,7 +11,7 @@ const VARIABLES = {
   DSH_LAYERFS_OPERATOR: "file URL of the SDK's operator (background processes in a Sandbox)",
   DSH_LAYERFS_HOME: "LayerFS home the SDK reads its project and Sandbox records from",
   DSH_LAYERFS_DOCKER: "Docker Engine socket the SDK starts Sandboxes through",
-  DSH_LAYERFS_IMAGE: "Runtime image digest of LayerFS Sandboxes",
+  DSH_LAYERFS_IMAGE: "Runtime image digest of LayerFS Sandboxes; pass it to sandbox.create",
   DSH_LAYERFS_VOLUME: "Docker volume holding this project's Store",
   DSH_LAYERFS_DAEMON: "Host path of the LayerFS daemon Sandboxes run",
   DSH_LAYERFS_TRACE: "File the SDK appends one line per call to",

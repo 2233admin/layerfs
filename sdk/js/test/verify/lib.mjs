@@ -2,7 +2,7 @@
 // Each case runs as its own command: a fresh volume, a fresh Init of the
 // fixture, its own Sandboxes, and teardown of all of them. Nothing is retried.
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -65,8 +65,8 @@ export async function refusal(promise) {
 
 /** Mounts a Workspace and tracks it for teardown. */
 export async function mount(ctx, sandbox, branch) {
-  const mounted = await ctx.layerfs.sandbox.mount(sandbox, branch);
-  const ws = { sandbox, path: mounted.path, branch, mounted };
+  const path = await ctx.layerfs.sandbox.mount(sandbox, branch);
+  const ws = { sandbox, path, branch };
   ctx.mounts.push(ws);
   return ws;
 }
@@ -76,7 +76,7 @@ export function sh(ctx, ws, command, options) {
 }
 
 export async function unmount(ctx, ws, options) {
-  const value = await ctx.layerfs.sandbox.unmount(ws.sandbox, ws.path, options);
+  const value = await ctx.layerfs.sandbox.unmount(ws.sandbox, ws.path, options?.discard);
   ctx.mounts = ctx.mounts.filter((m) => m !== ws);
   return value;
 }
@@ -87,6 +87,9 @@ export const head = async (ctx, branch) => {
   return found ? found.head ?? null : undefined;
 };
 
+/** The container id of the Sandbox `name`, from its record directory. */
+export const containerOf = (name) => readFileSync(join(process.env.LAYERFS_HOME, "_sandboxes", name, "container"), "utf8").trim();
+
 /** Unmounts (discarding), closes every Sandbox, removes the volume and host files. */
 export async function teardown(ctx) {
   const problems = [];
@@ -94,7 +97,7 @@ export async function teardown(ctx) {
     for (const process of (await ctx.operator.process.list(ws.sandbox).catch(() => ({ items: [] }))).items) {
       if (process.status === "running") await ctx.operator.process.cancel(ws.sandbox, process.id).catch((e) => problems.push(`cancel ${process.id}: ${e.message}`));
     }
-    await ctx.layerfs.sandbox.unmount(ws.sandbox, ws.path, { discard: true }).catch((e) => problems.push(`unmount ${ws.path}: ${e.message}`));
+    await ctx.layerfs.sandbox.unmount(ws.sandbox, ws.path, true).catch((e) => problems.push(`unmount ${ws.path}: ${e.message}`));
   }
   const containers = [];
   for (const id of [...ctx.layerfs.sandboxes]) {
@@ -105,8 +108,8 @@ export async function teardown(ctx) {
   }
   for (const id of containers) {
     // Our own test container: remove it so the volume can go.
-    const short = id.replace(/^sb_/, "");
-    try { execFileSync("docker", ["rm", "-f", short], { stdio: "ignore" }); } catch (e) { problems.push(`docker rm ${short}`); }
+    let short = id;
+    try { short = containerOf(id); execFileSync("docker", ["rm", "-f", short], { stdio: "ignore" }); } catch (e) { problems.push(`docker rm ${short}`); }
   }
   try { execFileSync("docker", ["volume", "rm", ctx.volume], { stdio: "ignore" }); } catch (e) { problems.push(`volume rm ${ctx.volume}`); }
   rmSync(ctx.work, { recursive: true, force: true });

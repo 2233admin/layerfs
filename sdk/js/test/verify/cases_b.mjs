@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { REPO, check, mount, note, refusal, sh, unmount } from "./lib.mjs";
+import { REPO, check, containerOf, mount, note, refusal, sh, unmount } from "./lib.mjs";
 
 const branch = "feature";
 
@@ -16,11 +16,11 @@ async function prepare(ctx, files) {
   const sandbox = await ctx.layerfs.service();
   const a = await mount(ctx, sandbox, branch);
   const b = await mount(ctx, sandbox, branch);
-  check(ctx, "A and B mount at C1", a.mounted.base === c1.head && b.mounted.base === c1.head, [a.mounted.base, b.mounted.base, c1.head]);
+  check(ctx, "A and B mount at C1", (await status(ctx, a)).base === c1.head && (await status(ctx, b)).base === c1.head, c1.head);
   return { c1: c1.head, sandbox, a, b };
 }
 
-const commit = (ctx, ws, options) => ctx.layerfs.sandbox.commit(ws.sandbox, ws.path, options);
+const commit = (ctx, ws, options) => ctx.layerfs.sandbox.commit(ws.sandbox, ws.path, options?.message, options?.force);
 const status = (ctx, ws) => ctx.layerfs.sandbox.status(ws.sandbox, ws.path);
 const read = async (ctx, path, at = branch) => (await ctx.layerfs.fs.read(at, path)).text;
 const heads = async (ctx) => Object.fromEntries((await ctx.layerfs.project.list_branches()).items.map((i) => [i.name, i.head]));
@@ -255,7 +255,7 @@ export const B = {
     check(ctx, "sealed Store has no workspace_stage", !sealedTables.some((t) => t.includes("stage")), sealedTables);
     // The installed Store and the daemon overlay, copied out of the running Sandbox read-only.
     const out = mkdtempSync(join(tmpdir(), "layerfs-327-b16-"));
-    const container = s.sandbox.replace(/^sb_/, "");
+    const container = containerOf(s.sandbox);
     try {
       execFileSync("docker", ["cp", `${container}:/layerfs-store/global/store.sqlite`, join(out, "store.sqlite")]);
       execFileSync("docker", ["cp", `${container}:/layerfs-local/overlay/overlay.sqlite`, join(out, "overlay.sqlite")]);

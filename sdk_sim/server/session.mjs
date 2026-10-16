@@ -232,19 +232,24 @@ const OPS = {
   "fs.mv"(a) { return this.write(a, () => this.layerfs.fs.mv(a.branch, a.from, a.to, a.message)); },
   "fs.apply"(a) { return this.write(a, () => this.layerfs.fs.apply(a.branch, a.changes.map((c) => { const { kind, ...rest } = clean(c); return { op: (c.op || kind) === "remove" ? "rm" : (c.op || kind), ...rest }; }), a.message)); },
   // ---------------------------------------------------------- sandbox
-  async "sandbox.create"() {
-    const value = await this.layerfs.sandbox.create();
+  // The UI names no Sandbox: it gets box-<n>, this project and the deployment's image.
+  async "sandbox.create"(a) {
+    const value = await this.layerfs.sandbox.create(a.name ?? `box-${Object.keys(this.boxes).length + 1}`, a.project ?? this.layerfs.projectName, a.image ?? this.ctx.deploy.image);
     const label = this.m.label("sb", value);
     this.boxes[label] = { label, real: value, closed: false, workspaces: {}, processes: [], watch: false };
     return () => ({ kind: "Ready", id: label, mounted: false });
   },
   async "sandbox.mount"(a) {
     const box = this.box(a.sandbox);
-    const value = await this.layerfs.sandbox.mount(box.real, a.branch);
-    box.workspaces[value.path] = { markers: [] };
-    this.ctx.mounts.push({ sandbox: box.real, path: value.path });
-    return () => ({ kind: "Mounted", sandbox: box.label, path: value.path, branch: a.branch,
-      base: this.m.node(value.base) ?? this.m.label("L", value.baseLayer), root: this.m.root(value.root) });
+    const path = await this.layerfs.sandbox.mount(box.real, a.branch);
+    box.workspaces[path] = { markers: [] };
+    this.ctx.mounts.push({ sandbox: box.real, path });
+    // mount answers the path only; status names the Commit or Layer it shows
+    const value = await this.layerfs.sandbox.status(box.real, path);
+    return () => {
+      const base = this.m.node(value.base) ?? this.m.label("L", value.baseLayer);
+      return { kind: "Mounted", sandbox: box.label, path, branch: a.branch, base, root: (this.m.s.commits[base] ?? this.m.s.layers[base])?.root ?? null };
+    };
   },
   async "sandbox.exec"(a) {
     const box = this.box(a.sandbox);
@@ -271,7 +276,7 @@ const OPS = {
   async "sandbox.commit"(a) {
     const box = this.box(a.sandbox), ws = this.workspace(box, a.path), captured = ws ? ws.baseCommit : null;
     const bound = ws ? ws.baseCommit || ws.baseLayer : null;
-    const value = await this.layerfs.sandbox.commit(box.real, a.path, clean({ force: a.force, message: a.message }));
+    const value = await this.layerfs.sandbox.commit(box.real, a.path, a.message, !!a.force);
     if (value.kind === "Committed") {
       const head = this.m.commitLabel(value.head);
       // A Commit record names the Commit a Workspace merged from, not a
@@ -286,7 +291,7 @@ const OPS = {
   },
   async "sandbox.unmount"(a) {
     const box = this.box(a.sandbox), ws = this.workspace(box, a.path);
-    await this.layerfs.sandbox.unmount(box.real, a.path, clean({ discard: a.discard }));
+    await this.layerfs.sandbox.unmount(box.real, a.path, !!a.discard);
     delete box.workspaces[a.path];
     this.ctx.mounts = this.ctx.mounts.filter((m) => !(m.sandbox === box.real && m.path === a.path));
     // The daemon does not list what a discard dropped; the overlay count stands in.
@@ -367,13 +372,12 @@ Session.prototype.uiCall = function(surface,group,method,args,view) {
     "fs.grep":["ref","pattern","path","pageSize","pagePos"],"fs.blame":["ref","path","fromLine"],
     "fs.write":["branch","path","content","message"],"fs.edit":["branch","path","oldText","newText","message"],
     "fs.mkdir":["branch","path","message"],"fs.rm":["branch","path","message"],"fs.cp":["branch","from","to","message"],"fs.mv":["branch","from","to","message"],"fs.apply":["branch","changes","message"],
-    "sandbox.create":[],"sandbox.mount":["sandbox","branch"],"sandbox.exec":["sandbox","path","command","message"],"sandbox.status":["sandbox","path"],"sandbox.commit":["sandbox","path","options"],"sandbox.unmount":["sandbox","path","options"],"sandbox.close":["sandbox"],
+    "sandbox.create":["name","project","image"],"sandbox.mount":["sandbox","branch"],"sandbox.exec":["sandbox","path","command","message"],"sandbox.status":["sandbox","path"],"sandbox.commit":["sandbox","path","message","force"],"sandbox.unmount":["sandbox","path","discard"],"sandbox.close":["sandbox"],
   };
   const name=`${group}.${method}`;
   if(name==="fs.diff_files") return this.call(name,{ref:args[0],left:{path:args[1],commit:args[0]},right:{path:args[3],commit:args[2]}});
   const keys=parameters[name];if(!keys) throw fail("UnknownMethod",name);
   const a=Object.fromEntries(keys.map((key,i)=>[key,args[i]]));
-  if(a.options){Object.assign(a,a.options);delete a.options;}
   if(name==="branch.fork") a.branch??="main";
   return this.call(name,a);
 };

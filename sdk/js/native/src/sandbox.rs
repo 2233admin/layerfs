@@ -1,7 +1,8 @@
 //! Sandbox lifecycle and Workspace control: create, close, mount, status,
 //! commit and unmount.
 //!
-//! `create` starts one container and its daemon. The project's first Sandbox
+//! `create` starts one named container and its daemon, bound to one project
+//! and running the image it names. The project's first Sandbox
 //! installs the sealed Store into the shared volume; later ones open it. A
 //! failed create keeps whatever container it made and names it in the
 //! refusal; nothing is cleaned up or retried on the caller's behalf.
@@ -51,7 +52,8 @@ fn setup(private: [u8; 32], peer: [u8; 32]) -> DaemonSetup {
     }
 }
 
-/// `sandbox.create({ project, deploy: { docker, image, volume, daemon } })`.
+/// The binding op `sandbox.create`: args `name`, `project`, `image`, `home` and
+/// `deploy` (docker, volume, daemon) from the JS `create(name, project, image)`.
 pub(crate) fn create(args: &SdkValue) -> Outcome {
     create_selected(args, false)
 }
@@ -76,10 +78,40 @@ fn create_selected(args: &SdkValue, service: bool) -> Outcome {
         let state = sandbox(&SdkValue::Map(fields))?;
         return Ok(SdkValue::map([("id", SdkValue::text(&state.id))]));
     }
+    // A caller names its Sandbox; a project's service Sandbox has a reserved name.
+    let id = if service {
+        format!("{}{name}", crate::discovery::SERVICE)
+    } else {
+        text(args, "name")?.to_owned()
+    };
     let mut project = crate::discovery::project(args)?;
     // Inputs are read first, so a refused request leaves no creation intent.
     let docker = text(deploy, "docker")?;
-    let image = text(deploy, "image")?.to_owned();
+    // A caller's Sandbox runs the image it names; the service Sandbox, the deployment's.
+    let image = if service {
+        deploy.get_text("image").ok_or_else(|| {
+            refused(
+                "InvalidInput",
+                "deploy.image is not configured (LAYERFS_IMAGE); Store calls need it for the service Sandbox",
+            )
+        })?
+    } else {
+        text(args, "image")?
+    }
+    .to_owned();
+    // checked here, before any intent is written: a malformed digest is the
+    // caller's mistake, not an uncertain creation
+    let digest = image.strip_prefix("sha256:").unwrap_or_default();
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    {
+        return Err(refused(
+            "InvalidInput",
+            format!("image must be an exact local image digest, sha256:<64 hex>, not {image}"),
+        ));
+    }
     let store_volume = text(deploy, "volume")?.to_owned();
     let executable = PathBuf::from(text(deploy, "daemon")?);
     // An interrupted first installation is never silently attempted again.
@@ -89,6 +121,36 @@ fn create_selected(args: &SdkValue, service: bool) -> Outcome {
             "a prior Sandbox creation has an unresolved discovery intent",
         ));
     }
+    // The name is claimed before anything is made; a failed create gives it
+    // back (its directory holds no record yet), so the name can be used again.
+    let saved_directory = crate::discovery::claim(args, &id)?;
+    let made = create_claimed(
+        args,
+        &directory,
+        &saved_directory,
+        &id,
+        &mut project,
+        (docker, image, store_volume, executable),
+        service,
+    );
+    if made.is_err() {
+        let _ = std::fs::remove_dir(&saved_directory);
+    }
+    made
+}
+
+/// Creates the claimed Sandbox `id`: container, daemon, Store install on a
+/// project's first Sandbox, then its records.
+fn create_claimed(
+    args: &SdkValue,
+    directory: &std::path::Path,
+    saved_directory: &std::path::Path,
+    id: &str,
+    project: &mut crate::registry::Project,
+    (docker, image, store_volume, executable): (&str, String, String, PathBuf),
+    service: bool,
+) -> Outcome {
+    let name = text(args, "project")?;
     crate::discovery::save(
         &directory.join("create.intent"),
         SdkValue::text("creation in progress"),
@@ -136,22 +198,19 @@ fn create_selected(args: &SdkValue, service: bool) -> Outcome {
         project.installed = Some(installed.manifest);
     }
     let container = owner.runtime.identity().to_string();
-    let id = format!("sb_{container}");
     let instance = owner.startup.instance;
     let (runtime, control, identity) = split(owner);
-    let saved_directory = directory.join(&id);
-    crate::discovery::directory(&saved_directory)?;
     let state = Arc::new(SandboxState {
-        id: id.clone(),
+        id: id.to_owned(),
         project: name.to_owned(),
-        directory: saved_directory,
+        directory: saved_directory.to_owned(),
         runtime,
         identity,
         control: Mutex::new(control),
         mounts: Default::default(),
         processes: Default::default(),
     });
-    crate::discovery::save_project(&directory, &project)?;
+    crate::discovery::save_project(directory, project)?;
     crate::discovery::save_sandbox(
         &state.directory,
         &state,
@@ -160,17 +219,20 @@ fn create_selected(args: &SdkValue, service: bool) -> Outcome {
         daemon.public,
         instance,
     )?;
+    // plain text beside the record, for people and tools reading daemon logs:
+    // docker logs $(cat "$LAYERFS_HOME/_sandboxes/<name>/container")
+    crate::discovery::save_text(&state.directory.join("container"), &container)?;
     if service {
         crate::discovery::save(
             &directory.join("service.record"),
-            SdkValue::map([("id", SdkValue::text(&id))]),
+            SdkValue::map([("id", SdkValue::text(id))]),
         )?;
     }
     std::fs::remove_file(directory.join("create.intent")).map_err(failed)?;
-    lock(&SANDBOXES)?.insert(id.clone(), state);
+    lock(&SANDBOXES)?.insert(id.to_owned(), state);
     Ok(SdkValue::map([
         ("kind", SdkValue::text("Ready")),
-        ("id", SdkValue::Text(id)),
+        ("id", SdkValue::text(id)),
         ("container", SdkValue::Text(container)),
     ]))
 }
@@ -209,12 +271,15 @@ pub(crate) fn close(args: &SdkValue) -> Outcome {
     owned.runtime.stop(1).map_err(failed)?;
     owned.runtime.delete().map_err(failed)?;
     std::fs::remove_file(owned.directory.join("sandbox.record")).map_err(failed)?;
-    let project_dir = crate::discovery::project_dir(args)?;
+    // the Sandbox's own project, from its record, not the caller's
+    let project_dir = crate::discovery::home(args)?.join(&owned.project);
     let _project_guard = crate::discovery::guard(&project_dir)?;
     let service = project_dir.join("service.record");
     if service.exists() && crate::discovery::load(&service)?.get_text("id") == Some(&id) {
         std::fs::remove_file(service).map_err(failed)?;
     }
+    // its records go with it, so its name is free again
+    std::fs::remove_dir_all(&owned.directory).map_err(failed)?;
     Ok(SdkValue::map([
         ("kind", SdkValue::text("Closed")),
         ("id", SdkValue::Text(id)),
