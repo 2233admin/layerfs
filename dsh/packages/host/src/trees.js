@@ -1,8 +1,12 @@
-// Saved trees for the Files pane: a Commit's or Layer's entries with file text,
-// read through one SDK client per project. Saved ids never change, so a tree
-// is read once and kept; the client (and its service Sandbox) is released
-// after a quiet minute. Large trees are cut short and say so.
-import { clientFor, release } from "./layerfs-client.js";
+// The Host's reads of a project, through one SDK client per project: the
+// project's state (inspect.snapshot) and saved trees for the Files pane (a
+// Commit's or Layer's entries with file text). One client means one service
+// Sandbox start, so the Host takes the project's discovery lock (which the
+// SDK refuses as Busy while another client holds it) once, not per read.
+// The client (and its service Sandbox) is released after a quiet minute.
+// Saved ids never change, so a tree is read once and kept. Large trees are
+// cut short and say so.
+import { clientFor, release, stateOf } from "./layerfs-client.js";
 
 const IDLE_MS = 60_000;
 const KEEP_TREES = 32;
@@ -40,6 +44,11 @@ export class TreeReader {
     reading.catch(() => this.trees.delete(key));
     while (this.trees.size > KEEP_TREES) this.trees.delete(this.trees.keys().next().value);
     return reading;
+  }
+
+  /** The project's state as the views draw it; see stateOf. */
+  state(project, sandboxes) {
+    return this.use(project, (client) => stateOf(client, sandboxes));
   }
 
   async use(project, fn) {

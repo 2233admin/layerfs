@@ -48,6 +48,8 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
 
   Removal deletes the project's Docker volume and LayerFS home entry, and drops it from the bindings; sessions on it become unbound. It is refused while any container still uses the volume. Workspace files and transcripts stay. The SDK remembers each name it initialized until the Host process ends, so a removed name is not taken again before dsh restarts: Init picks the next free name (`name-2`).
 
+  The Host reads each project (state and trees) through one shared SDK client, so it starts the project's service Sandbox once and releases it after a quiet minute. The SDK takes a project's discovery lock while a client starts or attaches that Sandbox and refuses a second client at the same moment as `Busy` (no retry); the page then says so and asks for Refresh.
+
   Trees are bounded: 4000 entries, 128 KB per file, 8 MB in all. `node_modules`, `.git`, `.next`, `dist` and `build` are listed but not opened.
 
 ### Client plugin

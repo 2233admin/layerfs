@@ -16,7 +16,6 @@
 import { missingDeployment } from "./config.js";
 import { prepareInit, runInit } from "./init.js";
 import { InitJobs } from "./jobs.js";
-import { projectState } from "./layerfs-client.js";
 import { removeProject } from "./remove.js";
 import { isSavedId } from "./trees.js";
 
@@ -82,7 +81,7 @@ export function registerRoutes(ctx, { spec, bindings, collector, trees, jobs = n
       if (parts[0] === "project" && parts.length === 3) {
         const project = bindings.byName(decodeURIComponent(parts[1]));
         if (!project) return send(res, 404, { code: "not-found", message: `no LayerFS project named ${decodeURIComponent(parts[1])}` });
-        if (req.method === "GET" && parts[2] === "state") return send(res, 200, { ...(await projectState(spec, project, [])), ...collector.nodesOf(project.name) });
+        if (req.method === "GET" && parts[2] === "state") return send(res, 200, { ...(await trees.state(project, [])), ...collector.nodesOf(project.name) });
         if (req.method === "GET" && parts[2] === "tree") return sendTree(res, project, url.searchParams.get("ref"));
         if (req.method === "POST" && parts[2] === "attach") {
           const body = await readJson(req);
@@ -107,7 +106,7 @@ export function registerRoutes(ctx, { spec, bindings, collector, trees, jobs = n
         }
         if (req.method === "GET" && parts[2] === "state" && parts.length === 3) {
           if (!view.project) return send(res, 404, { code: "no-project", message: "this session has no LayerFS project" });
-          return send(res, 200, await projectState(spec, view.project, collector.sandboxesOf(view.root)));
+          return send(res, 200, await trees.state(view.project, collector.sandboxesOf(view.root)));
         }
         if (req.method === "GET" && parts[2] === "tree" && parts.length === 3) {
           if (!view.project) return send(res, 404, { code: "no-project", message: "this session has no LayerFS project" });

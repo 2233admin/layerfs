@@ -39,21 +39,18 @@ export async function release({ layerfs }) {
 
 /**
  * The project as the views draw it: the mirror of one inspect.snapshot, with
- * the Sandboxes the traced calls created (ids from the trace lines).
- * @param {object} spec @param {object} project @param {string[]} sandboxes real Sandbox ids
+ * the Sandboxes the traced calls created (ids from the trace lines). Read
+ * through the Host's shared client for the project (TreeReader.use), so the
+ * Host does not start and close a service Sandbox per read.
+ * @param {object} client a project's client @param {string[]} sandboxes real Sandbox ids
  */
-export async function projectState(spec, project, sandboxes) {
-  const client = await clientFor(spec, project);
-  try {
-    const snap = await client.operator.inspect.snapshot();
-    const m = new Mirror(), boxes = [];
-    for (const real of sandboxes) {
-      const listed = (snap.sandboxes || []).find((x) => x.id === real);
-      boxes.push({ label: m.label("sb", real), real, closed: !listed, workspaces: {}, processes: [] });
-    }
-    m.absorb(snap, boxes);
-    return { s: { ...m.s, roots: {} }, labels: Object.fromEntries(m.toLabel) };
-  } finally {
-    await release(client);
+export async function stateOf(client, sandboxes) {
+  const snap = await client.operator.inspect.snapshot();
+  const m = new Mirror(), boxes = [];
+  for (const real of sandboxes) {
+    const listed = (snap.sandboxes || []).find((x) => x.id === real);
+    boxes.push({ label: m.label("sb", real), real, closed: !listed, workspaces: {}, processes: [] });
   }
+  m.absorb(snap, boxes);
+  return { s: { ...m.s, roots: {} }, labels: Object.fromEntries(m.toLabel) };
 }

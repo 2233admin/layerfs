@@ -39,6 +39,9 @@ const short = (path: string) => path.split('/').filter(Boolean).slice(-2).join('
 
 /** One line for ellen_joe's bubble: where main is and what was published last. */
 function summary(state: ProjectState | null, error: string | null) {
+  // the SDK refuses a second client while one is starting the project's
+  // service Sandbox (the first one also installs the Store into the volume)
+  if (error && /^Busy\b/.test(error)) return "LayerFS is busy with this project: another client is starting its Sandbox (the first one installs the Store, which takes a while for a big project). Press Refresh in a moment."
   if (error) return `I couldn't read this project: ${error}`
   if (!state) return 'Reading the project…'
   const s = state.s, real = Object.fromEntries(Object.entries(state.labels).map(([r, l]) => [l, r]))

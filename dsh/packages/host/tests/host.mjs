@@ -162,6 +162,15 @@ try {
   await trees.dispose();
   assert.deepEqual(closed, ["sb_service"]);
 
+  // state reads go through the same per-project client: one service Sandbox start, not one per read
+  let opened = 0;
+  const empty = { project: "p", branches: [], commits: [], layers: [], sandboxes: [], store: {} };
+  const shared = new TreeReader(h.spec, async () => { opened++; return { layerfs: { fs: fakeFs, sandboxes: new Set(), sandbox: { close: async () => {} } }, operator: { inspect: { snapshot: async () => empty } } }; });
+  const P = { name: "p" };
+  const [stateA, stateB] = await Promise.all([shared.state(P, []), shared.state(P, []), shared.read(P, REF)]);
+  assert.deepEqual([opened, typeof stateA.s, typeof stateB.labels], [1, "object", "object"]);
+  await shared.dispose();
+
   // projects: listed with their folder; attach moves one, detach keeps sessions on it
   const OTHER = "/work/other";
   assert.deepEqual((await call("GET", "/layerfs/projects")).body.projects.map((p) => [p.name, p.folder]), [["website", FOLDER]]);
