@@ -117,13 +117,30 @@ A scenario is `scenario.json` (format `layerfs-mock-scenario` version 2) plus it
 - a reply step: the turn's closing text. `until` makes the agent wait for those subagents to report first;
 - a pause step: milliseconds before the next step.
 
-`@name` in an argument is a subagent or job started earlier. A subagent's `description` is its name in the scenario. `scenarios/fixtures/website` is the shared project; its install, build, test and serve are small shell scripts, not npm.
+`@name` in an argument is a subagent or job started earlier. A subagent's `description` is its name in the scenario. `order` places the demo in lists. Every scenario's `fixture` is `demo-workspace/`, the shared website; its install, build, test and serve are small shell scripts, not npm. Scripts keep their notes between bash calls under `<temp>/dsh-layerfs/demo-notes/<project>/`, outside the workspace folder, because Init imports everything in it.
 
-Running a demo:
-1. Install `dsh-layerfs-demo` beside `dsh-layerfs` in a demo profile.
-2. `node tools/demo.mjs <demo> <folder>` copies the fixture.
-3. Import the folder as a LayerFS project.
-4. Start a session with the preset and the demo's mock model, and send any message.
+#### The demo workspace
+
+With the bundle installed, dsh web gets a workspace for `dsh/demo-workspace` with one session per demo, in scenario order. The client registers the workspace and makes any missing session when it loads. Each session opens with "What does this demo show?", which the mock answers with the demo's blurb and agents; dsh's sidebar lists no session before its first turn.
+
+Above the composer of a demo session, one strip shows:
+- a progress bar: the steps every agent has finished out of all the scenario's steps, from the mock's own replies, with the root agent's phase and the elapsed time;
+- Sim or Live;
+- Play, or Replay after a run.
+
+Play runs the demo in a new session that takes the old one's place. In order:
+1. A session is made in the demo workspace, with the preset, the demo's title and its mock model.
+2. The old session is archived, with its turn, subagents and jobs stopped.
+3. The demo's project (`demo-<id>`) is removed and Inited again from `demo-workspace/`, with the Init's progress on the bar.
+4. The project is chosen, "Run the demo." is sent, and the new session opens.
+
+Each step is attempted once. A refusal, such as a project whose Sandbox is still open, ends Play with its message on the strip.
+
+The Host side is the mock plugin's `/layerfs-demo` route. It serves the workspace folder, the demos, each demo's session (kept in `<profile>/dsh-layerfs-demo/sessions.json`) and each demo's latest run. Sim is not available yet: Play says so on the strip.
+
+Known limits:
+- dsh's sidebar orders sessions by last activity by default, so the demo played last moves to the top. The manual order keeps each demo's place.
+- `demo-workspace` is inside this repository. A turn's "Edited" card lists every change made in the repository during the turn, including other work in the checkout.
 
 ## Install into a dsh profile
 
@@ -172,7 +189,7 @@ Only dsh web is checked; dsh desktop serves the same web client but was not test
 | `pnpm test` | Host tests, the mock model's scenario tests, and the model's trace replay check |
 | `node ../sdk_sim/test_dsh_view.mjs sim` | the view model against the simulator's stories |
 | `node tools/init-project.mjs <profile dir> <folder> <image> <daemon>` | Init outside dsh |
-| `node tools/demo.mjs [<demo> <folder>]` | lists the demos, or copies a demo's fixture into a workspace folder |
+| `node tools/demo.mjs [<demo> <folder>]` | lists the demos, or copies the demo website into another folder |
 | `node tools/check-demo.mjs '<dsh web URL with ?token=…>' <session id> <demo>` | checks a finished demo session: every agent ran, and each bash step with `expect` left those LayerFS outcomes on the trace |
 | `node tools/check-session.mjs '<dsh web URL with ?token=…>' <session id>` | checks that a session's tab draws what LayerFS reports: Branches, heads, `main`, Sandboxes, which agent made each Commit and Layer, and bash-call groups |
 

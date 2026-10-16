@@ -3,7 +3,8 @@
   "version": 2,
   "title": "5 agents",
   "blurb": "A lead and five subagents on two Branches at once: each mounts its own Workspace, stale Workspaces merge on commit, .lww makes build output last-writer-wins, and two agents change the same line. The lead merges and publishes.",
-  "fixture": "../fixtures/website",
+  "fixture": "../../demo-workspace",
+  "order": 5,
   "agents": {
     "root": [
       { "phase": "Set up", "say": "Two feature Branches, checkout and search, each with .lww so dependencies and build output never conflict.",

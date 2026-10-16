@@ -11,9 +11,11 @@ export const PROVIDER = "layerfs-mock";
 /**
  * @param {typeof import("@deepseek-ai/dsh-llm").LlmAdapter} Base dsh's adapter class
  * @param {Map<string, object>} scenarios compiled scenarios by model id
- * @param {{ typingMs?: number }} [options] pause between streamed words
+ * @param {{ typingMs?: number, progress?: import("./progress.js").Progress, intro?: string }} [options]
+ *   pause between streamed words; where each reply's position is reported;
+ *   the question a demo Session opens with, answered with what the demo shows
  */
-export function createAdapter(Base, scenarios, { typingMs = 18 } = {}) {
+export function createAdapter(Base, scenarios, { typingMs = 18, progress, intro } = {}) {
   class LayerFsMockAdapter extends Base {
     providerInfo(provider) { return { id: provider, name: "LayerFS mock" }; }
 
@@ -34,8 +36,11 @@ export function createAdapter(Base, scenarios, { typingMs = 18 } = {}) {
         const offered = offeredTools(options);
         // dsh's own requests without tools (a session title): the scenario's title
         if (!offered.size) return yield* text(scenario.title, 0, signal);
+        // a demo Session that opens with the intro question is not a run
+        if (intro && firstUserText(options.messages ?? []) === intro) return yield* text(introOf(scenario), typingMs, signal);
         const agent = agentOf(scenario, options.messages ?? []);
         const reply = nextReply(scenario, agent, options.messages ?? []);
+        progress?.report(scenario.name, agent, reply, options.sessionId);
         if (reply.kind === "error") return yield failure(`LayerFS mock (${scenario.name}, ${agent}): ${reply.message}`, "MOCK_SCENARIO_STOPPED");
         await sleep(reply.delay, signal);
         if (reply.kind === "text") return yield* text(reply.text, typingMs, signal);
@@ -65,6 +70,17 @@ const model = (provider, scenario) => ({
   description: `Scripted, not a language model. ${scenario.description}`.trim(),
   inputModalities: ["text"],
 });
+
+const firstUserText = (messages) => {
+  const first = messages.find((m) => m.role === "user");
+  return (first?.content ?? []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+};
+
+const introOf = (scenario) => [
+  `${scenario.title}: ${scenario.blurb}`.trim(),
+  `Agents: ${Object.keys(scenario.agents).join(", ")}.`,
+  "Press Play below to run it on simulated or live LayerFS. Each run starts in a new session.",
+].join("\n\n");
 
 const failure = (message, code) => ({ type: "finish", reason: { kind: "error", failure: { message, code } } });
 

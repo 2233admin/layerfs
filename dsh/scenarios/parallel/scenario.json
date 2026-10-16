@@ -3,7 +3,8 @@
   "version": 2,
   "title": "Parallel Branches",
   "blurb": "Two subagents work at the same time on Branches of their own. The main agent publishes one; publish overwrites main, so it asks the other to merge main in first.",
-  "fixture": "../fixtures/website",
+  "fixture": "../../demo-workspace",
+  "order": 2,
   "agents": {
     "root": [
       { "phase": "Set up", "say": "Two independent pieces: a header and a footer. Each subagent gets its own Branch.",

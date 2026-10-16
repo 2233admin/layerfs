@@ -3,7 +3,8 @@
   "version": 2,
   "title": "Conflicts",
   "blurb": "Two subagents mount one Branch and retitle the same page. The second commit conflicts, writes markers into its Workspace, and commits once they are fixed. Then two Branches change the same line: the merge is refused until a working fork agrees.",
-  "fixture": "../fixtures/website",
+  "fixture": "../../demo-workspace",
+  "order": 3,
   "agents": {
     "root": [
       { "phase": "Set up", "say": "One Branch, feature, for both subagents; each mounts its own Workspace.",

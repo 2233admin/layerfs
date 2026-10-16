@@ -3,7 +3,8 @@
   "version": 2,
   "title": "Build a website",
   "blurb": "One agent writes code with fs, mounts a Workspace only to install, build and serve, publishes to main, then sees publish overwrite main and merges to keep both.",
-  "fixture": "../fixtures/website",
+  "fixture": "../../demo-workspace",
+  "order": 1,
   "agents": {
     "root": [
       { "phase": "Set up", "say": "I'll fork a Branch for this task, and a second one, late, to show what publish does later.",

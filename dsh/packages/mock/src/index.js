@@ -1,11 +1,17 @@
 // @dsh-layerfs/mock: the LayerFS mock model, a Cordis function plugin for
 // demos and keyless end-to-end runs. It registers the "layerfs-mock" LLM
 // provider with one model per scenario folder; pick one in the model picker.
-// Only the dsh-layerfs-demo bundle loads it.
+// Where a web server runs, it also serves /layerfs-demo (demo.js), which the
+// client's demo strip uses to play each scenario in its own Session of the
+// demo workspace. Only the dsh-layerfs-demo bundle loads it.
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LlmAdapter } from "@deepseek-ai/dsh-llm";
 import z from "@deepseek-ai/schemastery";
 import { createAdapter, PROVIDER } from "./adapter.js";
+import { registerDemoRoutes } from "./demo.js";
+import { Progress } from "./progress.js";
 import { loadScenarios } from "./scenario.js";
 
 export const name = "layerfs-mock";
@@ -13,12 +19,25 @@ export const inject = ["llm"];
 export const Config = z.object({
   scenarios: z.string().description("Folder of scenario folders (default: the scenarios folder of this checkout)"),
   typingMs: z.natural().max(1000).default(18).description("Pause between streamed words, in milliseconds"),
+  workspace: z.string().description("Demo workspace folder, each Init's source (default: the demo-workspace folder of this checkout)"),
+  stateDir: z.string().description("Each demo's Session (default: <profile>/dsh-layerfs-demo)"),
+  preset: z.string().default("layerfs-dsh-minimalist").description("Agent preset of the demo Sessions"),
+  prompt: z.string().default("Run the demo.").description("The message that starts a run"),
+  intro: z.string().default("What does this demo show?").description("The question a demo Session opens with before its first run"),
 });
 
 export function apply(ctx, config) {
   const dir = config.scenarios || fileURLToPath(new URL("../../../scenarios/", import.meta.url));
   // an invalid scenario stops the plugin with the step at fault named
   const scenarios = loadScenarios(dir);
-  const adapter = createAdapter(LlmAdapter, scenarios, { typingMs: config.typingMs });
+  const progress = new Progress(scenarios);
+  const adapter = createAdapter(LlmAdapter, scenarios, { typingMs: config.typingMs, progress, intro: config.intro });
   ctx.effect(() => ctx.llm.registerAdapter([PROVIDER], adapter), "layerfs-mock: model");
+  const profile = ctx.get("profileContext");
+  const demo = {
+    scenarios, progress, provider: PROVIDER, preset: config.preset, prompt: config.prompt, intro: config.intro,
+    workspace: config.workspace || fileURLToPath(new URL("../../../demo-workspace", import.meta.url)),
+    stateDir: config.stateDir || join(profile ? profile.dir : join(homedir(), ".dsh"), "dsh-layerfs-demo"),
+  };
+  ctx.inject(["webServer", "connection"], (child) => registerDemoRoutes(child, demo));
 }

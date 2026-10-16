@@ -3,7 +3,8 @@
   "version": 2,
   "title": "One Sandbox, two Workspaces",
   "blurb": "Separate overlays in one Sandbox, a slow build left to a background job, an fs write that makes a mount stale, and the refusals that keep teardown explicit: MountsActive, Busy, Dirty.",
-  "fixture": "../fixtures/website",
+  "fixture": "../../demo-workspace",
+  "order": 4,
   "agents": {
     "root": [
       { "phase": "Set up", "say": "Two Branches in one Sandbox: docs and site each get a Workspace.",

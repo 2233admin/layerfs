@@ -10,10 +10,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createAdapter } from "../src/adapter.js";
 import { agentOf, nextReply } from "../src/plan.js";
+import { Progress } from "../src/progress.js";
 import { compileScenario, loadScenarios, ScenarioError } from "../src/scenario.js";
 
 const scenarios = loadScenarios(fileURLToPath(new URL("../../../scenarios/", import.meta.url)));
-assert.deepEqual([...scenarios.keys()], ["agents", "conflicts", "parallel", "sandbox", "tour"]);
+assert.deepEqual([...scenarios.keys()], ["tour", "parallel", "conflicts", "sandbox", "agents"]);
 
 let n = 0;
 const id = (prefix) => `${prefix}-${String(++n).padStart(8, "0")}-0000-4000-8000-000000000000`;
@@ -25,7 +26,7 @@ const textMessage = (role, text, source) => ({ role, id: `m${++n}`, source, cont
  * makes the first bash result of that agent read Busy (as LayerFS answers
  * when another process changes its records).
  */
-function play(scenario, { busyOnce = null } = {}) {
+function play(scenario, { busyOnce = null, progress = null } = {}) {
   const agents = new Map(), calls = [];
   const start = (name, firstText, parent) => {
     const agent = { name, id: id("a"), parent, messages: [textMessage("user", firstText, { kind: "user" })], awake: true, busyUsed: false };
@@ -38,6 +39,7 @@ function play(scenario, { busyOnce = null } = {}) {
     if (!agent) break;
     assert.equal(agentOf(scenario, agent.messages), agent.name, `${scenario.name}: ${agent.name}'s conversation is recognised`);
     const reply = nextReply(scenario, agent.name, agent.messages);
+    progress?.report(scenario.name, agent.name, reply, agent.id);
     assert.notEqual(reply.kind, "error", `${scenario.name}/${agent.name}: ${reply.message}`);
     if (reply.kind === "text") {
       agent.messages.push(textMessage("assistant", reply.text, { kind: "model" }));
@@ -84,9 +86,16 @@ function play(scenario, { busyOnce = null } = {}) {
   return { calls, agents: [...agents.values()].map((a) => a.name), root };
 }
 
-// every demo plays to the end, every agent started, every step called once
+// every demo plays to the end, every agent started, every step called once;
+// its progress ends done with every step of every agent counted
+const progress = new Progress(scenarios);
 for (const [name, scenario] of scenarios) {
-  const { calls, agents } = play(scenario);
+  const { calls, agents, root } = play(scenario, { progress });
+  const run = progress.get(name);
+  assert.equal(run.root, root.id, `${name}: the run is the root Session's`);
+  assert.equal(run.state, "done", `${name}: the run ends done`);
+  assert.equal(run.done, Object.values(scenario.agents).reduce((n, steps) => n + steps.length, 0), `${name}: every step counted`);
+  assert.equal(run.done, run.of, `${name}: done of all`);
   assert.deepEqual(new Set(agents), new Set(Object.keys(scenario.agents)), `${name}: every agent runs`);
   for (const [agent, steps] of Object.entries(scenario.agents)) {
     const want = steps.filter((s) => s.kind === "call").map((s) => s.call.name);
@@ -189,7 +198,7 @@ bad({ root: [{ bash: { description: "d", script: "scripts/x.mjs" } }] }, /a line
 assert.throws(() => compileScenario({ type: "layerfs-mock-scenario", version: 1, title: "t", agents: { root: [sh] } }, { name: "t", folder }), /version: must be 2/);
 
 // the adapter: a stub base class stands in for dsh's LlmAdapter
-const adapter = createAdapter(class {}, scenarios, { typingMs: 0 });
+const adapter = createAdapter(class {}, scenarios, { typingMs: 0, intro: "What does this demo show?" });
 const chunks = async (options) => { const out = []; for await (const c of adapter.stream(options)) out.push(c); return out; };
 const tools = ["bash", "subagent", "send_message", "list_agents", "job_output", "job_list"].map((name) => ({ name }));
 let out = await chunks({ model: "tour", messages: [textMessage("user", "Run the demo.", { kind: "user" })], tools });
@@ -199,9 +208,13 @@ out = await chunks({ model: "tour", messages: [textMessage("user", "Run the demo
 assert.equal(out.at(-1).reason.failure.code, "MOCK_TOOL_NOT_OFFERED");
 out = await chunks({ model: "tour", messages: [textMessage("user", "Write a title", { kind: "user" })], tools: [] });
 assert.equal(out.find((c) => c.type === "block-end").block.text, "Build a website");
+// a demo Session's intro question is answered with what the demo shows, not run
+out = await chunks({ model: "conflicts", messages: [textMessage("user", "What does this demo show?", { kind: "user" })], tools });
+assert.match(out.find((c) => c.type === "block-end").block.text, /^Conflicts: [\s\S]*Agents: root, a, b\./);
+assert.equal(out.at(-1).reason.kind, "stop");
 out = await chunks({ model: "nope", messages: [], tools });
 assert.equal(out.at(-1).reason.failure.code, "MOCK_NO_SCENARIO");
-assert.deepEqual((await adapter.listModels("layerfs-mock")).map((x) => x.name), ["LayerFS mock · 5 agents", "LayerFS mock · Conflicts", "LayerFS mock · Parallel Branches", "LayerFS mock · One Sandbox, two Workspaces", "LayerFS mock · Build a website"]);
+assert.deepEqual((await adapter.listModels("layerfs-mock")).map((x) => x.name), ["LayerFS mock · Build a website", "LayerFS mock · Parallel Branches", "LayerFS mock · Conflicts", "LayerFS mock · One Sandbox, two Workspaces", "LayerFS mock · 5 agents"]);
 const aborted = new AbortController(); aborted.abort();
 out = await chunks({ model: "tour", messages: [textMessage("user", "Run the demo.", { kind: "user" })], tools, signal: aborted.signal });
 assert.equal(out.at(-1).reason.kind, "aborted");

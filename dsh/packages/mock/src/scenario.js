@@ -6,7 +6,8 @@
 //
 // scenario.json:
 //   { type: "layerfs-mock-scenario", version: 2, title, blurb?, fixture?,
-//     agents: { root: Step[], <child>: Step[], … } }
+//     order?, agents: { root: Step[], <child>: Step[], … } }
+// `order` places the demo in lists (lower first; unordered ones last, by name).
 // A step is one of:
 //   { <tool>: args, say?, phase?, note?, expect?, retry?, as? }   one tool call
 //   { reply: "…", until?: [child, …], phase?, note? }   the agent's text; ends its turn
@@ -52,10 +53,12 @@ export class ScenarioError extends Error {
 export function loadScenarios(dir) {
   const scenarios = new Map();
   if (!existsSync(dir)) return scenarios;
+  const loaded = [];
   for (const name of readdirSync(dir).sort()) {
     const file = join(dir, name, "scenario.json");
-    if (existsSync(file) && statSync(file).isFile()) scenarios.set(name, loadScenario(join(dir, name)));
+    if (existsSync(file) && statSync(file).isFile()) loaded.push(loadScenario(join(dir, name)));
   }
+  for (const s of loaded.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))) scenarios.set(s.name, s);
   return scenarios;
 }
 
@@ -75,11 +78,12 @@ export function loadScenario(folder) {
 export function compileScenario(raw, { name, folder, where = name }) {
   const fail = (path, message) => { throw new ScenarioError(`${where} ${path}`, message); };
   if (!isObject(raw)) fail("", "must be an object");
-  only(raw, ["type", "version", "title", "blurb", "fixture", "agents"], "", fail);
+  only(raw, ["type", "version", "title", "blurb", "fixture", "order", "agents"], "", fail);
   if (raw.type !== TYPE) fail("type", `must be "${TYPE}"`);
   if (raw.version !== 2) fail("version", "must be 2");
   if (typeof raw.title !== "string" || !raw.title) fail("title", "must be a non-empty string");
   if (raw.blurb !== undefined && typeof raw.blurb !== "string") fail("blurb", "must be a string");
+  if (raw.order !== undefined && !Number.isInteger(raw.order)) fail("order", "must be an integer");
   let fixture = null;
   if (raw.fixture !== undefined) {
     fixture = resolve(folder, String(raw.fixture));
@@ -101,7 +105,7 @@ export function compileScenario(raw, { name, folder, where = name }) {
   for (const agent of Object.keys(agents)) {
     if (agent !== "root" && !parents.has(agent)) fail(`agents.${agent}`, "no subagent step starts this agent");
   }
-  return { name, title: raw.title, blurb: raw.blurb ?? "", fixture, agents, prompts, parents };
+  return { name, title: raw.title, blurb: raw.blurb ?? "", fixture, order: raw.order ?? null, agents, prompts, parents };
 }
 
 function compileSteps(steps, path, context) {

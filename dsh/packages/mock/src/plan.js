@@ -31,9 +31,13 @@ export function agentOf(scenario, messages) {
  *   { kind: "calls", calls: [{ name, args }], say, delay, step }   answer with this tool call
  *   { kind: "text", text, delay }        answer with text, which ends the turn
  *   { kind: "error", message }           the scenario cannot go on
+ * Each also carries `done` (this agent's steps finished once it is sent),
+ * `of` (its steps) and `phase` (the latest `phase` at or before its step).
  */
 export function nextReply(scenario, agent, messages) {
   const steps = scenario.agents[agent];
+  let index = 0;
+  const reply = placed(steps, () => index);
   const results = new Map(), settled = [];
   messages.forEach((m, k) => {
     if (m.role === "tool") results.set(String(m.toolCallId), { text: textOf(m), isError: m.isError === true });
@@ -42,7 +46,7 @@ export function nextReply(scenario, agent, messages) {
   });
 
   const children = new Map(), contact = new Map(), jobs = new Map();
-  let index = 0, attempts = 0, retrying = false, replyAt = -1;
+  let attempts = 0, retrying = false, replyAt = -1;
   for (const [k, m] of messages.entries()) {
     if (m.role !== "assistant") continue;
     const calls = (m.content ?? []).filter((b) => b.type === "tool-call");
@@ -51,12 +55,12 @@ export function nextReply(scenario, agent, messages) {
       continue;
     }
     const step = steps[index];
-    if (step?.kind !== "call") return { kind: "error", message: `the conversation has a ${calls[0].name} call where ${step ? `${step.at} is a reply` : `${agent} has no steps left`}` };
+    if (step?.kind !== "call") return reply({ kind: "error", message: `the conversation has a ${calls[0].name} call where ${step ? `${step.at} is a reply` : `${agent} has no steps left`}` });
     if (calls.length !== 1 || calls[0].name !== step.call.name) {
-      return { kind: "error", message: `${step.at} calls ${step.call.name}, but the conversation has ${calls.map((c) => c.name).join(", ")}` };
+      return reply({ kind: "error", message: `${step.at} calls ${step.call.name}, but the conversation has ${calls.map((c) => c.name).join(", ")}` });
     }
     const result = results.get(String(calls[0].id));
-    if (!result) return { kind: "error", message: `${step.at}: the ${step.call.name} call has no result yet` };
+    if (!result) return reply({ kind: "error", message: `${step.at}: the ${step.call.name} call has no result yet` });
     if (step.call.child) {
       const id = result.text.match(STARTED)?.[1];
       if (id) children.set(step.call.child, id);
@@ -71,12 +75,12 @@ export function nextReply(scenario, agent, messages) {
       attempts++, retrying = true;
       continue;
     }
-    if (result.isError) return { kind: "error", message: `${step.at} failed, so ${agent} stops here: ${result.text.slice(0, 400)}` };
+    if (result.isError) return reply({ kind: "error", message: `${step.at} failed, so ${agent} stops here: ${result.text.slice(0, 400)}` });
     index++, attempts = 0, retrying = false;
   }
 
   const step = steps[index];
-  if (!step) return { kind: "text", text: "Done.", delay: 0 };
+  if (!step) return reply({ kind: "text", text: "Done.", delay: 0 });
   // the first step of a later turn waits until the agent is woken
   const previous = steps[index - 1];
   if (previous?.kind === "reply" && !retrying) {
@@ -85,25 +89,35 @@ export function nextReply(scenario, agent, messages) {
         const id = children.get(child), since = contact.get(child) ?? -1;
         return !id || !settled.some((s) => s.id === id && s.k > since);
       });
-      if (waiting.length) return { kind: "text", text: `Still waiting for ${waiting.join(" and ")}.`, delay: 0 };
+      if (waiting.length) return reply({ kind: "text", text: `Still waiting for ${waiting.join(" and ")}.`, delay: 0 });
     } else if (!messages.slice(replyAt + 1).some((m) => m.role === "user" && !settledId(m))) {
-      return { kind: "text", text: "Waiting for a message.", delay: 0 };
+      return reply({ kind: "text", text: "Waiting for a message.", delay: 0 });
     }
   }
-  if (step.kind === "reply") return { kind: "text", text: step.text, delay: step.delay };
+  if (step.kind === "reply") return reply({ kind: "text", text: step.text, delay: step.delay }, 1);
 
   const args = { ...step.call.args };
   for (const [key, ref] of Object.entries(step.call.refs ?? {})) {
     const id = ref.agent ? children.get(ref.agent) : jobs.get(ref.job);
-    if (!id) return { kind: "error", message: `${step.at}: no id for @${ref.agent ?? ref.job} in the results so far` };
+    if (!id) return reply({ kind: "error", message: `${step.at}: no id for @${ref.agent ?? ref.job} in the results so far` });
     args[key] = id;
   }
-  return {
+  return reply({
     kind: "calls",
     calls: [{ name: step.call.name, args }],
     say: retrying ? "LayerFS is busy; trying again." : step.say,
     delay: retrying ? step.retry.wait : step.delay,
     step: step.at,
+  });
+}
+
+/** Adds the agent's position to a reply; `sent` counts the step the reply finishes. */
+function placed(steps, index) {
+  return (value, sent = 0) => {
+    const done = Math.min(index() + sent, steps.length);
+    let phase = null;
+    for (let i = Math.min(index(), steps.length - 1); i >= 0 && !phase; i--) phase = steps[i].phase ?? null;
+    return { ...value, done, of: steps.length, phase };
   };
 }
 

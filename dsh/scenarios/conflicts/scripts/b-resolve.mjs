@@ -1,8 +1,11 @@
 // b: keep one title that says both, drop the markers, commit on the new head.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-const NOTES = ".layerfs-demo/b.json";
+import { dirname, join } from "node:path";
+// notes between this agent's bash calls, outside the workspace folder (Init would import them)
+const NOTES_DIR = join(dirname(dirname(process.env.DSH_LAYERFS_TRACE)), "demo-notes", process.env.DSH_LAYERFS_PROJECT);
+const NOTES = join(NOTES_DIR, "b.json");
 const notes = () => JSON.parse(readFileSync(NOTES, "utf8"));
-const keep = (values) => { mkdirSync(".layerfs-demo", { recursive: true }); writeFileSync(NOTES, JSON.stringify(values)); };
+const keep = (values) => { mkdirSync(NOTES_DIR, { recursive: true }); writeFileSync(NOTES, JSON.stringify(values)); };
 const { LayerFS, isRefusal } = await import(process.env.DSH_LAYERFS_SDK);
 const lf = new LayerFS(process.env.DSH_LAYERFS_PROJECT);
 const show = (what, value) => console.log(`${what} → ${value.kind}`);
