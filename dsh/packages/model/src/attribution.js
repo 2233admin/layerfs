@@ -52,7 +52,8 @@ export function record(W, st, p, o, shOut, calls) {
   const out = outcome(call, o, shOut, args);
   W.last = { agent: n, call, step: st, o, node: nodeOf(o) };
   A.out = outOf(call, o, W.tick);
-  if (W.last.node) W.attrib[W.last.node] = n;
+  // a node belongs to the agent that made it; a fast-forward merge only names it again
+  if (W.last.node) W.attrib[W.last.node] ??= n;
   if (o.ok && call === "sandbox.create") { W.sbBy[o.result.id] = { made: n }; if (st.as) W.names[st.as] = o.result.id; }
   if (o.ok && call === "sandbox.close") (W.sbBy[args.sandbox] ||= {}).closed = n;
   if (o.ok && (o.code === "Forked" || o.code === "Merged")) W.attrib["fork:" + o.result.branch] = n;

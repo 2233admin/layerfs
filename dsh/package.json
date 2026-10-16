@@ -8,6 +8,7 @@
     "node": ">=22.19"
   },
   "scripts": {
-    "test": "node packages/host/tests/run.mjs"
+    "test": "node packages/host/tests/host.mjs && node ../sdk_sim/test_dsh_view.mjs trace",
+    "build": "cd packages/client && \"${DSH_SOURCE:-../../../../deepseek-harness}/node_modules/.bin/tsdown\""
   }
 }
