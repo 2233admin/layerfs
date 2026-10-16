@@ -76,12 +76,19 @@ function Tile({ label, value, open }: { label: string, value?: string, open?: bo
   )
 }
 
-/** Why the project could not be read, in words. */
-function problem(error: string) {
+/**
+ * Why the project could not be read, in words: a title, what happened and
+ * what to do, and whether removing and importing it again is the way out.
+ */
+function problem(error: string): { title: string, text: string, reimport?: true } {
   // the SDK refuses a second client while one is starting the project's
   // service Sandbox (the first one also installs the Store into the volume)
-  if (/^Busy\b/.test(error)) return "LayerFS is busy with this project: another client is starting its Sandbox. The first start installs the Store, which takes a while for a big project. Refresh in a moment."
-  return `This project couldn't be read: ${error}`
+  if (/^Busy\b/.test(error)) return { title: 'LayerFS is busy with this project', text: "Another client is starting its Sandbox. The first start installs the Store, which takes a while for a big project. Refresh in a moment." }
+  // a start that failed earlier left its record, and the SDK will not guess how it ended
+  if (/unresolved discovery intent/.test(error)) return { title: "An earlier start of this project failed", reimport: true, text: "LayerFS kept a record of that failed start and won't start the project again until it's cleared. This usually means the project was imported by an older LayerFS, which this one can't open. Remove the project and import its folder again: its saved history goes, the folder's files stay." }
+  // the daemon exited before it listened: it refused the Store
+  if (/stopped at Listener/.test(error)) return { title: "LayerFS couldn't open this project", reimport: true, text: "Its daemon stopped before it was ready. This usually means the project was imported by an older LayerFS, which this one can't open. Remove the project and import its folder again: its saved history goes, the folder's files stay." }
+  return { title: "Couldn't read this project", text: error }
 }
 
 /** ellen_joe at full size, for a page with nothing else to show. */
@@ -228,7 +235,18 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
             </header>
             {(busy || error) && <div role="status" style={{ color: error ? T.danger : T.text2 }}>{error ?? busy}</div>}
             {stateError
-              ? <Notice title="Couldn't read this project">{problem(stateError)}</Notice>
+              ? (() => {
+                const why = problem(stateError)
+                return (
+                  <Notice title={why.title}>
+                    <div style={{ display: 'grid', gap: 8, justifyItems: 'start' }}>
+                      <span>{why.text}</span>
+                      {why.reimport && <Button variant="outline" size="sm" icon={<IconTrashOutlineRegular size={16} />} disabled={!!busy} onClick={() => setRemoving(true)}>Remove project…</Button>}
+                      {why.text !== stateError && <details style={{ fontSize: 12, color: T.caption }}><summary style={{ cursor: 'pointer' }}>What LayerFS said</summary><div style={{ marginTop: 4, wordBreak: 'break-word' }}>{stateError}</div></details>}
+                    </div>
+                  </Notice>
+                )
+              })()
               : (
                 <>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
