@@ -58,7 +58,9 @@ holds several Workspaces at once, each a mount of any Branch of its project:
 `mount(id, branch)` answers the Workspace path (`/workspaces/1`, `/workspaces/2`,
 … numbered per Sandbox), and Exec, status, commit and unmount name the Workspace
 by that path. Close removes the Sandbox's record directory, so its name can be
-created again.
+created again. Close takes its locks before it removes anything: a named
+Sandbox needs only its own, the service Sandbox also its project's. A close
+refused as `Busy` has removed nothing, so closing again later completes it.
 
 The same authorized home permits a fresh Node process to use a Sandbox name and
 mount path directly. Reopening validates the full container id, deployment,

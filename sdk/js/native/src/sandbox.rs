@@ -267,16 +267,26 @@ pub(crate) fn close(args: &SdkValue) -> Outcome {
             ));
         }
     };
+    // Every lock is taken before anything is removed: a Busy refusal leaves
+    // the container and its record, and a later close reopens and retries.
     let _guard = crate::discovery::guard(&owned.directory)?;
+    // only the service Sandbox has a record in its project (service.record);
+    // that project is the Sandbox's own, from its record, not the caller's
+    let project = if id.starts_with(crate::discovery::SERVICE) {
+        let directory = crate::discovery::home(args)?.join(&owned.project);
+        let guard = crate::discovery::guard(&directory)?;
+        Some((directory, guard))
+    } else {
+        None
+    };
     owned.runtime.stop(1).map_err(failed)?;
     owned.runtime.delete().map_err(failed)?;
     std::fs::remove_file(owned.directory.join("sandbox.record")).map_err(failed)?;
-    // the Sandbox's own project, from its record, not the caller's
-    let project_dir = crate::discovery::home(args)?.join(&owned.project);
-    let _project_guard = crate::discovery::guard(&project_dir)?;
-    let service = project_dir.join("service.record");
-    if service.exists() && crate::discovery::load(&service)?.get_text("id") == Some(&id) {
-        std::fs::remove_file(service).map_err(failed)?;
+    if let Some((directory, _guard)) = &project {
+        let service = directory.join("service.record");
+        if service.exists() && crate::discovery::load(&service)?.get_text("id") == Some(&id) {
+            std::fs::remove_file(service).map_err(failed)?;
+        }
     }
     // its records go with it, so its name is free again
     std::fs::remove_dir_all(&owned.directory).map_err(failed)?;
