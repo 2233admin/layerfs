@@ -2,7 +2,7 @@
 // calls name their Branch, and Sandbox calls take the Sandbox (or its id).
 // Calls that are not about a Workspace reach the Store through one service
 // Sandbox, created on the first such call unless `sandbox` names one.
-import { deployment, invoke, invokeClient } from "./client.js";
+import { deployment, invoke, invokeClient, sandboxId } from "./client.js";
 import { LayerFSError } from "./errors.js";
 import * as fsMethods from "./fs/index.js";
 import { init } from "./project/init.js";
@@ -32,7 +32,8 @@ export class LayerFS {
    * then DSH_LAYERFS_TRACE); `options.traceStep` labels its lines
    * (overrides LAYERFS_TRACE_STEP, then DSH_LAYERFS_TRACE_STEP). Deployment
    * settings read LAYERFS_HOME, _DOCKER, _IMAGE, _VOLUME and _DAEMON, each
-   * else its DSH_LAYERFS_ twin. */
+   * else its DSH_LAYERFS_ twin. `options.sandbox` selects an existing
+   * Sandbox for this client's Store calls. */
   constructor(projectName, options = {}) {
     if (typeof projectName !== "string" || !/^[a-z0-9](?:[a-z0-9_.-]{0,61}[a-z0-9])?$/.test(projectName)) {
       throw new LayerFSError("InvalidInput", "a project name is required", null);
@@ -52,8 +53,9 @@ export class LayerFS {
         daemon: env("DAEMON"),
       },
     };
-    this.sandboxes = new Set();
-    this.serviceSandbox = null;
+    const selected = options.sandbox === undefined ? null : sandboxId(options.sandbox);
+    this.sandboxes = new Set(selected ? [selected] : []);
+    this.serviceSandbox = selected ? Promise.resolve(selected) : null;
     this.fs = bind(this, fsMethods);
     this.project = bind(this, { init, list_branches });
     this.branch = bind(this, { list_commits, diff_commits, diff_branches, fork, merge, publish });
@@ -61,8 +63,8 @@ export class LayerFS {
   }
 
   /**
-   * The Sandbox that serves Store calls, created once on first use. A refused
-   * creation is not kept, so the caller's next call is a new attempt.
+   * The selected Sandbox, or an automatic service created once on first use.
+   * A refused creation is not kept, so the caller's next call is a new attempt.
    */
   service() {
     this.serviceSandbox ??= invoke("sandbox.service", { project: this.projectName, home: this.options.home, deploy: deployment(this.options.deploy) }, this.options).then(

@@ -5,8 +5,9 @@ description: Use when building, editing, testing or inspecting a project through
 
 # LayerFS JavaScript SDK
 
-> **Status:** Current general guide. It describes LayerFS 0.1.7 on `main`. Example
-> outputs were captured live in issue #334 Phase A at `b30e4fb8f`.
+> **Status:** Current general guide for the current SDK source. Base example
+> outputs were captured live in issue #334 Phase A at `b30e4fb8f`. Explicit
+> per-agent Sandbox routing was verified in #340 Phase A at `123fee2a2`.
 
 Your project lives in LayerFS, not on your local disk. You read and change it through
 the SDK, from small Node scripts you run with `node`.
@@ -143,6 +144,26 @@ process of one run must see the same values.
 ```js
 const layerfs = new LayerFS("shop");   // a project name; no I/O happens yet
 ```
+
+For several agents, the coordinator first creates each agent's Bash Sandbox in
+sequence, then gives its id to that agent. The agent selects it for Store calls:
+
+```js
+const layerfs = new LayerFS("shop", { sandbox: mySandboxId });
+```
+
+The same selected Sandbox serves `fs.*`, Branch and operator Store calls, and
+`service()` returns its id without starting another service. Use this agent's id
+for its Bash mounts too; one agent runs its own calls sequentially. Independent
+agents use distinct Sandboxes. Creation and automatic service discovery share a
+project lock, so concurrent startup can be refused `Busy` before any effect.
+Create first in sequence, then do parallel work. A selected Sandbox that is closed,
+missing or unauthorized is refused, never replaced automatically. After closing
+it, finish the client and use a new client for its successor. Issue #340's seven-case
+external regression covers routing and exact refusal without replacement. Its
+six persistent clients then passed concurrent public file reads and Branch forks
+on six own Sandboxes at `123fee2a2`; the initial shared-service discovery Busy and
+sixth-connection EOF remain retained in the Phase A evidence.
 
 A new project needs `project.init(folder)` once. After that, `new LayerFS("shop")` in
 any later process connects to the same project. Store calls (`fs.*`, Branch calls

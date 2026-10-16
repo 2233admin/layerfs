@@ -1,0 +1,3 @@
+# Evidence checksums and verbatim reports describe exact retained bytes.
+tables/** -text
+verbatim/** -text

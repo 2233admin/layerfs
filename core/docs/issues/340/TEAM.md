@@ -16,8 +16,11 @@ team-lead and worker prompts; the main agent's own duties are in [ROLLOUT.md](RO
 | I1, I2 | 2 | SDK, skill, lane brief, its run folder | `insight` lane tasks | publishes to `main`, merges Branches |
 | P1 | 1 | SDK, skill, lane brief, its run folder | `people` lane tasks | publishes to `main`, merges Branches |
 
-Six subagent slots are all in use while the team runs. Replacing an agent means
-closing it before spawning its successor.
+Phase A2 observed four active agents including the main agent. The team therefore
+runs its lead and at most two workers concurrently, retaining all five logical
+roles in staggered milestone waves. W1/W2 overlap on work and I1/I2 overlap on
+insight. Completed workers release capacity before successors start. This is an
+environment limitation; it does not reduce SPEC or prove five-worker concurrency.
 
 The team lead and workers never read the LayerFS repository, its issues or earlier
 runs. A LayerFS problem is reported, not worked around by reading LayerFS source.
@@ -35,8 +38,10 @@ Every agent works in its own folder under the run folder:
 ```
 
 - **One Sandbox per agent.** A Sandbox runs one operation at a time and refuses a
-  second process with `Busy`, so agents never share one. Each agent creates its own Bash
-  Sandbox at start and closes it at the end after saving its daemon logs.
+  second process with `Busy`, so agents never share one. The lead creates worker
+  Sandboxes in sequence before assignment. Every agent uses
+  `new LayerFS(project, { sandbox: ownId })` for Store calls and that same id for
+  Bash, then saves both daemon streams and closes it at completion.
 - **Shared project settings.** All agents use the same `LAYERFS_HOME`, `LAYERFS_DOCKER`,
   `LAYERFS_IMAGE`, `LAYERFS_VOLUME`, `LAYERFS_DAEMON` and project name. Phase A
   confirms how `fs.*` and Branch calls from several processes share the service Sandbox
@@ -131,7 +136,7 @@ invitations and notifications. A lane that needs another lane's code waits for i
 | Step | What happens | Done when |
 | --- | --- | --- |
 | T0 Skeleton | Lead alone builds L0 on `lead`, publishes it to `main` | All package tests pass on a fresh Branch from `main` |
-| T1 Start | Lead forks `work.1`, `insight.1`, `people.1`, writes lane plans, spawns all five workers at once with `ASSIGN` | Every worker has mounted and committed its first step |
+| T1 Start | Lead forks `work.1`, `insight.1`, `people.1`, writes lane plans, starts all five logical roles in waves with at most two active workers | Each role has mounted and committed its first step; work and insight pairs have overlapping same-Branch activity |
 | T2 Milestone 1 | Lanes build M1; lead integrates each lane as it reports `DONE` | All three M1s on `main` |
 | T3 Milestone 2 | Same for M2 | All three M2s on `main` |
 | T4 Milestone 3 | Same for M3 | All three M3s on `main` |

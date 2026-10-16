@@ -17,6 +17,15 @@ SdkValue supports null, bool, integer, text, bytes, list and unique-key map;
 nesting is at most 16 levels. One authenticated record fits `u16::MAX - 16` bytes.
 Methods therefore use bounded windows rather than whole-history/tree replies.
 
+Issue #340 admission correction: an SDK call that cannot encode within this
+record is refused locally as `TooLarge`, with null detail, only when encoding
+stopped before any send, without a received answer or failed fence. Other
+encoding, transport and uncertain failures retain their original custody.
+No request is split or replayed. The complete encoded call includes paths,
+metadata and observation fields as well as content; there is no fixed content
+byte allowance. Larger atomic changes use an ordinary Sandbox Workspace step.
+This is control-call admission, not a file, namespace or Workspace size limit.
+
 The root public table refuses `operator.*`. `@layerfs/sdk/operator` uses a
 separate native entrypoint and Rust API/daemon admission table. Store/Commit
 statistics, file statistics/history, Workspace overlay/changes and snapshot are
@@ -32,6 +41,24 @@ Names sort by bytes; recursive paths use component-by-component byte order;
 Commit history is first-parent newest-first. Numeric deep positions skip bounded
 windows linearly. Byte bounds may shorten a page and `hasMore` discloses more.
 A live ref resolves once per call, so independent calls can observe new heads.
+
+Issue #342 source update, 2026-10-16: the recursive immutable reader used by
+Branch/Commit diffs, grep and glob acquires at most 64 directory bindings and
+8,192 encoded binding bytes per frame, then resolves that window's inode values
+in one grouped Content demand. A depth-first frame retains only that window and
+its name continuation; exhausted frames require no final empty listing. This
+avoids one directory and inode-table descent per name. Equal filesystem roots
+return an empty diff after validating pagination. Equal directory binding roots
+cannot skip descendants: their inode values live in the filesystem's separate
+inode table. Numeric diff page positions still scan earlier paths; no cursor
+state or namespace-sized changed-path map is retained between calls.
+
+Diff omits a same-identity directory only when its metadata is also unchanged.
+Directory metadata changes occupy a returned item and therefore exactly one
+pagination position. This corrects the earlier mismatch where the scan counted
+a directory that the reply omitted, causing a later page to repeat a file.
+The [#342 investigation](../issues/342/README.md) records the original demand
+counts, bounded regression proofs and separate diagnostic observations.
 
 Direct Branch mutations bind a private indexed Workspace, drive ordinary
 Workspace operations and publish one captured Content construction through the
