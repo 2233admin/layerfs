@@ -2,7 +2,7 @@
 use layerfs_bridge::provision::{check_destination, ProviderKind, StoreManifest, StoreProfile};
 use layerfs_history::{
     BranchId, BranchSnapshot, ForkRequest, ForkSource, HistoryCatalog, HistoryCatalogConfig,
-    HistoryError, HistoryName, LayerStackId,
+    HistoryError, HistoryName, InitStatistics, LayerStackId,
 };
 use layerfs_persistence::{
     Handles, PersistenceConfig, SealedStore, SqliteAcquisitionSchema, SqlitePersistenceProfile,
@@ -91,6 +91,7 @@ pub(crate) fn initialize(
     timer: &TimingScope<'_, Active>,
     counters: Arc<InitCounters>,
 ) -> Result<SealedProject, Box<InitFailure>> {
+    let started = Instant::now();
     let mut initialized = None;
     let mut branch = None;
     let result = (|| {
@@ -141,6 +142,20 @@ pub(crate) fn initialize(
                 })
                 .map_err(InitError::History)?,
         );
+        let totals = handles.history.statistics().map_err(InitError::History)?;
+        let counts = counters.read();
+        handles
+            .history
+            .record_init(&InitStatistics {
+                entries: initialized.as_ref().expect("acknowledged Init").entries,
+                files: counts.files,
+                bytes: counts.bytes,
+                canonical: totals.canonical,
+                stored: totals.stored,
+                metadata: totals.metadata,
+                millis: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            })
+            .map_err(InitError::History)?;
         drop(storage);
         let sealed = handles.seal().map_err(InitError::Persistence)?;
         Ok(sealed)

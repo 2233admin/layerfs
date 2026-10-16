@@ -90,6 +90,13 @@ fn init_seals_complete_root_and_first_branch_without_retained_handles() {
             .unwrap(),
         Some(project.branch.clone())
     );
+    // Init recorded what it imported, once; `file` and `alias` are one identity.
+    let totals = handles.history.statistics().unwrap();
+    let init = totals.init.expect("Init totals");
+    assert_eq!((init.entries, init.files, init.bytes), (6, 2, 70_014));
+    assert!(init.stored > 0 && init.stored <= totals.stored);
+    assert!(init.canonical > 0 && init.canonical <= totals.canonical);
+    assert!(handles.history.record_init(&init).is_err());
     let storage = layerfs_storage::Storage::new(handles.storage.clone()).unwrap();
     {
         let reader = storage.reader().unwrap();

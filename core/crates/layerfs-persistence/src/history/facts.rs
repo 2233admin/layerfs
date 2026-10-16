@@ -1,7 +1,8 @@
 //! Persistent history facts and constant-size Store accounting reads.
 use super::{provider::HistoryProvider, rows::cell};
+use crate::backend::records::Param;
 use layerfs_content::merge::LwwDecision;
-use layerfs_history::{HistoryError, HistoryResult, StoreStatistics};
+use layerfs_history::{HistoryError, HistoryResult, InitStatistics, StoreStatistics};
 
 pub(crate) fn encode(values: &[LwwDecision]) -> HistoryResult<Vec<u8>> {
     let mut out = Vec::new();
@@ -88,7 +89,43 @@ impl HistoryProvider {
                     .ok_or(HistoryError::Capacity("metadata size"))?,
                 file,
                 free,
+                // Init always scans its root, so no entries means not recorded.
+                init: match get(7)? {
+                    0 => None,
+                    entries => Some(InitStatistics {
+                        entries,
+                        files: get(8)?,
+                        bytes: get(9)?,
+                        canonical: get(10)?,
+                        stored: get(11)?,
+                        metadata: get(12)?,
+                        millis: get(13)?,
+                    }),
+                },
             })
         })
+    }
+    pub(crate) fn record_init(&self, totals: &InitStatistics) -> HistoryResult<()> {
+        if totals.entries == 0 {
+            return Err(HistoryError::InvalidInput("Init entries"));
+        }
+        let row = [
+            totals.entries,
+            totals.files,
+            totals.bytes,
+            totals.canonical,
+            totals.stored,
+            totals.metadata,
+            totals.millis,
+        ]
+        .into_iter()
+        .map(|n| i64::try_from(n).map(Param::I64))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| HistoryError::Capacity("Init totals"))?;
+        let recorded = self.write(|tx| tx.execute("statistics_record_init", row))?;
+        if recorded != 1 {
+            return Err(HistoryError::Integrity("Init totals already recorded"));
+        }
+        Ok(())
     }
 }

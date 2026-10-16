@@ -581,4 +581,25 @@ pub struct StoreStatistics {
     pub file: u64,
     /// Free SQLite pages in bytes, reusable within the file.
     pub free: u64,
+    /// What Init imported and what it cost; absent until Init records it.
+    pub init: Option<InitStatistics>,
+}
+
+/// One Init's import counts and the Store totals it left, recorded once at seal.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct InitStatistics {
+    /// Source entries scanned, including the root directory.
+    pub entries: u64,
+    /// Regular-file identities constructed; extra links of one identity are not counted.
+    pub files: u64,
+    /// Bytes of those identities.
+    pub bytes: u64,
+    /// Store canonical bytes when Init finished.
+    pub canonical: u64,
+    /// Store pack bytes when Init finished.
+    pub stored: u64,
+    /// Store metadata bytes, as [`StoreStatistics::metadata`], when Init finished.
+    pub metadata: u64,
+    /// Init's wall time in milliseconds, up to the first Branch.
+    pub millis: u64,
 }

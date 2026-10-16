@@ -5,6 +5,9 @@ impl HistoryCatalog for HistoryProvider {
     fn statistics(&self) -> HistoryResult<StoreStatistics> {
         HistoryProvider::statistics(self)
     }
+    fn record_init(&self, totals: &InitStatistics) -> HistoryResult<()> {
+        HistoryProvider::record_init(self, totals)
+    }
     fn catalog_id(&self) -> CatalogId {
         self.catalog_id
     }

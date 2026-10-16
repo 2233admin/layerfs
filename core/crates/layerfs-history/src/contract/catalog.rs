@@ -116,6 +116,11 @@ pub trait HistoryCatalog: Send + Sync {
         Err(crate::HistoryError::Unsupported("Store statistics"))
     }
 
+    /// Records Init's totals once; a second record is `Integrity`.
+    fn record_init(&self, _totals: &crate::records::InitStatistics) -> HistoryResult<()> {
+        Err(crate::HistoryError::Unsupported("Init statistics"))
+    }
+
     /// Creates the genesis Layer and the stack atomically.
     fn initialize_layerstack(
         &self,

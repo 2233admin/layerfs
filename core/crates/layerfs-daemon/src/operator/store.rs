@@ -1,4 +1,4 @@
-//! Publication counters; diagnostics never scan the object catalog.
+//! Publication counters and Init's recorded totals; diagnostics never scan the object catalog.
 use crate::{
     sdk::{
         args::{self, Answer},
@@ -27,6 +27,20 @@ pub(crate) fn stats(store: &Arc<Store>) -> Answer {
         ("free", SdkValue::Int(value.free as i64)),
         ("dedupe", ratio(value.logical, value.canonical)),
         ("compression", ratio(value.canonical, value.stored)),
+        (
+            "init",
+            value.init.map_or(SdkValue::Null, |init| {
+                SdkValue::map([
+                    ("entries", SdkValue::Int(init.entries as i64)),
+                    ("files", SdkValue::Int(init.files as i64)),
+                    ("bytes", SdkValue::Int(init.bytes as i64)),
+                    ("canonical", SdkValue::Int(init.canonical as i64)),
+                    ("stored", SdkValue::Int(init.stored as i64)),
+                    ("metadata", SdkValue::Int(init.metadata as i64)),
+                    ("millis", SdkValue::Int(init.millis as i64)),
+                ])
+            }),
+        ),
     ]))
 }
 
