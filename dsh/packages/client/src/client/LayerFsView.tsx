@@ -1,6 +1,7 @@
 // The LayerFS tab: the root session's SDK calls, replayed into the shared
 // view (@dsh-layerfs/view), as the design preview draws a trace. It follows
-// the Host's /layerfs/session route while it is shown.
+// the Host's /layerfs/session route while it is shown, and plays new calls
+// one at a time, each kept on screen for a while (playback.ts).
 import { useEffect, useRef, useState } from 'react'
 import FM from '../../../../../sdk_sim/simulation_engine/files.js'
 import M from '../../../../../sdk_sim/simulation_engine/model.js'
@@ -10,7 +11,8 @@ import { api, type SessionView } from './api.ts'
 import { AVATARS } from './avatars.ts'
 import { Setup } from './Setup.tsx'
 import type { Directories } from './InitDialog.tsx'
-import { linesKey, replay, treeLoader, type TreeCache } from './replay.ts'
+import { Playback, SPEEDS, speedLabel, type Speed, type Step } from './playback.ts'
+import { treeLoader, type TreeCache } from './replay.ts'
 import { MESSAGE } from './ui.ts'
 import { useHiddenComposer } from './composer.ts'
 import { followTheme } from './theme.ts'
@@ -66,12 +68,23 @@ function TabBody({ sessionId, directories }: { sessionId: string, directories: (
 // visible (dsh publishes both heights on the scroll body).
 const BAND = { height: 'calc(var(--dsh-conversation-viewport-height, 100vh) - var(--dsh-composer-height, 0px))', minHeight: 320, position: 'relative' } as const
 
+// the playback speed, kept in this browser (playback.ts)
+const SPEED_KEY = 'layerfs-playback-speed'
+function savedSpeed(): Speed {
+  try {
+    const saved = localStorage.getItem(SPEED_KEY), n = Number(saved)
+    return saved !== null && (SPEEDS as readonly number[]).includes(n) ? n as Speed : 1
+  } catch { return 1 }
+}
+
 function Board({ sessionId, view, error }: { sessionId: string, view: SessionView, error: string | null }) {
   const host = useRef<HTMLDivElement>(null)
   const board = useRef<any>(null)
   const trees = useRef<TreeCache>(new Map())
-  const shown = useRef<string | null>(null)
-  const generation = useRef(0)
+  const play = useRef<{ playback: Playback, agents: string } | null>(null)
+  const speed = useRef<Speed>(savedSpeed())
+  const latest = useRef(view)
+  latest.current = view
 
   // the view lives as long as the tab; dsh's colour scheme sets its theme
   useEffect(() => {
@@ -84,36 +97,75 @@ function Board({ sessionId, view, error }: { sessionId: string, view: SessionVie
     })
     const unfollow = followTheme(root)
     board.current.rerender = () => { clearTimeout(soon); soon = setTimeout(() => board.current?.W && board.current.render(), 40) }
+    // the speed button, before Follow: 1× 2× 4× Max
+    const button = document.createElement('button')
+    button.className = 'ib'
+    const label = () => {
+      button.textContent = speedLabel(speed.current)
+      button.title = speed.current ? `Playback ${speedLabel(speed.current)}: each call stays on screen for its minimum time${speed.current > 1 ? ` ÷ ${speed.current}` : ''} · click for faster` : 'Playback Max: each call shows as it lands · click for 1×'
+    }
+    label()
+    button.onclick = () => {
+      speed.current = SPEEDS[(SPEEDS.indexOf(speed.current) + 1) % SPEEDS.length]
+      try { localStorage.setItem(SPEED_KEY, String(speed.current)) } catch { /* the speed lasts this tab only */ }
+      label()
+      play.current?.playback.nudge()
+    }
+    root.querySelector('[data-follow]')?.before(button)
     return () => {
       clearTimeout(soon)
+      play.current?.playback.stop()
+      play.current = null
       unfollow()
       board.current.dispose()
       board.current = null
-      shown.current = null
     }
   }, [sessionId])
 
-  // a new line rebuilds the model from all lines (labels follow call order)
+  // new lines queue on the playback; older ones show at once when the tab opens
   useEffect(() => {
-    const b = board.current, key = linesKey(view)
+    const b = board.current
     if (!b) return
-    b.acting = view.running.map((line) => view.agents[line.agentId] ?? line.agent)
-    if (key === shown.current) { if (b.W) b.render(); return }
-    const mine = ++generation.current, first = shown.current === null
-    shown.current = key
-    void replay(view, treeLoader(sessionId, trees.current), () => b.rerender()).then(({ W, last, agents }) => {
-      if (mine !== generation.current || board.current !== b) return
-      for (const name of ['main', ...agents]) b.avatar(name)
-      b.W = W
-      b.lastLoc = last ? X.locKey(X.where(W, last.a)) : null
-      if (b.follow && W.lastTab) b.active = W.lastTab
-      b.note = `${view.project!.name} · ${view.lines.length} calls${view.running.length ? ` · ${view.running.length} running` : ''}`
-      b.render()
-      if (!first && last) b.animate(last.a)
-    }, (e: Error) => { b.note = `The calls could not be replayed: ${e.message}` })
+    const agents = Object.values(view.agents).join(',')
+    let opening = false
+    if (!play.current || play.current.agents !== agents) {
+      // a rebuild (the tab opened, or an agent was named): labels follow call order
+      play.current?.playback.stop()
+      opening = true
+      const fresh = () => {
+        const engine: any = new X.ReplayEngine({ project: view.project?.name ?? 'project', loadTree: treeLoader(sessionId, trees.current) })
+        engine.onchange = () => b.rerender()
+        return X.storyView(engine, { lead: 'main' })
+      }
+      const playback: Playback = new Playback(fresh, (W, step) => show(b, W, step, playback), () => speed.current)
+      play.current = { playback, agents }
+    }
+    const lines = view.lines.map((line) => ({ ...line, agent: view.agents[line.agentId] ?? line.agent }))
+    const playback = play.current.playback
+    playback.feed(lines, 'main', opening).catch((e: Error) => { b.note = `The calls could not be replayed: ${e.message}` })
+    if (!opening && !playback.waiting && b.W) { b.acting = runningAgents(view); b.note = noteOf(view, playback); b.render() }
   }, [view, sessionId])
+
+  /** Draws the model after a step (its agent acting, the view following it) or once caught up. */
+  function show(b: any, W: any, step: Step | null, playback: Playback) {
+    if (board.current !== b) return
+    const v = latest.current
+    b.avatar('main')
+    if (step) b.avatar(step.a)
+    else for (const line of v.lines) b.avatar(v.agents[line.agentId] ?? line.agent)
+    b.W = W
+    if (step) { b.acting = [step.a]; b.lastLoc = X.locKey(X.where(W, step.a)) } else b.acting = runningAgents(v)
+    if (b.follow && W.lastTab) b.active = W.lastTab
+    b.note = noteOf(v, playback)
+    b.render()
+    if (step) b.animate(step.a)
+  }
 
   useEffect(() => { if (board.current && error) board.current.note = `LayerFS is not answering: ${error}` }, [error])
 
   return <div ref={host} style={BAND} />
 }
+
+const runningAgents = (view: SessionView) => view.running.map((line) => view.agents[line.agentId] ?? line.agent)
+const noteOf = (view: SessionView, playback: Playback) => `${view.project!.name} · ${view.lines.length} calls`
+  + (playback.waiting ? ` · ${playback.waiting} to play` : '') + (view.running.length ? ` · ${view.running.length} running` : '')

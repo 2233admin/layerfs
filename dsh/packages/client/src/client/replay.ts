@@ -1,7 +1,7 @@
-// A root session's trace lines replayed into the view model, the way the
-// design preview replays a trace file (?source=trace).
+// A project's LayerFS state as the view model, and saved trees on demand
+// (a session's trace lines are played by playback.ts).
 import * as X from '../../../model/src/index.js'
-import { api, type ProjectState, type SessionView } from './api.ts'
+import { api, type ProjectState } from './api.ts'
 
 /** Trees by real id, kept across rebuilds: a saved id never changes. */
 export type TreeCache = Map<string, Promise<object>>
@@ -65,21 +65,4 @@ function chronological(s: any, state: ProjectState) {
     if (id.startsWith('fork:')) s.branches[id.slice(5)].slot = slot
     else (s.commits[id] ?? s.layers[id]).slot = slot
   })
-}
-
-/** The lines' identity: a rebuild is needed only when it changes. */
-export const linesKey = (view: SessionView) => `${view.lines.length}:${view.lines.at(-1)?.id ?? ''}:${Object.values(view.agents).join(',')}`
-
-/**
- * Replays the lines on a fresh engine.
- * @returns the view model and the last drawn step
- */
-export async function replay(view: SessionView, loadTree: (real: string) => Promise<object>, onchange: () => void) {
-  const engine: any = new X.ReplayEngine({ project: view.project?.name ?? 'project', loadTree })
-  engine.onchange = onchange
-  const W: any = X.storyView(engine, { lead: 'main' })
-  const lines = view.lines.map((line) => ({ ...line, agent: view.agents[line.agentId] ?? line.agent }))
-  const steps = X.traceSteps(lines, { agent: 'main' })
-  for (const step of steps) await X.runStep(W, step, {})
-  return { W, last: steps.at(-1) ?? null, agents: [...new Set(lines.map((line) => line.agent as string))] }
 }

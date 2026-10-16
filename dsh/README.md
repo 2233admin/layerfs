@@ -63,6 +63,12 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
 
   An unbound session shows Setup: pick one of the folder's projects, or Init.
 
+  **Playback.** The tab plays calls one at a time, for real agents and demos alike. A bash call that mounts, runs, commits and unmounts a Workspace takes well under a second, so drawing only the latest state would never show its window. Instead:
+  - each new call stays on screen for a minimum time by kind ([`playback.ts`](packages/client/src/client/playback.ts)): a mount, a command or a background start 1.8 s, a Commit 1.6 s, a merge or publish 2 s, other writes 1.3 s, reads 0.9 s, and 1.5 s more for a refusal such as Conflict or Busy;
+  - calls that arrive meanwhile wait their turn, and the tab shows how many are left to play. A queue over 30 calls plays faster, so the tab stays about that far behind at most. No call is skipped;
+  - when the tab opens, calls that ended over 2 minutes ago appear at once and the rest play. A run that just started, such as a demo's Play, plays from its first call;
+  - the speed button beside Follow cycles 1×, 2×, 4× and Max (no hold: each call shows as it lands). The choice is kept in the browser.
+
   **Terminals and their command lines.** Every SDK call an agent makes prints one command line in one terminal. The single table for both is [`packages/model/src/cli.js`](packages/model/src/cli.js); `node packages/model/tests/cli.mjs` fails when an SDK or operator method has no row there.
 
   | Terminal | Prints | Calls |
