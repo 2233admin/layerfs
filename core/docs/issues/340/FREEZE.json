@@ -1,21 +1,21 @@
 {
   "schema": 1,
-  "revision": 1,
-  "createdAt": "2026-10-15T22:03:51.039132+00:00",
+  "revision": 2,
+  "createdAt": "2026-10-16T00:41:07.061287+00:00",
   "status": "Frozen diagnostic Crew campaign inputs; not release or benchmark evidence",
   "phase0Approval": "https://github.com/Ephemeral-AI-Lab/layerfs/issues/340#issuecomment-6202814124",
-  "reason": "Initial freeze after A1-A4 live gates; actual four-total-agent topology, per-agent Sandbox selection, ordinary shell preserving Node PATH, and owner-requested PR343 integrated before freeze",
+  "reason": "Closed B1 halt for P003 known unsent oversized call classification and P002/G001 Binary catalog/guide corrections, actual native R3 rebuild, and explicit live-proved host Node path; no application code, design, conflict history or lessons added",
   "product": {
-    "commit": "123fee2a22171fdb03ebad69e47f76c46231c763",
-    "tree": "75bf028b2029d842bbaf071f2893afafa214b64e",
+    "commit": "e6650057906f41c47327a4b67d8cb80f6d2a6bb9",
+    "tree": "3e495801d73a94d43a75c502ada0d1d7653c4e52",
     "binaries": {
       "layerfs-daemon": {
         "sha256": "47f354e5d92ea9e70032a8a28fbda052292ca761c76dd1e0a076b984247ceb8f",
         "bytes": 10054440
       },
       "layerfs.node": {
-        "sha256": "979602bcce9ccb8d6bad253006c3314e9ffd5d21863e99fc9d3a9b58a864b6b0",
-        "bytes": 3839728
+        "sha256": "3cbf8b55fdf2940d422349eb6d82ebc77b9816192f1fa77405f8de963c4b08dc",
+        "bytes": 3838912
       }
     },
     "runtimeImage": "sha256:091f785ba7d5d036dfa350e8fd69ee1fcd2d8320c3706841c8c95e6411eee9d2"
@@ -29,14 +29,14 @@
     "LANE-INSIGHT.md": "43eef4a3ad473242e9cf298d85cbd6a13744f08d97796adfbb10e9d083b3b8f6",
     "LANE-PEOPLE.md": "7f6c3d44b58e64564dbd3d9f35b60ac619c300ec948a7e745cd8c64cb8bd8c86",
     "ACCEPTANCE.md": "1f7d49c8d193309440b47d705608cf7b7ddc59266d530214432c191cc7179764",
-    "ENVIRONMENT.json": "73aa1a2f583970676b4515c3123eca73bc0b00c93272a5cdf9a25d903a8e248c",
+    "ENVIRONMENT.json": "303981292c85dab9db0afa21efcdcc04482f2d6f4bfe76d38e6342ee796236b8",
     "DEPENDENCIES.md": "e8450dfd9f2bfa946daf6cb0b383044c388b332726909c2a9e40a8a62ff1834e",
     "count-loc.mjs": "f73b6acb7d073e90631936ad62be8705a9c2a2f93c7e2097e7ca4f5c062f12ab",
     "count-loc.test.mjs": "df88b694b1e3bdb93d40c1484b2f927f464d023870ff6cee49c6d4774050f4e0"
   },
   "sdkFiles": {
     "sdk/js/package.json": "1ad038ae7a0931e29664ad96ce5e35c60a2f3c3ddfbb2ee65ed9ef90e4e35f2d",
-    "sdk/js/README.md": "24813c55e8c14a4bfd680ecf0b718878489b3c3a7331ccd633251145be609dae",
+    "sdk/js/README.md": "5c1545a587a77792f07ba008f689215f8516ddd817d3d0129f9dacd390a7e16e",
     "sdk/js/src/branch/diff_branches.js": "8b9d279fc6609197b97c2691b3b0269dd6354bc5d9b315c0b0197d004e4aabeb",
     "sdk/js/src/branch/diff_commits.js": "02ef823230adb4b9bc2d909cf2ac8a079ca2c9e95875cb52edc61181caf57940",
     "sdk/js/src/branch/fork.js": "e42845c250480d89c781b6d89aa62edfe93834a83ecd87efd9b17c870b4816be",
@@ -44,7 +44,7 @@
     "sdk/js/src/branch/merge.js": "4ef76841405a1f3fce7693a3b05009b269faa7a143ee4a4e8d4365aae61a8160",
     "sdk/js/src/branch/publish.js": "d169f80f9bc9d790f5291edc405145aeda07ab9b90f2e119d5e967f0a57b81ad",
     "sdk/js/src/client.js": "5a8f0bfac64c3d4f0d02efe62fe24bc40c09a6411cdbd4d8910c89da65c578f7",
-    "sdk/js/src/errors.js": "a80f63c5f63d9f38cb019f08a8efd3a5e32c3d39c2bd3f8feb573b385f3bf846",
+    "sdk/js/src/errors.js": "e8ae3f8d3e84309dd4c56c4dcbb4d7d9920a9d9264952c6e13c2d68a62dfda9d",
     "sdk/js/src/fs/apply.js": "a77f8cdeaadf10229b4644b3d9ae9d46d3e5f68a87a0a9d001f73394cc7e92eb",
     "sdk/js/src/fs/blame.js": "be4af521059b29b6e3071bd604800446457909b4b1a2015edddb4c78dd724d3d",
     "sdk/js/src/fs/cp.js": "8456af31f898620bb921917dad7cf4e5b7288249a94bcfe8abaf82057ed51685",
@@ -80,8 +80,8 @@
   "skillFiles": {
     ".agents/skills/layerfs-js-sdk/SKILL.md": "c30a51e0434ac02c03ecda3a01f11b12a49481d270e073788f1082fcf023db0c",
     ".agents/skills/layerfs-js-sdk/references/methods/branch.md": "a745e878163691dbf20107caa08772f6bb245171cf7fbd053e6e1ab999173625",
-    ".agents/skills/layerfs-js-sdk/references/methods/fs-read.md": "df59f3281504d0d65e610f652dfe3bb056c9e08fce0e0b002a740e4154ee3f4a",
-    ".agents/skills/layerfs-js-sdk/references/methods/fs-write.md": "4ed2aab129ebafd2035b7205205f20101236b5833ba4d10c4a413eda21fb416a",
+    ".agents/skills/layerfs-js-sdk/references/methods/fs-read.md": "bc4551c6aecdc95a96160cb483b850e04d1f79a85db9265d96888934dd4c6bcd",
+    ".agents/skills/layerfs-js-sdk/references/methods/fs-write.md": "226f52421093c1684e6afe5dbdca6c752dcf16613d124b808d1f04ebc7bfb5ae",
     ".agents/skills/layerfs-js-sdk/references/methods/project.md": "e7a259fb81465b5e94b8262e73042d6cce2d21a9ecc2e53f7a0991d6422a8f5f",
     ".agents/skills/layerfs-js-sdk/references/methods/sandbox.md": "02c8cce51d4c68ce0d1766a43ea6c9cffeb2ef97000da114ba066249f4fbe0bd",
     ".agents/skills/layerfs-js-sdk/references/rules/cargo.md": "821f89add935d62c4eaea3a9254db6ba19ab1cb8ac4696eecc1221bdb76bae15",
@@ -106,6 +106,13 @@
   "durable": "NOT_RUN — disabled by owner until explicit reauthorization",
   "constructionWorkers": 1,
   "cache": "unknown; tracing enabled; every number diagnostic",
-  "frozenBeforeBuild1Init": true,
-  "applicationImplementationSupplied": false
+  "frozenBeforeBuild1Init": false,
+  "applicationImplementationSupplied": false,
+  "previousFreeze": {
+    "revision": 1,
+    "commit": "4308d725fe110ecd787837b1d62ae95dd2d4c664",
+    "sha256": "897f623c3b666c621f6bf70852e9cbad6301d343ae6eb96872654522cbb1f718",
+    "archive": "frozen/revision-1/FREEZE.json"
+  },
+  "appliesTo": "B1 resumed clients; independent run is prepared only after completed B1 and its subsequent rebuild/freeze"
 }

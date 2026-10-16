@@ -74,7 +74,11 @@ original evidence; later understanding is added, never rewritten.
   87681 -> 87702 (delta +21), core 85836 -> 85857, SDK 1845 unchanged,
   reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).
   Exact first-parent/staged-tree comparison uses the pinned production counter;
-  the committed tree equals the counted staged tree. Rebuild/live proof pending.
+  the committed tree equals the counted staged tree. Actual native R3 builds
+  passed at `e6650057906f41c47327a4b67d8cb80f6d2a6bb9`; the host addon changed
+  to SHA-256 `3cbf8b55fdf2940d422349eb6d82ebc77b9816192f1fa77405f8de963c4b08dc`.
+  The daemon Cargo build ran and its existing binary hash remained unchanged.
+  Installed live proof remains pending.
 
 ### E-023 — Host result projection continued after a failed fs.apply
 
@@ -774,8 +778,15 @@ original evidence; later understanding is added, never rewritten.
   attempt described in E-027. Syntax preparation passed for product/test/fixture;
   packaging/lazy and all three actual trace cases pass. No fallback/replay occurs.
 - Verification: repository LOC/commit, native rebuild, installed identity and new
-  freeze remain pending at this entry. Existing runtime refusal handling did not
-  change. Live binary editing was not executed by this catalog correction.
+  freeze are recorded as they complete. Commit
+  `e6650057906f41c47327a4b67d8cb80f6d2a6bb9`, tree
+  `3e495801d73a94d43a75c502ada0d1d7653c4e52`, records Production LOC:
+  87702 -> 87702 (delta 0), core 85857 and SDK 1845 unchanged. The counted staged
+  tree equals the commit tree; the extra literal occupies an existing code line.
+  Reference is absent (retired R9c; last counted 65,417 at tree 498dd1917812).
+  Native R3 builds and packaging/dispatch with the actual new binding pass.
+  Existing runtime refusal handling did not change; live binary editing was not
+  executed by this catalog correction. New installed paths/freeze precede resume.
 - Effect on the run: the repair uses the explicitly halted, closed-resource
   boundary. No old selected client is reused and no Store/Branch reset occurs.
 - Source follow-up: fs-write guide line 72 also names NotText for binary editing,
