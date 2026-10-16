@@ -58,7 +58,7 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
   An unbound session shows Setup: pick one of the folder's projects, or Init.
 
   The composer is hidden while the tab shows; switch to Chat to send a message.
-- **The project picker** sits in the New Session row: a project of the folder or none, and a separate "+ Init" button that opens the Init dialog.
+- **The project chip** sits in the New Session row beside the preset chip, drawn like dsh's own chips. Its menu lists the folder's projects and "No LayerFS", with "Import project…" pinned below. Like "Add workspace…", Import opens the directory picker (Finder in dsh web on a Mac); the chosen folder becomes a new project attached to the workspace folder and is chosen for the session.
 - **The LayerFS page** (sidebar) has one tab per project. Each shows:
   - ellen_joe, with a line on where `main` is and what was published last;
   - the workspace the project is attached to, which you can change or detach (a session already on the project keeps it);
@@ -67,7 +67,7 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
   - "Remove project…", which asks for the project's name before removing it.
 
   Workspaces without a project offer Init.
-- **The Init dialog** (Setup, the picker and the page) imports the workspace folder by default. "Choose folder…" browses for another source: in the page where dsh offers it, otherwise with the native picker. The project is attached to the workspace folder either way. The name is optional and defaults to the source folder's.
+- **The Init dialog** (Setup and the page) imports the workspace folder by default. "Choose folder…" browses for another source: in the page where dsh offers it, otherwise with the native picker. The project is attached to the workspace folder either way. The name is optional and defaults to the source folder's.
 
 ### Preset
 
