@@ -31,6 +31,18 @@ Every Build 2 agent is fresh and spawned with `fork_turns: "none"`; give each a 
 standalone assignment with the input paths and run facts it needs. Build 2 uses a fresh
 Store, volume, HOME and trace. You may inspect only your current run's application.
 
+The run boundary also applies to collaboration metadata. Never call
+`collaboration.list_agents` without an explicit `path_prefix`, or with `/root` or
+another ancestor. If current-team inventory is needed, use only the exact unique
+current-run lead task path supplied by main as `TEAM_LEAD_TASK`:
+`collaboration.list_agents({"path_prefix": TEAM_LEAD_TASK})`. Do not infer this
+value from a host filesystem path. If it is absent, use known current-run task ids
+and direct messages, or request capacity information from main. Never discover or
+read other chats, thread histories, tasks or runs through another tool. Supply this
+same current-run scope to every worker and successor. Any unrelated prior-run
+summary or artifact exposure is a boundary event: stop work, preserve the original
+tool result and report it immediately without opening referenced artifacts.
+
 Do not edit LayerFS, the SDK, skill, runtime image or frozen dependencies. Send a
 BLOCKER with exact evidence for a suspected product defect. In Build 1 the main agent
 may HALT, repair and reauthorize new Sandboxes on the preserved Store. In Build 2 a

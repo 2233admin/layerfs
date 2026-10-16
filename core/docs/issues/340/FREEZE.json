@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "revision": 3,
-  "createdAt": "2026-10-16T05:06:50.627265+00:00",
+  "revision": 4,
+  "createdAt": "2026-10-16T05:58:07.848859+00:00",
   "status": "Frozen diagnostic Crew campaign inputs; not release or benchmark evidence",
   "phase0Approval": "https://github.com/Ephemeral-AI-Lab/layerfs/issues/340#issuecomment-6202814124",
-  "reason": "Post-completed-run actual rebuild at committed tip for independent deployment. Specification, team, prompts, lanes, dependencies and counter unchanged; no application implementation, notes, scripts or hints supplied.",
+  "reason": "Constrain collaboration metadata inventory to the unique current-run lead subtree. Filesystem and metadata boundaries now agree. Specification, team roles, lanes, acceptance, dependencies, counter, SDK, skill and native product unchanged; no application implementation or prior-run notes supplied.",
   "product": {
     "commit": "71c84b54323d19f55c536021acbf14a3b149399c",
     "tree": "cf7a6116066a7c88945194056fa93e893f989850",
@@ -23,13 +23,13 @@
   "files": {
     "SPEC.md": "22383c3fe049f389862f61b2e8874a85a386a39468d25e720c70e37e12415d80",
     "TEAM.md": "c078b6bfc454de62e924930f59f018c9e628e41af3bcaf89d65307ec707f62cb",
-    "LEAD-PROMPT.md": "7205e943c248a85f7d6836220d7f1aa0a4026191816520168fed3b9bc65ed36d",
-    "WORKER-PROMPT.md": "b3ed0ec52f32832ddd11a6fc8f4ec417901603b0cc1a9e8edc5a6f5262fa4573",
+    "LEAD-PROMPT.md": "f51cb84dc8766a17b9b16f992f6efb2c33441bc16edc2cc05a6efa561bd59e41",
+    "WORKER-PROMPT.md": "8263f143b176d94073cad6dda9810f374005d1da5f9e095b48c89559b3bbae9a",
     "LANE-WORK.md": "c9c7236e03dcc1b4a7d317a54528ddfa336b7934cb249b72eecee8ddde91a7f8",
     "LANE-INSIGHT.md": "43eef4a3ad473242e9cf298d85cbd6a13744f08d97796adfbb10e9d083b3b8f6",
     "LANE-PEOPLE.md": "7f6c3d44b58e64564dbd3d9f35b60ac619c300ec948a7e745cd8c64cb8bd8c86",
     "ACCEPTANCE.md": "1f7d49c8d193309440b47d705608cf7b7ddc59266d530214432c191cc7179764",
-    "ENVIRONMENT.json": "5ba0cb6fc9279a12cb237e165cc2f4d0d048ee28023eb61af5a9ea98f33367b4",
+    "ENVIRONMENT.json": "25623daf949888aa01de0f71434ede620ca17e91cf4826854cacce8cb0573430",
     "DEPENDENCIES.md": "e8450dfd9f2bfa946daf6cb0b383044c388b332726909c2a9e40a8a62ff1834e",
     "count-loc.mjs": "f73b6acb7d073e90631936ad62be8705a9c2a2f93c7e2097e7ca4f5c062f12ab",
     "count-loc.test.mjs": "df88b694b1e3bdb93d40c1484b2f927f464d023870ff6cee49c6d4774050f4e0"
@@ -109,12 +109,12 @@
   "frozenBeforeBuild1Init": false,
   "applicationImplementationSupplied": false,
   "previousFreeze": {
-    "revision": 2,
-    "commit": "71c84b54323d19f55c536021acbf14a3b149399c",
-    "sha256": "3d4e2543cbf2a6a75b57538501c2e9fe3785d4ef379feffb6e9b8837d73312bf",
-    "archive": "frozen/revision-2/FREEZE.json"
+    "revision": 3,
+    "commit": "336dcc455e506902da1cb0384787d7a523cd24e0",
+    "sha256": "6f37ec94aa55dd80923d6e07b07971e3bbc436f4be31f2aa99f7e21adcf5015b",
+    "archive": "frozen/revision-3/FREEZE.json"
   },
-  "appliesTo": "Fresh standalone independent runs after committing this freeze",
+  "appliesTo": "Fresh standalone independent runs after committing revision4",
   "nativeRebuild": {
     "path": "core/target/issue340/builds/r4/BUILD-IDENTITY.json",
     "sha256": "94b411cb62209ae79da97f65717f134f03990e979cc4dc748d178cf454d568b1",
@@ -122,5 +122,16 @@
     "productCodeTree": "3e495801d73a94d43a75c502ada0d1d7653c4e52",
     "actualBuilds": "locked/offline incremental host addon and Linux daemon; artifact hashes equal R3"
   },
-  "mustBeCommittedBeforeIndependentInit": true
+  "mustBeCommittedBeforeIndependentInit": true,
+  "frozenSourceParent": {
+    "commit": "336dcc455e506902da1cb0384787d7a523cd24e0",
+    "tree": "2edd934b313c8e72a96afe1795534af524dcde2e"
+  },
+  "metadataBoundary": {
+    "requiredDispatchField": "TEAM_LEAD_TASK",
+    "inventoryArgument": "path_prefix must equal the exact current-run lead canonical task path",
+    "unfilteredOrAncestorInventory": "forbidden",
+    "unrelatedThreadDiscovery": "forbidden"
+  },
+  "nativeBuildReuse": "Closed qualifying R4 build unchanged; no native/SDK/skill source change or new build claim."
 }

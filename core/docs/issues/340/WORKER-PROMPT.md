@@ -32,6 +32,16 @@ another run or Build 1 code/notes/reports in Build 2. A suspected LayerFS defect
 reported with evidence, never repaired or bypassed by you. Build 2 agents are fresh
 with `fork_turns: "none"`; no hidden earlier-run context is allowed.
 
+The run boundary includes collaboration metadata. The lead supplies
+`TEAM_LEAD_TASK`, the exact unique current-run lead canonical task path. Never call
+`collaboration.list_agents` without `path_prefix`, or with `/root` or any ancestor.
+If inventory is necessary, the only permitted scope is
+`collaboration.list_agents({"path_prefix": TEAM_LEAD_TASK})`. If that value is
+missing, use known current-run task ids/direct messages or ask the lead; do not
+guess a scope. Never discover or read other chats, histories, tasks or runs through
+another tool. If an unrelated prior-run summary or artifact is exposed, stop work,
+preserve the original tool result and tell the lead without opening references.
+
 Only explicit Disposable/WAL/synchronous=OFF global Store; Durable is
 `NOT_RUN — disabled by owner until explicit reauthorization`. Set
 `LAYERFS_CONSTRUCTION_WORKERS=1`. Preserve all shared LayerFS settings exactly.

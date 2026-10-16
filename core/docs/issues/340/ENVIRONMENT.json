@@ -1,5 +1,5 @@
 {
-  "status": "Frozen revision 3 diagnostic environment after completed run and actual native R4 rebuild",
+  "status": "Frozen revision4 diagnostic environment; explicit current-team collaboration metadata scope",
   "starting_main": "5d9008e479229f6d29b70923ca76d70bb2744e23",
   "product_source": "71c84b54323d19f55c536021acbf14a3b149399c",
   "runtime_image": "sha256:091f785ba7d5d036dfa350e8fd69ee1fcd2d8320c3706841c8c95e6411eee9d2",
@@ -54,5 +54,13 @@
   "host_node_path": "/usr/local/bin/node",
   "native_build_receipt": "core/target/issue340/builds/r4/BUILD-IDENTITY.json",
   "product_code_source": "e6650057906f41c47327a4b67d8cb80f6d2a6bb9",
-  "product_code_tree": "3e495801d73a94d43a75c502ada0d1d7653c4e52"
+  "product_code_tree": "3e495801d73a94d43a75c502ada0d1d7653c4e52",
+  "collaboration_metadata_boundary": {
+    "lead_task_path": "Main supplies TEAM_LEAD_TASK as the exact unique current-run lead canonical task path at dispatch.",
+    "inventory": "Only collaboration.list_agents({path_prefix: TEAM_LEAD_TASK}); never omitted, ancestor/root scope or unrelated chat/thread/history discovery.",
+    "capacity": "Main provides the available capacity; known current-run ids and direct messages suffice when inventory is unnecessary.",
+    "exposure": "Stop and report an unrelated prior-run result without opening references; preserve exact provenance.",
+    "qualified_probe": "Explicit current-run subtree filter returned only the selected lead and worker; no global inventory is required."
+  },
+  "native_build_reuse_for_prompt_revision": "R4 artifact identities retained. No native, SDK or skill input changed; this revision changes generic orchestration metadata scope only and does not claim another build."
 }
