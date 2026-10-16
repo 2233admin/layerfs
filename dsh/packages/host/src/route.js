@@ -11,6 +11,7 @@
 //   GET  /layerfs/projects                    every project and the folder it is attached to
 //   GET  /layerfs/project/<name>/state        the project as LayerFS reports it, with who made each node
 //   GET  /layerfs/project/<name>/tree?ref=<id>  as the session's tree route
+//   GET  /layerfs/project/<name>/storage      Store totals, what Init recorded, recent Commits' costs (storage.js)
 //   POST /layerfs/project/<name>/attach {folder}  attach to a workspace folder (null: detach)
 //   POST /layerfs/project/<name>/remove {confirm}  remove it (confirm: its name); see remove.js
 import { missingDeployment } from "./config.js";
@@ -83,6 +84,7 @@ export function registerRoutes(ctx, { spec, bindings, collector, trees, jobs = n
         if (!project) return send(res, 404, { code: "not-found", message: `no LayerFS project named ${decodeURIComponent(parts[1])}` });
         if (req.method === "GET" && parts[2] === "state") return send(res, 200, { ...(await trees.state(project, [])), ...collector.nodesOf(project.name) });
         if (req.method === "GET" && parts[2] === "tree") return sendTree(res, project, url.searchParams.get("ref"));
+        if (req.method === "GET" && parts[2] === "storage") return send(res, 200, await trees.storage(project));
         if (req.method === "POST" && parts[2] === "attach") {
           const body = await readJson(req);
           if (body.folder !== null && typeof body.folder !== "string") return send(res, 400, { code: "invalid-folder", message: "folder is a path or null" });

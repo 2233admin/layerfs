@@ -171,6 +171,22 @@ try {
   assert.deepEqual([opened, typeof stateA.s, typeof stateB.labels], [1, "object", "object"]);
   await shared.dispose();
 
+  // storage: Store totals and Init apart; every Branch's Commits once, newest first; main lists none
+  const C = (id, time) => ({ id, time, message: id, via: "fs", logical: 10, newCanonical: 5, newStored: 3, newMetadata: 1 });
+  const commitsOf = { feature: [C("c2", 2), C("c1", 1)], fix: [C("c3", 3), C("c1", 1)] };
+  const listed = [];
+  const stores = new TreeReader(h.spec, async () => ({
+    layerfs: {
+      sandboxes: new Set(), sandbox: { close: async () => {} },
+      project: { list_branches: async () => ({ items: ["main", "feature", "fix"].map((name) => ({ name })), hasMore: false }) },
+      branch: { list_commits: async (b) => (listed.push(b), { items: commitsOf[b], hasMore: false }) },
+    },
+    operator: { store: { stats: async () => ({ file: 4096, logical: 30, init: { entries: 3 } }) } },
+  }));
+  const storage = await stores.storage(P);
+  assert.deepEqual([storage.store, storage.init, storage.commits.map((c) => c.id), storage.branches, storage.partial, listed], [{ file: 4096, logical: 30 }, { entries: 3 }, ["c3", "c2", "c1"], 2, false, ["feature", "fix"]]);
+  await stores.dispose();
+
   // projects: listed with their folder; attach moves one, detach keeps sessions on it
   const OTHER = "/work/other";
   assert.deepEqual((await call("GET", "/layerfs/projects")).body.projects.map((p) => [p.name, p.folder]), [["website", FOLDER]]);
@@ -181,6 +197,7 @@ try {
   assert.equal(h.bindings.projectFor("session-other", FOLDER), null);
   assert.equal((await call("POST", "/layerfs/project/website/attach", { folder: 3 })).status, 400);
   assert.equal((await call("POST", "/layerfs/project/nope/attach", { folder: null })).status, 404);
+  assert.equal((await call("GET", "/layerfs/project/nope/storage")).status, 404);
   await call("POST", "/layerfs/project/website/attach", { folder: FOLDER });
 
   // Init: the source is counted first; the route answers a job, and the job its steps
