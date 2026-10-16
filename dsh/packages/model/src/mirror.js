@@ -27,7 +27,8 @@ export class Mirror {
     const known = this.toLabel.get(real);
     if (known) return known;
     const n = this.next[kind]++;
-    const label = kind === "sb" ? `sb_${String(n).padStart(2, "0")}` : `${kind}${n}`;
+    // a named Sandbox keeps its name; an older opaque sb_<hex> id gets sb_01, sb_02, …
+    const label = kind === "sb" ? (/^sb_[0-9a-f]{16,}$/.test(real) ? `sb_${String(n).padStart(2, "0")}` : real) : `${kind}${n}`;
     this.toLabel.set(real, label);
     this.toReal.set(label, real);
     return label;

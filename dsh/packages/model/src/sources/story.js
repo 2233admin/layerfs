@@ -122,7 +122,7 @@ async function runDemo(W, fr, env) {
   // its own event, so it prints in the project terminal under the agent.
   const liftCreates = (rec) => {
     for (const c of rec.calls.filter((x) => x.call === "sandbox.create")) {
-      W.hist.push({ agent: n, text: HIST["sandbox.create"](), out: outcome(c.call, c.outcome), t: seq, calls: callsOf({ calls: [c] }) });
+      W.hist.push({ agent: n, text: HIST["sandbox.create"](c.args), out: outcome(c.call, c.outcome), t: seq, calls: callsOf({ calls: [c] }) });
       if (c.outcome.ok) W.sbBy[c.outcome.result.id] = { made: n };
     }
     return rec;

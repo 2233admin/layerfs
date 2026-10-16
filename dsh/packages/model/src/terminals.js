@@ -9,7 +9,8 @@ export const HIST = {
   "branch.fork": (a) => `fork ${a.name} --from ${a.branch}`,
   "branch.merge": (a) => `merge ${a.branch} ${a.with} --name ${a.name}`,
   "branch.publish": (a) => `publish ${a.branch}`,
-  "sandbox.create": () => "sandbox create",
+  // name, project and image digest (shortened) as passed to sandbox.create(name, project, image)
+  "sandbox.create": (a = {}) => ["sandbox create", a.name, a.project && `--project ${a.project}`, a.image && `--image ${a.image.replace(/^(sha256:[0-9a-f]{12})[0-9a-f]+$/, "$1")}`].filter(Boolean).join(" "),
   "sandbox.close": (a) => `sandbox close ${a.sandbox}`,
 };
 

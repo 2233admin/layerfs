@@ -203,14 +203,15 @@ export function createView(root, o) {
   }
   // Main tab only. Sandboxes belong to the project, not to a Branch: one
   // Sandbox (one machine, one localhost) holds Workspaces of any Branch and any
-  // agent. A group per Sandbox: who created it, then a row per Workspace
+  // agent. A group per open Sandbox: who created it, then a row per Workspace
   // (agent, Branch, base, uncommitted, current / stale / conflict, process).
+  // A closed Sandbox leaves the list; its close stays in the project terminal.
   function sandboxesHtml() {
     const W = v.W, s = W.engine.s, open = s.sandboxOrder.filter((id) => !s.sandboxes[id].closed);
     const by = (id) => W.sbBy[id] || {};
     const forBranch = (id) => W.demo && Object.keys(W.demo.e.branchSandbox || {}).find((b) => W.demo.e.branchSandbox[b] === id);
     let nWs = 0, nProc = 0;
-    const groups = [...s.sandboxOrder].sort((a, b) => s.sandboxes[a].closed - s.sandboxes[b].closed).map((id) => {
+    const groups = open.map((id) => {
       const sb = s.sandboxes[id], n = by(id).made, br = forBranch(id);
       const rows = sb.wsOrder.filter((p) => sb.workspaces[p].mounted).map((p) => {
         const w = sb.workspaces[p], k = `${id}:${p}`, vw = W.ws[k], agent = vw ? vw.agent : null, B = W.branches[w.branch];
@@ -222,13 +223,13 @@ export function createView(root, o) {
           + `<span class="bchip" style="--bc:${B ? `var(${B.color})` : "var(--text-3)"}">${esc(w.branch)}</span><span class="at">@${esc(base)}</span>${dirty ? `<span class="st">+${dirty}</span>` : ""}${state}${run.length ? `<span class="st run">● ${esc(run[0].command)}</span>` : ""}</button>`;
       });
       const branches = new Set(sb.wsOrder.filter((p) => sb.workspaces[p].mounted).map((p) => sb.workspaces[p].branch));
-      const made = (n ? (by(id).service ? `${n}'s SDK service Sandbox` : `created by ${n}`) : "created outside dsh") + (br ? ` · ${br}'s agents share it` : "") + (sb.closed && by(id).closed ? ` · closed by ${by(id).closed}` : "");
-      return `<div class="sbg${sb.closed ? " closed" : ""}" data-sbcol="${esc(id)}" data-sbhl="${esc(id)}"><div class="sbh"><span class="d${sb.closed ? " off" : rows.length ? "" : " idle"}"></span><b>${esc(id)}</b><span class="mk">${n ? mascot(n, true) : ""}${esc(made)}</span><span class="sp"></span>`
-        + `<span class="ct">${sb.closed ? "closed" : rows.length ? `${rows.length} Workspace${rows.length === 1 ? "" : "s"}` : "idle"}</span></div>`
+      const made = (n ? (by(id).service ? `${n}'s SDK service Sandbox` : `created by ${n}`) : "created outside dsh") + (br ? ` · ${br}'s agents share it` : "");
+      return `<div class="sbg" data-sbcol="${esc(id)}" data-sbhl="${esc(id)}"><div class="sbh"><span class="d${rows.length ? "" : " idle"}"></span><b>${esc(id)}</b><span class="mk">${n ? mascot(n, true) : ""}${esc(made)}</span><span class="sp"></span>`
+        + `<span class="ct">${rows.length ? `${rows.length} Workspace${rows.length === 1 ? "" : "s"}` : "idle"}</span></div>`
         + (branches.size > 1 ? `<div class="dnote">${branches.size} Branches share this machine and its localhost</div>` : "") + rows.join("") + `</div>`;
     });
     return `<section class="term sblist"><div class="thead"><span class="kind sandbox">SANDBOXES</span><span class="ttl">${open.length} · ${nWs} Workspace${nWs === 1 ? "" : "s"} · ${nProc} process${nProc === 1 ? "" : "es"}</span></div>
-      <div class="tbody">${groups.join("") || `<span class="out">no Sandboxes yet · any agent may create one (sandbox.create)</span>`}</div></section>`;
+      <div class="tbody">${groups.join("") || `<span class="out">no open Sandboxes · any agent may create one (sandbox.create)</span>`}</div></section>`;
   }
   // Hovering anything tagged with a Sandbox lights it up: its group on main,
   // and in a Branch tab every pane on that machine.

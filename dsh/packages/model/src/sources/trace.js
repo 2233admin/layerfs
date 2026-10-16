@@ -163,6 +163,8 @@ export class ReplayEngine {
       }
       case "sandbox.create": {
         const id = this.sandbox(line.sandbox);
+        // a name is free again once its Sandbox closes: a new create starts a fresh entry
+        if (s.sandboxes[id].closed) s.sandboxes[id] = { id, closed: false, workspaces: {}, wsOrder: [], processes: {}, procOrder: [] };
         return ok("Ready", { kind: "Ready", id });
       }
       case "sandbox.close": {
@@ -252,6 +254,7 @@ export function stepOf(E, line, agent) {
   switch (line.method) {
     case "project.init": return { ...base, call: "project.init", args: { name: E.project, path: a.path } };
     case "branch.fork": return a.from && a.from !== "main" ? { ...base, call: "branch.fork", args: { name: a.name, branch: E.ref(a.from) } } : { ...base, call: "main.fork", args: { name: a.name } };
+    case "sandbox.create": return { ...base, call: "sandbox.create", args: { name: a.name, project: E.project, image: a.image } };
     case "sandbox.mount": return { ...base, call: "sandbox.mount", args: { branch: a.branch, sandbox: E.sandbox(a.sandbox) } };
     case "sandbox.close": return { ...base, call: "sandbox.close", args: { sandbox: E.sandbox(a.sandbox) } };
     case "sandbox.exec": return { ...base, sh: a.command, args: {}, bind: bind(a.path) };
