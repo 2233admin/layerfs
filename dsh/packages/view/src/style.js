@@ -62,7 +62,14 @@ export const CSS = `
 /* work area */
 .lfs .work { flex: 1; min-height: 0; display: grid; gap: 6px; padding: 6px; background: var(--grid-bg); }
 .lfs.lfs-project { display: flex; flex-direction: column; min-height: 0; background: var(--window); }
-.lfs .work.projectview { grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.3fr); }
+.lfs .work.projectview { grid-template-columns: minmax(240px, var(--hist, 55%)) 12px minmax(280px, 1fr); gap: 0; }
+.lfs.lfs-project { container-type: inline-size; }
+.lfs .split { cursor: col-resize; position: relative; touch-action: none; }
+.lfs .split::after { content: ""; position: absolute; top: 0; bottom: 0; left: 5px; width: 2px; border-radius: 1px; background: transparent; transition: background .15s; }
+.lfs .split:hover::after, .lfs .work.dragging .split::after { background: var(--accent); }
+.lfs .work.dragging { cursor: col-resize; user-select: none; }
+@container (max-width: 640px) { .lfs .work.projectview { grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(320px, 1fr); gap: 6px; } .lfs .split { display: none; } }
+.lfs .ptitle { font-size: 12px; font-weight: 500; color: var(--term-text); overflow: hidden; text-overflow: ellipsis; }
 .lfs .work.mainview { grid-template-columns: minmax(240px, .9fr) minmax(300px, 1fr) minmax(320px, 1.4fr); }
 .lfs .work.branchview { grid-template-columns: minmax(240px, 1fr) minmax(300px, 1.55fr) minmax(300px, 1.3fr); }
 .lfs .work.branchview.wide { grid-template-columns: minmax(200px, .7fr) minmax(260px, 1fr) minmax(320px, 1.7fr); }
@@ -109,7 +116,6 @@ export const CSS = `
 .lfs .graphwrap { flex: 1; min-height: 0; overflow: auto; padding: 6px 4px; }
 .lfs svg.graph { display: block; }
 .lfs svg.graph text { font-family: var(--font); fill: var(--term-text); }
-.lfs svg.graph .row-line { stroke: var(--term-border); stroke-dasharray: 2 4; }
 .lfs svg.graph .rowband { fill: var(--accent-bg); }
 .lfs svg.graph .edge { fill: none; stroke: var(--term-dim); stroke-width: 1.8; }
 .lfs svg.graph .edge.main { stroke: var(--purple); stroke-width: 2.4; }
@@ -126,9 +132,26 @@ export const CSS = `
 .lfs svg.graph .mbadge.stale circle { fill: var(--red); }
 .lfs svg.graph .mbadge text { fill: #fff; font: 700 8.5px var(--font); }
 .lfs svg.graph .popin { animation: lfs-popin .5s .3s both cubic-bezier(.2,.9,.3,1.35); transform-box: fill-box; transform-origin: center; }
-.lfs svg.graph .rt { font: 11.5px var(--mono); fill: var(--term-text); }
-.lfs svg.graph .rt .dim { fill: var(--term-dim); }
-.lfs svg.graph .rt .hd { font-weight: 700; fill: var(--accent); }
+/* History rows beside the lanes: id · Branch · message · author · head */
+.lfs .gview { display: flex; align-items: flex-start; min-width: 0; }
+.lfs .gview svg.graph { flex: none; }
+.lfs .glabels { flex: 1; min-width: 0; }
+.lfs .grow { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; font: 12px var(--font); color: var(--term-text); white-space: nowrap; text-align: left; }
+.lfs .grow:hover { background: var(--sep); }
+.lfs .grow.sel { background: var(--accent-bg); }
+.lfs .grow > * { flex: none; }
+.lfs .grow .gid { font: 600 12px var(--mono); min-width: 2.6em; }
+.lfs .grow .gid.dim { font-weight: 400; color: var(--term-dim); }
+.lfs .grow .gbr { font-weight: 500; }
+.lfs .grow .gmsg { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-2); }
+.lfs .grow .gby { font-weight: 500; color: var(--text-2); }
+.lfs .grow .ghead { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 999px; background: var(--accent-bg); color: var(--t-blue); }
+.lfs .grow.popin { animation: lfs-fadein .4s .3s both; }
+.lfs .blist { padding: 6px; }
+.lfs .brow { height: 32px; }
+.lfs .brow .bdot { width: 8px; height: 8px; border-radius: 50%; }
+.lfs .brow .gbr { flex: 0 0 26%; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lfs .brow .age { color: var(--term-dim); min-width: 2.5em; text-align: right; }
 @keyframes lfs-popin { from { transform: scale(0); } to { transform: scale(1); } }
 .lfs .rows { flex: 1; min-height: 0; overflow: auto; padding: 4px; }
 .lfs .brow { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 6px; cursor: pointer; min-height: 32px; transition: background .25s; }

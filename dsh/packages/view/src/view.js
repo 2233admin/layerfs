@@ -6,9 +6,9 @@
 //            Files) or a Branch view (FS terminal, Workspace panes, History or Files)
 //   status   running processes
 //   overlay  avatars, bubbles and flying blocks, placed relative to the root
-// With `project`, it draws one project instead: History and Files side by
-// side (Files follows the History node clicked), without tabs, terminals or
-// avatars.
+// With `project`, it draws one project instead: History (or its Branches)
+// and Files side by side with a divider to drag (Files follows the History
+// node or Branch clicked), without tabs, terminals or avatars.
 // The host owns the clock: it sets W, then calls render(), and animate() for
 // the call that just happened.
 import * as X from "../../model/src/index.js";
@@ -88,7 +88,7 @@ export function createView(root, o) {
 
   // ---------------------------------------------------------------- state
   const v = {
-    W: null, FM, lineDiff: o.lineDiff, live: !!o.live, project: PROJECT, rightMode: {}, active: "main", follow: true,
+    W: null, FM, lineDiff: o.lineDiff, live: !!o.live, project: PROJECT, rightMode: {}, active: "main", follow: true, left: "history",
     acting: new Set(), lastLoc: null, colorOf, render: () => render(),
   };
   const files = createFiles(v);
@@ -165,7 +165,7 @@ export function createView(root, o) {
         <div class="tbody" data-scroll="hist">${histLines}</div>${inrow("project · branch · sandbox create/close")}</section></div>
       <div class="col"><section class="term blist"><div class="thead"><span class="kind plain">BRANCHES</span><span class="ttl">${W.order.length} · by activity</span><span class="sp"></span>${counts()}</div>
         <div class="rows">${rows}</div></section>${sandboxesHtml()}</div>
-      ${W.mainHead ? rightCol("main", "main", W.mainHead, graph(W, colorOf, null, "main")) : `<div class="col"><div class="empty">No project yet</div></div>`}`;
+      ${W.mainHead ? rightCol("main", "main", W.mainHead, graph(W, colorOf, null, "main", pinnedAt("main"))) : `<div class="col"><div class="empty">No project yet</div></div>`}`;
   }
 
   function branchView(b) {
@@ -188,7 +188,7 @@ export function createView(root, o) {
       <div class="col">${wss.length ? `<div class="panes" style="grid-template-columns:${cols}">${panes}</div>`
         : `<div class="empty"><div><h3>No Workspace mounted on ${esc(b)}</h3>fs calls edit this Branch directly.<br>A <code>sandbox.mount</code> opens a pane here.${recent ? `<div class="recent">${recent}</div>` : ""}</div></div>`}
         <div class="bench" data-loc="bench" style="border-top:0;min-height:48px;background:var(--term);border-radius:8px;box-shadow:0 0 0 1px var(--term-border)"><b>Recently here</b>${X.recentlyOn(W, b).length ? "" : `<span>nobody in the last ${RECENT_S} s</span>`}</div></div>
-      ${rightCol(b, b, headId, graph(W, colorOf, scope, b))}`;
+      ${rightCol(b, b, headId, graph(W, colorOf, scope, b, pinnedAt(b)))}`;
   }
 
   // ---------------------------------------------------------------- Sandboxes and status
@@ -241,11 +241,30 @@ export function createView(root, o) {
   }
 
   // ---------------------------------------------------------------- render
+  /** The node a tab's Files is fixed at, or null while it follows the head. */
+  function pinnedAt(tab) { const at = files.filesOf(tab).at; return at === "latest" ? null : at; }
+  const ago = (ms) => { const m = Math.max(0, Math.round(ms / 60000)); return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`; };
+  /** Every Branch with its head, newest first: what a project page is usually opened for. */
+  function branchesHtml() {
+    const W = v.W, s = W.engine.s, now = Date.now(), timeOf = (b) => (s.commits[W.branches[b].head] || {}).time || 0;
+    const row = (b) => {
+      const B = W.branches[b], head = B.head, c = s.commits[head], by = W.attrib[head], open = !head.startsWith("fork:");
+      return `<button class="grow brow${pinnedAt("main") === head ? " sel" : ""}" data-node="${esc(head)}" title="Show ${esc(b)} in Files"><span class="bdot" style="background:var(${B.color})"></span><span class="gbr">${esc(b)}</span>`
+        + `<span class="gid${open ? "" : " dim"}">${open ? esc(head) : "no Commits"}</span><span class="gmsg">${c ? esc(c.message || c.via || "") : `from ${esc(s.branches[b].from || "main")}`}</span>`
+        + `${by ? `<span class="gby"${colorOf(by) ? ` style="color:${colorOf(by)}"` : ""}>${esc(by)}</span>` : ""}<span class="age">${c && c.time ? ago(now - c.time) : ""}</span></button>`;
+    };
+    const rows = [...W.order].sort((a, b) => timeOf(b) - timeOf(a)).map(row).join("");
+    return `<div class="graphwrap blist">${rows || `<div class="empty">No Branches yet: an agent's fork makes one</div>`}</div>`;
+  }
   function projectView() {
-    const W = v.W, name = W.engine.s.project ? W.engine.s.project.name : "project";
-    return `<div class="col"><section class="term"><div class="thead"><span class="kind history">HISTORY</span><span class="ttl">${esc(name)} · main @ ${esc(W.mainHead || "–")}</span></div>
-        <div class="graphwrap" data-scroll>${W.mainHead ? graph(W, colorOf, null, "main") : `<div class="empty">No history yet</div>`}</div></section></div>
-      <div class="col"><section class="term"><div class="thead"><span class="kind plain">FILES</span><span class="ttl">click a History node to look there</span></div>${W.mainHead ? files.filesHtml("main") : ""}</section></div>`;
+    const W = v.W, at = pinnedAt("main"), n = at && W.nodes[at];
+    const where = !at ? `main @ ${W.mainHead || "–"}` : at.startsWith("fork:") ? `the fork point of ${at.slice(5)}` : `${at}${n ? ` (${n.branch || "main"})` : ""}`;
+    const seg = (id, label) => `<button class="${v.left === id ? "on" : ""}" data-left="${id}">${label}</button>`;
+    const left = v.left === "branches" ? branchesHtml()
+      : `<div class="graphwrap" data-scroll>${W.mainHead ? graph(W, colorOf, null, "main", at) : `<div class="empty">No history yet</div>`}</div>`;
+    return `<div class="col"><section class="term"><div class="thead"><span class="seg">${seg("history", "History")}${seg("branches", "Branches")}</span><span class="sp"></span><span class="ttl">${W.order.length} Branch${W.order.length === 1 ? "" : "es"}</span></div>${left}</section></div>
+      <div class="split" data-split role="separator" aria-orientation="vertical" aria-label="Resize History and Files"></div>
+      <div class="col"><section class="term"><div class="thead"><span class="ptitle">Files at ${esc(where)}</span></div>${W.mainHead ? files.filesHtml("main") : ""}</section></div>`;
   }
   function render() {
     const W = v.W;
@@ -506,6 +525,8 @@ export function createView(root, o) {
     if (ro) { rosterMenu(ro); return; }
     const r = e.target.closest("[data-right]");
     if (r) { const [t, m] = r.dataset.right.split(":"); v.rightMode[t] = m; render(); return; }
+    const lf = e.target.closest("[data-left]");
+    if (lf) { v.left = lf.dataset.left; render(); return; }
     const op = e.target.closest("[data-open]");
     if (op) openTab(op.dataset.open);
     else if (!e.target.closest("[data-more]") && !e.target.closest(".menu")) closeMenu();
@@ -519,6 +540,17 @@ export function createView(root, o) {
   const onOut = (e) => { const n = e.target.closest && e.target.closest("svg.graph [data-node]"); if (n && !n.contains(e.relatedTarget)) hideCard(); };
   const onCardEnter = () => clearTimeout(cardTimer), onCardLeave = () => hideCard();
   const onChange = (e) => files.change(e);
+  // the project page's divider: History takes the share of the width it is dragged to (25–75%)
+  const onSplit = (e) => {
+    const bar = e.target.closest && e.target.closest("[data-split]");
+    if (!bar) return;
+    e.preventDefault();
+    const work = layout.work, box = work.getBoundingClientRect();
+    const move = (m) => { const share = Math.min(75, Math.max(25, ((m.clientX - box.left) / box.width) * 100)); work.style.setProperty("--hist", share.toFixed(1) + "%"); };
+    const up = () => { removeEventListener("pointermove", move); removeEventListener("pointerup", up); work.classList.remove("dragging"); };
+    work.classList.add("dragging");
+    addEventListener("pointermove", move); addEventListener("pointerup", up);
+  };
   const place = () => { if (!PROJECT) placeCrabs(); };
   root.addEventListener("click", onClick);
   root.addEventListener("mouseover", onOver);
@@ -526,6 +558,7 @@ export function createView(root, o) {
   card.addEventListener("mouseenter", onCardEnter);
   card.addEventListener("mouseleave", onCardLeave);
   root.addEventListener("change", onChange);
+  layout.work.addEventListener("pointerdown", onSplit);
   addEventListener("resize", place);
   // narrow layouts scroll a column: avatars stay with their hosts
   root.addEventListener("scroll", place, { capture: true, passive: true });
@@ -552,6 +585,7 @@ export function createView(root, o) {
       root.removeEventListener("mouseover", onOver);
       layout.work.removeEventListener("mouseout", onOut);
       root.removeEventListener("change", onChange);
+      layout.work.removeEventListener("pointerdown", onSplit);
       removeEventListener("resize", place);
       root.removeEventListener("scroll", place, { capture: true });
       if (resize) resize.disconnect();
