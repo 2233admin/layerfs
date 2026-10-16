@@ -55,9 +55,11 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
   const play = () => {
     setError(null)
     setPlaying({ step: 'session' })
+    // either way the demo's record is read again at once: its Session and run
+    const refresh = () => demoApi.demo(demo.id).then(setDemo, () => { /* the next poll reads it */ })
     playDemo(services(), info, demo, mode, setPlaying).then(
-      () => setPlaying(null),
-      (failure) => { setPlaying(null); setError(failure instanceof Error ? failure.message : String(failure)) },
+      () => { setPlaying(null); void refresh() },
+      (failure) => { setPlaying(null); setError(failure instanceof Error ? failure.message : String(failure)); void refresh() },
     )
   }
 
@@ -88,7 +90,8 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
         <span role="group" aria-label="LayerFS" style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid color-mix(in srgb, currentColor 18%, transparent)' }}>
           {choice('sim', 'Sim')}{choice('live', 'Live')}
         </span>
-        <Button variant="secondary" size="sm" disabled={playing !== null || running} onClick={play}
+        {/* Replay works mid-run too: the old Session is archived with its work stopped */}
+        <Button variant="secondary" size="sm" disabled={playing !== null} onClick={play} title={running ? 'Stop this run and play the demo again' : undefined}
           icon={run ? <IconRefreshOutlineRegular size={14} /> : <IconPlayOutlineRegular size={14} />}>{run ? 'Replay' : 'Play'}</Button>
       </div>
     </div>

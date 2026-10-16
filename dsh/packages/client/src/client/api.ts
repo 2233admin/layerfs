@@ -83,7 +83,8 @@ export const api = {
   projectState: (name: string) => call<ProjectState>('GET', `/project/${encodeURIComponent(name)}/state`),
   projectStorage: (name: string) => call<Storage>('GET', `/project/${encodeURIComponent(name)}/storage`),
   projectTree: (name: string, ref: string) => call<{ tree: Record<string, unknown>, partial: string | null }>('GET', `/project/${encodeURIComponent(name)}/tree?ref=${encodeURIComponent(ref)}`),
-  remove: (name: string) => call<{ removed: string, volume: string }>('POST', `/project/${encodeURIComponent(name)}/remove`, { confirm: name }),
+  /** stopSandboxes: stop the project's running Sandboxes instead of refusing (a demo's own project) */
+  remove: (name: string, stopSandboxes = false) => call<{ removed: string, volume: string }>('POST', `/project/${encodeURIComponent(name)}/remove`, { confirm: name, stopSandboxes }),
   attach: (name: string, folder: string | null) => call<{ project: Project }>('POST', `/project/${encodeURIComponent(name)}/attach`, { folder }),
   tree: (id: string, ref: string) => call<{ tree: Record<string, unknown>, partial: string | null }>('GET', `/session/${sid(id)}/tree?ref=${encodeURIComponent(ref)}`),
 }

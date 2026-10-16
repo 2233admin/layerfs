@@ -108,6 +108,12 @@ try {
   assert.ok(Number.isInteger(app.items[0].inode));
   assert.match((await lf.fs.read("main", "/app/page.tsx")).text, /<h1>Welcome<\/h1>/);
   assert.equal((await lf.fs.read("main", "/app/page.tsx", 4, 4)).text, "      <h1>Welcome</h1>\n");
+  const blame = await lf.fs.blame("main", "/app/page.tsx");
+  const welcome = blame.lines.find((l) => l.text.includes("Welcome"));
+  assert.equal(welcome.n, 4);
+  assert.match(welcome.commit, ID.commit, "main's lines are credited to the Commit that wrote them");
+  assert.equal(welcome.message, "welcome");
+  assert.match(blame.lines[0].commit, ID.layer, "an unchanged line is the Init Layer's");
   const both = await lf.branch.merge("feature", "main", "both");
   assert.equal(both.kind, "Merged");
   assert.equal(both.fastForward, true);

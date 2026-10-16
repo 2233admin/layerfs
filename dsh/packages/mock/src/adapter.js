@@ -30,15 +30,16 @@ export function createAdapter(Base, scenarios, { typingMs = 18, progress, intro 
 
     async *stream(options) {
       const { signal } = options;
+      let scenario, agent;
       try {
-        const scenario = scenarios.get(options.model);
+        scenario = scenarios.get(options.model);
         if (!scenario) return yield failure(`no mock scenario named ${options.model}; scenarios: ${[...scenarios.keys()].join(", ") || "none"}`, "MOCK_NO_SCENARIO");
         const offered = offeredTools(options);
         // dsh's own requests without tools (a session title): the scenario's title
         if (!offered.size) return yield* text(scenario.title, 0, signal);
         // a demo Session that opens with the intro question is not a run
         if (intro && firstUserText(options.messages ?? []) === intro) return yield* text(introOf(scenario), typingMs, signal);
-        const agent = agentOf(scenario, options.messages ?? []);
+        agent = agentOf(scenario, options.messages ?? []);
         const reply = nextReply(scenario, agent, options.messages ?? []);
         progress?.report(scenario.name, agent, reply, options.sessionId);
         if (reply.kind === "error") return yield failure(`LayerFS mock (${scenario.name}, ${agent}): ${reply.message}`, "MOCK_SCENARIO_STOPPED");
@@ -55,7 +56,10 @@ export function createAdapter(Base, scenarios, { typingMs = 18, progress, intro 
         }
         yield { type: "finish", reason: { kind: "tool-calls" } };
       } catch (error) {
-        if (signal?.aborted) return yield { type: "finish", reason: { kind: "aborted", failure: { message: "mock request aborted", code: "ABORTED" } } };
+        if (signal?.aborted) {
+          if (scenario && agent) progress?.stop(scenario.name, agent);
+          return yield { type: "finish", reason: { kind: "aborted", failure: { message: "mock request aborted", code: "ABORTED" } } };
+        }
         yield failure(error instanceof Error ? error.message : String(error), "MOCK_FAILED");
       }
     }

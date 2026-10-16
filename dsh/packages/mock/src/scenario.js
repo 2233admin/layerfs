@@ -6,17 +6,20 @@
 //
 // scenario.json:
 //   { type: "layerfs-mock-scenario", version: 2, title, blurb?, fixture?,
-//     order?, agents: { root: Step[], <child>: Step[], … } }
-// `order` places the demo in lists (lower first; unordered ones last, by name).
+//     order?, speed?, lib?, agents: { root: Step[], <child>: Step[], … } }
+// `order` places the demo in lists (lower first; unordered ones last, by name);
+// `speed` is the LayerFS tab's playback speed the demo starts at (1, 2 or 4).
 // A step is one of:
 //   { <tool>: args, say?, phase?, note?, expect?, retry?, as? }   one tool call
 //   { reply: "…", until?: [child, …], phase?, note? }   the agent's text; ends its turn
 //   { pause: ms }                                      pacing before the next step
-// Tools and their arguments are the preset's (see TOOLS). Two conveniences:
+// Tools and their arguments are the preset's (see TOOLS). Three conveniences:
 // `bash.script` names a file under the scenario folder that becomes
-// `command` (fed to node on stdin), and "@name" in an id argument names the
-// child started by `subagent` with description `name`, or the background job
-// a bash step started with `as: name`.
+// `command` (fed to node on stdin); `bash.run` lists calls [name, ...args] of
+// the module `lib` names (a path from the scenario folder), and becomes a
+// command that imports it and awaits each in turn; and "@name" in an id
+// argument names the child started by `subagent` with description `name`, or
+// the background job a bash step started with `as: name`.
 // After a reply the agent's next turn starts when it is woken: the root by
 // the children in `until` finishing (or by a new user message), a child by
 // a message from its parent. `say` is said before the call; `phase` and
@@ -25,15 +28,18 @@
 // `retry: { on, times, wait }` runs the step again when its result matches.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const TYPE = "layerfs-mock-scenario";
 const DELIMITER = "JS";
 const NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const REF = /^@([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)$/;
+const CALL = /^[A-Za-z_$][\w$]*$/;
+const SPEEDS = [1, 2, 4];
 
 /** The preset's tools: argument names, and which arguments are agent or job ids. */
 export const TOOLS = {
-  bash: { args: ["description", "command", "script", "timeoutMs", "workdir", "run_in_background"], required: ["description"] },
+  bash: { args: ["description", "command", "script", "run", "timeoutMs", "workdir", "run_in_background"], required: ["description"] },
   subagent: { args: ["description", "prompt", "cwd"], required: ["description", "prompt"] },
   send_message: { args: ["agent_id", "message"], required: ["agent_id", "message"], agent: "agent_id" },
   interrupt_agent: { args: ["agent_id"], required: ["agent_id"], agent: "agent_id" },
@@ -78,12 +84,18 @@ export function loadScenario(folder) {
 export function compileScenario(raw, { name, folder, where = name }) {
   const fail = (path, message) => { throw new ScenarioError(`${where} ${path}`, message); };
   if (!isObject(raw)) fail("", "must be an object");
-  only(raw, ["type", "version", "title", "blurb", "fixture", "order", "agents"], "", fail);
+  only(raw, ["type", "version", "title", "blurb", "fixture", "order", "speed", "lib", "agents"], "", fail);
   if (raw.type !== TYPE) fail("type", `must be "${TYPE}"`);
   if (raw.version !== 2) fail("version", "must be 2");
   if (typeof raw.title !== "string" || !raw.title) fail("title", "must be a non-empty string");
   if (raw.blurb !== undefined && typeof raw.blurb !== "string") fail("blurb", "must be a string");
   if (raw.order !== undefined && !Number.isInteger(raw.order)) fail("order", "must be an integer");
+  if (raw.speed !== undefined && !SPEEDS.includes(raw.speed)) fail("speed", `is one of ${SPEEDS.join(", ")}`);
+  let lib = null;
+  if (raw.lib !== undefined) {
+    lib = resolve(folder, String(raw.lib));
+    if (!existsSync(lib) || !statSync(lib).isFile()) fail("lib", `${raw.lib} is not a file`);
+  }
   let fixture = null;
   if (raw.fixture !== undefined) {
     fixture = resolve(folder, String(raw.fixture));
@@ -96,7 +108,7 @@ export function compileScenario(raw, { name, folder, where = name }) {
   for (const [agent, steps] of Object.entries(raw.agents)) {
     if (!NAME.test(agent)) fail(`agents.${agent}`, "an agent name is lowercase letters, digits and -");
     if (!Array.isArray(steps) || !steps.length) fail(`agents.${agent}`, "must be a non-empty list of steps");
-    agents[agent] = compileSteps(steps, `agents.${agent}`, { agent, folder, fail, prompts, parents });
+    agents[agent] = compileSteps(steps, `agents.${agent}`, { agent, folder, lib, fail, prompts, parents });
   }
   for (const [child, parent] of parents) {
     if (!agents[child]) fail(`agents.${parent}`, `starts ${child}, which has no steps under agents`);
@@ -105,7 +117,7 @@ export function compileScenario(raw, { name, folder, where = name }) {
   for (const agent of Object.keys(agents)) {
     if (agent !== "root" && !parents.has(agent)) fail(`agents.${agent}`, "no subagent step starts this agent");
   }
-  return { name, title: raw.title, blurb: raw.blurb ?? "", fixture, order: raw.order ?? null, agents, prompts, parents };
+  return { name, title: raw.title, blurb: raw.blurb ?? "", fixture, order: raw.order ?? null, speed: raw.speed ?? 1, agents, prompts, parents };
 }
 
 function compileSteps(steps, path, context) {
@@ -149,9 +161,11 @@ function compileSteps(steps, path, context) {
     const call = { name: tool, args: { ...args } };
 
     if (tool === "bash") {
-      if (("script" in args) === ("command" in args)) fail(`${at}.bash`, "has exactly one of script and command");
+      if (["script", "command", "run"].filter((key) => key in args).length !== 1) fail(`${at}.bash`, "has exactly one of script, run and command");
       if ("script" in args) call.args.command = scriptCommand(args.script, `${at}.bash.script`, context);
+      if ("run" in args) call.args.command = runCommand(args.run, `${at}.bash.run`, context);
       delete call.args.script;
+      delete call.args.run;
       if (typeof call.args.command !== "string" || !call.args.command) fail(`${at}.bash.command`, "must be a non-empty string");
       if (step.as !== undefined) {
         if (args.run_in_background !== true) fail(`${at}.as`, "names a background job: set run_in_background");
@@ -207,6 +221,17 @@ function scriptCommand(script, at, { folder, fail }) {
   const source = readFileSync(file, "utf8");
   if (source.split("\n").includes(DELIMITER)) fail(at, `a line may not read ${DELIMITER}`);
   return `node --input-type=module <<'${DELIMITER}'\n${source.replace(/\n?$/, "\n")}${DELIMITER}`;
+}
+
+/** Calls of the scenario's lib as a bash command: node imports it and awaits each. */
+function runCommand(calls, at, { lib, fail }) {
+  if (!lib) fail(at, "needs the scenario's lib");
+  if (!Array.isArray(calls) || !calls.length) fail(at, "lists calls [name, ...args]");
+  const lines = calls.map((c, k) => {
+    if (!Array.isArray(c) || typeof c[0] !== "string" || !CALL.test(c[0])) fail(`${at}[${k}]`, "is [name, ...args] with name an export of lib");
+    return `await t.${c[0]}(${c.slice(1).map((a) => JSON.stringify(a)).join(", ")});`;
+  });
+  return [`node --input-type=module <<'${DELIMITER}'`, `const t = await import(${JSON.stringify(pathToFileURL(lib).href)});`, ...lines, DELIMITER].join("\n");
 }
 
 function compileRetry(value, at, fail) {

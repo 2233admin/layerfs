@@ -3,7 +3,7 @@
 // dsh's appendPluginRecord is replaced by a stand-in that keeps each record
 // on the fake Session; Sessions, the web server and Connection are fakes.
 import assert from "node:assert/strict";
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { register } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -271,6 +271,18 @@ try {
   assert.deepEqual([h.bindings.byName("website"), h.bindings.workspace(FOLDER).lastUsed, h.bindings.session("session-root").project], [null, null, null]);
   assert.equal(h.bindings.projectFor("session-root", FOLDER), null, "a session on a removed project has none");
   await assert.rejects(removeProject(h.spec, h.bindings, fakeTrees, "website", dockerWith("")), { code: "not-found" });
+  // a demo's Replay asks to stop the running Sandboxes instead of refusing
+  h.bindings.addProject(FOLDER, { name: "website", source: FOLDER, volume: "dsh-layerfs-website-2", created: 2 });
+  ran.length = 0;
+  // its Sandbox records go too: the service Sandbox's (an empty claim, as a stopped call leaves it) and each naming its volume
+  const records = join(h.spec.home, "_sandboxes");
+  for (const [entry, volume] of [["_service.website", null], ["website-a", "dsh-layerfs-website-2"], ["other-b", "dsh-layerfs-other-1"]]) {
+    mkdirSync(join(records, entry), { recursive: true });
+    if (volume) writeFileSync(join(records, entry, "sandbox.record"), Buffer.concat([Buffer.from("LFSA\u0002\u0000volume\u0004"), Buffer.from(volume)]));
+  }
+  assert.deepEqual(await removeProject(h.spec, h.bindings, fakeTrees, "website", dockerWith("abc running\nold exited\n"), { stopSandboxes: true }), { removed: "website", volume: "dsh-layerfs-website-2" });
+  assert.deepEqual(ran, ["ps -a --filter volume=dsh-layerfs-website-2 --format {{.ID}} {{.State}}", "rm -f abc old", "volume rm dsh-layerfs-website-2"]);
+  assert.deepEqual(readdirSync(records), ["other-b"], "another project's Sandbox record stays");
   console.log("host: ok");
 } finally {
   rmSync(dir, { recursive: true, force: true });

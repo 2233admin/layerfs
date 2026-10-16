@@ -10,7 +10,7 @@ import { api, type InitJob } from './api.ts'
 export type DemoMode = 'live' | 'sim'
 /** A run's progress, from the mock model's replies (mock/src/progress.js). */
 export interface DemoRun { root: string, state: 'running' | 'done' | 'stopped', done: number, of: number, phase: string | null, error: string | null, started: number, ended: number | null }
-export interface Demo { id: string, title: string, blurb: string | null, agents: string[], sessionId: string | null, run: DemoRun | null }
+export interface Demo { id: string, title: string, blurb: string | null, agents: string[], speed: number, sessionId: string | null, run: DemoRun | null }
 export interface DemoInfo { workspace: string, preset: string, provider: string, prompt: string, intro: string, demos: Demo[] }
 
 /** What Play and the Session check use of dsh's Client services (read with ctx.get). */
@@ -25,10 +25,27 @@ export interface DemoServices {
     workspace: {
       create(request: { path: string }): Promise<Result<{ workspace: Workspace }>>
       archiveSession(request: { sessionId: string, stopActivity?: boolean }): Promise<Result<unknown>>
+      unarchiveSession(request: { sessionId: string }): Promise<Result<unknown>>
       insertSessionBefore(request: { workspaceId: string, sessionId: string, beforeSessionId?: string }): Promise<Result<unknown>>
     }
   }
   uiWorkspace?: { openSession(sessionId: string): void }
+  /** dsh's Workspace list, for its archived Sessions */
+  workspaces?: { list: { getSnapshot(): WorkspaceList, subscribe(listener: () => void): () => void } }
+}
+interface WorkspaceList { phase?: 'pending' | 'ready', archivedSessionIds?: readonly string[] }
+
+/** The archived Sessions, once dsh's Workspace list has arrived (none after 5 s without it). */
+function archived(services: DemoServices): Promise<Set<string>> {
+  const list = services.workspaces?.list
+  if (!list) return Promise.resolve(new Set())
+  return new Promise((resolve) => {
+    let stop = () => {}
+    const done = () => { stop(); clearTimeout(timer); resolve(new Set(list.getSnapshot().archivedSessionIds ?? [])) }
+    const timer = setTimeout(done, 5000)
+    if (list.getSnapshot().phase !== 'pending') return done()
+    stop = list.subscribe(() => { if (list.getSnapshot().phase !== 'pending') done() })
+  })
 }
 interface Workspace { workspaceId: string, path: string, sessionIds?: readonly string[] }
 type Result<T> = { ok: true, value: T } | { ok: false, error: { code?: string, message?: string } }
@@ -92,7 +109,6 @@ async function newSession(services: DemoServices, info: DemoInfo, workspace: Wor
   value('name the Session', await session.rename({ sessionId, title: demo.title }))
   value('choose the mock model', await session.selectModel({ sessionId, provider: info.provider, model: demo.id }))
   if (before) value('place the Session', await workspaces.insertSessionBefore({ workspaceId: workspace.workspaceId, sessionId, beforeSessionId: before }))
-  await demoApi.setSession(demo.id, sessionId)
   return sessionId
 }
 
@@ -108,11 +124,13 @@ const send = async (services: DemoServices, sessionId: string, text: string) =>
  */
 export async function ensureDemoSessions(services: DemoServices, info: DemoInfo): Promise<void> {
   if (!services.remote) return
-  const workspace = await workspaceOf(services, info)
-  const present = new Set(workspace.sessionIds ?? [])
+  const workspace = await workspaceOf(services, info), gone = await archived(services)
+  const present = new Set((workspace.sessionIds ?? []).filter((id) => !gone.has(id)))
   for (const demo of [...info.demos].reverse()) {
     if (demo.sessionId && present.has(demo.sessionId)) continue
-    await send(services, await newSession(services, info, workspace, demo), info.intro)
+    const sessionId = await newSession(services, info, workspace, demo)
+    await demoApi.setSession(demo.id, sessionId)
+    await send(services, sessionId, info.intro)
   }
 }
 
@@ -120,27 +138,43 @@ export async function ensureDemoSessions(services: DemoServices, info: DemoInfo)
 export type PlayStep = { step: 'session' } | { step: 'stop' } | { step: 'init', job: InitJob | null } | { step: 'start' }
 
 /**
- * Plays `demo` from scratch: a new Session takes the place of its current
- * one, which is then archived with its work stopped, and the demo's project
- * is Inited again before the first message is sent. Each step is attempted
- * once; a refusal (a project still in use, say) ends Play with its message,
- * leaving the new Session in place for the next Play.
- * @returns the new Session's id; it is opened once its first message is sent
+ * Plays `demo` from scratch in a new Session (dsh cannot empty one), which
+ * becomes the demo's only once the run starts. In order: the new Session is
+ * made at the current one's place (the sidebar lists it only from its first
+ * message); the current one is archived with its work stopped; the demo's
+ * projects are removed (their leftover Sandboxes stopped) and its project for
+ * the mode Inited again; then the new Session is recorded, sent the first
+ * message and opened. Each step is attempted once. On a failure before the
+ * run starts, the current Session is unarchived and stays the demo's, the new
+ * one is archived, and Play ends with the failure's message.
+ * @returns the new Session's id
  */
 export async function playDemo(services: DemoServices, info: DemoInfo, demo: Demo, mode: DemoMode, onStep: (step: PlayStep) => void): Promise<string> {
   if (!services.remote) throw new Error('this client has no Remote session services')
+  const { workspace: workspaces } = services.remote
   const workspace = await workspaceOf(services, info)
   onStep({ step: 'session' })
-  const sessionId = await newSession(services, info, workspace, demo, demo.sessionId ?? undefined)
-  onStep({ step: 'stop' })
-  if (demo.sessionId) value('archive the previous run', await services.remote.workspace.archiveSession({ sessionId: demo.sessionId, stopActivity: true }))
-  for (const name of [projectOf(demo.id, 'live'), projectOf(demo.id, 'sim')]) {
-    await api.remove(name).catch((error) => { if (error.status !== 404) throw error })
+  const previous = demo.sessionId ?? undefined
+  const sessionId = await newSession(services, info, workspace, demo, previous)
+  let archived = false
+  try {
+    onStep({ step: 'stop' })
+    if (previous) { value('stop the previous run', await workspaces.archiveSession({ sessionId: previous, stopActivity: true })); archived = true }
+    // a stopped run leaves the Sandboxes it kept open: the demo's own projects go with theirs
+    for (const name of [projectOf(demo.id, 'live'), projectOf(demo.id, 'sim')]) {
+      await api.remove(name, true).catch((error) => { if (error.status !== 404) throw error })
+    }
+    onStep({ step: 'init', job: null })
+    const project = projectOf(demo.id, mode)
+    await initProject(info.workspace, project, mode, (job) => onStep({ step: 'init', job }))
+    await api.choose(sessionId, project)
+    await demoApi.setSession(demo.id, sessionId)
+  } catch (error) {
+    // the demo stays on its current Session; the unused new one goes
+    if (archived) await workspaces.unarchiveSession({ sessionId: previous! }).catch(() => {})
+    await workspaces.archiveSession({ sessionId }).catch(() => {})
+    throw error
   }
-  onStep({ step: 'init', job: null })
-  const project = projectOf(demo.id, mode)
-  await initProject(info.workspace, project, mode, (job) => onStep({ step: 'init', job }))
-  await api.choose(sessionId, project)
   onStep({ step: 'start' })
   await send(services, sessionId, info.prompt)
   services.uiWorkspace?.openSession(sessionId)

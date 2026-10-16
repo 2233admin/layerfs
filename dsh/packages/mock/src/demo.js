@@ -59,7 +59,7 @@ class SessionFile {
 export function registerDemoRoutes(ctx, { scenarios, progress, workspace, stateDir, preset, provider, prompt, intro }) {
   const sessions = new SessionFile(stateDir);
   const view = (id, scenario, saved) => ({
-    id, title: scenario.title, blurb: scenario.blurb ?? null, agents: Object.keys(scenario.agents),
+    id, title: scenario.title, blurb: scenario.blurb ?? null, agents: Object.keys(scenario.agents), speed: scenario.speed ?? 1,
     sessionId: saved[id] ?? null, run: progress.get(id),
   });
   const handler = async (req, res) => {

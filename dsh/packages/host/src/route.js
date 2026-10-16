@@ -13,7 +13,8 @@
 //   GET  /layerfs/project/<name>/tree?ref=<id>  as the session's tree route
 //   GET  /layerfs/project/<name>/storage      Store totals, what Init recorded, recent Commits' costs (storage.js)
 //   POST /layerfs/project/<name>/attach {folder}  attach to a workspace folder (null: detach)
-//   POST /layerfs/project/<name>/remove {confirm}  remove it (confirm: its name); see remove.js
+//   POST /layerfs/project/<name>/remove {confirm, stopSandboxes?}  remove it (confirm: its name;
+//                                          stopSandboxes: stop its running Sandboxes first); see remove.js
 import { missingDeployment } from "./config.js";
 import { prepareInit, runInit } from "./init.js";
 import { InitJobs } from "./jobs.js";
@@ -93,7 +94,7 @@ export function registerRoutes(ctx, { spec, bindings, collector, trees, jobs = n
         if (req.method === "POST" && parts[2] === "remove") {
           const body = await readJson(req);
           if (body.confirm !== project.name) return send(res, 400, { code: "not-confirmed", message: `confirm with the project's name, ${project.name}` });
-          return send(res, 200, await removeProject(spec, bindings, trees, project.name));
+          return send(res, 200, await removeProject(spec, bindings, trees, project.name, undefined, { stopSandboxes: body.stopSandboxes === true }));
         }
       }
       if (parts[0] === "session" && parts.length >= 2) {

@@ -67,7 +67,7 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
   - each new call stays on screen for a minimum time by kind ([`playback.ts`](packages/client/src/client/playback.ts)): a mount, a command or a background start 1.8 s, a Commit 1.6 s, a merge or publish 2 s, other writes 1.3 s, reads 0.9 s, and 1.5 s more for a refusal such as Conflict or Busy;
   - calls that arrive meanwhile wait their turn, and the tab shows how many are left to play. A queue over 30 calls plays faster, so the tab stays about that far behind at most. No call is skipped;
   - when the tab opens, calls that ended over 2 minutes ago appear at once and the rest play. A run that just started, such as a demo's Play, plays from its first call;
-  - the speed button beside Follow cycles 1×, 2×, 4× and Max (no hold: each call shows as it lands). The choice is kept in the browser.
+  - the speed button beside Follow cycles 1×, 2×, 4× and Max (no hold: each call shows as it lands). The choice is kept in the browser. A demo's session starts at the demo's own `speed` (5 agents at 2×, as in the design preview) and keeps its own choice.
 
   **Terminals and their command lines.** Every SDK call an agent makes prints one command line in one terminal. The single table for both is [`packages/model/src/cli.js`](packages/model/src/cli.js); `node packages/model/tests/cli.mjs` fails when an SDK or operator method has no row there.
 
@@ -112,18 +112,21 @@ The `dsh-layerfs-demo` bundle adds the LayerFS mock model: an LLM provider that 
 
 | Demo | Agents | Shows |
 |---|---|---|
-| `tour` | root | fork, fs edits, build in a Sandbox, a lint failure and fix, a server that keeps unmount Busy, commit, publish, a late Branch, merge |
+| `tour` | root | the design preview's Tour, 24 steps: fs Commits, a Sandbox terminal that installs, fails lint, builds and serves (unmount Busy), a stale Workspace that merges on commit, a second Workspace, a fork from a Commit, two publishes |
 | `parallel` | root, header, footer | two subagents on their own Branches; the root publishes one, then asks the other to merge main in first |
-| `conflicts` | root, a, b | a commit Conflict with markers in the Workspace, resolved there; a merge Conflict resolved on a new fork |
+| `conflicts` | root | the design preview's Conflicts, 15 steps: a commit Conflict resolved in the Workspace, a merge Conflict resolved by making the Branches agree |
+| `merge` | root | the design preview's Commit & merge, 21 steps: a clean stale commit, a commit Conflict, merge into a new Branch, a merge Conflict, publish |
 | `sandbox` | root | one Sandbox with two Workspaces, a background build job, and the MountsActive, Busy and Dirty refusals |
-| `agents` | root and five | five subagents on two Branches at once: stale Workspaces, `.lww`, and two agents changing the same line |
+| `agents` | root and five | the design preview's 5 agents, 52 steps (62 bash calls): a Workspace per call in each Branch's shared Sandbox, stale merges, `.lww`, a same-line Conflict fixed in the kept Workspace, a dev server and curl, a try on a fork, merge, publish and blame |
 
-A scenario is `scenario.json` (format `layerfs-mock-scenario` version 2) plus its `scripts/`. Each agent has a list of steps:
-- a call step: one preset tool and its arguments. A bash step names a `script` (sent as `node --input-type=module <<'JS'`) or a `command`. `expect` lists the LayerFS outcomes its trace should show, `retry` reruns it on matching output, and `as` names a background job;
+A scenario is `scenario.json` (format `layerfs-mock-scenario` version 2), with its `scripts/` or a shared `lib`. Each agent has a list of steps:
+- a call step: one preset tool and its arguments. A bash step names a `script` (sent as `node --input-type=module <<'JS'`), a `run` (calls of the scenario's `lib`, imported and awaited in such a script) or a `command`. `expect` lists the LayerFS outcomes its trace should show, `retry` reruns it on matching output, and `as` names a background job;
 - a reply step: the turn's closing text. `until` makes the agent wait for those subagents to report first;
 - a pause step: milliseconds before the next step.
 
-`@name` in an argument is a subagent or job started earlier. A subagent's `description` is its name in the scenario. `order` places the demo in lists. Every scenario's `fixture` is `demo-workspace/`, the shared website; its install, build, test and serve are small shell scripts, not npm. Scripts keep their notes between bash calls under `<temp>/dsh-layerfs/demo-notes/<project>/`, outside the workspace folder, because Init imports everything in it.
+`@name` in an argument is a subagent or job started earlier. A subagent's `description` is its name in the scenario. `order` places the demo in lists and `speed` sets its playback speed. Every scenario's `fixture` is `demo-workspace/`, the shared website; its install, build, test and serve are small shell scripts, not npm: test checks each page's heading and that every `@/…` import resolves, and serve answers each page's heading on localhost:3000 (with python3). The sandbox demo's scripts keep their notes between bash calls under `<temp>/dsh-layerfs/demo-notes/<project>/`, outside the workspace folder, because Init imports everything in it.
+
+The tour, conflicts, merge and agents demos are the design preview's stories ([`sdk_sim/demo.js`](../sdk_sim/demo.js)) step for step, without its captions and progress cards: each step is one bash call of [`scenarios/shared/terminal.mjs`](scenarios/shared/terminal.mjs), which makes the same SDK calls as that step's terminal line and prints what the terminal printed (`npm ci`, `npm run build`, `npm test` and `npm run start` become the shell scripts). An agent's call mounts a Workspace of its own in its Branch's shared Sandbox, runs, commits and unmounts; after a Conflict the Workspace is kept for the agent's next call, and a trailing `&` keeps it for the server. The lead wakes the agents of each step with send_message and waits for them; each agent's pause is the preview's thinking time, and the call takes its typing and running time, so a burst's calls overlap and commit in the same order as in the preview. The calls keep their notes (a terminal's Workspace, an agent's kept one, the C<n> labels) under the project's LayerFS home entry, which is removed with the project.
 
 #### The demo workspace
 
@@ -134,13 +137,13 @@ Above the composer of a demo session, one strip shows:
 - Sim or Live: the simulator or real LayerFS. The choice is kept in the browser;
 - Play, or Replay after a run.
 
-Play runs the demo in a new session that takes the old one's place. In order:
-1. A session is made in the demo workspace, with the preset, the demo's title and its mock model.
+Play (Replay after a run, also allowed while one goes) runs the demo in a new session that takes the old one's place; dsh cannot empty a session. In order:
+1. A session is made in the demo workspace at the old one's place, with the preset, the demo's title and its mock model. The sidebar lists it only from its first message.
 2. The old session is archived, with its turn, subagents and jobs stopped.
-3. The demo's projects are removed, and its project for the mode (`demo-<id>`, or `demo-<id>-sim` on Sim) is Inited again from `demo-workspace/`, with the Init's progress on the bar.
-4. The project is chosen, "Run the demo." is sent, and the new session opens.
+3. The demo's projects are removed, and its project for the mode (`demo-<id>`, or `demo-<id>-sim` on Sim) is Inited again from `demo-workspace/`, with the Init's progress on the bar. Removal stops the Sandboxes a stopped run left open (only Play asks for that; removing other projects still refuses while a Sandbox runs) and clears their records in the LayerFS home.
+4. The new session becomes the demo's, the project is chosen, "Run the demo." is sent, and the new session opens.
 
-Each step is attempted once. A refusal, such as a project whose Sandbox is still open, ends Play with its message on the strip.
+Each step is attempted once. A failure before step 4 unarchives the old session, which stays the demo's, archives the unused new one, and shows the message on the strip. The strip reads the demo again as soon as Play ends. A run stops on the strip when a request of it is aborted; a stop between requests is not seen, but Replay works either way. When the client loads, a demo whose session is gone or archived gets a new one, opened with the intro question.
 
 The Host side is the mock plugin's `/layerfs-demo` route. It serves the workspace folder, the demos, each demo's session (kept in `<profile>/dsh-layerfs-demo/sessions.json`) and each demo's latest run.
 

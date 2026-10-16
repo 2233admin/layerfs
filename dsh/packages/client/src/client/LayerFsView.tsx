@@ -12,6 +12,7 @@ import { AVATARS } from './avatars.ts'
 import { Setup } from './Setup.tsx'
 import type { Directories } from './InitDialog.tsx'
 import { Playback, SPEEDS, speedLabel, type Speed, type Step } from './playback.ts'
+import { demoApi } from './demo.ts'
 import { treeLoader, type TreeCache } from './replay.ts'
 import { MESSAGE } from './ui.ts'
 import { useHiddenComposer } from './composer.ts'
@@ -68,13 +69,14 @@ function TabBody({ sessionId, directories }: { sessionId: string, directories: (
 // visible (dsh publishes both heights on the scroll body).
 const BAND = { height: 'calc(var(--dsh-conversation-viewport-height, 100vh) - var(--dsh-composer-height, 0px))', minHeight: 320, position: 'relative' } as const
 
-// the playback speed, kept in this browser (playback.ts)
+// the playback speed, kept in this browser (playback.ts): a demo's Session
+// starts at the demo's own speed and keeps its own choice
 const SPEED_KEY = 'layerfs-playback-speed'
-function savedSpeed(): Speed {
+function savedSpeed(key = SPEED_KEY, fallback: Speed = 1): Speed {
   try {
-    const saved = localStorage.getItem(SPEED_KEY), n = Number(saved)
-    return saved !== null && (SPEEDS as readonly number[]).includes(n) ? n as Speed : 1
-  } catch { return 1 }
+    const saved = localStorage.getItem(key), n = Number(saved)
+    return saved !== null && (SPEEDS as readonly number[]).includes(n) ? n as Speed : fallback
+  } catch { return fallback }
 }
 
 function Board({ sessionId, view, error }: { sessionId: string, view: SessionView, error: string | null }) {
@@ -105,13 +107,23 @@ function Board({ sessionId, view, error }: { sessionId: string, view: SessionVie
       button.title = speed.current ? `Playback ${speedLabel(speed.current)}: each call stays on screen for its minimum time${speed.current > 1 ? ` ÷ ${speed.current}` : ''} · click for faster` : 'Playback Max: each call shows as it lands · click for 1×'
     }
     label()
+    let key = SPEED_KEY, picked = false
     button.onclick = () => {
+      picked = true
       speed.current = SPEEDS[(SPEEDS.indexOf(speed.current) + 1) % SPEEDS.length]
-      try { localStorage.setItem(SPEED_KEY, String(speed.current)) } catch { /* the speed lasts this tab only */ }
+      try { localStorage.setItem(key, String(speed.current)) } catch { /* the speed lasts this tab only */ }
       label()
       play.current?.playback.nudge()
     }
     root.querySelector('[data-follow]')?.before(button)
+    demoApi.info().then((info) => {
+      const demo = info?.demos.find((d) => d.sessionId === sessionId)
+      if (!demo || picked) return
+      key = `${SPEED_KEY}:${demo.id}`
+      speed.current = savedSpeed(key, demo.speed as Speed)
+      label()
+      play.current?.playback.nudge()
+    }).catch(() => { /* not the demo workspace */ })
     return () => {
       clearTimeout(soon)
       play.current?.playback.stop()

@@ -13,6 +13,8 @@ import { setTimeout as pause } from "node:timers/promises";
 import { alive } from "./shell.js";
 
 export const model = createRequire(import.meta.url)("../../../../../sdk_sim/simulation_engine/model.js");
+/** The simulator's read-side helpers (blame over saved versions). */
+export const fileViews = createRequire(import.meta.url)("../../../../../sdk_sim/simulation_engine/files.js");
 export const { Refusal } = model;
 
 const LOCK_MS = 30_000;

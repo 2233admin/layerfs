@@ -3,6 +3,7 @@
 // reply; its subagents add their own steps. One run per scenario is kept: the
 // demo workspace has one Session per scenario, and Replay starts a new one.
 //   { root, state: running | done | stopped, done, of, phase, error, started, ended }
+// A run stops on a scenario error, or when one of its requests is aborted.
 // `done` and `of` sum every agent's finished and total steps.
 
 export class Progress {
@@ -32,6 +33,12 @@ export class Progress {
     if (agent === "root" && reply.phase) run.phase = reply.phase;
     if (reply.kind === "error") Object.assign(run, { state: "stopped", error: `${agent}: ${reply.message}`, ended: Date.now() });
     else if (agent === "root" && reply.done === reply.of) Object.assign(run, { state: "done", ended: Date.now() });
+  }
+
+  /** A request of the run was aborted (the user stopped the agents): the run is stopped. */
+  stop(scenario, agent) {
+    const run = this.runs.get(scenario);
+    if (run?.state === "running") Object.assign(run, { state: "stopped", error: `stopped while ${agent} worked`, ended: Date.now() });
   }
 
   /**

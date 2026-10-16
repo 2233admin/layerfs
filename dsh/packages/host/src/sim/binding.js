@@ -6,7 +6,7 @@
 // estimates from file text. One attempt per call; nothing is retried.
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { Project, Refusal, model, readTree, simDir } from "./state.js";
+import { Project, Refusal, fileViews, model, readTree, simDir } from "./state.js";
 import { runCommand, startCommand, stopCommand } from "./shell.js";
 
 const DEFAULT_MESSAGE = "Apply filesystem changes";
@@ -273,6 +273,13 @@ const CALLS = {
   }),
 
   "fs.read": (p, a) => p.with((c) => read(c, a)),
+  "fs.blame": (p, a) => p.with((c) => {
+    const ref = c.label(a.branch);
+    c.run("fs.read", { ref, path: a.path });
+    const b = fileViews.blame(c.sim, ref, a.path), from = a.fromLine ?? 1;
+    const lines = b.lines.slice(from - 1).map((l) => ({ n: l.n, text: l.text, lineTruncated: false, clipped: false, commit: c.hex(l.origin?.id ?? null), message: c.s.commits[l.origin?.id]?.message ?? "" }));
+    return { kind: "ok", snapshot: seen(c, ref), path: a.path, lines, origins: [], versions: b.versions, comparisonCoarse: false, nextLine: null };
+  }),
   "fs.list": (p, a) => p.with((c) => {
     const ref = c.label(a.branch), r = c.run("fs.list", { ref, path: a.path });
     return { kind: "ok", snapshot: seen(c, ref), root: c.hex(r.root), path: a.path ?? "/", ...paged(r.items.map((x) => ({ ...x, inode: inode(x.inode) })), a) };

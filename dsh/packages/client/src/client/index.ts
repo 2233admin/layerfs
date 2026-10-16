@@ -27,7 +27,7 @@ export function apply(ctx: any): void {
   const services = (): PanelServices => ({ workspaces: ctx.get('workspaces'), uiWorkspace: ctx.get('uiWorkspace') })
   // the Remote services, while the scope that injects them is up
   let remote: DemoServices['remote']
-  const demoServices = (): DemoServices => ({ remote, uiWorkspace: ctx.get('uiWorkspace') })
+  const demoServices = (): DemoServices => ({ remote, uiWorkspace: ctx.get('uiWorkspace'), workspaces: ctx.get('workspaces') })
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
     name: 'conversation.input.dock',
     id: 'layerfs-demo',
