@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { LayerFS } from "../../../../sdk/js/src/index.js";
 import { LayerFSOperator } from "../../../../sdk/js/operator/index.js";
-import { CLI, cliOf, routeOf } from "../src/cli.js";
+import { CLI, cliOf, commandOf, routeOf } from "../src/cli.js";
 
 const methods = (client) => Object.entries(client)
   .filter(([, group]) => group && typeof group === "object" && !(group instanceof Set) && Object.values(group).some((f) => typeof f === "function"))
@@ -17,7 +17,7 @@ for (const call of all) {
   assert.ok(["project", "fs", "workspace", null].includes(CLI[call].at), `${call}: terminal`);
   if (CLI[call].at === null) continue;
   // every drawn SDK line starts with its group, except a Workspace's shell command
-  if (call !== "sandbox.exec" && call !== "process.start") assert.ok(cliOf(call, {}).startsWith(call.split(".")[0] + " "), `${call}: group prefix`);
+  if (call !== "sandbox.exec" && call !== "process.start") assert.ok(commandOf(call, {}).startsWith(call.split(".")[0] + " "), `${call}: group prefix`);
 }
 
 const image = "sha256:" + "2d929c6d66c2".padEnd(64, "0");
@@ -50,7 +50,14 @@ const lines = [
 ];
 for (const [call, args, at, text] of lines) {
   assert.equal(routeOf(call).at, at, `${call}: terminal`);
-  assert.equal(cliOf(call, args), text, call);
+  assert.equal(commandOf(call, args), text, call);
+  // the terminal hides the group it implies
+  const shown = at === "fs" ? text.replace(/^fs /, "") : at === "workspace" ? text.replace(/^sandbox /, "") : text;
+  assert.equal(cliOf(call, args), shown, `${call} in its terminal`);
 }
+assert.equal(cliOf("fs.read", { path: "/a.txt" }), "read /a.txt");
+assert.equal(cliOf("sandbox.commit", { message: "x" }), 'commit -m "x"');
+assert.equal(cliOf("process.cancel", { process: "p" }), "process cancel p", "an operator group stays");
+assert.equal(cliOf("sandbox.create", { name: "b" }), "sandbox create b", "the project terminal keeps every group");
 assert.equal(routeOf("no.such").at, "project", "an unknown call falls back to the project terminal");
 console.log(`PASS cli: ${all.length} methods routed, ${lines.length} lines`);

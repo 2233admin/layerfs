@@ -11,6 +11,9 @@
 //
 // CLI form: `<group> <method> <required args…> [--optional value…]`
 //   - group and method are the SDK's own names (`branch list_commits`).
+//   - A terminal hides the group it implies: the fs terminal prints
+//     `read /a.txt`, a Workspace pane `commit -m "…"`. The project terminal
+//     prints every group (`branch merge …`, `sandbox create …`).
 //   - Required arguments are positional, in SDK order. Optional ones are
 //     `--kebab-name value` and print only when they differ from the SDK
 //     default; a true boolean is a bare `--force` / `--discard`.
@@ -108,5 +111,14 @@ export const CLI = {
 /** The route of `call`; a call missing from the table prints its own name, dimmed, in the project terminal. */
 export const routeOf = (call) => CLI[call] ?? { at: "project", dim: true, cli: () => call };
 
-/** The command line `call` prints with `args` (and, for a Workspace command, its shell text `sh`). */
-export const cliOf = (call, args = {}, sh) => routeOf(call).cli?.(args, sh) ?? call;
+/** The group each terminal implies, hidden from its lines. */
+const IMPLIED = { fs: "fs ", workspace: "sandbox " };
+
+/** The full command line of `call` with `args` (and, for a Workspace command, its shell text `sh`). */
+export const commandOf = (call, args = {}, sh) => routeOf(call).cli?.(args, sh) ?? call;
+
+/** The line `call` prints in its terminal: the command line without the group the terminal implies. */
+export function cliOf(call, args = {}, sh) {
+  const text = commandOf(call, args, sh), implied = IMPLIED[routeOf(call).at];
+  return implied && text.startsWith(implied) ? text.slice(implied.length) : text;
+}

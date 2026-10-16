@@ -184,7 +184,7 @@ export function createView(root, o) {
     for (let n = W.nodes[B.base]; n && n.branch; n = W.nodes[W.branches[n.branch].base]) scope.add(n.branch);
     for (const ob of W.order) { const OB = W.branches[ob]; if (W.nodes[OB.base] && W.nodes[OB.base].branch === b) scope.add(ob); const h = W.nodes[OB.head]; if (h && h.parents.some((p) => W.nodes[p] && W.nodes[p].branch === b)) scope.add(ob); }
     return `<div class="col"><section class="term${lastHit("fs:" + b)}" data-loc="fs:${esc(b)}"><div class="thead"><span class="kind fs">FS</span><span class="ttl">${esc(b)} @ ${headId}</span></div>
-        <div class="tbody" data-scroll>${fsLines}</div>${inrow("fs read · grep · write · edit · mv · rm")}</section></div>
+        <div class="tbody" data-scroll>${fsLines}</div>${inrow("read · grep · write · edit · mv · rm")}</section></div>
       <div class="col">${wss.length ? `<div class="panes" style="grid-template-columns:${cols}">${panes}</div>`
         : `<div class="empty"><div><h3>No Workspace mounted on ${esc(b)}</h3>fs calls edit this Branch directly.<br>A <code>sandbox.mount</code> opens a pane here.${recent ? `<div class="recent">${recent}</div>` : ""}</div></div>`}
         <div class="bench" data-loc="bench" style="border-top:0;min-height:48px;background:var(--term);border-radius:8px;box-shadow:0 0 0 1px var(--term-border)"><b>Recently here</b>${X.recentlyOn(W, b).length ? "" : `<span>nobody in the last ${RECENT_S} s</span>`}</div></div>

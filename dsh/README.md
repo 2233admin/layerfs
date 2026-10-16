@@ -75,7 +75,7 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
   A command line is `<group> <method> <required args> [--optional value] [-m "message"]`, using the SDK's own group and method names: `branch merge feature try-ui release -m "join"`, `sandbox create tester docs sha256:2d929c6d66c2`, `fs read /app/page.tsx --start-line 5`, `sandbox commit -m "add hero" --force`.
   - Required arguments are positional, in SDK order. Optional ones are `--kebab-case` flags shown only when they differ from the SDK default; a true boolean is a bare flag (`--force`, `--discard`).
   - An image is shortened to `sha256:` and 12 hex digits. File content is never printed, and `fs apply` shows its change count.
-  - A line does not repeat what its terminal names: an fs line drops its Branch, and a workspace line drops its Sandbox and path. `fs diff_files` prints both of its refs.
+  - A line does not repeat what its terminal names. The fs terminal hides the `fs` group and the Branch (`read /app/page.tsx`); a workspace pane hides the `sandbox` group, the Sandbox and the path (`commit -m "add hero"`, `unmount --discard`), but keeps the operator's `process cancel`. The project terminal prints every group. `fs diff_files` prints both of its refs.
   - A command run in a Workspace prints as the shell command itself, and a background start ends with ` &`.
   - Reads (`list_*`, `diff_*`, `fs read/list/stat/grep/glob/blame/diff_files`, `sandbox status`) and `sandbox mount` are dimmed.
   - A call with no row prints its own name, dimmed, in the project terminal.
