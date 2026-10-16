@@ -68,8 +68,18 @@ volume, topology, loopback endpoint, Noise peer and saved daemon incarnation.
 Discovery mutations use nonblocking OS locks and atomic record replacement; a
 mutation another process holds is refused as `Busy`, never waited for. The
 client does not keep a refused service Sandbox, so its next Store call is a new
-attempt. A create intent is written only after the request's inputs are read;
-an unresolved one is `Unknown` and never authorizes another installation.
+attempt. A create intent is written only after the request's inputs are read.
+A create that fails before anything reaches the Store volume (the container
+never became ready, for example a daemon that exits at startup) stops and
+deletes the container it made, once each, removes its intent and frees its
+name, then reports the original failure as `Failed` with `detail.container`
+and `detail.removed`; that container's log goes with it. One whose effect is
+unknown (an interrupted process, a Store install that failed, an Engine create
+whose outcome was lost, or a container that could not be removed) keeps the
+intent, which records what is known. Every later create of that project is then
+`Unknown`, never another installation, and its message says what to remove
+(`docker ps -a --filter volume=<volume>`, and a new volume when no Store is
+installed yet) before deleting `<home>/<project>/create.intent`.
 Daemon/container restart recovery and replay of uncertain operations are excluded.
 Close refuses mounted Workspaces. Background process ownership is in the native
 executor, including persisted process identity; the filesystem daemon launches

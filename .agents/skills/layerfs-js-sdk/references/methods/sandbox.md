@@ -73,7 +73,8 @@ it's ready.
 | --- | --- | --- |
 | `InvalidInput` | A bad name, another client's project, an image that isn't a digest, or a missing `LAYERFS_*` deployment variable | Fix the argument, or check the environment ([SKILL.md](../../SKILL.md#connect-to-a-project)) |
 | `Exists` | A Sandbox with this name is open | Use it, or pick another name |
-| `Unknown`, `Failed` | Creation is uncertain or failed | Stop and report; don't create another |
+| `Failed` | Creation failed. With `detail.removed: true` its container is already removed and nothing of it is left; otherwise it names what stays | Stop and report the message; don't create another |
+| `Unknown` | An earlier creation of this project has an unknown outcome; every create is refused until it is resolved | Stop and report the message, which says what a person must remove; don't remove or retry anything yourself |
 
 ```js
 const id = await layerfs.sandbox.create("builder", layerfs.projectName, process.env.LAYERFS_IMAGE);

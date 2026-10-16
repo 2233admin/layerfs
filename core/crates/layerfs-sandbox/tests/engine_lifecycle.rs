@@ -272,6 +272,40 @@ fn stderr_and_substring_markers_never_satisfy_readiness() {
 }
 
 #[test]
+fn exited_daemon_is_stopped_by_the_engines_not_modified_then_deleted() {
+    let (docker, peer) = Peer::new(
+        vec![
+            volume(),
+            created(),
+            fixed(200, b""),
+            fixed(204, b""),
+            logs(&frame(2, b"refused the Store\n")),
+            fixed(304, b""),
+            fixed(204, b""),
+        ],
+        2,
+    );
+    let mut sandbox = docker.create_sandbox(request()).unwrap();
+    let (path, mut file) = binary("exited");
+    sandbox.upload(&mut file, b"secret").unwrap();
+    sandbox.start().unwrap();
+    assert!(
+        !sandbox
+            .wait_listener(Duration::from_secs(1))
+            .unwrap_err()
+            .observation
+            .marker_seen
+    );
+    sandbox.stop(1).unwrap();
+    assert!(sandbox.disposition().stopped);
+    sandbox.delete().unwrap();
+    assert!(sandbox.disposition().deleted);
+    let calls = peer.finish();
+    assert!(String::from_utf8_lossy(&calls[5]).contains("/stop?t=1"));
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn marker_inside_truncated_frame_keeps_evidence_and_fails_readiness() {
     let mut payload = frame(1, b"LAYERFS_DAEMON_LISTEN 0.0.0.0:30421\n");
     let declared = u32::from_be_bytes(payload[4..8].try_into().unwrap()) + 1024;

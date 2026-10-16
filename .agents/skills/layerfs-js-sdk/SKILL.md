@@ -264,7 +264,8 @@ Added
    `code`, a `message` and a `detail`; `isRefusal(error, "Dirty")` tests for one code.
    Look at the project, then decide; never resend the same call blindly. On `Unknown`
    or `Failed` the outcome is uncertain: stop, check with `branch.list_commits` and
-   `fs.read`, and report.
+   `fs.read`, and report. A `sandbox.create` refused `Failed` with `detail.removed`
+   left nothing behind; report its message, which carries the cause.
 2. **A non-zero exit is not a refusal.** `sandbox.exec` returns normally; check
    `exitCode`.
 3. **Keep each command under 2 minutes.** `sandbox.exec` has no timeout: wrap long

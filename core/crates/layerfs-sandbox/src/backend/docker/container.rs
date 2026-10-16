@@ -169,16 +169,19 @@ impl Sandbox {
         Ok(())
     }
     /// Explicit whole-Sandbox process stop, once. This is crash teardown, not graceful FS drain.
+    /// The Engine's 304 (not running: its process already exited, or it never started)
+    /// is the same acknowledged stopped state.
     pub fn stop(&mut self, seconds: u16) -> Result<(), Box<WireFailure>> {
         if self.stop_attempted || self.delete_attempted {
             return Err(self.invalid("original container Stop admission"));
         }
         self.stop_attempted = true;
-        self.empty(
-            "POST",
-            &format!("/v1.54/containers/{}/stop?t={seconds}", self.id),
-            204,
-        )?;
+        let path = format!("/v1.54/containers/{}/stop?t={seconds}", self.id);
+        self.empty("POST", &path, 204)
+            .or_else(|failure| match failure.cause {
+                RuntimeError::Http(304) => Ok(()),
+                _ => Err(failure),
+            })?;
         self.stopped = true;
         Ok(())
     }
