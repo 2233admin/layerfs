@@ -1,4 +1,7 @@
 //! Scan, construct/save, consume inode identities and publish one genesis stack.
+use crate::import::observe::InitCounters;
+#[cfg(unix)]
+use crate::import::observe::InitStep;
 #[cfg(unix)]
 use crate::{
     backing::Backing,
@@ -21,7 +24,7 @@ use layerfs_storage::port::acquisition::Begin;
 use layerfs_storage::Save;
 use layerfs_storage::{read::Diagnostics, Storage};
 use layerfs_telemetry::timer::{Active, TimingScope};
-use std::{path::Path, time::Instant};
+use std::{path::Path, sync::Arc, time::Instant};
 /// Explicit host authority and inputs for one namespace Init.
 pub struct InitRequest<'a> {
     /// Host-visible regular directory, checked before construction.
@@ -60,6 +63,25 @@ pub struct Initialized {
 }
 /// Initializes one directory through the supplied ports, without an engine dependency.
 ///
+/// As [`init_observed`] with counters nobody reads.
+pub fn init(
+    store: &Storage,
+    catalog: &dyn HistoryCatalog,
+    request: InitRequest<'_>,
+    timer: &TimingScope<'_, Active>,
+) -> ProjectResult<Initialized> {
+    init_observed(
+        store,
+        catalog,
+        request,
+        timer,
+        Arc::new(InitCounters::new()),
+    )
+}
+
+/// Initializes one directory, updating `counters` as it runs so another
+/// thread can show how far it has come.
+///
 /// Input-sized acquisition state is held as one operation's rows behind
 /// `acquisition`. Those rows and the operation record are removed, with a
 /// checked result, before the tree save is finished or any history is
@@ -67,14 +89,16 @@ pub struct Initialized {
 /// unknown Store, history or backing outcome is [`ProjectError::Uncertain`]
 /// and leaves the operation untouched for its owner.
 #[cfg(unix)]
-pub fn init(
+pub fn init_observed(
     store: &Storage,
     catalog: &dyn HistoryCatalog,
     request: InitRequest<'_>,
     timer: &TimingScope<'_, Active>,
+    counters: Arc<InitCounters>,
 ) -> ProjectResult<Initialized> {
     use std::os::unix::fs::MetadataExt;
-    let mut progress = ImportProgress::new(request.deadline);
+    counters.step(InitStep::Scan);
+    let mut progress = ImportProgress::observed(request.deadline, counters);
     progress.tick()?;
     let source = scan::check_root(request.source)?;
     if let Some(placement) = request.acquisition.placement() {
@@ -103,6 +127,7 @@ pub fn init(
         Ok(value) => value,
         Err(error) => return Err(backing.settle(error, &mut progress.work)),
     };
+    progress.counters.step(InitStep::Publish);
     // Nothing final exists until the working rows and their record are gone.
     timer
         .child("history.discard_acquisition")
@@ -178,6 +203,7 @@ fn acquire<'a>(
     timer
         .child("history.import_finish_save")
         .run(|_| save.finish().map_err(storage))?;
+    progress.counters.step(InitStep::Tree);
     let scope = scope_for_seed(request.scope_seed);
     let reservation = timer.child("history.reserve_inodes").run(|_| {
         catalog
@@ -204,11 +230,12 @@ fn acquire<'a>(
 
 /// Refuses host Init where the required Unix metadata contract is unavailable.
 #[cfg(not(unix))]
-pub fn init(
+pub fn init_observed(
     _storage: &Storage,
     _catalog: &dyn HistoryCatalog,
     _request: InitRequest<'_>,
     _timer: &TimingScope<'_, Active>,
+    _counters: Arc<InitCounters>,
 ) -> ProjectResult<Initialized> {
     Err(ProjectError::Unsupported)
 }

@@ -7,10 +7,10 @@ use layerfs_history::{
 use layerfs_persistence::{
     Handles, PersistenceConfig, SealedStore, SqliteAcquisitionSchema, SqlitePersistenceProfile,
 };
-use layerfs_project::{Initialized, ProjectError};
+use layerfs_project::{InitCounters, InitStep, Initialized, ProjectError};
 use layerfs_storage::{port::PersistenceError, Storage, StorageError, StoragePolicy};
 use layerfs_telemetry::timer::{Active, TimingScope};
-use std::{fmt, path::PathBuf, time::Instant};
+use std::{fmt, path::PathBuf, sync::Arc, time::Instant};
 
 /// One host Project Init. The Store is created once with acquisition tables.
 #[derive(Debug)]
@@ -89,6 +89,7 @@ impl std::error::Error for InitFailure {}
 pub(crate) fn initialize(
     request: InitRequest,
     timer: &TimingScope<'_, Active>,
+    counters: Arc<InitCounters>,
 ) -> Result<SealedProject, Box<InitFailure>> {
     let mut initialized = None;
     let mut branch = None;
@@ -111,7 +112,7 @@ pub(crate) fn initialize(
         let handles = Handles::create(config, request.policy, &request.catalog)
             .map_err(InitError::Persistence)?;
         let storage = Storage::new(handles.storage.clone()).map_err(InitError::Storage)?;
-        let imported = layerfs_project::init(
+        let imported = layerfs_project::init_observed(
             &storage,
             &handles.history,
             layerfs_project::InitRequest {
@@ -123,8 +124,10 @@ pub(crate) fn initialize(
                 deadline: request.deadline,
             },
             timer,
+            Arc::clone(&counters),
         )
         .map_err(InitError::Project)?;
+        counters.step(InitStep::Seal);
         let source = ForkSource::Layer(imported.stack.head_layer);
         initialized = Some(imported);
         branch = Some(
@@ -196,6 +199,17 @@ impl ProjectApi {
         request: InitRequest,
         timer: &TimingScope<'_, Active>,
     ) -> Result<SealedProject, Box<InitFailure>> {
-        initialize(request, timer)
+        initialize(request, timer, Arc::new(InitCounters::new()))
+    }
+    /// As [`ProjectApi::init`], updating `counters` while it runs so another
+    /// thread can show how far it has come; the last step, Seal, covers the
+    /// first Branch and sealing.
+    pub fn init_observed(
+        &self,
+        request: InitRequest,
+        timer: &TimingScope<'_, Active>,
+        counters: Arc<InitCounters>,
+    ) -> Result<SealedProject, Box<InitFailure>> {
+        initialize(request, timer, counters)
     }
 }

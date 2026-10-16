@@ -21,7 +21,7 @@ const { contributor } = await import("../src/env.js");
 const { registerRoutes } = await import("../src/route.js");
 const { TreeReader } = await import("../src/trees.js");
 const { removeProject } = await import("../src/remove.js");
-const { prepareInit, scanSource } = await import("../src/init.js");
+const { prepareInit, scanSource, watching } = await import("../src/init.js");
 const { InitJobs } = await import("../src/jobs.js");
 const { CALL, PROJECT } = await import("@dsh-layerfs/model/sources/records.js");
 
@@ -198,6 +198,17 @@ try {
   runs[1].report({ step: "import" });
   assert.equal((await job(second.body.job.id)).step, "failed", "an ended job takes no more reports");
   assert.equal((await call("GET", "/layerfs/init/nope")).status, 404);
+  // LayerFS's counts are read while its Init runs; a failed read stops only the counts
+  const later = (ms, value) => new Promise((resolve) => setTimeout(() => resolve(value), ms));
+  let progressReads = 0;
+  const counted = [], counting = { operator: { project: { progress: async () => ({ step: "files", entries: 3, files: ++progressReads, bytes: 10 }) } } };
+  assert.equal(await watching(counting, (f) => counted.push(f.imported), () => later(600, "sealed")), "sealed");
+  assert.ok(counted.length >= 2 && counted.every((c) => c.step === "files"), "counts while Init runs");
+  const after = progressReads;
+  await later(300);
+  assert.equal(progressReads, after, "no reads after Init ends");
+  const broken = { operator: { project: { progress: async () => { throw new Error("no binding"); } } } };
+  assert.equal(await watching(broken, () => assert.fail("no counts"), () => later(300, "sealed")), "sealed");
 
   // who made each node: every journaled session's lines of that project
   const journal = (line) => appendFileSync(join(h.spec.stateDir, "lines", "session-root.jsonl"), JSON.stringify({ agentId: "child-1", agent: "tester", project: "website", ok: true, start: "2026-10-16T00:00:01.000Z", ms: 5, ...line }) + "\n");

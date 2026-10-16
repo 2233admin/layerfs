@@ -4,8 +4,8 @@
 //! of the project installs it into the shared volume. Init's first Branch is
 //! named `main` and the SDK never shows it: `main` is the line of Layers.
 use crate::job::{failed, refused, Outcome};
-use crate::registry::{lock, random, text, Project, PROJECTS};
-use layerfs_api::{InitRequest, ProjectApi};
+use crate::registry::{lock, random, text, Project, INITS, PROJECTS};
+use layerfs_api::{InitCounters, InitRequest, InitStep, ProjectApi};
 use layerfs_bridge::control::SdkValue;
 use layerfs_bridge::sdk_values::hex;
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId};
@@ -66,9 +66,13 @@ pub(crate) fn init(args: &SdkValue) -> Outcome {
         scope_seed: random()?,
         deadline: Instant::now() + INIT_DEADLINE,
     };
+    let counters = Arc::new(InitCounters::new());
+    lock(&INITS)?.insert(name.to_owned(), Arc::clone(&counters));
+    let running = Running(name);
     let (sealed, _) = Timing::disabled("project.init", |timer| {
-        ProjectApi::new().init(request, timer)
+        ProjectApi::new().init_observed(request, timer, counters)
     });
+    drop(running);
     let sealed = sealed.map_err(failed)?;
     let answer = SdkValue::map([
         ("kind", SdkValue::text("Initialized")),
@@ -94,4 +98,38 @@ pub(crate) fn init(args: &SdkValue) -> Outcome {
     crate::discovery::save_project(&directory, &project)?;
     lock(&PROJECTS)?.insert(name.to_owned(), Arc::new(Mutex::new(project)));
     Ok(answer)
+}
+
+/// Removes a finished Init's counts, whichever way it ended.
+struct Running<'a>(&'a str);
+impl Drop for Running<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut inits) = INITS.lock() {
+            inits.remove(self.0);
+        }
+    }
+}
+
+/// `operator.project.progress`: how far the project's running Init has come
+/// (`step`, `entries`, `files`, `bytes`), or null when none runs.
+pub(crate) fn progress(args: &SdkValue) -> Outcome {
+    let name = text(args, "project")?;
+    let Some(counters) = lock(&INITS)?.get(name).cloned() else {
+        return Ok(SdkValue::Null);
+    };
+    let counts = counters.read();
+    let step = match counts.step {
+        InitStep::Scan => "scan",
+        InitStep::Files => "files",
+        InitStep::Tree => "tree",
+        InitStep::Publish => "publish",
+        InitStep::Seal => "seal",
+    };
+    let number = |n: u64| SdkValue::Int(i64::try_from(n).unwrap_or(i64::MAX));
+    Ok(SdkValue::map([
+        ("step", SdkValue::text(step)),
+        ("entries", number(counts.entries)),
+        ("files", number(counts.files)),
+        ("bytes", number(counts.bytes)),
+    ]))
 }

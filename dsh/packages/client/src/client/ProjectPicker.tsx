@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { IconChevronDownOutlineRegular, IconDatabaseOutlineRegular, IconPlusOutlineRegular, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import { api, type InitJob, type SessionView } from './api.ts'
-import { ProgressBar, jobText, useClock } from './Progress.tsx'
+import { ProgressBar, jobFraction, jobText, useClock } from './Progress.tsx'
 import { InitDialog, type Directories } from './InitDialog.tsx'
 
 const NONE = '\u0000none'
@@ -122,10 +122,10 @@ export function ProjectPicker({ sessionId, directories }: { sessionId: string, d
         )}
       />
       {job && (
-        <span role="status" style={{ position: 'absolute', left: 0, top: '100%', marginTop: 6, zIndex: 20, width: 280, display: 'grid', gap: 8, padding: '10px 12px', borderRadius: 12, background: 'var(--dsw-alias-bg-base, #fff)', border: '1px solid var(--dsw-alias-border-subtle, #8883)', boxShadow: '0 8px 24px rgba(0,0,0,.12)', pointerEvents: 'none' }}>
+        <span role="status" style={{ position: 'absolute', left: 0, top: '100%', marginTop: 6, zIndex: 20, width: 300, maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 8, padding: '10px 12px', borderRadius: 12, background: 'var(--dsw-alias-bg-base, #fff)', border: '1px solid var(--dsw-alias-border-subtle, #8883)', boxShadow: '0 8px 24px rgba(0,0,0,.12)', pointerEvents: 'none' }}>
           <span style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Importing {job.name}</span>
-          <ProgressBar fraction={null} />
-          <span style={{ fontSize: 12, whiteSpace: 'nowrap', color: 'var(--dsw-alias-label-caption)' }}>{jobText(job, now)}</span>
+          <ProgressBar fraction={jobFraction(job)} />
+          <span style={{ fontSize: 12, lineHeight: '17px', overflowWrap: 'anywhere', color: 'var(--dsw-alias-label-caption)' }}>{jobText(job, now)}</span>
         </span>
       )}
       {initing && <InitDialog folder={folder} directories={directories()} onClose={() => setIniting(false)} onDone={(project) => { setIniting(false); void run(() => api.choose(sessionId, project.name)) }} />}

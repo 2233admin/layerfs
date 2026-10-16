@@ -44,7 +44,7 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
   | `POST /layerfs/project/<name>/attach {folder}` | attach to a workspace folder, or `null` to detach |
   | `POST /layerfs/project/<name>/remove {confirm}` | remove the project; `confirm` must repeat its name |
 
-  Init first counts the source (every entry, links not followed, as LayerFS reads it), then makes the volume, then runs LayerFS's Host Init (scan and import on the Host, then install of the sealed Store into the volume by the Sandbox's daemon). The page reads the job every 300 ms.
+  Init first counts the source (every entry, links not followed, as LayerFS reads it), then makes the volume, then runs LayerFS's Host Init, which scans and imports on the Host and seals the Store under the LayerFS home. The project's first Sandbox installs that Store into the volume later. While LayerFS imports, the Host reads its counts every 250 ms (the SDK operator's `project.progress()`: step, entries scanned, files and bytes built) into the job's `imported`. The page reads the job every 300 ms and fills the bar from those counts over the Host's totals: scan 0–15%, files 15–95% (bytes plus 4 KB per file), then tree, publish and seal.
 
   Removal deletes the project's Docker volume and LayerFS home entry, and drops it from the bindings; sessions on it become unbound. It is refused while any container still uses the volume. Workspace files and transcripts stay. The SDK remembers each name it initialized until the Host process ends, so a removed name is not taken again before dsh restarts: Init picks the next free name (`name-2`).
 
@@ -61,7 +61,7 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
   An unbound session shows Setup: pick one of the folder's projects, or Init.
 
   The composer is hidden while the tab shows; switch to Chat to send a message.
-- **The project chip** sits in the New Session row beside the preset chip, drawn like dsh's own chips. Its menu lists the folder's projects and "No LayerFS", with "Import project…" pinned below. Like "Add workspace…", Import opens the directory picker (Finder in dsh web on a Mac); the chosen folder becomes a new project attached to the workspace folder and is chosen for the session. While it imports, a card under the chip shows the step, the file and byte counts, the elapsed time and a moving bar; the Init dialog shows the same.
+- **The project chip** sits in the New Session row beside the preset chip, drawn like dsh's own chips. Its menu lists the folder's projects and "No LayerFS", with "Import project…" pinned below. Like "Add workspace…", Import opens the directory picker (Finder in dsh web on a Mac); the chosen folder becomes a new project attached to the workspace folder and is chosen for the session. While it imports, a card under the chip shows the percentage, the step with its counts ("Importing 12,000 of 30,000 files · 40 MB of 90 MB") and the elapsed time over a bar. The bar moves without a fraction while the Host counts the source; the Init dialog shows the same.
 - **The LayerFS page** (sidebar) has one tab per project. Each shows:
   - ellen_joe, with a line on where `main` is and what was published last;
   - the workspace the project is attached to, which you can change or detach (a session already on the project keeps it);

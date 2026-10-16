@@ -134,6 +134,7 @@ await operator.files.history("feature", "/README.md", 20, 0);
 await operator.workspace.overlay(id, mounted.path);
 await operator.workspace.changes(id, mounted.path, 20, 0);
 await operator.inspect.snapshot();
+await operator.project.progress(); // while layerfs.project.init runs in this process
 const process = await operator.process.start(id, mounted.path, "npm run dev");
 await operator.process.list(id);
 await operator.process.cancel(id, process.process);
@@ -143,6 +144,16 @@ Operator names are refused by public JS/native/Rust/daemon dispatch. This subpat
 uses its own method table; process control remains exclusively in the binding.
 HTTP exists only in the local demo server, which maps GET reads and POST
 `{args:[...]}` writes at `/api/{sdk|operator}/{group}/{method}`.
+
+`project.progress()` reads the project's Init while `project.init` runs in the
+same process, without a Sandbox: `{ step, entries, files, bytes }`, or null when
+no Init runs. `step` is `scan` (reading the source), `files` (constructing each
+regular file), `tree` (building the namespace), `publish` (genesis Layer) or
+`seal` (first Branch and sealing). `entries` counts source entries scanned,
+including the root; `files` and `bytes` count regular-file identities
+constructed and their bytes, a hardlinked file once. The counts say how far
+Init has come, not its totals; a caller that wants a fraction counts the source
+itself. The install into the volume happens later, at the project's first Sandbox.
 
 Store `logical` sums regular-file sizes across immutable Commit and Layer history
 records, counting each hardlink path. `canonical` counts distinct registered object

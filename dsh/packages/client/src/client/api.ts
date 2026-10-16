@@ -29,6 +29,8 @@ export interface InitJob {
   step: 'scan' | 'volume' | 'import' | 'done' | 'failed'
   scanned: Counts | null
   totals: Counts | null
+  /** LayerFS's own counts while it imports (SDK operator project.progress). */
+  imported: { step: 'scan' | 'files' | 'tree' | 'publish' | 'seal', entries: number, files: number, bytes: number } | null
   project: Project | null
   error: { code: string, message: string } | null
 }

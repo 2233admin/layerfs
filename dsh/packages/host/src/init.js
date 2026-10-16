@@ -4,12 +4,14 @@ import { execFile } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { lstat, opendir } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
+import { setTimeout as pause } from "node:timers/promises";
 import { promisify } from "node:util";
 import { missingDeployment } from "./config.js";
 import { clientFor, release } from "./layerfs-client.js";
 
 const run = promisify(execFile);
 const NAME = /^[a-z0-9](?:[a-z0-9_.-]{0,61}[a-z0-9])?$/;
+const WATCH_MS = 250;
 
 const refuse = (code, message) => Object.assign(new Error(message), { code });
 
@@ -72,10 +74,11 @@ export function prepareInit(spec, bindings, { folder, source = folder, name }, p
 
 /**
  * Runs a prepared Init: counts the source, makes the volume, imports the
- * source (LayerFS's Host Init, then the Store's install into the volume) and
- * binds the project to `folder`. `report` sees each step: scan, volume,
- * import. One attempt; a failure leaves no binding, and the volume it made
- * is removed.
+ * source (LayerFS's Host Init, which seals the Store under the LayerFS home;
+ * the project's first Sandbox installs it into the volume) and binds the
+ * project to `folder`. `report` sees each step (scan, volume, import) and,
+ * while LayerFS imports, its counts as `imported`. One attempt; a failure
+ * leaves no binding, and the volume it made is removed.
  */
 export async function runInit(spec, bindings, { folder, project }, report = () => {}) {
   report({ step: "scan" });
@@ -87,7 +90,7 @@ export async function runInit(spec, bindings, { folder, project }, report = () =
   let client;
   try {
     client = await clientFor(spec, project);
-    await client.layerfs.project.init(project.source);
+    await watching(client, report, () => client.layerfs.project.init(project.source));
   } catch (error) {
     if (client) await release(client).catch(() => {});
     await run("docker", [...docker, "volume", "rm", project.volume]).catch(() => {});
@@ -96,6 +99,27 @@ export async function runInit(spec, bindings, { folder, project }, report = () =
   await release(client);
   bindings.addProject(folder, project);
   return project;
+}
+
+/**
+ * Runs `init`, reading its counts (operator project.progress) every WATCH_MS
+ * until it ends. One read at a time; a failed read stops the counts, not Init.
+ */
+export async function watching(client, report, init) {
+  let running = true;
+  const watch = (async () => {
+    while (running) {
+      const counts = await client.operator.project.progress().catch(() => (running = false, null));
+      if (counts && running) report({ imported: counts });
+      if (running) await pause(WATCH_MS);
+    }
+  })();
+  try {
+    return await init();
+  } finally {
+    running = false;
+    await watch;
+  }
 }
 
 /** Imports `source` (default: the workspace folder) as a LayerFS project bound to `folder`. */

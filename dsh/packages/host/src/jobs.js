@@ -3,6 +3,9 @@
 //   step      scan | volume | import | done | failed
 //   scanned   running counts while the source is counted
 //   totals    { entries, files, bytes } once counted
+//   imported  LayerFS's counts while it imports: { step: scan | files | tree |
+//             publish | seal, entries, files, bytes } (see the SDK operator's
+//             project.progress); the totals above make them a fraction
 //   project   the new project (done); error { code, message } (failed)
 // A job is kept for KEEP_MS after it ends, then dropped.
 import { randomUUID } from "node:crypto";
@@ -24,7 +27,7 @@ export class InitJobs {
 
   /** Starts a prepared Init; answers its job. */
   begin(prepared) {
-    const job = { id: randomUUID(), name: prepared.project.name, source: prepared.project.source, folder: prepared.folder, started: Date.now(), step: "scan", scanned: null, totals: null, project: null, error: null, ended: null };
+    const job = { id: randomUUID(), name: prepared.project.name, source: prepared.project.source, folder: prepared.folder, started: Date.now(), step: "scan", scanned: null, totals: null, imported: null, project: null, error: null, ended: null };
     this.jobs.set(job.id, job);
     const end = (fields) => {
       Object.assign(job, fields, { ended: Date.now() });
