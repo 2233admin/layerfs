@@ -18,9 +18,12 @@
 // A step is one of:
 //   { <tool>: args, say?, phase?, note?, expect?, retry?, as? }   one tool call
 //   { reply: "…", until?: [child, …], phase?, note? }   the agent's text; ends its turn
-// A root step may also carry `checkpoint: { label, verdict?, note? }`: when the
-// step is done the run has reached that checkpoint (a range's end, #352).
-// `verdict` is pass, watch, optimize or stop; progress.js keeps them on disk.
+// A root step may also carry `checkpoint: { label, verdict?, note?, restore? }`:
+// when the step is done the run has reached that checkpoint (a range's end,
+// #352). `verdict` is pass, watch, optimize or stop; progress.js keeps them on
+// disk. `restore` lists lib calls (as a bash `run`) that rebuild the project
+// as it was at the checkpoint; with it, a run may start after the checkpoint
+// (plan.js, resumed).
 //   { pause: ms }                                      pacing before the next step
 // Tools and their arguments are the preset's (see TOOLS). Three conveniences:
 // `bash.script` names a file under the scenario folder that becomes
@@ -136,7 +139,11 @@ export function compileScenario(raw, { name, folder, where = name }) {
     if (agent !== "root" && !parents.has(agent)) fail(`agents.${agent}`, "no subagent step starts this agent");
   }
   // the root steps that reach a checkpoint, by their position in root's steps
-  const checkpoints = agents.root.flatMap((step, index) => (step.checkpoint ? [{ index, ...step.checkpoint }] : []));
+  const checkpoints = agents.root.flatMap((step, index) => {
+    if (!step.checkpoint) return [];
+    step.checkpoint.index = index;
+    return [step.checkpoint];
+  });
   return { name, title: raw.title, blurb: raw.blurb ?? "", fixture, order: raw.order ?? null, speed: raw.speed ?? 1, live: raw.live === true, image: raw.image ?? null, seed, agents, prompts, parents, checkpoints };
 }
 
@@ -234,15 +241,23 @@ function compileSteps(steps, path, context) {
 }
 
 /** A step's checkpoint, checked: root steps only; null when the step has none. */
-function compileCheckpoint(checkpoint, at, { agent, fail }) {
+function compileCheckpoint(checkpoint, at, context) {
+  const { agent, fail } = context;
   if (checkpoint === undefined) return null;
   if (agent !== "root") fail(`${at}.checkpoint`, "only the root agent's steps reach checkpoints");
   if (!isObject(checkpoint)) fail(`${at}.checkpoint`, "is { label, verdict?, note? }");
-  only(checkpoint, ["label", "verdict", "note"], `${at}.checkpoint`, fail);
+  only(checkpoint, ["label", "verdict", "note", "restore"], `${at}.checkpoint`, fail);
   if (typeof checkpoint.label !== "string" || !checkpoint.label) fail(`${at}.checkpoint.label`, "must be a non-empty string");
   if (checkpoint.verdict !== undefined && !VERDICTS.includes(checkpoint.verdict)) fail(`${at}.checkpoint.verdict`, `is one of ${VERDICTS.join(", ")}`);
   if (checkpoint.note !== undefined && typeof checkpoint.note !== "string") fail(`${at}.checkpoint.note`, "must be a string");
-  return { label: checkpoint.label, verdict: checkpoint.verdict ?? "pass", note: checkpoint.note ?? null };
+  let restore = null;
+  if (checkpoint.restore !== undefined) {
+    const command = runCommand(checkpoint.restore, `${at}.checkpoint.restore`, context);
+    restore = { kind: "call", call: { name: "bash", args: { description: `Restore the project as it was at ${checkpoint.label}`, command } },
+      say: `Restoring ${checkpoint.label}: the project as it was there, without replaying the ranges before it.`, retry: null, expect: null, delay: 0,
+      at: `${at}.checkpoint.restore`, phase: `Restore ${checkpoint.label}`, note: null, checkpoint: null };
+  }
+  return { label: checkpoint.label, verdict: checkpoint.verdict ?? "pass", note: checkpoint.note ?? null, restore };
 }
 
 /** A script file under the scenario folder, as a bash command that feeds it to node on stdin. */

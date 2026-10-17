@@ -3,13 +3,15 @@
 // agent's phase), the run speed (how fast the mock plays it, mock/src/pace.js;
 // it applies to a run under way too), Sim or Live, and Play, which replays the
 // demo in a new Session (demo.ts). A demo with checkpoints (#352) also shows
-// their timeline (Checkpoints.tsx). Other Sessions render nothing.
+// their timeline, and Play or Replay first asks where the run starts: from
+// the beginning or after a checkpoint the latest run reached
+// (Checkpoints.tsx). Other Sessions render nothing.
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Button, IconPlayOutlineRegular, IconRefreshOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { demoApi, playDemo, SPEEDS, speedLabel, type Demo, type DemoInfo, type DemoMode, type DemoServices, type PlayStep } from './demo.ts'
 import { useDemoSessionLock } from './lockdown.ts'
 import { ProgressBar, jobFraction, jobText, useClock } from './Progress.tsx'
-import { Checkpoints, checkpointText } from './Checkpoints.tsx'
+import { Checkpoints, StartPicker, checkpointText, startable } from './Checkpoints.tsx'
 
 // while a run goes, and slower while waiting for one to start
 const POLL_MS = 700, IDLE_POLL_MS = 2500
@@ -39,6 +41,9 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
   const [chosen, setMode] = useState<DemoMode>(savedMode)
   const [playing, setPlaying] = useState<PlayStep | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // the start picker: closed (null), or open with the chosen checkpoint (-1 = the beginning);
+  // Replay opens it on the latest checkpoint a run can start after
+  const [picking, setPicking] = useState<number | null>(null)
 
   useEffect(() => {
     let live = true
@@ -73,12 +78,13 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
   // a replayed run's demo plays on Live LayerFS only
   const mode: DemoMode = demo.live ? 'live' : chosen
 
-  const play = () => {
+  const play = (startAfter: string | null = null) => {
     setError(null)
+    setPicking(null)
     setPlaying({ step: 'session' })
     // either way the demo's record is read again at once: its Session and run
     const refresh = () => demoApi.demo(demo.id).then(setDemo, () => { /* the next poll reads it */ })
-    playDemo(services(), info, demo, mode, setPlaying).then(
+    playDemo(services(), info, demo, mode, setPlaying, startAfter).then(
       () => { setPlaying(null); void refresh() },
       (failure) => { setPlaying(null); setError(failure instanceof Error ? failure.message : String(failure)); void refresh() },
     )
@@ -111,7 +117,11 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 6, margin: '0 0 6px', padding: '8px 12px', borderRadius: 10, border: '1px solid color-mix(in srgb, currentColor 12%, transparent)' }}>
       <ProgressBar fraction={fraction} />
-      {checkpoints ? <Checkpoints checkpoints={checkpoints} running={running && !halted} /> : null}
+      {checkpoints ? <Checkpoints checkpoints={checkpoints} running={running && !halted} onPick={(i) => setPicking(i)} /> : null}
+      {checkpoints && picking !== null ? (
+        <StartPicker checkpoints={checkpoints} chosen={picking < 0 ? null : picking} onChoose={(i) => setPicking(i ?? -1)}
+          onCancel={() => setPicking(null)} onStart={() => play(picking < 0 ? null : checkpoints[picking].label)} />
+      ) : null}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: error || halted || run?.state === 'stopped' ? 'var(--dsh-color-fg-danger, #d14343)' : 'var(--dsh-color-fg-muted, inherit)' }}
           title={error ?? line}>{error ?? line}</span>
@@ -122,7 +132,9 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
           {demo.live ? null : choice('sim', 'Sim')}{choice('live', 'Live')}
         </span>
         {/* Replay works mid-run too: the old Session is archived with its work stopped */}
-        <Button variant="secondary" size="sm" disabled={playing !== null} onClick={play} title={running ? 'Stop this run and play the demo again' : undefined}
+        <Button variant="secondary" size="sm" disabled={playing !== null}
+          onClick={() => (checkpoints && startable(checkpoints).length ? setPicking(picking === null ? startable(checkpoints).at(-1)! : null) : play())}
+          title={running ? 'Stop this run and play the demo again' : undefined}
           icon={run ? <IconRefreshOutlineRegular size={14} /> : <IconPlayOutlineRegular size={14} />}>{run ? 'Replay' : 'Play'}</Button>
       </div>
     </div>

@@ -12,8 +12,12 @@ import { api, type InitJob } from './api.ts'
 export type DemoMode = 'live' | 'sim'
 /** A run's progress, from the mock model's replies (mock/src/progress.js). */
 export interface DemoRun { root: string, state: 'running' | 'done' | 'stopped', done: number, of: number, phase: string | null, error: string | null, started: number, ended: number | null, journal?: boolean }
-/** A checkpoint of the demo's scenario (#352); reachedAt is when the latest run reached it. */
-export interface DemoCheckpoint { label: string, verdict: 'pass' | 'watch' | 'optimize' | 'stop', note: string | null, reachedAt: number | null }
+/**
+ * A checkpoint of the demo's scenario (#352): reachedAt is when the latest run
+ * reached it, restored whether that run started after it; resumable whether a
+ * run can start after it.
+ */
+export interface DemoCheckpoint { label: string, verdict: 'pass' | 'watch' | 'optimize' | 'stop', note: string | null, resumable: boolean, reachedAt: number | null, restored: boolean }
 export interface Demo { id: string, title: string, blurb: string | null, agents: string[], speed: number, live: boolean, image: string | null, seed: string | null, seedError?: string, sessionId: string | null, run: DemoRun | null, checkpoints?: DemoCheckpoint[] }
 export interface DemoInfo { workspace: string, preset: string, provider: string, prompt: string, intro: string, demos: Demo[] }
 
@@ -161,10 +165,11 @@ export type PlayStep = { step: 'session' } | { step: 'stop' } | { step: 'init', 
  * the mode Inited again; then the new Session is recorded, sent the first
  * message and opened. Each step is attempted once. On a failure before the
  * run starts, the current Session is unarchived and stays the demo's, the new
- * one is archived, and Play ends with the failure's message.
+ * one is archived, and Play ends with the failure's message. With
+ * `startAfter`, a checkpoint's label (#352), the run starts after it.
  * @returns the new Session's id
  */
-export async function playDemo(services: DemoServices, info: DemoInfo, demo: Demo, mode: DemoMode, onStep: (step: PlayStep) => void): Promise<string> {
+export async function playDemo(services: DemoServices, info: DemoInfo, demo: Demo, mode: DemoMode, onStep: (step: PlayStep) => void, startAfter: string | null = null): Promise<string> {
   if (!services.remote) throw new Error('this client has no Remote session services')
   if (demo.live) mode = 'live'
   if (demo.seedError) throw new Error(`the demo's seed: ${demo.seedError}`)
@@ -193,7 +198,8 @@ export async function playDemo(services: DemoServices, info: DemoInfo, demo: Dem
     throw error
   }
   onStep({ step: 'start' })
-  await send(services, sessionId, info.prompt)
+  // a run that starts after a checkpoint says so in its first message (mock/src/plan.js)
+  await send(services, sessionId, startAfter ? `${info.prompt.replace(/\.$/, '')} from after ${startAfter}.` : info.prompt)
   services.uiWorkspace?.openSession(sessionId)
   return sessionId
 }

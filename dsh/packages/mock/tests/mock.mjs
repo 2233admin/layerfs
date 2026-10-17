@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createAdapter } from "../src/adapter.js";
-import { agentOf, nextReply } from "../src/plan.js";
+import { agentOf, nextReply, resumed, stepsOf } from "../src/plan.js";
 import { Pace } from "../src/pace.js";
 import { Progress } from "../src/progress.js";
 import { compileScenario, loadScenarios, ScenarioError } from "../src/scenario.js";
@@ -295,7 +295,7 @@ assert.equal(out.at(-1).reason.kind, "aborted");
     /only the root agent's steps reach checkpoints|two replies in a row/);
   assert.throws(() => withLib({}, [["go"]]) && compileScenario({ type: "layerfs-mock-scenario", version: 2, title: "t", lib: "lib.mjs", agents: { root: [{ bash: { description: "d", run: [["go"]] }, checkpoint: { label: "L", verdict: "maybe" } }] } }, { name: "t", folder }), /verdict: is one of pass, watch, optimize, stop/);
   const demo = scenarios.get("checkpoints");
-  assert.deepEqual(demo.checkpoints.map((c) => [c.label, c.verdict]), [["Range 1", "pass"], ["Range 2", "pass"], ["Range 3", "watch"], ["Range 4", "pass"]]);
+  assert.deepEqual(demo.checkpoints.map((c) => [c.label, c.verdict]), [["Range 1", "pass"], ["Range 2", "pass"], ["Range 3", "pass"], ["Range 4", "pass"]]);
   const dir = mkdtempSync(join(tmpdir(), "lfs-journal-"));
   const p = new Progress(scenarios, dir), at = demo.checkpoints[1].index;
   const root = (done) => ({ kind: "calls", done, of: demo.agents.root.length, phase: null });
@@ -308,6 +308,28 @@ assert.equal(out.at(-1).reason.kind, "aborted");
   const run = restarted.get("checkpoints");
   assert.equal(run.state, "stopped"); assert.match(run.error, /interrupted/); assert.equal(run.done, at + 1);
   assert.equal(new Progress(scenarios).get("checkpoints"), null, "no journal, no run");
+
+  // a run started after a checkpoint: restore, restart the children at their next turn, go on
+  const r = resumed(demo, "Range 2");
+  assert.equal(r.restored, 2);
+  assert.deepEqual([...r.skip], [["a01", 2], ["a02", 2]]);
+  assert.equal(r.root[0].call.name, "bash"); assert.match(r.root[0].call.args.command, /restore\(2\)/);
+  assert.deepEqual(r.root.slice(1, 3).map((x) => [x.call.name, x.call.child]), [["subagent", "a01"], ["subagent", "a02"]]);
+  assert.match(r.root[1].call.args.prompt, /start at your turn 3\.\)$/);
+  assert.deepEqual(r.root.filter((x) => x.checkpoint).map((x) => x.checkpoint.label), ["Range 3", "Range 4"], "only the later checkpoints are played");
+  assert.equal(resumed(demo, "Range 4"), null, "no restore, no resume");
+  const say = (text) => [{ role: "user", content: [{ type: "text", text }] }];
+  assert.equal(stepsOf(demo, "root", say("Run the demo from after Range 2.")).restored, 2);
+  assert.equal(stepsOf(demo, "root", say("Run the demo.")).steps, demo.agents.root);
+  assert.equal(stepsOf(demo, "a01", say(`${r.root[1].call.args.prompt}`)).steps.length, demo.agents.a01.length - 4, "a01 skips two turns of two steps");
+  assert.equal(stepsOf(demo, "a01", say(`Task:\n${r.root[1].call.args.prompt}\n\nReport back when done.`)).steps.length, demo.agents.a01.length - 4, "the marker is found with dsh's text around the prompt");
+  assert.equal(agentOf(demo, say(r.root[1].call.args.prompt)), "a01", "a restarted child is still known by its prompt");
+  const first = nextReply(demo, "root", say("Run the demo from after Range 2."));
+  assert.equal(first.kind, "calls"); assert.equal(first.restored, 2); assert.equal(first.phase, "Restore Range 2");
+  const q = new Progress(scenarios, mkdtempSync(join(tmpdir(), "lfs-journal-")));
+  q.report("checkpoints", "root", first, "s2");
+  assert.deepEqual(q.checkpoints("checkpoints").map((c) => [c.reachedAt !== null, c.restored]), [[true, true], [true, true], [false, false], [false, false]], "restored before the run plays");
+  assert.deepEqual(q.checkpoints("checkpoints").map((c) => c.resumable), [true, true, true, false]);
 }
 
 console.log(`mock: ok (${scenarios.size} scenarios played)`);

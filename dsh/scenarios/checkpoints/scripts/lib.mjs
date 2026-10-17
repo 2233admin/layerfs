@@ -41,3 +41,16 @@ export async function verify(range) {
   console.log(`checkpoint r${range}: main has ${found} of ${want} files the ranges wrote`);
   if (found !== want) { console.log("checkpoint failed"); process.exitCode = 1; }
 }
+
+/**
+ * What a run that starts after checkpoint `range` restores first. Here it
+ * rebuilds ranges 1..range at once, standing in for #352's Store snapshot
+ * restore, which brings the project back in one step without replaying them.
+ */
+export async function restore(range) {
+  for (let r = 1; r <= range; r++) {
+    for (const agent of ["a01", "a02"]) await work(agent, r);
+    await consolidate(r);
+  }
+  console.log(`restored: main as it was at the end of range ${range}`);
+}

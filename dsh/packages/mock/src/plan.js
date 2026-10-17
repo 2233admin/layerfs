@@ -24,6 +24,73 @@ const SHELL_FAILURE = /\n\[(exit code: [1-9][0-9]*|killed by signal: [^\]\n]+)\]
 const textOf = (message) => (message.content ?? []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
 const settledId = (message) => message.role === "user" ? message.source?.childId ?? textOf(message).match(SETTLED)?.[1] : undefined;
 
+// A run may start after a checkpoint (#352): the root's first message ends
+// "from after <label>." Its steps are then the checkpoint's restore, a start
+// of each child it had started (the child's prompt says which turn it starts
+// at), and its steps after the checkpoint, less the first send_message to each
+// restarted child (the start opens that turn). A child skips the turns it had
+// finished. Nothing is kept: both come from the conversation again.
+const RESUME_ROOT = / from after (.+)\.$/;
+// dsh may add its own text around a child's prompt, so the marker is found anywhere in it
+const RESUME_CHILD = /\(Resumed after .+?: start at your turn ([0-9]+)\.\)/;
+const variants = new WeakMap();
+
+/** The root's steps and each restarted child's skipped turns, for a run started after checkpoint `label`. */
+export function resumed(scenario, label) {
+  let cache = variants.get(scenario);
+  if (!cache) variants.set(scenario, (cache = new Map()));
+  if (cache.has(label)) return cache.get(label);
+  const at = scenario.checkpoints.findIndex((c) => c.label === label), cp = scenario.checkpoints[at];
+  if (!cp?.restore) { cache.set(label, null); return null; }
+  const root = scenario.agents.root, prefix = root.slice(0, cp.index + 1), rest = root.slice(cp.index + 1);
+  const starts = new Map(), turns = new Map();
+  for (const s of prefix) {
+    if (s.kind !== "call") continue;
+    if (s.call.child) { starts.set(s.call.child, s); turns.set(s.call.child, (turns.get(s.call.child) ?? 0) + 1); }
+    if (s.call.name === "send_message") { const c = s.call.refs.agent_id.agent; turns.set(c, (turns.get(c) ?? 0) + 1); }
+  }
+  const skip = new Map();
+  const steps = [cp.restore];
+  for (const [child, s] of starts) {
+    const done = turns.get(child), left = skipTurns(scenario.agents[child], done);
+    if (!left.length) continue;
+    skip.set(child, done);
+    steps.push({ ...s, call: { ...s.call, args: { ...s.call.args, prompt: `${s.call.args.prompt} (Resumed after ${label}: start at your turn ${done + 1}.)` } }, say: null, phase: null, delay: 0 });
+  }
+  const opened = new Set();
+  let phase = null;
+  for (const s of rest) {
+    if (s.kind === "call" && s.call.name === "send_message") {
+      const c = s.call.refs.agent_id.agent;
+      if (skip.has(c) && !opened.has(c)) { opened.add(c); phase ??= s.phase; continue; }
+    }
+    steps.push(phase && !s.phase ? { ...s, phase } : s);
+    phase = null;
+  }
+  const value = { label, restored: at + 1, root: steps, skip };
+  cache.set(label, value);
+  return value;
+}
+
+/** A child's steps after its first `turns` turns. */
+function skipTurns(steps, turns) {
+  let seen = 0, i = 0;
+  while (seen < turns && i < steps.length) if (steps[i++].kind === "reply") seen++;
+  return steps.slice(i);
+}
+
+/** The steps this conversation plays: the scenario's, or a resumed run's; and how many checkpoints were restored. */
+export function stepsOf(scenario, agent, messages) {
+  const first = messages.find((m) => m.role === "user"), text = first ? textOf(first).trim() : "";
+  if (agent === "root") {
+    const label = text.match(RESUME_ROOT)?.[1];
+    const r = label ? resumed(scenario, label) : null;
+    return r ? { steps: r.root, restored: r.restored } : { steps: scenario.agents.root, restored: 0 };
+  }
+  const turn = Number(text.match(RESUME_CHILD)?.[1] ?? 0);
+  return { steps: turn > 1 ? skipTurns(scenario.agents[agent], turn - 1) : scenario.agents[agent], restored: 0 };
+}
+
 /** Which of the scenario's agents a conversation belongs to. */
 export function agentOf(scenario, messages) {
   const first = messages.find((m) => m.role === "user");
@@ -41,9 +108,9 @@ export function agentOf(scenario, messages) {
  * `of` (its steps) and `phase` (the latest `phase` at or before its step).
  */
 export function nextReply(scenario, agent, messages) {
-  const steps = scenario.agents[agent];
+  const { steps, restored } = stepsOf(scenario, agent, messages);
   let index = 0;
-  const reply = placed(steps, () => index);
+  const reply = placed(steps, () => index, restored);
   const results = new Map(), settled = [];
   messages.forEach((m, k) => {
     if (m.role === "tool") results.set(String(m.toolCallId), { text: textOf(m), isError: m.isError === true });
@@ -131,13 +198,18 @@ export function nextReply(scenario, agent, messages) {
   });
 }
 
-/** Adds the agent's position to a reply; `sent` counts the step the reply finishes. */
-function placed(steps, index) {
+/**
+ * Adds the agent's position to a reply; `sent` counts the step the reply
+ * finishes. `passed` lists the checkpoints (their root step index) of the
+ * steps done, and `restored` how many a resumed run started after.
+ */
+function placed(steps, index, restored = 0) {
   return (value, sent = 0) => {
     const done = Math.min(index() + sent, steps.length);
     let phase = null;
     for (let i = Math.min(index(), steps.length - 1); i >= 0 && !phase; i--) phase = steps[i].phase ?? null;
-    return { ...value, done, of: steps.length, phase };
+    const passed = steps.slice(0, done).flatMap((s) => (s.checkpoint ? [s.checkpoint.index] : []));
+    return { ...value, done, of: steps.length, phase, passed, restored };
   };
 }
 

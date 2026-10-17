@@ -2,7 +2,7 @@
  "type": "layerfs-mock-scenario",
  "version": 2,
  "title": "Checkpoints",
- "blurb": "A small history replay in four ranges: two agents write on lanes of their own, the lead merges, publishes and verifies, and each range ends at a checkpoint with a verdict. The strip shows the checkpoint timeline; reached checkpoints are kept on disk and outlive a restart. (#352; the verdicts are fake.)",
+ "blurb": "A small history replay in four ranges: two agents write on lanes of their own, the lead merges, publishes and verifies, and each range ends at a checkpoint once its gates pass. The strip shows the checkpoint timeline; reached checkpoints are kept on disk and outlive a restart. Play or Replay can start after a checkpoint the last run reached: the ranges up to it are restored, not replayed. (#352; the gate numbers are fake.)",
  "fixture": "../../demo-workspace",
  "order": 10,
  "lib": "scripts/lib.mjs",
@@ -65,7 +65,13 @@
     "checkpoint": {
      "label": "Range 1",
      "verdict": "pass",
-     "note": "Baseline set from this range (fake numbers)."
+     "note": "Baseline set from this range (fake numbers).",
+     "restore": [
+      [
+       "restore",
+       1
+      ]
+     ]
     }
    },
    {
@@ -124,7 +130,13 @@
     "checkpoint": {
      "label": "Range 2",
      "verdict": "pass",
-     "note": "All gates pass; fs.write p95 1.02\u00d7 baseline (fake)."
+     "note": "All gates pass; fs.write p95 1.02\u00d7 baseline (fake).",
+     "restore": [
+      [
+       "restore",
+       2
+      ]
+     ]
     }
    },
    {
@@ -182,8 +194,14 @@
     },
     "checkpoint": {
      "label": "Range 3",
-     "verdict": "watch",
-     "note": "fs.stat p95 1.3\u00d7 baseline and rising (fake): probes run at the next milestone."
+     "verdict": "pass",
+     "note": "All gates pass; fs.stat p95 1.05\u00d7 baseline (fake).",
+     "restore": [
+      [
+       "restore",
+       3
+      ]
+     ]
     }
    },
    {
@@ -242,11 +260,11 @@
     "checkpoint": {
      "label": "Range 4",
      "verdict": "pass",
-     "note": "Watch cleared: fs.stat back to 1.05\u00d7 baseline (fake)."
+     "note": "All gates pass; the history matches the oracle (fake)."
     }
    },
    {
-    "reply": "All four ranges reached their checkpoints. Range 3 was a watch, cleared in range 4."
+    "reply": "All four ranges reached their checkpoints; every gate passed."
    }
   ],
   "a01": [

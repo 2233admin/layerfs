@@ -57,7 +57,9 @@ export class Progress {
     let run = this.runs.get(scenario);
     if (agent === "root" && run?.root !== sessionId) {
       const steps = Object.entries(this.scenarios.get(scenario).agents);
-      run = { root: sessionId, state: "running", agents: Object.fromEntries(steps.map(([name, list]) => [name, { done: 0, of: list.length }])), phase: null, error: null, started: Date.now(), ended: null, reached: [] };
+      // a run started after a checkpoint has the checkpoints up to it restored, not replayed
+      const restored = (this.scenarios.get(scenario).checkpoints ?? []).slice(0, reply.restored ?? 0).map((c) => ({ index: c.index, at: Date.now(), restored: true }));
+      run = { root: sessionId, state: "running", agents: Object.fromEntries(steps.map(([name, list]) => [name, { done: 0, of: list.length }])), phase: null, error: null, started: Date.now(), ended: null, reached: restored };
       this.runs.set(scenario, run);
       this.write(scenario, run);
     }
@@ -66,8 +68,10 @@ export class Progress {
     if (agent === "root" && reply.phase) run.phase = reply.phase;
     let changed = false;
     if (agent === "root") {
-      for (const c of this.scenarios.get(scenario).checkpoints ?? []) {
-        if (c.index < reply.done && !run.reached.some((r) => r.index === c.index)) { run.reached.push({ index: c.index, at: Date.now() }); changed = true; }
+      // the checkpoints of the steps done (plan.js); without that list, those at or before `done`
+      const passed = reply.passed ?? (this.scenarios.get(scenario).checkpoints ?? []).filter((c) => c.index < reply.done).map((c) => c.index);
+      for (const index of passed) {
+        if (!run.reached.some((r) => r.index === index)) { run.reached.push({ index, at: Date.now() }); changed = true; }
       }
     }
     if (reply.kind === "error") { Object.assign(run, { state: "stopped", error: `${agent}: ${reply.message}`, ended: Date.now() }); changed = true; }
@@ -86,12 +90,16 @@ export class Progress {
 
   /**
    * The scenario's checkpoints with the latest run's progress through them:
-   * { label, verdict, note, reachedAt } each, reachedAt null until reached.
+   * { label, verdict, note, resumable, reachedAt, restored } each: reachedAt
+   * null until reached, restored when a resumed run started after it.
    */
   checkpoints(scenario) {
     const defined = this.scenarios.get(scenario)?.checkpoints ?? [];
     const reached = this.runs.get(scenario)?.reached ?? this.journal(scenario)?.reached ?? [];
-    return defined.map(({ index, ...c }) => ({ ...c, reachedAt: reached.find((r) => r.index === index)?.at ?? null }));
+    return defined.map((c) => {
+      const r = reached.find((x) => x.index === c.index);
+      return { label: c.label, verdict: c.verdict, note: c.note, resumable: c.restore !== null, reachedAt: r?.at ?? null, restored: r?.restored === true };
+    });
   }
 
   /**
