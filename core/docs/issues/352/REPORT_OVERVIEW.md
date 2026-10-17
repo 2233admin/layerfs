@@ -20,7 +20,7 @@
   grep, glob, diff_files, blame), `sandbox` (create, service, mount, exec,
   status, commit, unmount, close), `branch` (fork, merge, publish, diff_commits,
   diff_branches), `project` (init, list_commits, branches, other project
-  methods), `operator` (store.stats, store.commits, files.stats). A method not in
+  methods), `operator` (store.stats, store.commits, files.stats, inspect.snapshot, workspace.overlay). A method not in
   this list fails the check until it is assigned here.
 - **A step's category** is the category of the call that defines it: an fs batch
   is fs; a one-shot Workspace (mount, exec, commit, unmount) is sandbox; a lead

@@ -562,7 +562,7 @@ them here.
 **Recorded at P1 close (2026-10-18):** the baseline is ranges 2–4 on daemon
 `511dceed` (`~/lfs-history/metrics/baseline.json`); the thresholds are
 gates.mjs `THRESHOLDS` (RESULTS.md, P1); the wall budget is 120 s per range,
-24,240 s for 202 ranges, against the current phase's mean × 202.
+24,240 s for 202 ranges, against the current phase's mean × 202. The runner reads the budget from `~/lfs-history/budget.json` (`wallBudgetMs`, `ranges`, the decision's reason) and records `wallBudgetMs` and `wallProjectedMs` in each attempt's metrics.
 
 - **Pass:** continue.
 - **Watch:** continue, and run the probes at the next milestone.

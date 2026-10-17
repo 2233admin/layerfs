@@ -269,7 +269,9 @@ test("aggregate groups calls by operation and size class", () => {
   ]);
   assert.deepEqual(rows.map((r) => [r.op, r.sizeClass, r.n]), [["fs.write", "≤1 KiB", 2], ["fs.write", "≤512 KiB", 1]]);
   assert.equal(rows[0].slowPhase, "construct");
-  assert.equal(sizeClass("files", 3), "2–4");
+  assert.equal(sizeClass("files", 3), "2–4 files");
+  assert.equal(sizeClass("files", 0), "0 files");
+  assert.equal(sizeClass("entries", 100), ">64 entries");
 });
 
 test("the report keeps the lead's section and the index links each range", () => {

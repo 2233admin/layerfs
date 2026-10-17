@@ -38,7 +38,8 @@ export function parseReport(text) {
 export function atHead(file) {
   try {
     const at = join(realpathSync(dirname(file)), basename(file));
-    const top = execFileSync("git", ["-C", dirname(at), "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+    // A docs folder outside git (a dev or control run's) has no HEAD: null, quietly.
+    const top = execFileSync("git", ["-C", dirname(at), "rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
     return execFileSync("git", ["-C", top, "show", `HEAD:${relative(top, at)}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   } catch { return null; }
 }

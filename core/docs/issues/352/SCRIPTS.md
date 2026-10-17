@@ -286,3 +286,48 @@ differs from the text above:
   `metrics/probes-<daemon>.json` `{ daemon, points: [{ range, depth, binary,
   cache, probes }] }`, read by report.mjs (`loadSeeds`). A seed fills only a
   range that no same-binary attempt covers.
+
+## 13. As built for P2 (2026-10-18)
+
+The P2 player is `dsh/tools/history/agents.mjs`, called by `run.mjs` when the
+run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
+`steps.mjs`, tested by `tests/p2.mjs`). A run moves to P2 with `run.mjs phase
+--run <id> --phase p2`: same pinned binaries and Store, the move recorded in
+`run.json` (`phases`) and the ledger. Where it differs from the text above:
+
+- **Agents are concurrent tasks with their own SDK client.** Each agent runs
+  its steps in plan order and awaits only the `after` barriers of each step;
+  a failure rejects every pending barrier so no agent waits forever. Each
+  agent has its own client (Store calls through the run's service Sandbox) so
+  trace labels never mix; every call is recorded (`lib.mjs record`) and its
+  trace label is `<step>#<seq>`, which joins the trace line to its record.
+- **One Sandbox per agent** (at least 4), created once by the lead, kept
+  across ranges until a seal. Two concurrent unmounts of different Workspaces
+  in one Sandbox failed "Workspace absent" on daemon `511dceed` (dev run,
+  finding reported to the lead); one Sandbox per agent keeps the replay off it.
+  The seal closes named Sandboxes at once and the service last.
+- **Lanes are the plan's Branch names**, forked from main by the lead at the
+  range start (one lead step), with the lead's own Branch `r<k>-main`. Each
+  merge makes a new Branch `r<k>-main-<n>`; the reconcile and the publish run
+  on the last one.
+- **The race** (`merge-race`): the first raced lane publishes (from its own
+  client) while the lead merges the second; then the lead merges the published
+  lane. A raced merge answering Conflict is merged again before the reconcile.
+- **Decoys change every line** of the base (prefixed with the marker). A
+  decoy that only appended a line merged cleanly with the real change, so the
+  planned Commit Conflict answered Committed.
+- **Removals never take a folder another agent of the lane writes under**
+  (`p2Plan` `keep`), and a write under such a folder that did not exist at the
+  range start makes it again (`mkdir` of an existing folder is a no-op), so
+  concurrent agents never race on a folder. A folder left empty is invisible
+  to every check (git and the checks list files only).
+- **Apply and stale-apply steps put removals in the Sandbox too** (`rm -rf` of
+  the removal target in the step's script).
+- **Same-Branch concurrent Commits can answer HeadMoved** (daemon `511dceed`):
+  a Commit that merged against the head it read fails at publish when another
+  agent's Commit landed meanwhile. That is an unplanned outcome (stop). Until
+  it is fixed, development runs may pass `--serialize-commits 1` (one
+  publishing call per lane at a time; refused for a measured run, recorded as
+  `devAid` in the metrics).
+- **Not in P2:** installs and unit tests (P3); `p2Plan` reports them as left out.
+

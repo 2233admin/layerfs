@@ -2,7 +2,9 @@
 // range NNN's report as it is about to be committed, its issue comment and
 // its findings. Each rule prints PASS or FAIL with the reasons; the caller
 // exits non-zero naming the failing rule ids.
-//   F1 fixed shape     the template's headings in order, none empty
+//   F1 fixed shape     the template's headings in order, none empty; for an
+//                      attempt that recorded its calls and Overview, the
+//                      Overview first with its sums (REPORT_OVERVIEW.md §3)
 //   F2 frozen          attempt rows and the latest check rows equal the stored
 //                      gate results (legacy attempts: git HEAD's report);
 //                      every earlier range's report equals HEAD's
@@ -20,6 +22,7 @@ import { dirname, join, resolve } from "node:path";
 import { checkFinding, loadFindings } from "./findings.mjs";
 import { atHead, cells, legacyGates, parseReport, tableAfter } from "./frozen.mjs";
 import { FINDING_COLUMNS, LEAD_END, LEAD_START, NOTE_START } from "./report.mjs";
+import { checkOverview } from "./stats.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
 const HEADINGS = (k) => [`# Range ${pad(k)}`, "## Attempts", "## 1. Checks", "## 2. Work", "## 3. Operation latency", "## 4. Scale probes", "## 5. Storage", "## 6. Trends", LEAD_START, NOTE_START, LEAD_END];
@@ -74,6 +77,11 @@ export function checkReport({ range, metricsDir, docs }) {
     from = at + 1;
     if (h !== LEAD_START && h !== `# Range ${pad(range)}` && !section(text, h)?.trim()) fail("F1", `${h} is empty; an empty section says why`);
   }
+
+  // F1, the Overview: required, and its sums checked, when the latest attempt recorded its data
+  const last = attempts.at(-1);
+  if (last?.overview && last?.calls) for (const p of checkOverview(text, last)) fail("F1", `Overview: ${p}`);
+  else if (text.includes("\n## Overview")) notes.push("note F1: an Overview without recorded data in the latest attempt");
 
   // F2: rows equal the recorded results; earlier reports unchanged
   attempts.forEach((m, i) => {

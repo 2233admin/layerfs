@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 // The headless player of the history replay (#352 SPEC §2, §3, §7; SCRIPTS.md §1):
 //   node dsh/tools/history/run.mjs new  --run <id> --phase p1 [--label measured|dev|control] [--policy default|control]
-//   node dsh/tools/history/run.mjs play --run <id> --from N --to M [--mode measured|fast]
+//   node dsh/tools/history/run.mjs play --run <id> --from N --to M [--mode measured|fast] [--serialize-commits 1 (dev/control runs only)]
 //   node dsh/tools/history/run.mjs fork --run <new id> --from-run <id> --range N [--label …]
 //   node dsh/tools/history/run.mjs cleanup --run <id>
+//   node dsh/tools/history/run.mjs phase --run <id> --phase p2
+// `phase` moves a run to the next phase (P1 → P2 …) at the range it stands
+// at, keeping its pinned binaries and its Store; the move is recorded in the
+// run's manifest (`phases`) and ledger. A dirty run cannot move.
 // `new` makes the run's folder (~/lfs-history/runs/<id>/), its Docker volume
 // layerfs-issue352-<id>, and its Store by Init of dsh's first commit; every
 // container is named layerfs-issue352-<id>-<sandbox> (LAYERFS_CONTAINER_PREFIX).
@@ -17,6 +21,13 @@
 // (LAYERFS_TRACE) with LAYERFS_CONSTRUCTION_WORKERS=1; fast mode (fast-forward
 // after a fork) plays and checks the changed paths only: no trace, probes,
 // tests, snapshots or metrics.
+// P2 (agents.mjs) plays the plan's lanes as Branches and its agents as
+// concurrent tasks ordered by the plan's barriers, with the lead's merges,
+// race, reconcile and publish; every call is recorded (lib.mjs record) for
+// the call table, size classes and the Overview (stats.mjs).
+// The wall budget is read from ~/lfs-history/budget.json ({ wallBudgetMs,
+// ranges, reason }); the projection is the mean tooling wall time of the
+// phase's latest attempts (this one included) × `ranges` (SPEC §5).
 // Exit codes: 0 the last range passed (or watch); 3 optimize; 4 stop (a gate,
 // a step that differs from the plan, or a failed checkpoint); 5 the guard
 // refused a range (disk, binary, missing calibration); 1 an error; 2 usage.
@@ -34,7 +45,9 @@ import {
   binaries, closure, consolidate, HISTORY, Mismatch, probeFixture, probes, readTrace, REPO, Run,
   step, teardown, verify, writeJson,
 } from "./lib.mjs";
-import { addDelta, deltaSummary, diskGuard, EXIT, pad, PHASES, phaseOps, Tree } from "./steps.mjs";
+import { addDelta, deltaSummary, diskGuard, EXIT, nextPhase, pad, PHASES, phaseOps, Tree } from "./steps.mjs";
+import { consolidateLanes, playAgents, pool, startRange } from "./agents.mjs";
+import { buildOverview, callTable } from "./stats.mjs";
 
 const here = new URL(".", import.meta.url).pathname;
 const IMAGE = "sha256:d3773b4eac6a7a644887b17e36956cd1553786d47103f0170a3bb2b0ff6988de";
@@ -51,6 +64,31 @@ export function outputs(label, dir) {
   return label === "measured"
     ? { metrics: join(HISTORY, "metrics"), docs: join(REPO, "core/docs/issues/352"), snapshots: join(HISTORY, "snapshots") }
     : { metrics: join(dir, "metrics"), docs: join(dir, "docs"), snapshots: join(dir, "snapshots") };
+}
+
+/** The wall budget (SPEC §5; decided at P1 close and recorded in budget.json), or null. */
+export function loadBudget(file = join(HISTORY, "budget.json")) {
+  if (!existsSync(file)) return null;
+  const b = JSON.parse(readFileSync(file, "utf8"));
+  return Number.isFinite(b.wallBudgetMs) && Number.isInteger(b.ranges) ? b : null;
+}
+
+/**
+ * The projected wall time of the whole history (SPEC §5, lead decision at P1
+ * close): the mean tooling wall time of the phase's latest attempts, this
+ * one included (`own`), × the history's ranges.
+ */
+export function wallProjection(attempts, phase, own, ranges) {
+  const latest = new Map();
+  for (const a of attempts) if (a.phase === phase && a.range !== own.range && a.wall?.totalMs != null && (!latest.has(a.range) || latest.get(a.range).attempt < a.attempt)) latest.set(a.range, a);
+  const walls = [...[...latest.values()].map((a) => a.wall.totalMs), own.totalMs];
+  return { wallProjectedMs: Math.round((walls.reduce((n, x) => n + x, 0) / walls.length) * ranges), wallMeanOf: walls.length };
+}
+
+/** Metrics files of `dir`, as recorded. */
+function readAttempts(dir) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).filter((f) => /^range-\d{3}\.a\d+\.json$/.test(f)).map((f) => JSON.parse(readFileSync(join(dir, f), "utf8")));
 }
 
 /** The next attempt number of range k in `metrics`. */
@@ -162,37 +200,54 @@ async function playRange(run, k, mode) {
   if (!guard.ok) { console.error(`range ${k} refused: ${guard.why}`); return EXIT.guard; }
   if (phase.tests && measured && !existsSync(join(run.planDir, `tests-${pad(k)}.json`))) { console.error(`range ${k} refused: no tests-${pad(k)}.json; calibrate it first`); return EXIT.guard; }
   if (!run.lf) await run.client();
+  const p2 = phase.lanes === "plan";
+  if (p2) await pool(run, k, plan.agents.length);
   lap("prepareMs", t0);
   const outputs = run.manifest.outputs, attempt = measured ? nextAttempt(outputs.metrics, k) : 0;
   const traceFile = measured ? join(run.dir, "trace", `range-${pad(k)}.a${attempt}.jsonl`) : null;
   if (traceFile) mkdirSync(join(run.dir, "trace"), { recursive: true });
   run.traceTo(traceFile, `r${pad(k)}`);
-  const m = { range: k, attempt, run: run.manifest.run, phase: run.manifest.phase, label: run.manifest.label, mode, started: new Date().toISOString(),
+  const m = { ...(run.serialize ? { devAid: "serialize-commits" } : {}), range: k, attempt, run: run.manifest.run, phase: run.manifest.phase, label: run.manifest.label, mode, started: new Date().toISOString(),
     binary: run.manifest.binary, plan: { version: run.manifest.planVersion, checkpoint: plan.checkpoint }, policy: run.manifest.policyName };
   const before = measured ? await run.op.store.stats() : null;
-  const { ops, reconcile, left } = phaseOps(plan, run.manifest.phase);
-  const branch = `r${pad(k)}-lane`;
-  const ctx = { ops, reconcile, branch, tree: new Tree(lsTree(run.repo, run.state.prevCommit).files), work: { fs: 0, sandbox: 0, commits: 0 }, measured };
+  const { ops, reconcile, left } = p2 ? { ops: [], reconcile: [], left: {} } : phaseOps(plan, run.manifest.phase);
+  let branch = `r${pad(k)}-lane`;
+  let ctx = p2 ? null : { ops, reconcile, branch, tree: new Tree(lsTree(run.repo, run.state.prevCommit).files), work: { fs: 0, sandbox: 0, commits: 0 }, measured };
   const depthBefore = run.state.depth.commits;
   let failure = null, published = null, proof = null, tests = null, probeOut = {};
-  run.calls = 0;
+  run.tally.calls = 0;
+  run.sink.log.length = 0;
   try {
     let since = performance.now();
-    run.label(`r${pad(k)}.fork`);
-    await run.lf.branch.fork(branch, "main");
-    // The first range writes the probe fixture (ignored paths) first: its Commit
-    // is the checkpoint check's base, since Init's Layer has no Commit.
-    if (!run.state.head) {
-      run.label(`r${pad(k)}.probe-fixture`);
-      run.state.head = (await run.lf.fs.apply(branch, probeFixture(), "scale probe fixture (SPEC §3c)")).head;
-      run.state.depth.commits++;
+    if (p2) {
+      if (!run.state.head) throw new Error("P2 continues a run whose first range wrote the probe fixture (a P1 run, or a fork of one)");
+      ctx = await startRange(run, k, plan, measured, run.serialize);
+      await playAgents(run, k, ctx);
+      lap("playMs", since);
+      since = performance.now();
+      published = await consolidateLanes(run, k, plan, ctx);
+      branch = ctx.final;
+      ctx.tree = ctx.mainTree;
+      lap("consolidateMs", since);
+    } else {
+      run.label(`r${pad(k)}.fork`);
+      await run.lf.branch.fork(branch, "main");
+      // The first range writes the probe fixture (ignored paths) first: its Commit
+      // is the checkpoint check's base, since Init's Layer has no Commit.
+      if (!run.state.head) {
+        run.label(`r${pad(k)}.probe-fixture`);
+        run.state.head = (await run.lf.fs.apply(branch, probeFixture(), "scale probe fixture (SPEC §3c)")).head;
+        run.state.depth.commits++;
+      }
+      run.rec.agent = "a01";
+      for (const op of ops) await step(run, k, op.id, ctx);
+      run.rec.agent = "lead";
+      lap("playMs", since);
+      since = performance.now();
+      await consolidate(run, k, "reconcile", ctx);
+      published = await consolidate(run, k, "publish", ctx);
+      lap("consolidateMs", since);
     }
-    for (const op of ops) await step(run, k, op.id, ctx);
-    lap("playMs", since);
-    since = performance.now();
-    await consolidate(run, k, "reconcile", ctx);
-    published = await consolidate(run, k, "publish", ctx);
-    lap("consolidateMs", since);
     since = performance.now();
     const snapshotDue = measured && (phase.snapshot === "every" || due({ planned: plan.snapshot, verdict: "pass", sinceMs: run.state.sinceMs, lastCostMs: run.state.lastSnapshotMs }).due);
     proof = await verify(run, k, { prevHead: run.state.head, head: published.source.commit, layer: published.publishedLayer.id, prevCommit: run.state.prevCommit, full: snapshotDue });
@@ -206,21 +261,22 @@ async function playRange(run, k, mode) {
     if (!(error instanceof Mismatch)) console.error(error.stack ?? error);
     failure = error instanceof Mismatch ? error.message : `error: ${error.message}`;
   }
+  if (run.rec) run.rec.agent = "lead";
   run.traceTo(null, undefined);
   const head = published?.source?.commit ?? null, layer = published?.publishedLayer?.id ?? null;
   m.head = head; m.layer = layer; m.failure = failure;
   m.depth = { before: depthBefore, after: run.state.depth.commits + ctx.work.commits };
   if (!measured) {
     const stages = { kind: "tooling", totalMs: Math.round(performance.now() - t0), ...wall };
-    writeJson(join(run.dir, "fast", `range-${pad(k)}.json`), { range: k, mode, head, failure, calls: run.calls, wall: stages });
-    console.log(`range ${k}: ${failure ? `STOP ${failure}` : "ok"} (${run.calls} calls; tooling ${JSON.stringify(stages)})`);
+    writeJson(join(run.dir, "fast", `range-${pad(k)}.json`), { range: k, mode, head, failure, calls: run.tally.calls, wall: stages });
+    console.log(`range ${k}: ${failure ? `STOP ${failure}` : "ok"} (${run.tally.calls} calls; tooling ${JSON.stringify(stages)})`);
     if (failure) { run.state.dirty = k; run.save(); return EXIT.stop; }
     advance(run, k, plan, head, layer, ctx, performance.now() - t0);
     return EXIT.done;
   }
   // measured: storage, metrics, snapshot, report
   let since = performance.now();
-  const t = readTrace(traceFile);
+  const t = readTrace(traceFile, run.sink.log);
   const deltaTotal = addDelta(run.state.deltaTotal ?? null, t.delta);
   const after = await run.op.store.stats().catch(() => null);
   const snap = await run.op.inspect.snapshot().catch(() => null);
@@ -237,21 +293,43 @@ async function playRange(run, k, mode) {
     reinstallGrowth: null,
   };
   m.ops = aggregate(t.calls);
+  // every call by method (SPEC §3b), and the checkpoint diff's cost per entry it lists (SPEC §4)
+  m.calls = callTable(t.all, run.sink.log);
+  const diffs = t.calls.filter((c) => c.method === "branch.diff_commits" && c.size?.n > 0);
+  const median = (xs) => { const v = [...xs].sort((a, b) => a - b); return v.length ? v[Math.floor((v.length - 1) / 2)] : null; };
+  m.perUnit = diffs.length ? { "branch.diff_commits": { unit: "entry", n: diffs.length, msPerEntry: +median(diffs.map((c) => c.ms / c.size.n)).toFixed(4), entries: median(diffs.map((c) => c.size.n)), ms: median(diffs.map((c) => c.ms)) } } : {};
   // the checkpoint tree the scoped probes read (gates.mjs SCOPED)
   const oracle = JSON.parse(readFileSync(join(run.manifest.oracle, `oracle-${pad(k)}.json`), "utf8"));
   m.inputs = { tree: { files: oracle.files, bytes: oracle.bytes } };
   m.probes = Object.fromEntries(Object.entries(probeOut).map(([name, p]) => [name, { ms: p.ms, ...(p.error ? { error: p.error } : {}), counters: t.probe[name] ?? {} }]));
   const open = snap?.sandboxes?.reduce((n, s) => n + (s.workspaces?.length ?? 0), 0) ?? null;
   m.health = { workspacesOpen: open, overlaysLeft: null };
-  m.work = { bashCalls: ops.length + 2, lanes: 1, agents: 1, lfsCommits: ctx.work.commits, workspaces: null, oneShotShare: null,
-    fileMutations: { fs: ctx.work.fs, sandbox: ctx.work.sandbox }, reads: ops.reduce((n, o) => n + o.reads.length, 0), reconcile: reconcile.length, leftOut: left, sdkCalls: t.lines };
+  const mounts = run.sink.log.filter((e) => e.method === "sandbox.mount");
+  const heldIds = new Set(p2 ? [...ctx.p2.held.keys()].filter((id) => /mount/.test(plan.steps.find((s) => s.id === id)?.kind ?? "")) : []);
+  const held = mounts.filter((e) => heldIds.has(e.label)).length;
+  const played = p2 ? ctx.played : new Map([["a01", { fs: ops.length, sandbox: 0, branch: 0, project: 0 }]]);
+  const leadSteps = p2 ? ctx.leadSteps : [{ op: "reconcile", category: "fs" }, { op: "publish", category: "branch" }];
+  const stepLane = new Map(plan.steps.map((s) => [s.id, s.lane]));
+  m.work = { bashCalls: [...played.values()].reduce((n, by) => n + Object.values(by).reduce((x, y) => x + y, 0), 0) + leadSteps.length,
+    lanes: p2 ? plan.lanes.length : 1, agents: p2 ? plan.agents.length : 1, lfsCommits: ctx.work.commits,
+    workspaces: mounts.length, oneShot: mounts.length - held, longLived: held, oneShotShare: mounts.length ? +((mounts.length - held) / mounts.length).toFixed(3) : null,
+    fileMutations: { fs: ctx.work.fs, sandbox: ctx.work.sandbox }, mutations: ctx.work.mutations ?? null,
+    reads: p2 ? plan.steps.reduce((n, s) => n + (s.reads?.length ?? 0), 0) : ops.reduce((n, o) => n + o.reads.length, 0),
+    reconcile: p2 ? ctx.p2.reconcile.length : reconcile.length, leftOut: p2 ? ctx.p2.left : left, sdkCalls: t.lines };
+  m.overview = buildOverview({ plan: p2 ? plan : { ...plan, conflicts: [], lanes: [{ name: branch, agents: ["a01"] }], agents: ["a01"] }, log: run.sink.log, played, leadSteps,
+    laneOf: (label) => (p2 ? stepLane.get(label) ?? null : String(label ?? "").startsWith(`r${pad(k)}.s`) ? branch : null),
+    events: ctx.events ?? [], race: ctx.race ?? null, merged: ctx.merged ?? new Map(), tries: ctx.tries ?? new Map(), published: ctx.published ?? new Set(),
+    lanesPlayed: p2 ? plan.lanes.map((l) => ({ name: l.name, agents: l.agents, steps: l.agents.reduce((n, a) => n + (ctx.steps.get(a) ?? 0), 0) })) : [{ name: branch, agents: ["a01"], steps: ops.length }],
+    runningBefore: run.state.depth.commits, phase: run.manifest.phase });
+  if (!p2) m.overview.planned = { branches: plan.lanes.length + 1, agents: plan.agents.length };
   const pathsOk = proof?.paths?.ok, idsOk = proof?.ids?.ok;
   m.checks = {
     tree: proof ? { ok: proof.ok, files: proof.tree?.files ?? proof.paths.git, missing: [...proof.paths.missing, ...proof.ids.missing, ...(proof.tree?.missing ?? [])], extra: [...proof.paths.extra, ...(proof.tree?.extra ?? [])],
       content: [...proof.ids.content, ...(proof.tree?.content ?? [])], mode: [...proof.ids.mode, ...(proof.tree?.mode ?? [])], paths: pathsOk, ids: idsOk, full: !!proof.tree } : { ok: false, files: 0, missing: [], extra: [], content: [], mode: [] },
     history: { ok: !!layer },
-    steps: { matched: failure ? Math.max(run.calls - 1, 0) : run.calls, total: run.calls },
-    conflicts: { planned: 0, hit: 0, unplanned: 0 },
+    steps: { matched: failure ? Math.max(run.tally.calls - 1, 0) : run.tally.calls, total: run.tally.calls },
+    conflicts: { planned: p2 ? plan.conflicts.length : 0, hit: p2 ? m.overview.conflicts.reduce((n, c) => n + c.hit, 0) : 0, unplanned: 0,
+      byKind: Object.fromEntries(m.overview.conflicts.map((c) => [c.kind, { hit: c.hit, planned: c.planned }])) },
     ignored: { ok: true },
     tests: tests ?? { equal: 0, run: 0 },
   };
@@ -269,6 +347,8 @@ async function playRange(run, k, mode) {
     } catch (error) { failure = `snapshot: ${error.message}`; m.failure = failure; m.checks.history.ok = false; }
   }
   m.wall = { kind: "tooling", totalMs: Math.round(performance.now() - t0), ...wall };
+  const budget = loadBudget();
+  if (budget) Object.assign(m.budget, { wallBudgetMs: budget.wallBudgetMs, ...wallProjection(readAttempts(outputs.metrics), m.phase, { range: k, totalMs: m.wall.totalMs }, budget.ranges) });
   const file = join(outputs.metrics, `range-${pad(k)}.a${attempt}.json`);
   writeJson(file, m);
   if (failure) { run.state.dirty = k; run.save(); }
@@ -290,7 +370,9 @@ async function playRange(run, k, mode) {
 function advance(run, k, plan, head, layer, ctx, ms, m = null) {
   const s = run.state;
   s.next = k + 1; s.layer = layer; s.head = head; s.prevCommit = plan.checkpoint; s.heads[k] = head; s.layers[k] = layer;
-  s.depth = { commits: s.depth.commits + ctx.work.commits, layers: s.depth.layers + 1, branches: s.depth.branches + 1 };
+  // Branches made in the range: forks and merges (every Merged makes one), probes and checks included
+  const made = run.sink.log.filter((e) => (e.method === "branch.fork" && e.kind === "Forked") || (e.method === "branch.merge" && e.kind === "Merged")).length;
+  s.depth = { commits: s.depth.commits + ctx.work.commits, layers: s.depth.layers + 1, branches: s.depth.branches + (made || 1) };
   if (m?.storage) { s.storeBytes = m.storage.file; s.growth = [...s.growth, m.storage.newStored ?? 0].slice(-20); }
   if (m?.snapshot) { s.sinceMs = []; s.lastSnapshotMs = (m.snapshot.sealMs ?? 0) + m.snapshot.copyMs; s.lastSnapshot = k; } else s.sinceMs = [...s.sinceMs, Math.round(ms)];
   s.dirty = null;
@@ -304,6 +386,12 @@ async function cmdPlay(o) {
   if (run.state.dirty != null) { console.error(`run ${o.run} stopped in range ${run.state.dirty}; recover by fork from a snapshot (SPEC §6)`); return EXIT.guard; }
   if (from !== run.state.next) { console.error(`run ${o.run} stands at range ${run.state.next}, not ${from}`); return EXIT.usage; }
   if (mode === "measured") process.env.LAYERFS_CONSTRUCTION_WORKERS = "1";
+  // A development aid only: one publishing call per lane at a time, to play past
+  // concurrent same-Branch HeadMoved refusals while they are open. Never measured.
+  if (o["serialize-commits"] != null) {
+    if (run.manifest.label === "measured") { console.error("--serialize-commits is a development aid; a measured run never uses it"); return EXIT.usage; }
+    run.serialize = true;
+  }
   let code = EXIT.done;
   try {
     for (let k = from; k <= to && code === EXIT.done; k++) code = await playRange(run, k, mode);
@@ -316,6 +404,21 @@ async function cmdPlay(o) {
     run.close();
   }
   return code;
+}
+
+/** Moves a run to the next phase at the range it stands at; its binaries and Store stay (SPEC §9). */
+function cmdPhase(o) {
+  const dir = join(HISTORY, "runs", o.run), run = new Run(dir);
+  const why = nextPhase(run.manifest.phase, o.phase);
+  if (why) { console.error(`run ${o.run}: ${why}`); return EXIT.usage; }
+  if (run.state?.dirty != null) { console.error(`run ${o.run} stopped in range ${run.state.dirty}; recover by fork first`); return EXIT.guard; }
+  const entry = { from: run.manifest.phase, to: o.phase, atRange: run.state.next, at: new Date().toISOString(), binary: run.manifest.binary };
+  run.manifest.phases = [...(run.manifest.phases ?? []), entry];
+  run.manifest.phase = o.phase;
+  writeJson(join(dir, "run.json"), run.manifest);
+  run.note({ kind: "phase", name: `${entry.from}->${entry.to}`, atRange: entry.atRange });
+  console.log(JSON.stringify({ run: o.run, ...entry }, null, 1));
+  return EXIT.done;
 }
 
 /** A new run from run `from`'s snapshot of range N (SPEC §7, Forking): its file rebuilt into a new volume and home. */
@@ -373,7 +476,7 @@ async function cmdCleanup(o) {
 }
 
 function usage() {
-  console.error("usage: run.mjs new|play|fork|cleanup … (see the file's header)");
+  console.error("usage: run.mjs new|play|fork|cleanup|phase … (see the file's header)");
   return EXIT.usage;
 }
 
@@ -387,7 +490,7 @@ async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const o = options(rest);
   if (!o.run) process.exit(usage());
-  const code = cmd === "new" ? (await cmdNew(o), EXIT.done) : cmd === "play" ? await cmdPlay(o) : cmd === "fork" ? (await cmdFork(o), EXIT.done) : cmd === "cleanup" ? await cmdCleanup(o) : usage();
+  const code = cmd === "new" ? (await cmdNew(o), EXIT.done) : cmd === "play" ? await cmdPlay(o) : cmd === "phase" ? cmdPhase(o) : cmd === "fork" ? (await cmdFork(o), EXIT.done) : cmd === "cleanup" ? await cmdCleanup(o) : usage();
   process.exit(code);
 }
 

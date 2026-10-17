@@ -78,7 +78,7 @@ test("phaseOps: P1 plays fs/apply/stale-apply files and leaves out the conflicts
   assert.equal(ops[1].files.length, 1);
   assert.deepEqual(left, { hold: 1, check: 1, decoy: 1, fs: 1 });
   assert.equal(reconcile[0].expect, "Committed");
-  assert.throws(() => phaseOps(plan, "p2"), /no player/);
+  assert.throws(() => phaseOps(plan, "p3"), /no player/);
 });
 
 test("sandboxCommands: chunks stay under one request and the script restores bytes and modes", () => {

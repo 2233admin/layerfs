@@ -36,9 +36,9 @@ const worst = (xs) => xs.reduce((m, x) => (RANK[x] > RANK[m] ? x : m), "pass");
 export function sizeClass(kind, n) {
   if (n == null) return "—";
   const edges = kind === "bytes" ? [[1024, "≤1 KiB"], [8192, "≤8 KiB"], [65536, "≤64 KiB"], [524288, "≤512 KiB"]]
-    : [[1, "1"], [4, "2–4"], [16, "5–16"], [64, "17–64"]];
-  for (const [e, name] of edges) if (n <= e) return name;
-  return kind === "bytes" ? ">512 KiB" : ">64";
+    : [[0, "0"], [1, "1"], [4, "2–4"], [16, "5–16"], [64, "17–64"]];
+  for (const [e, name] of edges) if (n <= e) return kind === "bytes" ? name : `${name} ${kind}`;
+  return kind === "bytes" ? ">512 KiB" : `>64 ${kind}`;
 }
 
 const quantile = (xs, p) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.min(s.length - 1, Math.floor((s.length - 1) * p))] : null; };
@@ -61,7 +61,15 @@ export function aggregate(calls) {
     const phaseTotals = {};
     for (const c of slow) for (const [k, v] of Object.entries(c.phases)) phaseTotals[k] = (phaseTotals[k] || 0) + v;
     const slowPhase = Object.entries(phaseTotals).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-    return { op, sizeClass: cls, n: cs.length, p50: quantile(ms, 0.5), p95, p99: quantile(ms, 0.99), max: Math.max(...ms), slowPhase };
+    const row = { op, sizeClass: cls, n: cs.length, p50: quantile(ms, 0.5), p95, p99: quantile(ms, 0.99), max: Math.max(...ms), slowPhase };
+    // per call: the SQL work's p50, an exec's FUSE opcodes' p50, and ms per unit of its own input
+    const withSql = cs.filter((c) => c.sql);
+    if (withSql.length) row.sql = Object.fromEntries(["statements", "vm_steps", "fullscan_steps"].map((k) => [k, quantile(withSql.map((c) => c.sql[k] ?? 0), 0.5)]));
+    const withFuse = cs.filter((c) => c.fuse != null);
+    if (withFuse.length) row.fuse = quantile(withFuse.map((c) => c.fuse), 0.5);
+    const sized = cs.filter((c) => c.size?.n > 0);
+    if (sized.length) row.perUnit = { kind: sized[0].size.kind, ms: +quantile(sized.map((c) => c.ms / c.size.n), 0.5).toFixed(4), n: quantile(sized.map((c) => c.size.n), 0.5) };
+    return row;
   }).sort((a, b) => (a.op < b.op ? -1 : a.op > b.op ? 1 : a.sizeClass < b.sizeClass ? -1 : 1));
 }
 
@@ -187,6 +195,11 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
     probeFits.push({ name: `${name}${unit(name)}`, e: exponent(all.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.ms, scoped)])) });
     for (const k of Object.keys(m.probes[name].counters || {}))
       counterFits.push({ name: `${name}.${k}${unit(name)}`, e: exponent(all.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.counters?.[k], scoped)])) });
+  }
+  // An operation judged per unit of its own input (SPEC §4: diff_commits may grow with the entries changed,
+  // never with depth): its p50 ms per entry against depth, from attempts that recorded it (run.mjs perUnit).
+  for (const [op, p] of Object.entries(m.perUnit || {})) {
+    probeFits.push({ name: `${op} per ${p.unit}`, e: exponent(all.map((x) => [x.depth?.after, x.perUnit?.[op]?.msPerEntry])) });
   }
   const top = (fits, th) => fits.length
     ? { ...fits.reduce((m2, f) => ((f.e ?? -Infinity) > (m2.e ?? -Infinity) ? f : m2)), result: worst(fits.map((f) => band(f.e, th))) }

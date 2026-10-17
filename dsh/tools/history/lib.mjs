@@ -21,7 +21,7 @@ import { compareTree, IGNORE } from "./oracle.mjs";
 import { compareResults, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
 import { INSTALL } from "./calibrate-tests.mjs";
 import {
-  abs, callOf, compareIds, comparePaths, idBatches, pad, parseTreePage, PHASES, phaseOps, PROBE_DIR, quote,
+  abs, attributeFuse, callOf, compareIds, comparePaths, idBatches, pad, parseTreePage, PHASES, phaseOps, PROBE_DIR, quote,
   deltaWork, route, sandboxCommands, sandboxExpect, sqlCounters, traceLines, Tree, TREE_IDS, TREE_PAGE,
 } from "./steps.mjs";
 
@@ -60,7 +60,9 @@ export class Run {
     this.state = existsSync(this.statePath) ? readJson(this.statePath) : null;
     this.planDir = this.manifest.plan;
     this.repo = this.manifest.repo;
-    this.calls = 0;
+    // shared by the agents' views of this run (agent()): the call count and the call log
+    this.tally = { calls: 0 };
+    this.sink = { seq: 0, log: [] };
   }
   save() { writeJson(this.statePath, this.state); }
   /** Appends one created or removed resource to the run's ledger and the shared one. */
@@ -76,17 +78,37 @@ export class Run {
     Object.assign(process.env, this.manifest.env);
     const { LayerFS } = await import(join(REPO, "sdk/js/src/index.js"));
     const { LayerFSOperator } = await import(join(REPO, "sdk/js/operator/index.js"));
-    this.lf = new LayerFS(this.manifest.project, { trace: this.trace ?? undefined });
-    this.op = new LayerFSOperator(this.lf);
+    this.LayerFS = LayerFS;
+    this.raw = new LayerFS(this.manifest.project, { trace: this.trace ?? undefined });
+    this.rec = { label: undefined, next: null, tree: null, agent: "lead" };
+    this.lf = record(this.raw, this.rec, this.sink);
+    this.op = new LayerFSOperator(this.raw);
     this.sandbox = null;
+    this.pool = [];
     return this.lf;
+  }
+  /**
+   * Another actor's view of this run (P2): its own SDK client, so its trace
+   * labels never mix with a concurrent actor's, Store calls through the run's
+   * service Sandbox, Workspaces in `sandbox`; the call count and log shared.
+   */
+  async agent(name, sandbox) {
+    const service = await this.raw.service();
+    const a = Object.create(this);
+    a.raw = new this.LayerFS(this.manifest.project, { trace: this.trace ?? undefined, sandbox: service });
+    a.rec = { label: undefined, next: null, tree: null, agent: name };
+    a.lf = record(a.raw, a.rec, this.sink);
+    a.sandbox = sandbox;
+    a.blobs = () => this.blobs();
+    return a;
   }
   /** Points the trace at `file` (null: off) and labels the next calls with `step`. */
   traceTo(file, step) {
     this.trace = file;
-    if (this.lf) { this.lf.options.trace = file ?? undefined; this.lf.options.traceStep = step; }
+    if (this.raw) this.raw.options.trace = file ?? undefined;
+    if (this.rec) this.rec.label = step;
   }
-  label(step) { if (this.lf) this.lf.options.traceStep = step; }
+  label(step) { if (this.rec) this.rec.label = step; }
   blobs() { return (this.blobCache ??= new BlobCache(this.repo)); }
   close() { this.blobCache?.close(); this.blobCache = null; }
   /** The container id of Sandbox `id`, from its record. */
@@ -95,9 +117,80 @@ export class Run {
   }
 }
 
+const byteLength = (x) => (x == null ? 0 : typeof x === "string" ? Buffer.byteLength(x) : x.length ?? 0);
+const jsonBytes = (v) => { try { return v == null ? 0 : Buffer.byteLength(typeof v === "string" ? v : JSON.stringify(v)); } catch { return 0; } };
+const READ_INPUT = { "fs.read": "bytes", "fs.stat": "bytes", "fs.diff_files": "bytes", "fs.blame": "bytes" };
+
+/**
+ * One call's input and output as the replay sees it (SPEC §3c, the size
+ * class of its own input): bytes in (content, an exec's command), bytes out
+ * (a read's answer, an exec's output), files or entries touched, and the
+ * size its latency is classed by. `size` is the caller's own measure (the
+ * files a Sandbox Commit changes, the entries a merge brings) when it set one.
+ */
+export function measure(method, args, value, tree, size) {
+  const out = { bytesIn: 0, bytesOut: 0, files: 0, size: size ?? null };
+  const items = Array.isArray(value?.items) ? value.items.length : null;
+  switch (method) {
+    case "fs.write": out.bytesIn = byteLength(args[2]); out.files = 1; out.size ??= { kind: "bytes", n: out.bytesIn }; break;
+    case "fs.edit": out.bytesIn = byteLength(args[3]); out.files = 1; out.size ??= { kind: "bytes", n: out.bytesIn }; break;
+    case "fs.apply": {
+      const changes = Array.isArray(args[1]) ? args[1] : [];
+      out.bytesIn = changes.reduce((n, c) => n + byteLength(c?.bytes ?? c?.content ?? c?.newText), 0);
+      out.files = changes.filter((c) => c?.op !== "mkdir").length;
+      out.size ??= { kind: "bytes", n: out.bytesIn };
+      break;
+    }
+    case "fs.rm": case "fs.mkdir": case "fs.cp": case "fs.mv": out.files = 1; out.size ??= { kind: "files", n: 1 }; break;
+    case "fs.list": case "branch.diff_commits": case "branch.diff_branches": case "branch.list_commits":
+      out.bytesOut = jsonBytes(value); out.files = items ?? 0; out.size ??= items == null ? null : { kind: "entries", n: items }; break;
+    case "fs.grep": case "fs.glob": {
+      out.bytesOut = jsonBytes(value); out.files = items ?? 0;
+      const scope = tree?.filesUnder(args[2] ?? "/");
+      out.size ??= scope == null ? null : { kind: "files", n: scope };
+      break;
+    }
+    case "sandbox.exec":
+      out.bytesIn = byteLength(args[2]); out.bytesOut = byteLength(value?.stdout) + byteLength(value?.stderr); break;
+    default:
+      if (READ_INPUT[method]) {
+        out.bytesOut = jsonBytes(value); out.files = value ? 1 : 0;
+        out.size ??= { kind: "bytes", n: method === "fs.stat" && Number.isFinite(value?.size) ? value.size : out.bytesOut };
+      }
+  }
+  return out;
+}
+
+/**
+ * The run's SDK client with every call recorded (seq, method, actor, step
+ * label, outcome, measure()) in `sink.log`. Each call's trace label is
+ * `<step>#<seq>`, so the trace line joins its record exactly.
+ */
+export function record(raw, rec, sink) {
+  const wrap = (group) => Object.fromEntries(Object.entries(raw[group]).map(([name, fn]) => [name, async (...args) => {
+    const seq = ++sink.seq, method = `${group}.${name}`, size = rec.next;
+    rec.next = null;
+    raw.options.traceStep = `${rec.label ?? ""}#${seq}`;
+    const entry = { seq, method, label: rec.label ?? null, agent: rec.agent };
+    sink.log.push(entry);
+    try {
+      // a dev-only aid (run.mjs --serialize-commits, never measured): one publishing call per lane at a time
+      const value = rec.lock && PUBLISHING.has(method) ? await rec.lock(() => fn(...args)) : await fn(...args);
+      Object.assign(entry, { kind: value?.kind ?? "ok", ...(value?.fastForward === false ? { newCommit: true } : {}) }, measure(method, args, value, rec.tree, size));
+      return value;
+    } catch (error) {
+      Object.assign(entry, { kind: error?.code ?? "error" }, measure(method, args, null, rec.tree, size));
+      throw error;
+    }
+  }]));
+  return { raw, options: raw.options, sandboxes: raw.sandboxes, service: () => raw.service(), fs: wrap("fs"), branch: wrap("branch"), sandbox: wrap("sandbox"), project: wrap("project") };
+}
+
+const PUBLISHING = new Set(["fs.write", "fs.edit", "fs.apply", "fs.mkdir", "fs.rm", "fs.cp", "fs.mv", "sandbox.commit"]);
+
 /** Checks a call's outcome against the plan; a refusal is its code. */
-async function expectCall(run, label, work, want) {
-  run.calls++;
+export async function expectCall(run, label, work, want) {
+  run.tally.calls++;
   let got, value;
   try { value = await work(); got = value?.kind ?? "ok"; } catch (error) {
     if (!error?.code) throw error;
@@ -121,21 +214,42 @@ export async function setup(run) {
   return run.sandbox;
 }
 
+/** Counts one file mutation (SPEC §3b): added, modified or deleted, with its bytes, by route. */
+export function countMutation(work, via, f) {
+  work.mutations ??= { fs: { added: 0, modified: 0, deleted: 0, bytes: 0 }, sandbox: { added: 0, modified: 0, deleted: 0, bytes: 0 } };
+  const m = work.mutations[via];
+  if (f.op === "rm" || f.call === "rm") m.deleted++;
+  else { if (f.previous) m.modified++; else m.added++; m.bytes += f.size ?? 0; }
+}
+
+/** The exec commands that put `files` (writes with blob ids, decoys with bytes, removals) in a Workspace. */
+export async function placeCommands(run, files) {
+  const bytes = await Promise.all(files.map((f) => (f.op === "rm" ? null : f.bytes ?? run.blobs().get(f.blob))));
+  return sandboxCommands(files.map((f, i) => (f.op === "rm" ? { op: "rm", path: f.path, target: f.target } : { path: f.path, mode: f.mode, bytes: bytes[i] })));
+}
+
+/** Runs exec commands in a Workspace; each must exit 0. */
+export async function execAll(run, sb, ws, commands, label, files = 0) {
+  for (const command of commands) {
+    run.rec.next = { kind: "files", n: files };
+    const r = await expectCall(run, `${label} exec`, () => run.lf.sandbox.exec(sb, ws, command));
+    if (r.exitCode !== 0) throw new Mismatch(`${label} exec exited ${r.exitCode}: ${String(r.stderr ?? "").slice(0, 300)}`);
+  }
+}
+
 /** One Sandbox step on `branch`: mount, the exec commands, Commit (checked), unmount. */
-async function sandboxStep(run, branch, files, label, work) {
+export async function sandboxStep(run, branch, files, label, work) {
   const sb = await setup(run);
   const ws = await expectCall(run, `${label} mount`, () => run.lf.sandbox.mount(sb, branch));
   let committed = false;
   try {
-    const bytes = await Promise.all(files.map((f) => run.blobs().get(f.blob)));
-    for (const command of sandboxCommands(files.map((f, i) => ({ path: f.path, mode: f.mode, bytes: bytes[i] })))) {
-      const r = await expectCall(run, `${label} exec`, () => run.lf.sandbox.exec(sb, ws, command));
-      if (r.exitCode !== 0) throw new Mismatch(`${label} exec exited ${r.exitCode}: ${String(r.stderr ?? "").slice(0, 300)}`);
-    }
+    await execAll(run, sb, ws, await placeCommands(run, files), label, files.length);
     const want = sandboxExpect(files);
+    run.rec.next = { kind: "files", n: files.length };
     await expectCall(run, `${label} commit`, () => run.lf.sandbox.commit(sb, ws, label), want);
     committed = true;
     work.sandbox += files.length;
+    for (const f of files) countMutation(work, "sandbox", f);
     if (want === "Committed") work.commits++;
   } finally {
     await run.lf.sandbox.unmount(sb, ws, !committed);
@@ -143,8 +257,8 @@ async function sandboxStep(run, branch, files, label, work) {
 }
 
 /** One op's fs calls (and its Sandbox step) on `branch`, each outcome checked. */
-async function writeOp(run, branch, files, tree, label, work) {
-  const { calls, sandbox } = route(files, tree);
+export async function writeOp(run, branch, files, tree, label, work, options = {}) {
+  const { calls, sandbox } = route(files, tree, options);
   for (const c of calls) {
     const msg = `${label} ${c.path}`.slice(0, 200);
     if (c.call === "rm") await expectCall(run, `${label} rm ${c.path}`, () => run.lf.fs.rm(branch, abs(c.target), msg), c.expect);
@@ -154,14 +268,16 @@ async function writeOp(run, branch, files, tree, label, work) {
       else await expectCall(run, `${label} write ${c.path}`, () => run.lf.fs.apply(branch, [{ op: "mkdir", path: abs(c.parent) }, { op: "write", path: abs(c.path), bytes }], msg), c.expect);
     }
     work.fs++;
+    countMutation(work, "fs", c);
     if (c.expect === "Committed") work.commits++;
   }
   if (sandbox.length) await sandboxStep(run, branch, sandbox, label, work);
 }
 
 /** The read samples of a plan step (SPEC §3c): each must answer, or be Binary. */
-async function reads(run, branch, step, tree) {
-  for (const r of step.reads) {
+export async function reads(run, branch, step, tree) {
+  run.rec.tree = tree;
+  for (const r of step.reads ?? []) {
     if (r.kind !== "list" && r.kind !== "grep" && r.kind !== "glob" && !tree.has(r.path)) continue;
     if ((r.kind === "list" || r.kind === "grep" || r.kind === "glob") && !tree.isDir(r.path === "/" ? "" : r.path)) continue;
     const p = abs(r.path === "/" ? "" : r.path);
@@ -176,7 +292,7 @@ async function reads(run, branch, step, tree) {
 
 /** Plays one plan step (SCRIPTS.md §6 `step`) in the run's phase. */
 export async function step(run, k, id, ctx) {
-  const op = ctx.ops.find((o) => o.id === id);
+  const op = (ctx.byId ??= new Map(ctx.ops.map((o) => [o.id, o]))).get(id);
   if (!op) throw new Error(`r${pad(k)}: no step ${id} in phase ${run.manifest.phase}`);
   run.label(id);
   await writeOp(run, ctx.branch, op.files, ctx.tree, id, ctx.work);
@@ -229,7 +345,7 @@ async function readIds(run, ref, paths, label) {
 }
 
 // Prints "<mode> <blob> <path>" for each path argument (relative to the Workspace), "missing - <path>" when absent.
-const BLOB_IDS = `const fs=require("fs"),c=require("crypto");for(const p of process.argv.slice(1)){let s;try{s=fs.lstatSync(p)}catch{process.stdout.write("missing - "+p+"\\n");continue}let b,m;if(s.isSymbolicLink()){b=Buffer.from(fs.readlinkSync(p));m="120000"}else{b=fs.readFileSync(p);m=s.mode&0o111?"100755":"100644"}process.stdout.write(m+" "+c.createHash("sha1").update("blob "+b.length+"\\0").update(b).digest("hex")+" "+p+"\\n")}`;
+export const BLOB_IDS = `const fs=require("fs"),c=require("crypto");for(const p of process.argv.slice(1)){let s;try{s=fs.lstatSync(p)}catch{process.stdout.write("missing - "+p+"\\n");continue}let b,m;if(s.isSymbolicLink()){b=Buffer.from(fs.readlinkSync(p));m="120000"}else{b=fs.readFileSync(p);m=s.mode&0o111?"100755":"100644"}process.stdout.write(m+" "+c.createHash("sha1").update("blob "+b.length+"\\0").update(b).digest("hex")+" "+p+"\\n")}`;
 
 /**
  * The proof checkpoint (SPEC §7): diff_commits between the previous
@@ -291,10 +407,15 @@ export async function closure(run, k, what, { layer }) {
 export async function teardown(run) {
   if (!run.lf) return [];
   const problems = [];
-  for (const id of [...run.lf.sandboxes]) {
+  const close = async (id) => {
     try { await run.lf.sandbox.close(id); run.note({ kind: "sandbox", name: id, removed: true }); } catch (e) { problems.push(`close ${id}: ${e.code ?? ""} ${e.message}`); }
-  }
+  };
+  // Named Sandboxes close at once (each takes only its own lock); the service, which also takes the project's, last.
+  const ids = [...run.lf.sandboxes], service = ids.filter((id) => id.startsWith("_service."));
+  await Promise.all(ids.filter((id) => !service.includes(id)).map(close));
+  for (const id of service) await close(id);
   run.sandbox = null;
+  run.pool = [];
   return problems;
 }
 
@@ -319,6 +440,7 @@ export async function probes(run, k, { branch, tree }) {
   const lf = run.lf, r = `r${pad(k)}`, P = `/${PROBE_DIR}`;
   const big = tree.largestDir();
   const sb = await setup(run);
+  run.rec.tree = tree;
   const list = [
     ["stat", () => lf.fs.stat("main", `${P}/small.txt`)],
     ["read", () => lf.fs.read("main", `${P}/small.txt`, 1, 50)],
@@ -342,6 +464,7 @@ export async function probes(run, k, { branch, tree }) {
     ["oneshot_commit", async () => {
       const ws = await lf.sandbox.mount(sb, `probe-${r}`);
       await lf.sandbox.exec(sb, ws, `mkdir -p ${PROBE_DIR}/c && head -c 2048 /dev/zero | tr '\\0' p > ${PROBE_DIR}/c/one.txt`);
+      run.rec.next = { kind: "files", n: 1 };
       const c = await lf.sandbox.commit(sb, ws, "probe commit");
       await lf.sandbox.unmount(sb, ws, false);
       return c;
@@ -357,17 +480,22 @@ export async function probes(run, k, { branch, tree }) {
 }
 
 /** Reads a range's trace file: the latency rows' input, and each probe's SQL counters. */
-export function readTrace(file) {
+export function readTrace(file, log = null) {
   const lines = existsSync(file) ? traceLines(readFileSync(file, "utf8")) : [];
-  const calls = lines.filter((l) => !String(l.step ?? "").startsWith("probe:")).map(callOf);
+  // a label is "<step>#<seq>" (record()): the step, and the call record it joins
+  for (const l of lines) { const m = /^(.*)#(\d+)$/.exec(String(l.step ?? "")); if (m) { l.step = m[1]; l.seq = Number(m[2]); } }
+  attributeFuse(lines);
+  const bySeq = new Map((log ?? []).map((e) => [e.seq, e]));
+  const isProbe = (l) => String(l.step ?? "").startsWith("probe:");
+  const calls = lines.filter((l) => !isProbe(l)).map((l) => callOf(l, bySeq.get(l.seq)?.method === l.method ? bySeq.get(l.seq) : null));
   const probe = {};
-  for (const l of lines.filter((x) => String(x.step ?? "").startsWith("probe:"))) {
+  for (const l of lines.filter(isProbe)) {
     const name = l.step.slice(6), c = sqlCounters(l);
     probe[name] ??= {};
     for (const [key, n] of Object.entries(c)) probe[name][key] = (probe[name][key] || 0) + n;
   }
   const delta = deltaWork(lines.filter((x) => !String(x.step ?? "").startsWith("probe:")));
-  return { calls, probe, delta, lines: lines.length };
+  return { calls, probe, delta, lines: lines.length, all: lines };
 }
 
 export { PHASES, phaseOps, Tree };
