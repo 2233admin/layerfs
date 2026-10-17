@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { blockify, due, manifestOf, manifestPath, orphans, pageSizeOf, rebuild, verify } from "../snapshot.mjs";
+import { blockify, due, manifestOf, manifestPath, newManifestPath, orphans, pageSizeOf, rebuild, verify } from "../snapshot.mjs";
 import { parseIds, ROLES, storeFigures, trend } from "../inspect.mjs";
 import { chooseRun, compareResults, packageOf, parseVitestJson, selectTests, vitestCommand } from "../unit-tests.mjs";
 import { dockerArgs, FETCH, INSTALL, noInstall, parseProbe } from "../calibrate-tests.mjs";
@@ -50,6 +50,25 @@ test("blockify writes only new blocks, and a manifest rebuilds the file", () => 
   writeFileSync(join(blocks, first.blocks[1]), "damaged");
   assert.equal(verify(m1, blocks).ok, false);
   assert.throws(() => rebuild(m1, blocks, join(dir, "out", "bad.sqlite")), /SHA-256/);
+});
+
+test("a rerun line's snapshot sits beside the old line's, each found by its run", () => {
+  const snaps = join(dir, "lines");
+  mkdirSync(snaps, { recursive: true });
+  assert.equal(newManifestPath(snaps, 2, "old"), join(snaps, "range-002.json"), "the first line takes the plain name");
+  writeFileSync(join(snaps, "range-002.json"), JSON.stringify({ range: 2, blocks: ["a"] }));
+  assert.equal(manifestPath(snaps, 2, "old"), join(snaps, "range-002.json"), "a manifest that names no run serves its run");
+  assert.equal(newManifestPath(snaps, 2, "new"), join(snaps, "range-002.new.json"), "a rerun of the range does not replace it");
+  writeFileSync(join(snaps, "range-002.new.json"), JSON.stringify({ range: 2, run: "new", blocks: ["b"] }));
+  assert.equal(manifestPath(snaps, 2, "new"), join(snaps, "range-002.new.json"));
+  assert.equal(manifestPath(snaps, 2), join(snaps, "range-002.json"));
+  writeFileSync(join(snaps, "range-003.json"), JSON.stringify({ range: 3, run: "new", blocks: ["c"] }));
+  assert.equal(manifestPath(snaps, 3, "new"), join(snaps, "range-003.json"));
+  assert.throws(() => manifestPath(snaps, 3, "old"), /no snapshot of range 3/);
+  mkdirSync(join(snaps, "blocks"), { recursive: true });
+  for (const id of ["a", "b", "c", "d"]) writeFileSync(join(snaps, "blocks", id.repeat(64)), id);
+  for (const [f, id] of [["range-002.json", "a"], ["range-002.new.json", "b"], ["range-003.json", "c"]]) writeFileSync(join(snaps, f), JSON.stringify({ blocks: [id.repeat(64)] }));
+  assert.deepEqual(orphans(snaps), [join(snaps, "blocks", "d".repeat(64))], "every line's manifest keeps its blocks");
 });
 
 test("a snapshot keeps the 4 KiB page size and needs a SQLite file", () => {

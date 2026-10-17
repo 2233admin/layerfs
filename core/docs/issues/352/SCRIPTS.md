@@ -264,3 +264,14 @@ differs from the text above:
   range adds its lane, check and probe branches (about seven). Counters that
   grow with the branch count (fork `returned_rows`) climb with depth for
   that reason; read such a verdict with the branch count beside it.
+- **Scoped probes are fitted per unit of their own input** (finding 002).
+  SPEC §4 lets grep over the whole tree grow with the bytes in its scope, so
+  the Scaling and Counters gates fit `grep_tree` per tree byte against depth
+  (`gates.mjs` `SCOPED`). The runner records the checkpoint tree's files and
+  bytes from the oracle as `inputs.tree`; report.mjs attaches the same to
+  earlier ranges' metrics in memory. An attempt recorded without `inputs` is
+  judged raw, exactly as it was, so recorded outcomes do not change.
+- **A rerun line's snapshots sit beside the old line's.** A run that snaps a
+  range another run already snapped writes `range-NNN.<run>.json`; manifests
+  name their run, and `fork` and the runner read a run's own manifest first.
+  A plain manifest that names no run (taken before this) serves its run.

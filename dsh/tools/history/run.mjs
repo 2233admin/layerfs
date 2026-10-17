@@ -143,8 +143,8 @@ function snapshot(run, k, facts) {
   mkdirSync(dir, { recursive: true });
   const r = spawnSync("node", [join(here, "snapshot.mjs"), "take", "--range", String(k), "--volume", run.manifest.volume, "--image", run.manifest.env.LAYERFS_IMAGE, "--dir", dir, "--facts", factsFile], { encoding: "utf8" });
   if (r.status !== 0) throw new Error(`snapshot: ${r.stderr.slice(0, 400)}`);
-  const m = JSON.parse(readFileSync(manifestPath(dir, k), "utf8"));
-  return { size: m.size, newBlocks: m.newBlocks, newBytes: m.newBytes, copyMs: m.copyMs, sealMs: facts.sealMs, walBytes: facts.walBytes, manifest: manifestPath(dir, k) };
+  const file = manifestPath(dir, k, run.manifest.run), m = JSON.parse(readFileSync(file, "utf8"));
+  return { size: m.size, newBlocks: m.newBlocks, newBytes: m.newBytes, copyMs: m.copyMs, sealMs: facts.sealMs, walBytes: facts.walBytes, manifest: file };
 }
 
 /** Plays range k. Returns the exit code the range ends with (0 to go on). */
@@ -237,6 +237,9 @@ async function playRange(run, k, mode) {
     reinstallGrowth: null,
   };
   m.ops = aggregate(t.calls);
+  // the checkpoint tree the scoped probes read (gates.mjs SCOPED)
+  const oracle = JSON.parse(readFileSync(join(run.manifest.oracle, `oracle-${pad(k)}.json`), "utf8"));
+  m.inputs = { tree: { files: oracle.files, bytes: oracle.bytes } };
   m.probes = Object.fromEntries(Object.entries(probeOut).map(([name, p]) => [name, { ms: p.ms, ...(p.error ? { error: p.error } : {}), counters: t.probe[name] ?? {} }]));
   const open = snap?.sandboxes?.reduce((n, s) => n + (s.workspaces?.length ?? 0), 0) ?? null;
   m.health = { workspacesOpen: open, overlaysLeft: null };
@@ -259,7 +262,7 @@ async function playRange(run, k, mode) {
       const sealed = await seal(run);
       wall.sealMs = sealed.sealMs;
       since = performance.now();
-      m.snapshot = snapshot(run, k, { dsh: plan.checkpoint, tree: plan.tree, head, layer, depth: m.depth.after, daemon: run.manifest.binary.daemon,
+      m.snapshot = snapshot(run, k, { run: run.manifest.run, dsh: plan.checkpoint, tree: plan.tree, head, layer, depth: m.depth.after, daemon: run.manifest.binary.daemon,
         sdk: run.manifest.binary.sdk, planVersion: run.manifest.planVersion, policy: run.manifest.policy ?? "default", pageSize: 4096, ...sealed,
         state: { next: k + 1, layer, head, prevCommit: plan.checkpoint, depth: { ...run.state.depth, commits: m.depth.after }, deltaTotal } });
       lap("snapshotMs", since);
@@ -271,7 +274,7 @@ async function playRange(run, k, mode) {
   if (failure) { run.state.dirty = k; run.save(); }
   else { run.state.deltaTotal = deltaTotal; advance(run, k, plan, head, layer, ctx, m.wall.totalMs, m); }
   since = performance.now();
-  const r = spawnSync("node", [join(here, "report.mjs"), "--metrics", outputs.metrics, "--plan", run.planDir, "--docs", outputs.docs], { encoding: "utf8" });
+  const r = spawnSync("node", [join(here, "report.mjs"), "--metrics", outputs.metrics, "--plan", run.planDir, "--docs", outputs.docs, "--oracle", run.manifest.oracle], { encoding: "utf8" });
   // The report's own time is known only after it ran: added to the metrics
   // file (the report shown reads it from the next range's run on).
   m.wall.reportMs = Math.round(performance.now() - since);
@@ -318,7 +321,7 @@ async function cmdPlay(o) {
 async function cmdFork(o) {
   const source = new Run(join(HISTORY, "runs", o["from-run"]));
   const k = Number(o.range);
-  const manifest = JSON.parse(readFileSync(manifestPath(source.manifest.outputs.snapshots, k), "utf8"));
+  const manifest = JSON.parse(readFileSync(manifestPath(source.manifest.outputs.snapshots, k, source.manifest.run), "utf8"));
   if (!manifest.state) throw new Error(`snapshot ${k} carries no runner state`);
   const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: source.manifest.env.LAYERFS_DAEMON, source: { run: source.manifest.run, range: k } });
   runManifest.binary = binaries(env);

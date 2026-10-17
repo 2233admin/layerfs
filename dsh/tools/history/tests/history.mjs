@@ -205,6 +205,25 @@ test("a probe that grows with depth is a scaling finding even when fast", () => 
   assert.ok(rising([1, 2, 3, 4]) && !rising([1, 3, 2, 4]));
 });
 
+test("a whole-tree grep is judged per tree byte when the attempt records its input", () => {
+  const bytes = (i) => 1e6 * (i + 1);
+  const at = (i, perByte, inputs = true) => metrics(i, {
+    probes: { grep_tree: { ms: perByte * bytes(i), counters: { statements: Math.round(perByte * bytes(i) * 100) } } },
+    ...(inputs ? { inputs: { tree: { files: 100 * (i + 1), bytes: bytes(i) } } } : {}),
+  });
+  // earlier ranges predate `inputs`: report.mjs attaches them from the oracle (withInputs)
+  const hist = [0, 1, 2, 3, 4, 5, 6].map((i) => at(i, 1e-5));
+  const flat = evaluate(at(7, 1e-5), hist, buildBaseline(hist.slice(0, 5)));
+  assert.equal(flat.checks.find((c) => c.name === "Scaling").result, "pass", "grows with the tree only");
+  assert.equal(flat.checks.find((c) => c.name === "Counters").result, "pass");
+  assert.match(flat.checks.find((c) => c.name === "Scaling").value, /per tree byte/);
+  const legacy = evaluate(at(7, 1e-5, false), hist, buildBaseline(hist.slice(0, 5)));
+  assert.equal(legacy.checks.find((c) => c.name === "Scaling").result, "optimize", "an attempt without inputs is judged raw, as recorded");
+  const deeper = [0, 1, 2, 3, 4, 5, 6].map((i) => at(i, 1e-5 * (i + 1)));
+  const g = evaluate(at(7, 8e-5), deeper, buildBaseline(deeper.slice(0, 5)));
+  assert.equal(g.checks.find((c) => c.name === "Scaling").result, "optimize", "cost per byte that grows with depth is still a finding");
+});
+
 test("aggregate groups calls by operation and size class", () => {
   const rows = aggregate([
     { method: "fs.write", ms: 3, size: { kind: "bytes", n: 500 } }, { method: "fs.write", ms: 9, size: { kind: "bytes", n: 700 }, phases: { construct: 7 } },

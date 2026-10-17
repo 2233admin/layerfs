@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Block-incremental Store snapshots (#352 SPEC §7):
 //   node dsh/tools/history/snapshot.mjs take --range N --volume V --image I --dir <snapshots> [--facts <json>]
-//   node dsh/tools/history/snapshot.mjs verify --range N --dir <snapshots>
-//   node dsh/tools/history/snapshot.mjs fork --range N --dir <snapshots> --work <dir> --project <name> [--volume <name>]
+//   node dsh/tools/history/snapshot.mjs verify --range N --dir <snapshots> [--run <id>]
+//   node dsh/tools/history/snapshot.mjs fork --range N --dir <snapshots> --work <dir> --project <name> [--volume <name>] [--run <id>]
 //   node dsh/tools/history/snapshot.mjs orphans --dir <snapshots>
 // A snapshot is the global Store's SQLite file at a checkpoint, kept as
-// range-NNN.json (a manifest of block hashes) over <snapshots>/blocks/, which
+// range-NNN.json (a manifest of block hashes; range-NNN.<run>.json for a run
+// that reruns a range another line already snapped) over <snapshots>/blocks/, which
 // holds every distinct 1 MiB block once, named by its SHA-256. Taking one
 // writes only the blocks no earlier snapshot has, so its cost follows the
 // bytes the Store changed, not its size.
@@ -27,7 +28,28 @@ export const BLOCK = 1 << 20;
 export const PAGE_SIZE = 4096;
 const here = dirname(fileURLToPath(import.meta.url));
 const pad = (n) => String(n).padStart(3, "0");
-export const manifestPath = (dir, range) => join(dir, `range-${pad(range)}.json`);
+const manifestName = (range, run) => `range-${pad(range)}${run ? `.${run}` : ""}.json`;
+/**
+ * The manifest of run `run`'s snapshot of `range` (SPEC §7: after a fix the
+ * forked line's snapshots sit beside the old line's). A line's own name,
+ * range-NNN.<run>.json, wins; the plain range-NNN.json serves a run that wrote
+ * it, or any run when it names none (taken before lines were named). Without
+ * `run`, the plain name.
+ */
+export function manifestPath(dir, range, run = null) {
+  const plain = join(dir, manifestName(range));
+  if (!run) return plain;
+  const own = join(dir, manifestName(range, run));
+  if (existsSync(own)) return own;
+  const owner = existsSync(plain) ? JSON.parse(readFileSync(plain, "utf8")).run : undefined;
+  if (owner && owner !== run) throw new Error(`run ${run} has no snapshot of range ${range} (${plain} is run ${owner}'s)`);
+  return plain;
+}
+/** Where run `run` writes its snapshot of `range`: the plain name, or its own beside another line's. */
+export function newManifestPath(dir, range, run = null) {
+  const plain = join(dir, manifestName(range));
+  return run && existsSync(plain) ? join(dir, manifestName(range, run)) : plain;
+}
 
 /** SQLite's page size from a database file's header (bytes 16–17; 1 means 65536). */
 export function pageSizeOf(header) {
@@ -105,7 +127,7 @@ export function verify(manifest, blocks) {
 /** The blocks in `blocks` that no manifest of `dir` names. */
 export function orphans(dir) {
   const used = new Set();
-  for (const f of readdirSync(dir).filter((f) => /^range-\d+\.json$/.test(f))) for (const id of JSON.parse(readFileSync(join(dir, f), "utf8")).blocks) used.add(id);
+  for (const f of readdirSync(dir).filter((f) => /^range-\d+(\.[a-z0-9-]+)?\.json$/.test(f))) for (const id of JSON.parse(readFileSync(join(dir, f), "utf8")).blocks) used.add(id);
   const blocks = join(dir, "blocks");
   return existsSync(blocks) ? readdirSync(blocks).filter((f) => /^[0-9a-f]{64}$/.test(f) && !used.has(f)).map((f) => join(blocks, f)) : [];
 }
@@ -137,7 +159,7 @@ export function manifestOf(range, image, made, facts, copyMs) {
 }
 
 function take({ range, volume, image, dir, facts }) {
-  const file = manifestPath(dir, range);
+  const file = newManifestPath(dir, range, facts.run);
   if (existsSync(file)) throw new Error(`${file} exists; a snapshot is never replaced`);
   mkdirSync(join(dir, "blocks"), { recursive: true });
   const t0 = Date.now();
@@ -150,8 +172,8 @@ function take({ range, volume, image, dir, facts }) {
   return manifest;
 }
 
-function fork({ range, dir, work, project, volume }) {
-  const manifest = JSON.parse(readFileSync(manifestPath(dir, range), "utf8"));
+function fork({ range, dir, work, project, volume, run }) {
+  const manifest = JSON.parse(readFileSync(manifestPath(dir, range, run), "utf8"));
   const id = `r${pad(range)}-${Date.now().toString(36)}`, source = join(resolve(work), `${id}-src`);
   if (existsSync(source)) throw new Error(`${source} exists`);
   rebuild(manifest, join(dir, "blocks"), join(source, "global", "store.sqlite"));
@@ -176,11 +198,11 @@ function main() {
     const m = take({ range, volume: opt("--volume"), image: opt("--image"), dir, facts });
     console.log(JSON.stringify({ range, size: m.size, blocks: m.blocks.length, newBlocks: m.newBlocks, newBytes: m.newBytes, copyMs: m.copyMs }));
   } else if (cmd === "verify" && range !== null && dir) {
-    const r = verify(JSON.parse(readFileSync(manifestPath(dir, range), "utf8")), join(dir, "blocks"));
+    const r = verify(JSON.parse(readFileSync(manifestPath(dir, range, opt("--run")), "utf8")), join(dir, "blocks"));
     console.log(JSON.stringify(r));
     if (!r.ok) process.exit(1);
   } else if (cmd === "fork" && range !== null && dir && opt("--work") && opt("--project")) {
-    console.log(JSON.stringify(fork({ range, dir, work: opt("--work"), project: opt("--project"), volume: opt("--volume") }), null, 2));
+    console.log(JSON.stringify(fork({ range, dir, work: opt("--work"), project: opt("--project"), volume: opt("--volume"), run: opt("--run") }), null, 2));
   } else if (cmd === "orphans" && dir) {
     for (const path of orphans(dir)) console.log(path);
   } else {

@@ -92,6 +92,22 @@ export function exponent(points) {
   return sxx ? +(ps.reduce((s, p) => s + (p[0] - mx) * (p[1] - my), 0) / sxx).toFixed(3) : null;
 }
 
+/**
+ * Probes whose own input grows with the tree (SPEC §4: grep over the whole
+ * tree may grow with the files and bytes in its scope, never with depth): the
+ * input each is divided by before its depth exponent is fitted. A metrics file
+ * carries the checkpoint tree as `inputs.tree` (run.mjs, from the oracle); an
+ * attempt recorded without it is judged as it was, raw.
+ */
+export const SCOPED = { grep_tree: (x) => x.inputs?.tree?.bytes };
+
+/** The probe's value per unit of its own input, or the raw value when unscoped. */
+export function perInput(name, x, value, scoped) {
+  if (!scoped || !SCOPED[name] || value == null) return value;
+  const n = SCOPED[name](x);
+  return n > 0 ? value / n : null;
+}
+
 /** True when the last `n` values each rose over the one before. */
 export const rising = (series, n = THRESHOLDS.rising) =>
   series.length > n && series.slice(-n - 1).every((v, i, a) => i === 0 || (v != null && a[i - 1] != null && v > a[i - 1]));
@@ -136,12 +152,15 @@ export function evaluate(m, history = [], baseline = null, t = THRESHOLDS) {
   } else add("Speed", "baseline not set (pilot)", "—", "pass");
   // Scaling: probes must stay flat with depth; counters are judged more strictly.
   const all = [...history, m];
+  // A probe with its own growing input is fitted per unit of that input, when this attempt recorded it.
+  const scoped = m.inputs != null;
+  const unit = (name) => (scoped && SCOPED[name] ? " per tree byte" : "");
   // The probe and the counter with the highest depth exponent, and the worst band of any.
   const probeFits = [], counterFits = [];
   for (const name of Object.keys(m.probes || {})) {
-    probeFits.push({ name, e: exponent(all.map((x) => [x.depth?.after, x.probes?.[name]?.ms])) });
+    probeFits.push({ name: `${name}${unit(name)}`, e: exponent(all.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.ms, scoped)])) });
     for (const k of Object.keys(m.probes[name].counters || {}))
-      counterFits.push({ name: `${name}.${k}`, e: exponent(all.map((x) => [x.depth?.after, x.probes?.[name]?.counters?.[k]])) });
+      counterFits.push({ name: `${name}.${k}${unit(name)}`, e: exponent(all.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.counters?.[k], scoped)])) });
   }
   const top = (fits, th) => fits.length
     ? { ...fits.reduce((m2, f) => ((f.e ?? -Infinity) > (m2.e ?? -Infinity) ? f : m2)), result: worst(fits.map((f) => band(f.e, th))) }

@@ -10,7 +10,7 @@
 // comment the lead posts on #352 at every range's end (renderComment, a fixed
 // format), with `gh issue comment 352 --body-file <it>`.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { buildBaseline, evaluate } from "./gates.mjs";
 import { change, loadFindings } from "./findings.mjs";
 
@@ -30,6 +30,19 @@ export function loadAttempts(dir) {
   }
   for (const xs of byRange.values()) xs.sort((a, b) => a.attempt - b.attempt);
   return new Map([...byRange].sort((a, b) => a[0] - b[0]));
+}
+
+/**
+ * The checkpoint tree each range's scoped probes read (gates.mjs SCOPED), from
+ * its oracle: attached in memory to earlier ranges' metrics that predate
+ * `inputs`, never written back to a recorded file.
+ */
+export function withInputs(m, oracleDir) {
+  if (m.inputs) return m;
+  const file = join(oracleDir, `oracle-${pad(m.range)}.json`);
+  if (!existsSync(file)) return m;
+  const o = JSON.parse(readFileSync(file, "utf8"));
+  return { ...m, inputs: { tree: { files: o.files, bytes: o.bytes } } };
 }
 
 /** One range's report, following ranges/TEMPLATE.md. */
@@ -177,6 +190,7 @@ function main() {
   const args = process.argv.slice(2);
   const opt = (n) => { const i = args.indexOf(n); return i < 0 ? null : args[i + 1]; };
   const metricsDir = opt("--metrics"), planDir = opt("--plan"), docs = opt("--docs");
+  const oracleDir = opt("--oracle") ?? join(dirname(planDir ?? "."), "oracle");
   if (!metricsDir || !planDir || !docs) { console.error("usage: report.mjs --metrics <dir> --plan <dir> --docs <dir>"); process.exit(2); }
   const summaries = new Map(JSON.parse(readFileSync(join(planDir, "plan.json"), "utf8")).ranges.map((r) => [r.range, r]));
   const attempts = loadAttempts(metricsDir), findings = loadFindings(metricsDir);
@@ -189,7 +203,7 @@ function main() {
   const rows = [];
   let verdict = "pass", comment = null;
   for (const [range, xs] of attempts) {
-    const history = last.filter((m) => m.range < range);
+    const history = last.filter((m) => m.range < range).map((m) => withInputs(m, oracleDir));
     const gates = xs.map((m) => evaluate(m, history, range < 5 ? null : baseline));
     const file = join(docs, "ranges", `range-${pad(range)}.md`);
     const old = existsSync(file) ? readFileSync(file, "utf8") : "";
