@@ -47,6 +47,61 @@ pub struct DeltaCounters {
     pub ineligible_candidates: u64,
     /// Candidates refused because the resulting chain would exceed its budget.
     pub work_exceeded: u64,
+    /// Candidates refused because their chain already reached the role's depth cap.
+    pub depth_capped: u64,
+    /// Whole-file objects stored, by chain depth (FULL is 0).
+    pub whole_file_depths: DepthHistogram,
+    /// Chunk objects stored, by chain depth (FULL is 0).
+    pub chunk_depths: DepthHistogram,
+}
+
+/// Stored objects by dependency-chain depth: slot `d` counts depth `d`, and the
+/// last slot counts every depth at or above it.
+pub type DepthHistogram = [u64; DEPTH_SLOTS];
+/// Slots of a [`DepthHistogram`].
+pub const DEPTH_SLOTS: usize = 32;
+
+impl DeltaCounters {
+    /// Adds `other` to these counts.
+    pub fn accumulate(&mut self, other: &Self) {
+        for (total, value) in [
+            (&mut self.prepared_full, other.prepared_full),
+            (&mut self.trials, other.trials),
+            (&mut self.prefix_selected, other.prefix_selected),
+            (&mut self.full_losses, other.full_losses),
+            (&mut self.no_candidate, other.no_candidate),
+            (&mut self.absent_candidates, other.absent_candidates),
+            (&mut self.ineligible_candidates, other.ineligible_candidates),
+            (&mut self.work_exceeded, other.work_exceeded),
+            (&mut self.depth_capped, other.depth_capped),
+        ] {
+            *total = total.saturating_add(value);
+        }
+        add_depths(&mut self.whole_file_depths, &other.whole_file_depths);
+        add_depths(&mut self.chunk_depths, &other.chunk_depths);
+    }
+
+    /// Counts one stored payload object of `role` at chain `depth`.
+    fn note_depth(&mut self, role: ObjectRole, depth: u8) {
+        let histogram = match role {
+            ObjectRole::Chunk => &mut self.chunk_depths,
+            _ => &mut self.whole_file_depths,
+        };
+        note_depth(histogram, depth);
+    }
+}
+
+/// Counts one object at chain `depth` in `histogram`.
+pub fn note_depth(histogram: &mut DepthHistogram, depth: u8) {
+    let slot = usize::from(depth).min(DEPTH_SLOTS - 1);
+    histogram[slot] = histogram[slot].saturating_add(1);
+}
+
+/// Adds `other` to `total`, slot by slot.
+pub fn add_depths(total: &mut DepthHistogram, other: &DepthHistogram) {
+    for (total, value) in total.iter_mut().zip(other) {
+        *total = total.saturating_add(*value);
+    }
 }
 
 /// Depth and canonical cost of one object's dependency chain.
@@ -316,6 +371,7 @@ pub fn select(
             let sig = prehashed.unwrap_or_else(|| signature(raw));
             input.candidates.insert(id, sig);
         }
+        input.counters.note_depth(role, 0);
         return Ok(full);
     }
     let raw = raw_payload(canonical, role)?;
@@ -352,6 +408,7 @@ pub fn select(
             let sig = prehashed.unwrap_or_else(|| signature(raw));
             input.candidates.insert(id, sig);
         }
+        input.counters.note_depth(role, 0);
         return Ok(full);
     };
     // Exactly one trial: the acquired base is read once, authenticated, and used
@@ -377,6 +434,7 @@ pub fn select(
             let sig = prehashed.unwrap_or_else(|| signature(raw));
             input.candidates.insert(id, sig);
         }
+        input.counters.note_depth(role, 0);
         return Ok(full);
     }
     let base_raw = raw_payload(&base, role)?;
@@ -407,13 +465,15 @@ pub fn select(
         );
         SaveProfile::charge(&mut input.profile.resolve.cost_ns, started);
         let base_cost = base_cost?.ok_or(StorageError::Integrity("selected base is not stored"))?;
+        let depth = base_cost.depth.saturating_add(1);
         input.depths.record(
             id,
             ChainCost {
-                depth: base_cost.depth.saturating_add(1),
+                depth,
                 canonical: base_cost.canonical.saturating_add(canonical.len() as u64),
             },
         );
+        input.counters.note_depth(role, depth);
         input.counters.prefix_selected = input.counters.prefix_selected.saturating_add(1);
         Ok(prefix)
     } else {
@@ -421,6 +481,7 @@ pub fn select(
         if lane == PackLane::WholeFile {
             input.candidates.insert(id, signature(raw));
         }
+        input.counters.note_depth(role, 0);
         Ok(full)
     }
 }
@@ -496,7 +557,11 @@ fn eligible(
         input.counters.absent_candidates = input.counters.absent_candidates.saturating_add(1);
         return Ok(false);
     };
-    Ok(depth < depth_cap)
+    if depth >= depth_cap {
+        input.counters.depth_capped = input.counters.depth_capped.saturating_add(1);
+        return Ok(false);
+    }
+    Ok(true)
 }
 
 fn acquire(input: &mut SelectInput<'_>, id: ObjectId) -> StorageResult<Vec<u8>> {

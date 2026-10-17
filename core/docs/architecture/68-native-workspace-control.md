@@ -188,7 +188,12 @@ it is `Timing::disabled`. Telemetry holds `timing` (pre-order nodes
 27 scalar `SqlWork` counters of that session group's totals after the request
 minus before it; reader totals are live plus retired readers summed under one
 registry turn; concurrent requests' work on the same sessions is included and
-an unavailable group is left out), `fuse` (#352, Linux: on a traced status or
+an unavailable group is left out), `delta` (#352: on a call that finished a
+Save, the daemon's Save selection totals after it minus before it: payload
+selection counts with `depth_capped` and `work_exceeded` refusals and the
+whole-file and chunk depth histograms, and the pooled metadata leaves' counts
+and depth histogram; a histogram ends at its last nonzero slot and its 32nd
+slot counts depth 31 and above), `fuse` (#352, Linux: on a traced status or
 unmount of an attached Workspace, its 39 kernel opcode counts since attach,
 the four frame dispositions, forget and store units and the largest READ and
 WRITE sizes), `storage` (the Commit's 42 Storage Diagnostics, section 16 order) and

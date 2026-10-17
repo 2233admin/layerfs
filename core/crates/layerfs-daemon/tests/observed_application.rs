@@ -494,7 +494,8 @@ fn width(telemetry: &layerfs_bridge::control::SdkValue, path: &[&str]) -> usize 
 }
 /// #352: a traced call carries its Store SQL work (the sessions' totals after
 /// it minus before it), and a traced status or unmount of an attached
-/// Workspace carries its kernel opcode counts since attach.
+/// Workspace carries its kernel opcode counts since attach; a traced Commit
+/// carries its delta selection work.
 #[test]
 fn traced_calls_carry_sql_work_and_status_unmount_carry_opcodes() {
     let f = support::Fixture::new("observed-traced-work", None);
@@ -515,6 +516,7 @@ fn traced_calls_carry_sql_work_and_status_unmount_carry_opcodes() {
     // Bind opens the Workspace's reader: its opening statements are this call's.
     assert!(counter(bind, &["sql", "readers"], "statements") > 0);
     assert!(bind.get("fuse").is_none(), "bind carries no opcode counts");
+    assert!(bind.get("delta").is_none(), "bind finishes no Save");
     let ready = layerfs_api::internal::workspace(&mut control)
         .attach(bound.token)
         .unwrap();
@@ -524,6 +526,16 @@ fn traced_calls_carry_sql_work_and_status_unmount_carry_opcodes() {
     let file = Path::new(&ready.directory).join("traced.txt");
     fs::write(&file, b"traced").unwrap();
     assert_eq!(fs::read(&file).unwrap(), b"traced");
+    // A Commit finishes a Save: its delta selection work is the Store's Save
+    // totals after it minus before it.
+    layerfs_api::internal::workspace(&mut control)
+        .commit(bound.token)
+        .unwrap();
+    let commit = layerfs_api::internal::take_telemetry(&mut control);
+    assert_eq!(commit.len(), 1);
+    assert_eq!(width(&commit[0], &["delta", "payload"]), 11);
+    assert_eq!(width(&commit[0], &["delta", "metadata"]), 7);
+    assert!(counter(&commit[0], &["delta", "metadata"], "leaves") > 0);
     // Unmount is admitted on a quiet connection: observe untraced, bounded.
     layerfs_api::internal::trace(&mut control, None);
     let deadline = std::time::Instant::now() + Duration::from_secs(8);

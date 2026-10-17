@@ -1,13 +1,14 @@
 //! Opened provider ownership and one reader per mounted Workspace.
 use super::{read_service::ReadSet, PortError, ReadServiceWork, ReaderFactory, StoreReader};
 use layerfs_history::{HistoryCatalog, WorkspaceId};
+use layerfs_storage::{encoding::delta::select::DeltaCounters, save::PoolCounters, WriteOutcome};
 use layerfs_storage::{
     port::PackPersistence, ReservationBlocks, Storage, StorageError, StoragePolicy, StorageResult,
 };
 use layerfs_workspace::{CanonicalCache, CanonicalClient, ClientWork};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
-    Arc,
+    Arc, Mutex,
 };
 
 /// Exact adapter demand counts. They do not substitute for provider work receipts.
@@ -27,6 +28,13 @@ pub(super) struct Counts {
     pub length_ids: AtomicU64,
     pub serials: AtomicU64,
 }
+/// Delta selection outcomes of every Save this daemon finished, payload and
+/// pooled metadata: stored depths and why candidates were refused.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SaveCounters {
+    pub delta: DeltaCounters,
+    pub pool: PoolCounters,
+}
 /// One global Store binding, with mounted readers and a shared immutable cache.
 /// Opened providers must belong to the same validated authority. Application
 /// composition owns that selection; this adapter knows only the public ports.
@@ -44,6 +52,7 @@ pub struct Store {
     pub(super) serial_low_water: AtomicU64,
     /// The write recognizer's fixed slots, shared by every Workspace.
     pub(super) recognizer: super::Recognizer,
+    saves: Mutex<SaveCounters>,
 }
 impl Store {
     /// Takes the control reader and a mount-time factory under explicit capacity.
@@ -75,6 +84,7 @@ impl Store {
             counts,
             serial_low_water: AtomicU64::new(0),
             recognizer: super::Recognizer::new(),
+            saves: Mutex::default(),
         })
     }
     /// Explicit configuration. Application assembly calls this once, before
@@ -93,6 +103,17 @@ impl Store {
     }
     pub fn history(&self) -> &dyn HistoryCatalog {
         self.history.as_ref()
+    }
+    /// Adds one finished Save's selection counts to the daemon's totals.
+    pub(crate) fn note_save(&self, saved: &WriteOutcome) {
+        if let Ok(mut saves) = self.saves.lock() {
+            saves.delta.accumulate(&saved.delta);
+            saves.pool.accumulate(&saved.pool);
+        }
+    }
+    /// The selection counts of every Save this daemon finished.
+    pub fn save_counters(&self) -> SaveCounters {
+        self.saves.lock().map(|saves| *saves).unwrap_or_default()
     }
     pub fn read_handles(&self) -> usize {
         self.readers.work().readers

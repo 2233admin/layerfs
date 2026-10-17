@@ -42,6 +42,8 @@ pub struct WriteOutcome {
     pub metadata_bytes: u64,
     /// Actual pooled selection and value assignment counts, including race trials.
     pub pool: crate::save::PoolCounters,
+    /// Actual payload delta selection counts and stored depths.
+    pub delta: DeltaCounters,
 }
 
 pub(super) struct State<'a> {

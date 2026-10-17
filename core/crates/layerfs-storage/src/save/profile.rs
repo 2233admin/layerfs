@@ -68,4 +68,27 @@ pub struct PoolCounters {
     pub trials: u64,
     /// Candidates refused because the resulting chain would exceed its budget.
     pub work_exceeded: u64,
+    /// Candidates refused because their chain already reached the depth cap.
+    pub depth_capped: u64,
+    /// Leaves stored, by chain depth (FULL is 0).
+    pub depths: crate::encoding::delta::select::DepthHistogram,
+}
+impl PoolCounters {
+    /// Adds `other` to these counts.
+    pub fn accumulate(&mut self, other: &Self) {
+        for (total, value) in [
+            (&mut self.leaves, other.leaves),
+            (&mut self.reused_values, other.reused_values),
+            (&mut self.new_values, other.new_values),
+            (&mut self.groups, other.groups),
+            (&mut self.delta_leaves, other.delta_leaves),
+            (&mut self.full_leaves, other.full_leaves),
+            (&mut self.trials, other.trials),
+            (&mut self.work_exceeded, other.work_exceeded),
+            (&mut self.depth_capped, other.depth_capped),
+        ] {
+            *total = total.saturating_add(value);
+        }
+        crate::encoding::delta::select::add_depths(&mut self.depths, &other.depths);
+    }
 }

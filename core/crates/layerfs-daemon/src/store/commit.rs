@@ -185,9 +185,11 @@ impl BoundWorkspace {
                     self.store.logical_size(node).map_err(CommitError::History)
                 })?;
                 retained.phase = CommitPhase::Finish;
-                retained.saved = Some(phase(timing, "finish", || {
+                let saved = phase(timing, "finish", || {
                     save.finish().map_err(CommitError::Storage)
-                })?);
+                })?;
+                self.store.note_save(&saved);
+                retained.saved = Some(saved);
                 // Count only after finish has proved the root's references
                 // closed, so a missing dependency stays a Storage refusal.
                 let logical = phase(timing, "logical.count", || {

@@ -186,6 +186,12 @@ impl Application {
             .then(|| self.observed_store(crate::bootstrap::OpenedStore::sql_sessions))
             .flatten();
         let before = sessions.as_ref().map(crate::bootstrap::SqlSessions::totals);
+        // And its delta selection work: the Store's Save totals after it minus
+        // before it.
+        let saves = traced
+            .then(|| self.observed_store(|opened| opened.store.clone()))
+            .flatten();
+        let saves_before = saves.as_ref().map(|store| store.save_counters());
         let recording = traced.then(crate::telemetry::Recording::start);
         let outcome = self.control_operation(operation, slot);
         let reports = recording.map(crate::telemetry::Recording::finish);
@@ -193,6 +199,10 @@ impl Application {
             .as_ref()
             .zip(before)
             .and_then(|(sessions, before)| crate::telemetry::sql(before, sessions.totals()));
+        let delta = saves
+            .as_ref()
+            .zip(saves_before)
+            .and_then(|(store, before)| crate::telemetry::delta(before, store.save_counters()));
         // A traced status or unmount carries the Workspace's kernel opcode
         // counts since attach.
         #[cfg(target_os = "linux")]
@@ -306,8 +316,12 @@ impl Application {
             // The SDK trace route reports a failed diagnostic write beside
             // the reply and keeps its connection.
             Some(reports) => {
-                let telemetry =
-                    crate::telemetry::value(reports, &outcome, diagnostic.as_ref(), sql, fuse);
+                let telemetry = crate::telemetry::value(
+                    reports,
+                    &outcome,
+                    diagnostic.as_ref(),
+                    [sql, delta, fuse],
+                );
                 (outcome, None, Some(telemetry))
             }
             None => (outcome, diagnostic, None),

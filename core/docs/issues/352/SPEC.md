@@ -581,6 +581,14 @@ The fixer follows these steps when a range ends as optimize or stop.
   closed, summed), each the 27 scalar `SqlWork` counters as the session group's
   totals after the exchange minus before it. Concurrent exchanges' work on the
   same sessions is included, so read it from a call that ran alone;
+- `delta`, on a call that finished a Save (a Commit or a merge): the
+  daemon's Save selection totals after it minus before it. `payload` has the
+  whole-file and chunk selection counts, the bases refused at the depth cap
+  (`depth_capped`) or the chain-work budget (`work_exceeded`) and a depth
+  histogram per role (`whole_file_depths`, `chunk_depths`: slot d counts the
+  objects stored at chain depth d, 0 is FULL); `metadata` has the pooled
+  leaves' counts and `depths`. The runner sums them per range for §3d's Delta
+  row; Init's own objects are not in them;
 - `fuse`, on `status` and `unmount` of an attached Workspace (Linux): its 39
   opcode counts since attach, the frame dispositions (`served`, `inline`,
   `refused`, `terminal`), forget and store units and the largest READ and WRITE.

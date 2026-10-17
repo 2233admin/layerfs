@@ -125,6 +125,7 @@ impl State<'_> {
         let cap = capacities.metadata_delta_max_depth;
         for base in &bases {
             if base.depth >= cap {
+                self.pool_stats.depth_capped += 1;
                 continue;
             }
             if base
@@ -145,6 +146,8 @@ impl State<'_> {
             if let Some(program) = program? {
                 if program.len() < full.len() {
                     self.pool_stats.delta_leaves += 1;
+                    let depth = base.depth.saturating_add(1);
+                    crate::encoding::delta::select::note_depth(&mut self.pool_stats.depths, depth);
                     return Ok(EncodedRecord {
                         lane: PackLane::Ordinary,
                         record: program,
@@ -157,6 +160,7 @@ impl State<'_> {
             break;
         }
         self.pool_stats.full_leaves += 1;
+        crate::encoding::delta::select::note_depth(&mut self.pool_stats.depths, 0);
         Ok(EncodedRecord {
             lane: PackLane::Ordinary,
             record: full,

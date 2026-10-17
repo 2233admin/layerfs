@@ -9,8 +9,10 @@
 //! [`crate::control::Service`] directly can start a [`Recording`] around one
 //! operation to get the same Commit and read phase reports.
 use crate::control::{Failure, Success};
+use crate::store::SaveCounters;
 use layerfs_bridge::control::SdkValue;
 use layerfs_persistence::SqlWork;
+use layerfs_storage::encoding::delta::select::DepthHistogram;
 use layerfs_telemetry::timer::{
     Active, NodeOutcome, Timing, TimingNode, TimingReport, TimingScope,
 };
@@ -105,12 +107,12 @@ pub(crate) fn value(
     reports: Vec<TimingReport>,
     outcome: &Result<Success, Failure>,
     diagnostic: Option<&std::io::Error>,
-    sql: Option<SdkValue>,
-    fuse: Option<SdkValue>,
+    [sql, delta, fuse]: [Option<SdkValue>; 3],
 ) -> SdkValue {
     let mut fields = vec![("timing".to_owned(), timing(&reports))];
-    fields.extend(sql.map(|sql| ("sql".to_owned(), sql)));
-    fields.extend(fuse.map(|fuse| ("fuse".to_owned(), fuse)));
+    for (name, value) in [("sql", sql), ("delta", delta), ("fuse", fuse)] {
+        fields.extend(value.map(|value| (name.to_owned(), value)));
+    }
     let (namespace, storage) = crate::application::commit_parts(outcome);
     if let Some(storage) = storage {
         fields.push((
@@ -160,6 +162,67 @@ pub(crate) fn sql(before: SqlTotals, after: SqlTotals) -> Option<SdkValue> {
     .filter_map(|(name, value)| Some((name.to_owned(), value?)))
     .collect();
     (!fields.is_empty()).then_some(SdkValue::Map(fields))
+}
+
+/// One call's delta selection work: the Store's Save totals after it minus
+/// before it, or None when the call finished no Save. Depth lists end at
+/// their last nonzero slot; the last of 32 slots counts depth 31 and above.
+pub(crate) fn delta(before: SaveCounters, after: SaveCounters) -> Option<SdkValue> {
+    if before == after {
+        return None;
+    }
+    let less = |after: u64, before: u64| SdkValue::Int(after.saturating_sub(before) as i64);
+    let depths = |after: &DepthHistogram, before: &DepthHistogram| {
+        let mut slots: Vec<u64> = after
+            .iter()
+            .zip(before)
+            .map(|(after, before)| after.saturating_sub(*before))
+            .collect();
+        while slots.last() == Some(&0) {
+            slots.pop();
+        }
+        SdkValue::List(slots.into_iter().map(|n| SdkValue::Int(n as i64)).collect())
+    };
+    let (a, b) = (&after.delta, &before.delta);
+    let payload = SdkValue::map([
+        ("prepared_full", less(a.prepared_full, b.prepared_full)),
+        ("trials", less(a.trials, b.trials)),
+        (
+            "prefix_selected",
+            less(a.prefix_selected, b.prefix_selected),
+        ),
+        ("full_losses", less(a.full_losses, b.full_losses)),
+        ("no_candidate", less(a.no_candidate, b.no_candidate)),
+        (
+            "absent_candidates",
+            less(a.absent_candidates, b.absent_candidates),
+        ),
+        (
+            "ineligible_candidates",
+            less(a.ineligible_candidates, b.ineligible_candidates),
+        ),
+        ("depth_capped", less(a.depth_capped, b.depth_capped)),
+        ("work_exceeded", less(a.work_exceeded, b.work_exceeded)),
+        (
+            "whole_file_depths",
+            depths(&a.whole_file_depths, &b.whole_file_depths),
+        ),
+        ("chunk_depths", depths(&a.chunk_depths, &b.chunk_depths)),
+    ]);
+    let (a, b) = (&after.pool, &before.pool);
+    let metadata = SdkValue::map([
+        ("leaves", less(a.leaves, b.leaves)),
+        ("delta_leaves", less(a.delta_leaves, b.delta_leaves)),
+        ("full_leaves", less(a.full_leaves, b.full_leaves)),
+        ("trials", less(a.trials, b.trials)),
+        ("depth_capped", less(a.depth_capped, b.depth_capped)),
+        ("work_exceeded", less(a.work_exceeded, b.work_exceeded)),
+        ("depths", depths(&a.depths, &b.depths)),
+    ]);
+    Some(SdkValue::map([
+        ("payload", payload),
+        ("metadata", metadata),
+    ]))
 }
 
 /// The scalar `SqlWork` counters, in `SQL_FIELDS` order (observation

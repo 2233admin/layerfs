@@ -387,6 +387,7 @@ pub(crate) fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
     }
     let known = store.logical_size(ln).map_err(history)?;
     let saved = save.finish().map_err(args::failed)?;
+    store.note_save(&saved);
     // Counted over finished, reference-closed objects, as a Commit counts.
     let reader = storage.reader().map_err(args::failed)?;
     let logical = layerfs_content::filesystem::statistics::logical_size_after(
