@@ -1,10 +1,10 @@
 # #352 — Range report Overview format
 
-> **Status:** Current, owner direction 2026-10-18. Binding format for the
-> **Overview** that opens every range report (`ranges/range-NNN.md`), generated
-> by `report.mjs` and enforced by `report.mjs check` (SPEC §3, format rule F1).
-> STATS.md carries the same tables as running totals. The example below is
-> **simulated**; real reports are generated from the range's metrics.
+> **Status:** Superseded in part, 2026-10-18, by [REPORT_FORMAT.md](REPORT_FORMAT.md),
+> which defines the whole report. This file stays binding for the four Activity
+> tables (calls by category, Branches, conflicts, agents), their rules and their
+> checks, which REPORT_FORMAT.md §3 "2. Activity" uses unchanged. Where the two
+> differ, REPORT_FORMAT.md wins. The example below is **simulated**.
 
 ## 1. Rules
 
