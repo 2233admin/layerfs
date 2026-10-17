@@ -136,7 +136,7 @@ fn faithful_history_model() -> bool {
 /// Largest dependency-chain depth the driver will *declare* a base at.
 ///
 /// `StoragePolicy::frozen_default` caps a whole-file chain at
-/// `DEFAULT_WHOLE_FILE_DELTA_MAX_DEPTH` = 8 and the reader accepts a stored
+/// `DEFAULT_WHOLE_FILE_DELTA_MAX_DEPTH` = 16 and the reader accepts a stored
 /// chain of exactly that depth, so the design is self-consistent. A producer
 /// that declared a base unconditionally would nevertheless ask the Store to
 /// build a chain as deep as the selection ever ran, and the selection's own

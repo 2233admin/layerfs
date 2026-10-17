@@ -15,8 +15,8 @@ canonical bytes. C1 never calls a delta codec and never imports SQLite.
 | Item | Accepted value | Notes |
 | --- | --- | --- |
 | Construction cutoff `T` | a power of two in `131072..=1048576`, exclusive | Default `131072`; 256 KiB and 1 MiB are supported and exercised end to end |
-| Whole-file delta depth | `0..=50`, default `8` | `0` disables whole-file delta selection; a depth never widens a chain or memory budget |
-| Chunk delta depth | `0..=50`, default `4` | Same rule for chunk payloads |
+| Whole-file delta depth | `0..=50`, default `16` (8 before #352) | `0` disables whole-file delta selection; a depth never widens a chain or memory budget |
+| Chunk delta depth | `0..=50`, default `8` (4 before #352) | Same rule for chunk payloads |
 | Largest whole-file frame | `max(135168, raw + raw/128 + 1024)` | Derived from the accepted cutoff; the default cutoff keeps its frozen value |
 | Advisory predecessors | at most `4` per object | Bounded hints for physical selection; never a logical dependency |
 | Empty file | file state over a defined empty mapping page | No whole-file object is produced |

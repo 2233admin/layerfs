@@ -17,9 +17,9 @@ pub const MINIMUM_SMALL_FILE_THRESHOLD_BYTES: u64 = 131_072;
 /// Largest accepted construction cutoff.
 pub const MAXIMUM_SMALL_FILE_THRESHOLD_BYTES: u64 = 1_048_576;
 /// Default whole-file dependency bound.
-pub const DEFAULT_WHOLE_FILE_DELTA_MAX_DEPTH: u8 = 8;
+pub const DEFAULT_WHOLE_FILE_DELTA_MAX_DEPTH: u8 = 16;
 /// Default chunk dependency bound.
-pub const DEFAULT_CHUNK_DELTA_MAX_DEPTH: u8 = 4;
+pub const DEFAULT_CHUNK_DELTA_MAX_DEPTH: u8 = 8;
 /// Largest accepted dependency depth for either role.
 pub const MAXIMUM_DELTA_MAX_DEPTH: u8 = 50;
 

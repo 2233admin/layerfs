@@ -442,8 +442,8 @@ edges; an independent object has depth zero.
 
 | Policy/budget | Current value |
 | --- | --- |
-| Default whole-file maximum depth | 8 edges |
-| Default chunk maximum depth | 4 edges |
+| Default whole-file maximum depth | 16 edges (8 before #352; a Store keeps the depth it was created with) |
+| Default chunk maximum depth | 8 edges (4 before #352) |
 | Accepted configurable depth range | 0–50; zero disables prospective deltas for the role |
 | Chain canonical work budget | 512 KiB |
 | Chain encoded work budget | 256 KiB |

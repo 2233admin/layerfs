@@ -22,7 +22,7 @@ needs no Workspace, branch, commit, mount or daemon.
 | Format profile | `1` |
 | Schema identity | `application_id = 1279677261`, `user_version = 4` (older versions are rejected, not migrated) |
 | Persisted policy | one row, `id = 1`, twenty-one columns: cutoff, three depths, the publication watermark |
-| Accepted policy | cutoff a power of two in `131072..=1048576`; each depth `0..=50`; defaults 128 KiB / whole-file 8 / chunk 4 / pooled metadata 8 |
+| Accepted policy | cutoff a power of two in `131072..=1048576`; each depth `0..=50`; defaults 128 KiB / whole-file 16 / chunk 8 / pooled metadata 8 (whole-file 8 and chunk 4 before #352; a Store keeps its recorded policy) |
 | Encoding | **FULL and PREFIX** payload records. One PREFIX trial per object against at most one eligible candidate; the complete framed record cost decides |
 | Pack framings | v1 ordinary groups, v2 native chunk records, v4 compact whole-file records, v7 singleton packs; the pooled value-group framing (v6, header versions 12, 21 and 22) is removed and refused |
 | Rejected framings | v3, v5 and unknown versions fail explicitly; no trial decoding |
