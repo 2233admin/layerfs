@@ -48,7 +48,24 @@
   F-001, before P2's measured run.
 - **F-006 · health cannot judge overlay files left (lead, 2026-10-18).** The
   health row reads "? overlays", so a leaked Workspace overlay would go unseen.
-  Owner: the builder (measure it per range, REPORT_FORMAT.md).
+  Owner: the builder (measure it per range, REPORT_FORMAT.md). **Done** in
+  `a1d975ffa` (measured per range in the report's health row).
 - **F-007 · Trends were never written (lead, 2026-10-18).** §6 has been empty in
   every report; it becomes the headline's "moved most" line (REPORT_FORMAT.md).
-  Owner: the builder.
+  Owner: the builder. **Done** in `a1d975ffa` (the headline's top movers).
+- **F-008 · Sandbox Commit refused `HeadMoved` under concurrent same-lane
+  Commits (builder's P2 dev run, 2026-10-18; stop class, blocks P2).** A
+  Sandbox Commit merges against the Branch head it read and fails at publish
+  when another agent committed in between; the fs write path refuses a head
+  move the same way. Range 5 (dev run `p2-dev`) stopped twice at r005.s0051.
+  The plan expects such a Commit to merge cleanly (SPEC §2, stale clean merge).
+  Owner: the fixer, first priority. A dev-only `--serialize-commits 1` aid
+  exists and is refused for measured runs.
+- **F-009 · concurrent unmounts of two Workspaces in one Sandbox fail
+  "Workspace absent" (builder, 2026-10-18).** Worked around in the player with
+  one Sandbox per agent. Owner: the fixer.
+- **F-010 · the checkpoint `diff_commits` is not O(changed) (builder,
+  2026-10-18; owner's point 7).** Pages return ~20–27 entries; page 0 grew
+  127 → 213 ms (401k → 703k VM steps) from range 5 to 7 (dev run); per entry
+  3.3 → 6.5 → 13.0 ms against the ~11 ms one-file probe; later pages re-skip
+  from the start. Dev ranges 7–11 gated optimize on it. Owner: the fixer.
