@@ -13,6 +13,7 @@
 | 2026-10-18 | The pilot set is ranges 0–4 (311 dsh commits), and the delta control arm replays the same ranges 0–4 (SPEC §8 said 1–5) | It matches plan v2's pilot snapshots, the report baseline and milestone 4; the control must cover the same ranges as the arm it is compared with |
 | 2026-10-18 | Files over 60,000 bytes, executables, symlinks and mode changes go through a Sandbox `apply` step | One fs request carries at most 65,519 bytes; recorded as open finding F-001 in BUGS.md |
 | 2026-10-18 | A fork-probe optimize verdict that tracks the replay's own probe/lane Branch count is diagnosed by the fixer like any other, not waived | The SDK cannot delete a Branch, so ~7 Branches accumulate per range; a fork whose rows grow with Branch count is a real scaling question at 202 ranges |
+| 2026-10-18 | Owner direction: implementation, play and recovery must all be fast. Every range records its tooling stage times; play removes tooling overhead; recovery is one command (`run.mjs recover`, newest good snapshot, fast-forward) | Passed ranges are never replayed measured; the time between LayerFS work must go to LayerFS work |
 
 ## P1 · Pilot
 
