@@ -22,6 +22,7 @@ verify ~1 s); a fix took 50–65 min of fixer time; the first builder tasks took
 | S8 | **Development runs first, one range.** A dev run of range 0–2 found the probe-Branch effect and the base64 portability issue before any measured range | Builder's pre-pilot report |
 | S9 | **Counters before time.** Deterministic counters (rows, statements, VM steps) show growth at range 2 while times are still tiny, and need no repeated samples | fork rows 16→23→30, merge statements 2,900→5,792 |
 | S10 | **Rebuilds: keep the old daemon by id.** The old binary is needed for old-vs-new tables; copy it to `core/target/issue352/daemon-<id>/` before rebuilding | The fixer kept `daemon-0ef24121/` and could measure old against new |
+| S11 | **Validate gates and probes offline before a measured run.** Dry-run gates.mjs over recorded metrics (seconds, no replay) and check every probe's input is fixed (SPEC §3c; the input size is recorded and a changed input is refused) before any re-baseline | Three re-baselines on daemons `71001f65`/`361bb09e` tripped on tooling: per-entry normalisation (F-012/F-013), a fixed cost spread over entries (F-013), a drifting probe input (F-014) |
 
 ## 2. Lead bookkeeping
 
