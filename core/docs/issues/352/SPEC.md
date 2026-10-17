@@ -1054,6 +1054,10 @@ most chains before depth 8. Doubling its depth would change little.
 - `BUGS.md`: each failure, its diagnosis, its fix kind and its recovery.
 - `OPTIMIZATIONS.md`: each optimization with its old-vs-new probe table on the
   same snapshots.
+- `fixes/NNN-aK-<slug>.md`: one record per fix (owner request, 2026-10-18): the
+  old and new design, the proof, and old-vs-new performance on the same
+  snapshots ([fixes/README.md](fixes/README.md) has the template). BUGS.md and
+  OPTIMIZATIONS.md keep one line per finding and link the record.
 
 ## 11. Open decisions for the owner
 

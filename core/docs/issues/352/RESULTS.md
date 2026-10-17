@@ -14,6 +14,7 @@
 | 2026-10-18 | Files over 60,000 bytes, executables, symlinks and mode changes go through a Sandbox `apply` step | One fs request carries at most 65,519 bytes; recorded as open finding F-001 in BUGS.md |
 | 2026-10-18 | A fork-probe optimize verdict that tracks the replay's own probe/lane Branch count is diagnosed by the fixer like any other, not waived | The SDK cannot delete a Branch, so ~7 Branches accumulate per range; a fork whose rows grow with Branch count is a real scaling question at 202 ranges |
 | 2026-10-18 | Owner direction: implementation, play and recovery must all be fast. Every range records its tooling stage times; play removes tooling overhead; recovery is one command (`run.mjs recover`, newest good snapshot, fast-forward) | Passed ranges are never replayed measured; the time between LayerFS work must go to LayerFS work |
+| 2026-10-18 | Process slip, recorded: ranges 000–002's comments were posted about a minute before their report commits were pushed (the lead's first commit command failed on untracked files). The links resolved once `a448fe02b`..`fdd4a7301` were pushed; later checkpoints commit, verify the push, then comment | HANDOFF's order (commit and push, then comment) keeps every comment's link working |
 
 ## P1 · Pilot
 
