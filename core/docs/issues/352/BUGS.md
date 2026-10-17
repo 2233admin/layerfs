@@ -106,3 +106,9 @@
   checkpoint with `71001f65`; REBUILD.md §4 for the batch passes on a range-4
   fork written by `511dceed`.
   [fixes/002-a1-f011-binding-hint-migration.md](fixes/002-a1-f011-binding-hint-migration.md).
+- **F-012 · checkpoint `diff_commits` per changed entry rises with depth
+  (builder's re-baseline, daemon `71001f65`, 2026-10-18).** Per entry
+  0.44 → 0.72 → 1.00 ms over ranges 0–2 (depth exponent 0.80, optimize in
+  `p1-rebase` and `p1-control-b`; 0.61 and 0.42 with ranges 3 and 4); the
+  one-file probe is flat (~11 ms, vm_steps 18–21k). Owner: the fixer, counter
+  diagnosis before P2.
