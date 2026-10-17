@@ -34,3 +34,14 @@
   (builder): `report.mjs` writes only the report of the range it just played and
   keeps every earlier attempt's recorded check rows as written. **Fixed** in
   `badd7494d` (stored gate results, `report.mjs check`, format rule F1–F8).
+- **F-005 · chunks are never stored as deltas (lead, 2026-10-18, owner-tracked).**
+  Range 4's chunk depth histogram is [0: 906], and [0: 2,419] since Init: every
+  chunk object is FULL. Is it no base found, or are files rarely chunked
+  (≥ 128 KiB)? It feeds the delta decision (SPEC §8). Owner: the fixer,
+  diagnosis first.
+- **F-006 · health cannot judge overlay files left (lead, 2026-10-18).** The
+  health row reads "? overlays", so a leaked Workspace overlay would go unseen.
+  Owner: the builder (measure it per range, REPORT_FORMAT.md).
+- **F-007 · Trends were never written (lead, 2026-10-18).** §6 has been empty in
+  every report; it becomes the headline's "moved most" line (REPORT_FORMAT.md).
+  Owner: the builder.
