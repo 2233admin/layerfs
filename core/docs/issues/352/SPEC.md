@@ -559,6 +559,11 @@ them here.
 | Seal: WAL before seal, seal time | steady | growing | Optimize if it blocks the next range |
 | Wall time per range; projected total | within budget | within 1.5× | Re-plan range size or the test cap |
 
+**Recorded at P1 close (2026-10-18):** the baseline is ranges 2–4 on daemon
+`511dceed` (`~/lfs-history/metrics/baseline.json`); the thresholds are
+gates.mjs `THRESHOLDS` (RESULTS.md, P1); the wall budget is 120 s per range,
+24,240 s for 202 ranges, against the current phase's mean × 202.
+
 - **Pass:** continue.
 - **Watch:** continue, and run the probes at the next milestone.
 - **Optimize:** finish the checkpoint and snapshot, then fix and recover (§6).
@@ -1058,10 +1063,10 @@ most chains before depth 8. Doubling its depth would change little.
 | --- | --- | --- |
 | P0 · Plan and oracles | `plan.mjs` and `oracle.mjs` over the whole history, without LayerFS | **Done 2026-10-17:** plan and oracle for all 202 ranges; every plan passes the `replayPlan` static check |
 | P1 · Pilot | First, one Init of a dsh checkout with `node_modules` (its stored-to-raw ratio). Then the first ~300 commits, fs only, one lane, a snapshot every range, plus the delta control arm. Builds `snapshot.mjs` and `inspect.mjs` | Every checkpoint matches git; baselines and gate thresholds recorded; growth per range and per install within 2× the §7 estimate, or re-planned |
-| P2 · Multi-agent | Lanes, the 5–10 agent crew, one-shot Workspaces, planned conflicts | Every planned conflict hit and resolved; identity holds |
-| P3 · Sandbox share | The 9 : 1 split, FUSE timing, `node_modules` installs, unit tests (§2, Tests) | Deduplication and FUSE gates pass |
-| P4 · Recovery and demo | Milestone snapshots, probes, one kill and resume from a fork, one fast rebuild, the Live demo window seeded from a fork; the LayerFS page's checkpoint views (§7, Inspecting a checkpoint) | Recovery proved; the demo passes check-demo in dsh |
-| P5 · Full history | All 202 ranges. Controls: squashed history, and one Commit per git commit | Latency-vs-depth and storage curves, with history cost separated from tree size and from Commit granularity |
+| P2 · Multi-agent (ranges 5–14) | Lanes, the 5–10 agent crew, one-shot Workspaces, planned conflicts | Every planned conflict hit and resolved; identity holds |
+| P3 · Sandbox share (ranges 15–29) | The 9 : 1 split, FUSE timing, `node_modules` installs, unit tests (§2, Tests) | Deduplication and FUSE gates pass |
+| P4 · Recovery and demo (ranges 30–50) | Milestone snapshots, probes, one kill and resume from a fork, one fast rebuild, the Live demo window seeded from a fork; the LayerFS page's checkpoint views (§7, Inspecting a checkpoint) | Recovery proved; the demo passes check-demo in dsh |
+| P5 · Full history (ranges 51–201) | All 202 ranges. Controls: squashed history, and one Commit per git commit | Latency-vs-depth and storage curves, with history cost separated from tree size and from Commit granularity |
 
 ## 10. Outputs in this folder
 
