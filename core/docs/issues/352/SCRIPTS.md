@@ -196,8 +196,8 @@ lead only waits where the plan has a barrier.
 - **Any later window:** it starts from the milestone snapshot before it. That
   needs the one new dsh feature (SPEC §2): **seed a demo from a Store
   snapshot**. The scenario's `seed` names the snapshot manifest, and Play
-  restores it into the demo's own volume and LayerFS home, as
-  `restore-store.mjs` does, instead of Initing.
+  forks it into the demo's own volume and LayerFS home (SPEC §7, Forking from a
+  snapshot) instead of Initing.
 
 ## 9. Speed
 

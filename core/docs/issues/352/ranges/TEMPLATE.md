@@ -11,8 +11,8 @@
 | Checkpoint | `<mainline commit id>`, tree `<tree id>` |
 | LayerFS depth | Commits A → B, Layers, Branches |
 | Binary | daemon `<id>`, SDK `<id>`, image `<digest>`, plan version |
-| Started from | snapshot `<id>` (range NNN−1) |
-| Snapshot taken | `<id>` or none |
+| Started from | the live Store, or a fork of snapshot `range-NNN` |
+| Snapshot taken | `range-NNN`: new blocks, bytes, seal and copy time; or none |
 | Wall time | total; play, verify, tests, seal + snapshot |
 
 ## Attempts
@@ -99,6 +99,7 @@ size alone.
 | Directory share of new bytes | | |
 | Delta share; depth distribution per role; at cap; stopped by budget | | |
 | `node_modules` reinstall growth | | |
+| Range growth: tracked, `node_modules`, build outputs, metadata; × median | | |
 | Projection at 202 ranges / disk budget | | |
 
 ## 6. Trends
@@ -117,4 +118,4 @@ baseline, each with its direction over the last 3 ranges.
 
 - `~/lfs-history/metrics/range-NNN.json` (one file per attempt)
 - The per-call trace, the runner log, and the test output
-- The snapshot and its manifest
+- The snapshot manifest (`~/lfs-history/snapshots/range-NNN.json`)

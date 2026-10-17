@@ -1,6 +1,6 @@
 # #352 — dsh history replay: SPEC
 
-> **Status:** Current plan, 2026-10-17. The numbers come from dsh's git history.
+> **Status:** Current plan, 2026-10-18. The numbers come from dsh's git history.
 > They stay estimates until the pilot (phase 1) measures them. Improve this file
 > where the work shows it is wrong, in the same commit as the change.
 
@@ -32,6 +32,8 @@ bare clone of `https://github.com/deepseek-ai/deepseek-harness` at
 | Mainline (first-parent) commits | 2,188 |
 | Files at HEAD | 16,297 tracked (133 MB): 16,273 regular, 10 executable, 14 symlinks |
 | Git pack | 303 MiB |
+| Unique file versions in history | 268k, 6.9 GiB raw |
+| Ignored files in a working copy | `node_modules` 78k files, 2.3 GiB; desktop build 4.8k files, 0.7 GiB; `lib/` and `dist/` ~40 MiB |
 | Last 2,000 mainline steps | ~70 files, +1,889 / −613 lines each |
 | Dates | 2026-06-10 to 2026-10-17 |
 
@@ -48,9 +50,23 @@ bare clone of `https://github.com/deepseek-ai/deepseek-harness` at
 | LayerFS Commits | ~249k in total (P0), one per fs mutation, Sandbox Commit, merge and reconcile write |
 | Bash calls | ~30k–40k: one per dsh commit's fs batch, one per one-shot Workspace |
 
-`node_modules` is installed, because LayerFS stores ignored files. Installs run in
-a Sandbox at each range that changes `package.json` or `pnpm-lock.yaml`, plus at
-range 1.
+### Ignored files
+
+LayerFS stores everything `.gitignore` covers, so the replay makes those files as
+a real project would. They dominate the Store's growth (§7, Disk), so they follow
+these rules:
+
+| Files | Made | Rule |
+| --- | --- | --- |
+| `node_modules` | In a Sandbox at range 1 and at each range that changes `package.json` or `pnpm-lock.yaml` (197 ranges) | Install on top of the existing tree (`pnpm install --offline --frozen-lockfile`). A clean install (`rm -rf node_modules` first) only at the milestones |
+| `lib/`, `dist/` | The range's `quick` tests build the packages it changed | Every range |
+| `apps/desktop/.desktop-build` | The `full` tests | Milestones only |
+| Caches | `tsbuildinfo` and Vite caches, made by the builds above | Kept, as a real project keeps them. The pnpm store stays on its own Docker volume outside LayerFS (Speed-ups, 4) |
+
+The oracle cannot take ignored files from git. Their expected state:
+- `node_modules`: for each lockfile hash, the tree the first install made (each
+  file's git blob id and mode), recorded once and then compared;
+- build outputs: they exist and the tests pass.
 
 ### The two nested cycles
 
@@ -60,15 +76,17 @@ range 1.
    binary against the run's manifest.
 2. *Run the inner cycle* on every lane, agents in parallel.
 3. *Consolidate.* The lead merges the lanes into main and publishes.
-4. *Verify the checkpoint:*
-   - tracked files match git (path, mode, SHA-256);
+4. *Verify the checkpoint* (§7, Proof checkpoint):
+   - LayerFS's changes since the previous checkpoint are exactly git's changed
+     tracked paths, with git's blob ids and modes;
    - history matches the plan;
    - every planned conflict happened and was resolved;
-   - ignored output exists;
+   - ignored files match their expected state;
    - the range's tests pass.
 5. *Write the range outputs* (§3) and *evaluate the gates* (§5).
-6. *Seal and snapshot.* Every range during the pilot, then every 5 ranges. Keep
-   milestones.
+6. *Seal and snapshot* when due (§7): every range during the pilot, then when
+   fast-forwarding would cost more than a snapshot, before an optimize fix, and
+   at milestones. A snapshot writes only the blocks that changed.
 
 **Inner cycle (one per step):**
 
@@ -108,13 +126,15 @@ dsh/tools/history/
                 Sandbox tests or agents)
   gates.mjs     the gate decision (§5), latency aggregation, the pilot baseline
   report.mjs    ranges/range-NNN.md and RANGES.md; exit code for the runner
+  snapshot.mjs  take, verify and fork block-incremental snapshots (§7)
+  inspect.mjs   a checkpoint's files, oracle diff and Store figures (§7)
   scenario.mjs  turn a window of ranges into a dsh scenario
 dsh/scenarios/dsh-history/
   scenario.json the Live demo: a window of ~3 ranges seeded from a milestone snapshot
   run/          final.json like Crew's, small enough to commit
 ~/lfs-history/  outside the repository
   plan/ oracle/ all ranges (too large for git)
-  snapshots/    sealed Store copies with manifests
+  snapshots/    block-incremental Store snapshots: blocks/ and one manifest each
   metrics/      one line per call, one summary per range
 ```
 
@@ -213,10 +233,12 @@ work.
    regenerated forward (`--from N`) instead of being edited by hand.
 2. **Content comes from the blob cache and one moving checkout**, never from a
    git process per file or a fresh checkout per range.
-3. **Verify the tree with one exec.** A one-shot Workspace on a fork of main
-   runs one node script that prints each tracked file's git blob id and mode;
-   `compareTree` checks it against git. Never 16k `fs.read` calls. The tracked
-   set is decided as `dsh/tools/checks/tree.mjs` does.
+3. **Verify only what changed.** Each range checks `diff_commits` against git's
+   changed paths (§7, Proof checkpoint). The full tree is checked at snapshots
+   with one exec: a one-shot Workspace on a fork of main runs one node script
+   that prints each tracked file's git blob id and mode, and `compareTree`
+   checks it against git. Never 16k `fs.read` calls. The tracked set is decided
+   as `dsh/tools/checks/tree.mjs` does.
 4. **Offline installs.** Fill a pnpm store once from the lockfiles of all ranges
    (`pnpm fetch`), keep it on its own Docker volume outside LayerFS, and install
    with `--offline --frozen-lockfile`. There is no network wait, and an install
@@ -231,9 +253,9 @@ work.
 8. **Concurrency as planned.** Lanes and agents run at the same time. The runner
    moves to the next range as soon as the checkpoint is written, and the lead
    wakes only when the runner stops.
-9. **Snapshots stream.** Seal, then stream the copy (`tar | zstd -T0`) to host
-   disk while the next range starts on the reopened Store. Copy time is recorded
-   separately.
+9. **Snapshots are incremental.** A snapshot writes only the blocks the Store
+   changed, so the Store is closed for seconds and the next range starts at once
+   (§7). Seal and copy time are recorded separately.
 10. **Budget from the pilot.** P1 measures wall time per range. P1 ends only when
    wall time × 202 fits the budget the owner sets. Otherwise re-plan (larger ranges,
    fewer checks, lighter tests) before P2.
@@ -333,6 +355,9 @@ Read from `operator.store.stats()` and per-Commit `sizes`:
   share whose chain stopped at the chain-work budget instead of the depth cap.
 - **Directory share:** metadata bytes as a share of the range's new bytes.
 - **Efficiency:** the range's new stored bytes per changed git bytes.
+- **Growth:** the range's new stored bytes against the median of earlier ranges,
+  split into tracked files, `node_modules`, build outputs and metadata.
+- **Snapshot:** new blocks and their bytes, seal time and copy time.
 - **Projection:** the Store size at 202 ranges, against the disk budget.
 - **Long history:** whether new bytes per changed byte or per-call latency rise
   with depth. Read this from the latency table's depth slope and from the internal
@@ -406,7 +431,9 @@ them here.
 | Delta (§8): objects at the depth cap | < 10% | 10–25% | Evaluate deeper chains when > 25% and stored bytes grow faster than changed bytes |
 | Store projection vs disk budget | < 80% | 80–100% | Stop when over budget |
 | Health: Workspaces open at range end, overlay files left, daemon memory and open files | 0, 0, flat | rising for 1–2 ranges | Optimize when rising for 3 ranges (a leak) |
-| Seal and snapshot: WAL before seal, seal and copy time | steady | growing | Optimize if it blocks the next range |
+| Range growth: new stored bytes | ≤ 3× the median of earlier ranges | — | Optimize when > 3× the median or > 2 GiB |
+| Snapshot time against the range's new blocks | grows with new blocks | — | Optimize when it grows with the Store's size instead |
+| Seal: WAL before seal, seal time | steady | growing | Optimize if it blocks the next range |
 | Wall time per range; projected total | within budget | within 1.5× | Re-plan range size or test tiers |
 
 - **Pass:** continue.
@@ -422,8 +449,8 @@ rebuilt, and only mechanically.
 
 | Kind of fix | Example | Recovery |
 | --- | --- | --- |
-| Code path only | FUSE, exec, a query | Restore the latest snapshot, fast-forward to range k, rerun range k measured |
-| Data already written | A bug stored something wrong | Verify each snapshot with the fixed checker; resume from the last good one |
+| Code path only | FUSE, exec, a query | Fork from the latest snapshot (§7), fast-forward to range k, rerun range k measured |
+| Data already written | A bug stored something wrong | Verify each snapshot with the fixed checker; fork from the last good one |
 | Store format | A fundamental data structure | Migrate the latest good snapshot, or fast-rebuild it from the plan in the new format, checking every checkpoint's oracle |
 
 Every optimization is compared old binary vs new binary, with the scale probes on
@@ -618,65 +645,115 @@ Each finding goes to `BUGS.md` or `OPTIMIZATIONS.md` with:
   throwaway databases and are never snapshotted.
 
 There are two kinds of checkpoint:
-- **Proof checkpoint:** every range; cheap and permanent.
-- **Snapshot:** less often; expensive and disposable.
+- **Proof checkpoint:** every range; small and permanent.
+- **Snapshot:** the Store's bytes at a checkpoint, kept incrementally (below).
 
 ### Proof checkpoint (every range, never redone)
 
 After consolidation, the runner verifies the range's oracle:
-- tree identity;
-- history shape;
-- step outcomes;
-- planned conflicts;
-- ignored output;
+- **tracked files:** `diff_commits` between the previous checkpoint and this one
+  lists exactly the tracked paths git changed in the range, and each of them has
+  git's blob id and mode. The previous checkpoint was verified, so the whole tree
+  matches. A full `compareTree` of all files runs at every snapshot;
+- **ignored files:** `node_modules` matches the lockfile's expected state (§2,
+  Ignored files); the build outputs the range's commands make exist;
+- history shape, step outcomes and planned conflicts;
 - the range's tests.
 
-It records the result in `ranges/range-NNN.md` and `RANGES.md`, with:
+So the check grows with the range's changes, not with the tree (§4).
+
+The result goes to `ranges/range-NNN.md` and `RANGES.md`, with:
 - the LayerFS main head Commit id and the depth;
 - the binary and the plan version.
 
 That record is the checkpoint. Git's tree and the plan never change, so a passed
 proof is never rerun, even after a fix. Rebuilt Store bytes are checked against
-the same oracle.
+the same oracle. The head Commit id also lets anyone read the checkpoint's files
+and history in the live Store later (Inspecting a checkpoint, below).
 
-### Snapshot (sealed Store copy)
+### Snapshot: block-incremental, one shared block store
+
+A snapshot is the Store's SQLite file at a checkpoint, kept as a manifest of
+block hashes over one shared block store. Every snapshot is complete, but each
+writes only the blocks the Store changed since the snapshots before it. LayerFS
+content is mostly added and rarely rewritten, so a range changes its new content
+plus the index pages it touched: an estimated 100–300 MiB, against a Store of
+~8 GiB at the end.
+
+```
+~/lfs-history/snapshots/
+  blocks/            every distinct block, once, named by its SHA-256
+  range-NNN.json     manifest: the block list, and the facts below
+```
 
 **When:**
-- every range in the pilot (P1), then every 5 ranges;
-- right after the checkpoint of a range whose gate is optimize, before the fix
-  starts, so a restore never replays the range that triggered it.
+- every range in the pilot (P1);
+- after it, when fast-forwarding from the last snapshot would take longer than
+  taking a new one (the seal and copy times in the manifests give both);
+- always right after the checkpoint of a range whose gate is optimize, before the
+  fix starts, so a restore never replays the range that triggered it;
+- at the milestones (ranges 4, 50, 100, 151, 201, as P0 planned them).
 
 **How:**
-1. **Quiesce.** No Workspace mounted and no step in flight. Long-lived Sandboxes
-   may stay, empty.
+1. **Quiesce** at the end of consolidation, when nothing is mounted anyway. Long-
+   lived Sandboxes may stay, empty.
 2. **Seal.** `Handles::seal()` checkpoints the WAL into the main file and closes
-   the Store.
-3. **Copy** from the Docker volume to `~/lfs-history/snapshots/range-NNN/`. Hash
-   every file and write `manifest.json`.
-4. **Reopen** and continue. Seal and copy time are recorded separately and are
-   never part of operation latency.
+   the Store. The WAL is kept small during the range by SQLite's automatic
+   checkpoints, so the seal is short.
+3. **Copy the new blocks.** Read the file in blocks (4 KiB pages grouped into
+   1 MiB blocks), hash each one, and write only those not in `blocks/` yet. Write
+   the manifest.
+4. **Reopen** and continue. The Store is closed for seconds. Seal and copy time
+   are recorded separately and are never part of operation latency.
+
+Step 3 reads the whole file (about 10 s at 20 GiB) even though it writes only the
+changes. If that read shows in the snapshot gate (§5), the fallback is to take
+the changed page numbers from the WAL frames before the seal, so only those pages
+are read. Automatic WAL checkpoints are never turned off for this: a large WAL
+slows reads and would distort the latency being measured.
 
 **Manifest:**
 - range, dsh commit and tree id, LayerFS main head Commit id, depth;
 - daemon, SDK and image ids, and the plan version;
 - the `store_policy` row (cutoff and depths), the schema version, and page size 4096;
-- each file's size and SHA-256;
+- the block list, the file's size and SHA-256, and the new blocks' count and bytes;
 - seal time and copy time;
 - the WAL size before the seal (a health signal; see §5).
 
 **Verification:**
-- Every snapshot: check the file hashes against the manifest.
+- Every snapshot: the rebuilt file's SHA-256 matches the manifest.
 - Each milestone: restore into a fresh volume and LayerFS home. Run the oracle
   check on main and `PRAGMA quick_check`. A snapshot that was never restored is
   not proven restorable.
+
+### Forking from a snapshot
+
+Forking at range k rebuilds k's file from its manifest into a fresh Docker volume
+and LayerFS home, and the run continues there. Nothing is replayed: the cost is
+one sequential write of the Store's size at k (about 10–20 s for 10 GiB).
+
+After a fix at k, the forked run becomes the main line, and its snapshots add
+blocks next to the old ones. So the snapshots form a tree, as Branches do. Blocks
+reachable only from abandoned snapshots after k are kept while they are evidence
+(the failed Store, until its diagnosis is in `BUGS.md`), then removed with
+literal paths.
+
+Two other ways to fork were rejected:
+
+| Way | Why not |
+| --- | --- |
+| Extract Commits ≤ k from one full Store into a new database | Costs as much as a copy (it walks everything up to k); the new database is compact, unlike one that grew range by range, so replays would measure a cleaner Store; and after a data bug the full Store holds the bad rows |
+| Open the full Store read-only, hide rows after k, write to a second database on top | O(1), but it is a new storage path in LayerFS: two databases on every read, and refs, totals and policy are updated in place. The replay would measure that path instead of the product. A possible future feature, not part of #352 |
+
+Reading a checkpoint's files needs no fork: the live Store reads any Commit by id.
 
 ### Retention
 
 | Kind | Kept |
 | --- | --- |
-| Rolling | The latest 2; delete older ones, with literal paths only |
-| Milestones | Forever. About 6: range 5 (pilot end), then ~25%, 50%, 75% and 100% of the history, plus the demo seed if it is not one of these |
-| Failed Store | One copy, `failed-NNN/`, until its diagnosis is in `BUGS.md` |
+| Snapshots on the main line | All of them (their blocks are shared; ~15 GiB for all 48 planned) |
+| Milestones | Forever, and restored at least once (Verification) |
+| Snapshots of an abandoned line | Until the failure's diagnosis is in `BUGS.md` |
 
 Milestones serve:
 - the old-vs-new binary probes (§6);
@@ -687,11 +764,11 @@ Milestones serve:
 
 | Use | How |
 | --- | --- |
-| Code-path fix | Restore the latest snapshot; fast-forward later ranges with the fast-rebuild player; rerun the failing range measured |
-| Data written wrong | Verify snapshots newest first with the fixed checker; resume from the newest good one |
+| Code-path fix | Fork from the latest snapshot; fast-forward later ranges with the fast-rebuild player; rerun the failing range measured |
+| Data written wrong | Verify snapshots newest first with the fixed checker; fork from the newest good one |
 | Store format change | Migrate the newest good snapshot, or fast-rebuild from the plan in the new format, checking every range's oracle |
-| Probes | Both binaries run the same probes on the same milestone snapshots |
-| Live demo | Seed the dsh demo from a milestone and play ~3 ranges from it |
+| Probes | Both binaries run the same probes on forks of the same milestone snapshots |
+| Live demo | Seed the dsh demo from a milestone fork and play ~3 ranges from it |
 
 **Snapshots stay valid.** Open uses the Store's recorded policy, so later default
 changes (such as the delta depths) do not invalidate a snapshot.
@@ -700,21 +777,83 @@ changes (such as the delta depths) do not invalidate a snapshot.
 the main file) is not a proof checkpoint. It runs inside the seal and
 automatically during the run.
 
+### Inspecting a checkpoint
+
+Troubleshooting needs a checkpoint's files, history and Store figures.
+
+**`dsh/tools/history/inspect.mjs`** (P1, for the builder and the fixer). It only
+reads; it works on the live Store or a fork, never on the snapshot files in place.
+
+| Command | Shows |
+| --- | --- |
+| `ls <range\|commit> [path]`, `cat …` | The tree and file contents at a range's checkpoint or any Commit, through the SDK |
+| `diff <range>` | LayerFS main against the oracle, with `compareTree` |
+| `stats <range>` | Bytes per table and index (SQLite `dbstat`), object counts by kind and size class, delta depth and chain length histograms, dedup and compression ratios, WAL size; read-only, on a fork |
+| `trend` | The same figures from every snapshot's manifest and fork, in a row: growth with history (§4) |
+| `open <range>` | Forks the snapshot and attaches it to dsh as a read-only project |
+
+**In dsh's LayerFS page** (P4), at two levels:
+1. **Files and history at a checkpoint.** Each checkpoint records main's head
+   Commit id (the demo's `verify` prints it; the checkpoint journal keeps it). The
+   project header gets the same 0..n number row as the demo strip; choosing k
+   shows Files and History at k's Commit, from the live Store. Every checkpoint
+   works, with or without a snapshot.
+2. **The database at a checkpoint.** The live Store's size and tables are today's,
+   not k's. For a range with a snapshot, `open` forks it and the page lists it as
+   its own read-only project (`demo-dsh-history @ 120`), so its Store tiles and
+   storage drawer show the database as it was at k.
+
 ### Disk
 
-- Docker Desktop's disk image is the real limit (64 GiB in use). The Mac has
-  ~397 GiB free.
-- Store estimate: 5–20 GiB at the end.
-- **The disk guard** runs before each range. It projects the space the run will
-  hold:
-  - the working Store after the next range;
-  - 2 rolling snapshots;
-  - all milestones taken and planned;
-  - a failed copy.
+Measured on 2026-10-18:
 
-  The Docker disk and the host disk are checked separately. The guard stops when
-  free space falls under 2× that projection. Over 80% of the budget is a watch
-  item and over 100% is a stop (§5).
+| Fact | Value |
+| --- | --- |
+| Mac disk | 356 GiB free |
+| Docker Desktop disk image | 64 GiB in use of a 200 GiB maximum; 41 GiB of it is old volumes Docker reports as reclaimable (the owner's to prune) |
+| Tracked history | 268k unique file versions, 6.9 GiB raw; git packs them into 301 MiB |
+| One `node_modules` install | 78k files, 2.3 GiB |
+| `apps/desktop/.desktop-build` | 4.8k files, 0.7 GiB |
+| `lib/` and `dist/` outputs | ~2k files, ~40 MiB |
+
+Estimate at range 202 (to be replaced by the pilot's numbers):
+
+| Part | Estimate |
+| --- | --- |
+| Tracked history and Commit metadata (249k Commits) | ~3 GiB (1.5–6) |
+| `node_modules`: the first install and 197 incremental ones | ~2.5 GiB (1.2–3.5) |
+| Build outputs every range | ~0.5 GiB |
+| Desktop build at the 5 milestones | ~1.5 GiB |
+| **Working Store** | **~8 GiB (5–12)** |
+| All snapshots, block-incremental | ~15 GiB (10–25) |
+| One fork at a time | ≤ 8 GiB |
+| Install overlay peak (deleted after the commit) | ~3 GiB |
+| **Peak extra disk** | **~35 GiB; worst case ~60 GiB** |
+
+Docker would stay near 100 of its 200 GiB, and the Mac above 290 GiB free. The
+uncertain part is LayerFS's ratio on `node_modules`: P1 starts by Initing a dsh
+checkout with `node_modules` once and reading Init's statistics. If the pilot
+measures more than 2× this estimate, re-plan before range 6.
+
+What would break the estimate, and is therefore ruled out (§2, Ignored files):
+- a clean install every range: ~78k deletes and 78k writes each, ~15 million
+  file changes over 197 installs;
+- the desktop build every range: its packed app changes every build and does not
+  deduplicate, an estimated 50–100 GiB;
+- caches that churn on every command;
+- full-copy snapshots: up to ~140 GiB for 2 rolling copies, 5 milestones and a
+  failed copy.
+
+**The disk guard** runs before each range. It projects the space the run will
+hold:
+- the working Store after the next range;
+- the snapshot blocks;
+- one fork;
+- the install overlay peak.
+
+The Docker disk and the host disk are checked separately. The guard stops when
+free space falls under 2× that projection. Over 80% of the budget is a watch
+item and over 100% is a stop (§5).
 
 ## 8. Delta depth
 
@@ -779,10 +918,10 @@ most chains before depth 8. Doubling its depth would change little.
 | Phase | Scope | Done when |
 | --- | --- | --- |
 | P0 · Plan and oracles | `plan.mjs` and `oracle.mjs` over the whole history, without LayerFS | **Done 2026-10-17:** plan and oracle for all 202 ranges; every plan passes the `replayPlan` static check |
-| P1 · Pilot | First ~300 commits, fs only, one lane, snapshot every range, plus the delta control arm | Every checkpoint matches git; baselines and gate thresholds recorded |
+| P1 · Pilot | First, one Init of a dsh checkout with `node_modules` (its stored-to-raw ratio). Then the first ~300 commits, fs only, one lane, a snapshot every range, plus the delta control arm. Builds `snapshot.mjs` and `inspect.mjs` | Every checkpoint matches git; baselines and gate thresholds recorded; growth per range and per install within 2× the §7 estimate, or re-planned |
 | P2 · Multi-agent | Lanes, the 5–10 agent crew, one-shot Workspaces, planned conflicts | Every planned conflict hit and resolved; identity holds |
 | P3 · Sandbox share | The 9 : 1 split, FUSE timing, `node_modules` installs, test tiers | Deduplication and FUSE gates pass |
-| P4 · Recovery and demo | Milestone snapshots, probes, one kill and resume, one fast rebuild, the Live demo window seeded from a snapshot | Recovery proved; the demo passes check-demo in dsh |
+| P4 · Recovery and demo | Milestone snapshots, probes, one kill and resume from a fork, one fast rebuild, the Live demo window seeded from a fork; the LayerFS page's checkpoint views (§7, Inspecting a checkpoint) | Recovery proved; the demo passes check-demo in dsh |
 | P5 · Full history | All 202 ranges. Controls: squashed history, and one Commit per git commit | Latency-vs-depth and storage curves, with history cost separated from tree size and from Commit granularity |
 
 ## 10. Outputs in this folder
@@ -797,6 +936,8 @@ most chains before depth 8. Doubling its depth would change little.
 ## 11. Open decisions for the owner
 
 - The Docker Desktop disk limit, if the pilot projects past 80% of it.
+- Pruning Docker's 41 GiB of reclaimable old volumes (§7, Disk). Not needed for
+  the estimate, but it is the owner's to do.
 - Durable mode stays NOT_RUN unless reauthorized.
 - Merging `dsh-history-replay` into main is for the owner, because it may carry
   core format changes.

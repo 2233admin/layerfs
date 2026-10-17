@@ -117,10 +117,16 @@ When you need one of these, stop and say so on #352.
 - **Run lengths.** A range or a phase is a long run: start it in the background
   and read its log. Every test or check invocation has a wall timeout of at most
   120 s (`perl -e 'alarm 120; exec @ARGV' …`). Build first with `--no-run`.
-- **Checkpoints and disk.** Follow SPEC.md §7: a proof checkpoint every range,
-  a sealed snapshot on its cadence with a manifest, milestones restored and
-  verified, retention of the last 2 plus about 6 milestones, and the disk guard
-  before every range.
+- **Checkpoints and disk.** Follow SPEC.md §7: a proof checkpoint every range
+  (changed paths by `diff_commits`, the full tree at snapshots), block-incremental
+  snapshots in one shared block store when due, milestones restored and verified,
+  recovery by forking a snapshot (never by extracting from a Store), and the disk
+  guard before every range.
+- **Ignored files.** Follow SPEC.md §2, Ignored files: `node_modules` installed on
+  top of the existing tree, a clean install and the desktop build only at
+  milestones, the pnpm store outside LayerFS.
+- **Troubleshooting a checkpoint.** Use `inspect.mjs` (SPEC.md §7, Inspecting a
+  checkpoint) on the live Store or a fork, never on snapshot files in place.
 
 ## Orchestration
 
@@ -142,6 +148,13 @@ Three agents run the work.
 **First builder task (P1):** wire per-call SQL work (`SqlWork`) and per-Workspace
 FUSE opcode counts into the SDK call trace. The P0 check found that neither
 reaches it (SPEC.md §6). The fixer's playbook (D0–D6) depends on them.
+
+**Then, before the pilot's first range (P1):**
+1. One Init of a dsh checkout with `node_modules`; record its stored-to-raw
+   ratio in `RESULTS.md` against SPEC.md §7's estimate.
+2. `snapshot.mjs`: take, verify and fork block-incremental snapshots (SPEC.md §7).
+3. `inspect.mjs`: `ls`, `cat`, `diff`, `stats`, `trend`, `open` (SPEC.md §7,
+   Inspecting a checkpoint).
 
 **Rules:**
 - Continue the same builder and fixer with SendMessage, so they keep what they
