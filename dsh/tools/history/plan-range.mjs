@@ -286,7 +286,7 @@ export function planRange({ k, range, commits, prev, next, prevDirs, sizes, seed
     range: k, checkpoint: range.checkpoint, tree: range.tree, milestone, snapshot,
     dsh: { commits: range.commits, mainline: range.steps.length, first: range.steps[0].commits[0] ?? range.steps[0].mainline, oversize: range.oversize },
     lanes: lanes.map((l) => ({ name: l.name, areas: l.areas, agents: l.agents, commits: l.commits.length })),
-    agents, steps, conflicts, consolidation, closure: { install, tests: milestone ? "full" : "quick" },
+    agents, steps, conflicts, consolidation, closure: { install, tests: null },
     counts: { ...counts, fsFiles, sandboxFiles: sbFiles, reconcile: reconcile.length },
   };
 }

@@ -68,6 +68,13 @@ When you need one of these, stop and say so on #352.
   (`~/lfs-history/oracle/`) exist for all 202 ranges, and every range's plan
   passes the static check. The results are in SPEC.md §2, "P0 results". Your
   work starts at P1, with `run.mjs`.
+- **P1 tools are written, tested on synthetic data, and never run on real
+  data:** `snapshot.mjs`, `inspect.mjs`, `unit-tests.mjs` with
+  `calibrate-tests.mjs`, the test selection in `plan.mjs` (plan v2), and the
+  range-growth and snapshot-time gates (tests in `tools/history/tests/tools.mjs`).
+  The plan on disk is still v1: regenerate it (`plan.mjs`, then `oracle.mjs
+  build`) before calibrating. Their first real runs are P1's, and each is a
+  finding if it fails.
 - **dsh source:** the full bare clone is `~/lfs-history/dsh.git` (SPEC.md §1). The
   owner's checkout is a partial clone and cannot be cloned locally.
 
@@ -156,12 +163,14 @@ reaches it (SPEC.md §6). The fixer's playbook (D0–D6) depends on them.
 **Then, before the pilot's first range (P1):**
 1. One Init of a dsh checkout with `node_modules`; record its stored-to-raw
    ratio in `RESULTS.md` against SPEC.md §7's estimate.
-2. `snapshot.mjs`: take, verify and fork block-incremental snapshots (SPEC.md §7).
-3. `inspect.mjs`: `ls`, `cat`, `diff`, `stats`, `trend`, `open` (SPEC.md §7,
-   Inspecting a checkpoint).
-4. The test selection in `plan.mjs` and its one-time native calibration (SPEC.md
-   §2, Tests): each range's unit test files, skips with reasons, and native
-   results.
+2. Regenerate the plan as v2 and its oracles; fill the pnpm store once
+   (`pnpm fetch`); run `calibrate-tests.mjs` for the pilot's ranges.
+3. Wire the written tools into the runner: seal, then `snapshot.mjs take` when
+   `due` says so, with the manifest facts (SPEC.md §7); the range's unit tests
+   with `vitestCommand` and `compareResults`; `head` and `snapshot` in the
+   metrics.
+4. Prove `snapshot.mjs fork` and `inspect.mjs diff` and `stats` on the first
+   pilot snapshot.
 
 **Rules:**
 - Continue the same builder and fixer with SendMessage, so they keep what they

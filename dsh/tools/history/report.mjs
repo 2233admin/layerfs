@@ -40,7 +40,7 @@ export function renderRange({ plan, summary, attempts, gates, lead }) {
     ["Checkpoint", `\`${plan.checkpoint}\`, tree \`${plan.tree.slice(0, 12)}\``],
     ["LayerFS depth", `${fmt(m.depth?.before)} → ${fmt(m.depth?.after)} Commits`],
     ["Binary", `daemon \`${m.binary?.daemon ?? "?"}\`, SDK \`${m.binary?.sdk ?? "?"}\`, image \`${m.binary?.image ?? "?"}\`, plan v${m.plan?.version ?? "?"}`],
-    ["Snapshot", plan.snapshot ? `${plan.milestone ? "milestone " : ""}${m.snapshot ?? "taken"}` : "none"],
+    ["Snapshot", m.snapshot ? `${plan.milestone ? "milestone, " : ""}${bytes(m.snapshot.newBytes)} new of ${bytes(m.snapshot.size)}; seal ${fmt(m.snapshot.sealMs ?? null)} ms, copy ${fmt(m.snapshot.copyMs)} ms` : plan.snapshot ? "planned, not taken" : "none"],
     ["Wall time", m.wall ? `${fmt(m.wall.totalMs / 1000)} s (play ${fmt((m.wall.playMs ?? 0) / 1000)}, verify ${fmt((m.wall.verifyMs ?? 0) / 1000)}, tests ${fmt((m.wall.testsMs ?? 0) / 1000)}, seal ${fmt((m.wall.sealMs ?? 0) / 1000)})` : "—"],
   ]), "");
   out.push("## Attempts", "", table(["#", "Binary", "Started", "Result", "Reason"], attempts.map((a, i) => [
@@ -74,6 +74,7 @@ export function renderRange({ plan, summary, attempts, gates, lead }) {
     ["Directory share of new bytes", s.directoryShare],
     ["Delta share / at cap / stopped by budget", s.delta ? `${fmt(s.delta.share)} / ${fmt(s.delta.atCap)} / ${fmt(s.delta.byBudget)}` : null],
     ["node_modules reinstall growth", s.reinstallGrowth],
+    ["New stored bytes this range", bytes(s.newStored)],
   ]), "");
   out.push("## 6. Trends", "", m.trends?.length ? m.trends.map((t) => `- ${t}`).join("\n") : "Written by the runner from the last 3 ranges.", "");
   out.push(lead ?? `${LEAD_START} (written by the lead)\n\n- (none yet)\n`);

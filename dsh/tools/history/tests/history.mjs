@@ -82,7 +82,7 @@ test("ranges respect the target, fold a short tail and end on mainline", () => {
   for (const r of ranges.slice(0, -1)) assert.ok(r.commits >= 4);
   for (const r of ranges) assert.equal(r.checkpoint, r.steps.at(-1).mainline);
   const p = snapshotPolicy(40);
-  assert.ok(p(0).snapshot && p(4).snapshot && p(4).milestone && !p(5).snapshot && p(9).snapshot && p(39).milestone);
+  assert.ok(p(0).snapshot && p(4).snapshot && p(4).milestone && !p(5).snapshot && !p(10).snapshot && p(9).milestone && p(39).milestone);
 });
 
 /** Plans every range of the test repository, checking each reaches its checkpoint. */
@@ -167,7 +167,7 @@ test("tree comparison finds missing, extra, content and mode differences", () =>
 
 const metrics = (range, over = {}) => ({
   range, attempt: 1, depth: { before: range * 1000, after: (range + 1) * 1000 },
-  checks: { tree: { ok: true }, history: { ok: true }, steps: { matched: 10, total: 10 }, conflicts: { planned: 3, hit: 3, unplanned: 0 }, ignored: { ok: true }, tests: { passed: 4, run: 4 } },
+  checks: { tree: { ok: true }, history: { ok: true }, steps: { matched: 10, total: 10 }, conflicts: { planned: 3, hit: 3, unplanned: 0 }, ignored: { ok: true }, tests: { equal: 4, run: 4 } },
   health: { workspacesOpen: 0, overlaysLeft: 0, daemonRssMb: 200, openFiles: 50, walBytes: 1e6 },
   ops: [{ op: "fs.stat", sizeClass: "—", n: 50, p50: 2, p95: 4, p99: 5, max: 6, slowPhase: "sdk.read" }],
   probes: { "stat-small": { ms: 2, counters: { rows: 3 } } },

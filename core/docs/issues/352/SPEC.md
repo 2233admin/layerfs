@@ -90,9 +90,11 @@ cheap, self-contained unit tests run. Never:
    `selenium-webdriver`, `webdriverio`, `electron` or `@vitest/browser`, or reads
    `DSH_SNAPSHOT`.
 4. **Calibrate once, natively.** Run each remaining file alone at the range's
-   checkpoint on a plain Docker volume with the runtime image, outside LayerFS,
-   with `--network none` and a 10 s timeout. A file that fails or times out there
-   is skip-listed for that range with its reason (`tests.skipped` in the plan):
+   checkpoint in the one moving checkout, in the runtime image, outside LayerFS,
+   with `--network none` and a 10 s timeout (`calibrate-tests.mjs`). Its install
+   is the replay's own (`INSTALL`: offline, frozen lockfile, no install scripts). A file that fails or times out there
+   is skip-listed for that range with its reason (`skipped` in
+   `tests-NNN.json`, written beside the plan, which stays as written):
    it is environment-dependent or broken at that commit, not LayerFS's problem.
 5. **Cap:** up to 60 s of native test time per range (at most 30 files, fastest
    first); milestones up to 5 min.
@@ -162,8 +164,10 @@ dsh/tools/history/
                 Sandbox tests or agents)
   gates.mjs     the gate decision (§5), latency aggregation, the pilot baseline
   report.mjs    ranges/range-NNN.md and RANGES.md; exit code for the runner
-  snapshot.mjs  take, verify and fork block-incremental snapshots (§7)
+  snapshot.mjs  take, verify and fork block-incremental snapshots; when one is due (§7)
   inspect.mjs   a checkpoint's files, oracle diff and Store figures (§7)
+  unit-tests.mjs  a range's unit test selection, run choice and comparison (§2, Tests)
+  calibrate-tests.mjs  the one-time native run of each range's candidates (§2, Tests)
   scenario.mjs  turn a window of ranges into a dsh scenario
 dsh/scenarios/dsh-history/
   scenario.json the Live demo: a window of ~3 ranges seeded from a milestone snapshot
@@ -202,6 +206,11 @@ the whole history the plan takes 16 s and the oracles 20 s.
 | Planned conflicts | 202 Commit Conflicts, 175 stale clean merges, 202 decoys, 40 merge races |
 | Installs | 197 ranges (`pnpm-lock.yaml` changes on 645 mainline commits) |
 | Snapshots / milestones | 48 / ranges 4, 50, 100, 151, 201 |
+
+**Plan v2 (written, not yet generated):** each range's closure carries its unit
+test selection (§2, Tests), and the plan fixes snapshots only for the pilot
+ranges and the milestones; other snapshots are decided at run time (§7, When).
+The numbers above are v1's; regenerate before P1.
 
 Design decisions the build settled:
 

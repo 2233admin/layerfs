@@ -3,16 +3,17 @@
 // reads the files and writes the reports.
 //
 // A range's metrics file (the runner writes one per attempt):
-//   { range, attempt, binary, depth: { before, after }, wall: { totalMs, ... },
+//   { range, attempt, binary, head (main's head Commit id), depth: { before, after }, wall: { totalMs, ... },
 //     checks: { tree: { ok, files, missing, extra, content, mode }, history: { ok },
 //               steps: { matched, total }, conflicts: { planned, hit, unplanned },
-//               ignored: { ok }, tests: { passed, run } },
+//               ignored: { ok }, tests: { equal, run } (files whose result equals the native one) },
 //     health: { workspacesOpen, overlaysLeft, daemonRssMb, openFiles, walBytes },
 //     work: { ... SPEC §3b counts },
 //     ops: [ { op, sizeClass, n, p50, p95, p99, max, slowPhase } ]   (aggregate())
 //     probes: { <name>: { ms, counters: { <name>: n } } },
 //     storage: { logical, canonical, stored, metadata, newStored, changedBytes,
 //                directoryShare, reinstallGrowth, delta: { share, atCap, byBudget } },
+//     snapshot: { size, newBytes, sealMs, copyMs } | null   (snapshot.mjs's manifest, when taken),
 //     budget: { diskProjected, diskBudget, wallProjectedMs, wallBudgetMs } }
 
 export const THRESHOLDS = {
@@ -25,6 +26,8 @@ export const THRESHOLDS = {
   disk: { watch: 0.8, act: 1 },
   wall: { watch: 1, act: 1.5 },
   rising: 3,
+  // a range's new stored bytes against the median of the ranges before it, and in absolute terms
+  growth: { median: 3, bytes: 2 * 2 ** 30, history: 3 },
 };
 const RANK = { pass: 0, watch: 1, optimize: 2, stop: 3 };
 const worst = (xs) => xs.reduce((m, x) => (RANK[x] > RANK[m] ? x : m), "pass");
@@ -105,8 +108,8 @@ export function evaluate(m, history = [], baseline = null, t = THRESHOLDS) {
   const c = m.checks || {};
   const correct = c.tree?.ok && c.history?.ok && c.steps?.matched === c.steps?.total
     && c.conflicts?.hit === c.conflicts?.planned && !c.conflicts?.unplanned && c.ignored?.ok !== false
-    && c.tests?.passed === c.tests?.run;
-  add("Correctness", c.tree ? `tree ${c.tree.ok ? "ok" : `${c.tree.missing?.length ?? 0} missing, ${c.tree.extra?.length ?? 0} extra, ${c.tree.content?.length ?? 0} content, ${c.tree.mode?.length ?? 0} mode`}; steps ${c.steps?.matched}/${c.steps?.total}; conflicts ${c.conflicts?.hit}/${c.conflicts?.planned}${c.conflicts?.unplanned ? `, ${c.conflicts.unplanned} unplanned` : ""}; tests ${c.tests?.passed}/${c.tests?.run}` : "not run", "all", correct ? "pass" : "stop");
+    && c.tests?.equal === c.tests?.run;
+  add("Correctness", c.tree ? `tree ${c.tree.ok ? "ok" : `${c.tree.missing?.length ?? 0} missing, ${c.tree.extra?.length ?? 0} extra, ${c.tree.content?.length ?? 0} content, ${c.tree.mode?.length ?? 0} mode`}; steps ${c.steps?.matched}/${c.steps?.total}; conflicts ${c.conflicts?.hit}/${c.conflicts?.planned}${c.conflicts?.unplanned ? `, ${c.conflicts.unplanned} unplanned` : ""}; tests ${c.tests?.equal}/${c.tests?.run} equal to native` : "not run", "all", correct ? "pass" : "stop");
   const h = m.health || {};
   const leaked = (h.workspacesOpen || 0) + (h.overlaysLeft || 0);
   const grow = ["daemonRssMb", "openFiles", "walBytes"].filter((k) => rising([...history.map((x) => x.health?.[k]), h[k]]));
@@ -153,6 +156,17 @@ export function evaluate(m, history = [], baseline = null, t = THRESHOLDS) {
   const cap = s.delta?.atCap;
   add("Delta at cap", cap == null ? "n/a" : `${cap} (budget ${s.delta?.byBudget ?? "n/a"})`, `< ${t.deltaAtCap.watch}`,
     cap > t.deltaAtCap.act && rising(eff) ? "optimize" : cap > t.deltaAtCap.watch ? "watch" : "pass");
+  // Growth: a range that stores far more than the ranges before it (SPEC §5)
+  const earlier = history.map((x) => x.storage?.newStored).filter((v) => v != null);
+  const median = earlier.length >= t.growth.history ? quantile(earlier, 0.5) : null;
+  const ratio = median && s.newStored != null ? +(s.newStored / median).toFixed(2) : null;
+  add("Range growth", s.newStored == null ? "n/a" : `${(s.newStored / 2 ** 20).toFixed(1)} MiB${ratio != null ? `, ${ratio}× the median` : ""}`, `≤ ${t.growth.median}× median, ≤ 2 GiB`,
+    s.newStored != null && (s.newStored > t.growth.bytes || (ratio != null && ratio > t.growth.median)) ? "optimize" : "pass");
+  // Snapshot time per new byte must not grow with the Store's size (SPEC §5, §7)
+  const snaps = all.filter((x) => x.snapshot?.copyMs != null && x.snapshot?.size).map((x) => [x.snapshot.size, ((x.snapshot.sealMs ?? 0) + x.snapshot.copyMs) / Math.max(x.snapshot.newBytes, 1 << 20)]);
+  const snapE = exponent(snaps);
+  add("Snapshot time", m.snapshot ? `${m.snapshot.copyMs} ms for ${(m.snapshot.newBytes / 2 ** 20).toFixed(1)} MiB new; size exponent ${snapE ?? "n/a"}` : "no snapshot",
+    `< ${t.depthExponent.watch}`, band(snapE, t.depthExponent));
   const b = m.budget || {};
   add("Disk projection", b.diskBudget ? +(b.diskProjected / b.diskBudget).toFixed(2) : "n/a", `< ${t.disk.watch}`, b.diskBudget ? band(b.diskProjected / b.diskBudget, t.disk, "stop") : "pass");
   add("Wall projection", b.wallBudgetMs ? +(b.wallProjectedMs / b.wallBudgetMs).toFixed(2) : "n/a", `≤ ${t.wall.watch}`, b.wallBudgetMs ? band(b.wallProjectedMs / b.wallBudgetMs, t.wall, "stop") : "pass");

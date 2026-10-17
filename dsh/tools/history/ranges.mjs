@@ -63,13 +63,17 @@ export function cutRanges(steps, { target, min, max } = RANGE) {
   }));
 }
 
-/** Pilot ranges snapshot every range, then every `every`; milestones are kept forever. */
-export function snapshotPolicy(count, { pilot = 5, every = 5 } = {}) {
+/**
+ * The snapshots the plan fixes: every pilot range and the milestones (kept
+ * forever). Other ranges snapshot when snapshot.mjs's `due` says so at run
+ * time (SPEC §7, When).
+ */
+export function snapshotPolicy(count, { pilot = 5 } = {}) {
   const milestones = new Set([Math.min(pilot, count) - 1]);
   for (const f of [0.25, 0.5, 0.75]) milestones.add(Math.max(pilot, Math.round(count * f)) - 1);
   milestones.add(count - 1);
   return (i) => ({
-    snapshot: i < pilot || (i + 1) % every === 0 || milestones.has(i),
+    snapshot: i < pilot || milestones.has(i),
     milestone: milestones.has(i),
   });
 }

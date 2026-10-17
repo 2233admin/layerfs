@@ -4,13 +4,17 @@
 // <out>/range-NNN.json holds one range's plan; <out>/plan.json the summary.
 // The plan only moves forward: --from N rewrites ranges N and later and
 // leaves earlier ranges, whose checkpoints may already be proved, untouched.
+// Each range's closure carries its unit test selection (unit-tests.mjs);
+// calibrate-tests.mjs later writes which of them run, in tests-NNN.json.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { blobSizes, diffTrees, git, lsTree, readCommits, topoPositions } from "./git.mjs";
+import { BlobCache, blobSizes, diffTrees, git, lsTree, readCommits, topoPositions } from "./git.mjs";
 import { cutRanges, mainlineSteps, RANGE, snapshotPolicy } from "./ranges.mjs";
 import { dirCounts, LIMITS, planRange, replayPlan, stateDiff } from "./plan-range.mjs";
+import { selectTests } from "./unit-tests.mjs";
 
-export const PLAN_VERSION = 1;
+// 2: unit test selection per range; snapshots planned only for the pilot and milestones (SPEC §7)
+export const PLAN_VERSION = 2;
 
 /** Applies raw changes to a state (path -> {mode, blob}) in place. */
 export function apply(state, changes) {
@@ -41,11 +45,12 @@ export function summarize(plan) {
     lfsCommits: plan.steps.reduce((n, s) => n + s.commits, 0) + merges + reconcile + (plan.closure.install ? 1 : 0),
     perLane, perAgent, reads: plan.steps.reduce((n, s) => n + (s.reads?.length || 0), 0),
     conflicts: plan.conflicts.map((c) => c.kind), reconcile, install: plan.closure.install,
+    tests: plan.closure.tests?.files?.length ?? null,
     snapshot: plan.snapshot, milestone: plan.milestone, dropped: plan.counts.dropped, typeRisk: plan.counts.typeRisk,
   };
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   const opt = (n, d) => { const i = args.indexOf(n); return i < 0 ? d : args[i + 1]; };
   const repo = opt("--repo"), out = opt("--out"), ref = opt("--ref", "master"), seed = opt("--seed", "352"), from = Number(opt("--from", "0"));
@@ -69,7 +74,7 @@ function main() {
   const old = existsSync(summaryFile) ? JSON.parse(readFileSync(summaryFile, "utf8")) : null;
   if (from > 0 && (!old || old.seed !== seed || old.head !== head)) throw new Error("--from needs an existing plan.json with the same seed and head");
   const policy = snapshotPolicy(ranges.length);
-  const initTree = lsTree(repo, init.mainline);
+  const initTree = lsTree(repo, init.mainline), blobs = new BlobCache(repo);
   let state = initTree.files;
   const rows = [];
   for (const [i, r] of ranges.entries()) {
@@ -80,12 +85,14 @@ function main() {
       const played = replayPlan(prev, plan);
       const diff = stateDiff(played.state, next);
       if (played.problems.length || diff.length) throw new Error(`range ${i} does not reach its checkpoint: ${[...played.problems, ...diff.slice(0, 5)].join("; ")}`);
+      plan.closure.tests = await selectTests({ state: next, changed: nets[i].map((c) => c.path), milestone: plan.milestone, read: (id) => blobs.get(id) });
       writeFileSync(join(out, `range-${String(i).padStart(3, "0")}.json`), JSON.stringify(plan));
       rows.push(summarize(plan));
     } else rows.push(old.ranges[i]);
     state = next;
     if (i % 25 === 0) lap(`range ${i}`);
   }
+  blobs.close();
   const total = (k) => rows.reduce((n, r) => n + (typeof r[k] === "number" ? r[k] : 0), 0);
   const summary = {
     version: PLAN_VERSION, seed, ref, head, generated: new Date().toISOString(), from,
@@ -94,7 +101,7 @@ function main() {
     totals: {
       ranges: rows.length, dshCommits: total("dshCommits"), mainline: steps.length, bashCalls: total("bashCalls"),
       steps: total("steps"), workspaces: total("workspaces"), oneShot: total("oneShot"), lfsCommits: total("lfsCommits"),
-      reads: total("reads"), reconcile: total("reconcile"), installs: rows.filter((r) => r.install).length,
+      reads: total("reads"), reconcile: total("reconcile"), installs: rows.filter((r) => r.install).length, testFiles: total("tests"),
       snapshots: rows.filter((r) => r.snapshot).length, milestones: rows.filter((r) => r.milestone).map((r) => r.range),
       conflicts: rows.reduce((m, r) => { for (const c of r.conflicts) m[c] = (m[c] || 0) + 1; return m; }, {}),
       fileMutations: rows.reduce((m, r) => ({ fs: m.fs + r.fileMutations.fs, sandbox: m.sandbox + r.fileMutations.sandbox }), { fs: 0, sandbox: 0 }),
@@ -106,4 +113,4 @@ function main() {
   console.log(JSON.stringify(summary.totals, null, 1));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+if (import.meta.url === `file://${process.argv[1]}`) await main();
