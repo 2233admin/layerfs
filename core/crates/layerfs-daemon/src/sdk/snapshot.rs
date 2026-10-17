@@ -133,19 +133,21 @@ pub(crate) fn kind_name(kind: InodeKind) -> &'static str {
     }
 }
 
-/// Logical size of a file or symlink's content; a directory is 0.
+/// Logical size of a file or symlink's content; a directory is 0. A regular
+/// file's length is Store metadata: no payload or delta chain is read.
 pub(crate) fn size(reader: &StorePorts, entry: &EntryFacts) -> Result<u64, SdkRefusal> {
-    if entry.value.kind == InodeKind::Directory {
-        return Ok(0);
-    }
-    let canonical =
-        layerfs_content::AuthenticatedObjects::read_canonical(reader, entry.value.content_root)
-            .map_err(args::content)?;
     match entry.value.kind {
-        InodeKind::RegularFile => Ok(layerfs_content::file::classify(&canonical)
-            .map_err(args::content)?
-            .logical_len()),
-        _ => Ok(canonical.len() as u64),
+        InodeKind::Directory => Ok(0),
+        InodeKind::RegularFile => reader
+            .file_lengths(&[entry.value.content_root])
+            .map_err(args::failed)?
+            .pop()
+            .ok_or_else(|| args::failed("missing file length")),
+        InodeKind::Symlink => {
+            layerfs_content::AuthenticatedObjects::read_canonical(reader, entry.value.content_root)
+                .map(|canonical| canonical.len() as u64)
+                .map_err(args::content)
+        }
     }
 }
 

@@ -42,7 +42,16 @@ pub(crate) fn lines(
             layerfs_bridge::control::SdkValue::Null,
         ));
     }
-    let size = snapshot::size(reader, entry)?;
+    // The root is read and classified once; each window reads only its part.
+    let view = crate::telemetry::timed("sdk.lines", |timing| {
+        layerfs_content::file::FileView::open(
+            reader,
+            entry.value.content_root,
+            timing.child("content.read"),
+        )
+    })
+    .map_err(args::content)?;
+    let size = view.logical_len();
     let pattern = pattern.unwrap_or("").as_bytes();
     let mut failure = vec![0; pattern.len()];
     for i in 1..pattern.len() {
@@ -62,13 +71,9 @@ pub(crate) fn lines(
         let end = size.min(offset + 16384);
         let mut bytes = Vec::new();
         let read = crate::telemetry::timed("sdk.lines", |timing| {
-            layerfs_content::file::read_range(
-                reader,
-                entry.value.content_root,
-                offset..end,
-                &mut bytes,
-                timing.child("content.read"),
-            )
+            timing
+                .child("content.read")
+                .run(|scope| view.read_range(reader, offset..end, &mut bytes, scope))
         });
         read.map_err(args::content)?;
         utf8.extend_from_slice(&bytes);
