@@ -79,6 +79,31 @@ export async function trackedTree(lf, ref) {
   return tree;
 }
 
+/**
+ * A Commit's tracked changes from its parent (a Branch's first Commit: from
+ * its base Layer): entries added, removed or of another type, and files whose
+ * content differs (fs.diff_files, which compares binary files too), in
+ * diff_commits' order. Ignored folders are never walked; diff_commits would
+ * walk both whole trees, build caches included, again for every page.
+ * @param {{ id: string, parent?: string, base?: string }} commit as list_commits lists it
+ * @param {(ref: string) => Promise<Map<string, string>>} treeOf trackedTree, perhaps cached
+ */
+export async function trackedChanges(lf, commit, treeOf = (ref) => trackedTree(lf, ref)) {
+  const before = commit.parent ?? commit.base;
+  const [a, b] = [await treeOf(before), await treeOf(commit.id)];
+  const out = [];
+  for (const [path, type] of b) {
+    const was = a.get(path);
+    if (!was) out.push({ path, kind: "Added", type });
+    else if (was !== type) out.push({ path, kind: "Removed", type: was }, { path, kind: "Added", type });
+    else if (type === "file" && !(await lf.fs.diff_files(before, path, commit.id, path)).contentEqual) out.push({ path, kind: "Modified", type });
+    else if (type === "symlink") throw new Error(`${path}: a symlink in the tracked tree is not compared yet`);
+  }
+  for (const [path, type] of a) if (!b.has(path)) out.push({ path, kind: "Removed", type });
+  const segments = (p) => p.split("/");
+  return out.sort((x, y) => { const [p, q] = [segments(x.path), segments(y.path)]; for (let i = 0; i < Math.min(p.length, q.length); i++) if (p[i] !== q[i]) return p[i] < q[i] ? -1 : 1; return p.length - q.length; });
+}
+
 const quote = (text) => `'${text.replaceAll("'", "'\\''")}'`;
 
 /**

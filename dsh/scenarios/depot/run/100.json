@@ -10,7 +10,7 @@
  "ms": 308,
  "expect": [
   "sandbox.exec:exit:0",
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -29,7 +29,8 @@
    "message": "final-main acceptance source/binary/process audit (exit 0)",
    "force": false,
    "commit": "1220d5463170a32ed6c5fde50cf95cc6ba8bec25d3d279333bec8e5489e7f4cb9a",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

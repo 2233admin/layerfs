@@ -131,7 +131,11 @@ Each field of a kept step comes from the record:
   recorded refusal. A recorded `Committed` of a command step whose changes were all
   generated files may come back `UpToDate`; the converter writes
   `sandbox.commit:Committed|UpToDate` there; the order check treats such a Commit
-  as optional.
+  as optional. The other way round, a recorded `UpToDate` gets
+  `sandbox.commit:UpToDate|Committed`, because a tool may touch its own cache
+  depending on wall time (cargo's last-use times); a `Committed` there must
+  change no tracked file, which `replay.mjs` checks before going on and the
+  order check checks again (`final.json` `extras` places such Commits).
 - **Agent.** Shop and Depot: the builder plays as `root`. Crew: lead → `root`;
   `P1…P1f` → `people`; `W1*` → `work-a`; `W2*` → `work-b`; `I1*` → `insight-a`;
   `I2*` → `insight-b`. The observer (`main`) is dropped.

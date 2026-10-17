@@ -7,7 +7,9 @@
 //   mount, exec, commit, unmount  a Workspace in it; exec runs the recorded
 //                                 command verbatim ($PWD is the Workspace)
 // Each call's outcome must be the recorded one (`expect`; "a|b" allows
-// either), and each command's exit code the recorded one. The first call that
+// either), and each command's exit code the recorded one. A Commit the record
+// has as UpToDate may come back Committed only if it changes no tracked file
+// (a tool's own cache, such as cargo's last-use times, is all it holds). The first call that
 // differs ends the step with exit code 1, which stops the demo there: a run
 // is never patched up. Nothing waits or retries; order between agents comes
 // from the scenario's own waits.
@@ -137,7 +139,7 @@ export async function step(scenario, number) {
           if (!id) throw new Mismatch("the agent has no Sandbox to mount in");
           const r = await expectCall(call, "sandbox.mount", () => lf.sandbox.mount(id, call.branch));
           const path = r;
-          workspaces[call.ws] = { sandbox: id, path };
+          workspaces[call.ws] = { sandbox: id, path, branch: call.branch };
           keep(wsKey, workspaces);
           console.log(`⟳ mount ${call.branch} → ${path}`);
           break;
@@ -152,6 +154,21 @@ export async function step(scenario, number) {
         }
         case "commit": {
           const r = await expectCall(call, "sandbox.commit", () => lf.sandbox.commit(ws.sandbox, ws.path, call.message ?? undefined, call.force));
+          if (call.generated && outcome(r) === "Committed") {
+            // the record has UpToDate: this Commit may hold only generated (ignored) files
+            const { trackedChanges } = await import("../../tools/checks/tree.mjs");
+            let made = null;
+            for (let pos = 0; !made; ) {
+              const page = await lf.branch.list_commits(ws.branch, 100, pos);
+              made = page.items.find((c) => c.id === r.commit?.id) ?? null;
+              if (!page.hasMore) break;
+              pos += page.items.length;
+            }
+            if (!made) throw new Mismatch(`the Commit ${short(r.commit?.id)} is not on ${ws.branch}`);
+            const changes = await trackedChanges(lf, made);
+            if (changes.length) throw new Mismatch(`sandbox.commit answered Committed with ${changes.length} tracked change(s), first ${changes[0].path}; the record has UpToDate`);
+            console.log("  (only generated files changed; the record has UpToDate)");
+          }
           console.log(`✓ commit · ${outcome(r)} ${r.commit ? short(r.commit.id) : ""}${r.merged ? " · merged with the head" : ""}`);
           break;
         }

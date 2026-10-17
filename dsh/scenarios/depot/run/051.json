@@ -10,7 +10,7 @@
  "ms": 380,
  "expect": [
   "sandbox.exec:exit:0",
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -29,7 +29,8 @@
    "message": "M6 candidate doc-depot-domain (exit 0)",
    "force": false,
    "commit": "1240c96b8aa2c030b9ed068ce952039a4afbc8d8e192228c51ed44eb1a761667ad",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

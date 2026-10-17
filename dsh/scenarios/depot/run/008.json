@@ -10,7 +10,7 @@
  "ms": 137,
  "expect": [
   "sandbox.exec:exit:0",
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -29,7 +29,8 @@
    "message": "M1 health-test (exit 0)",
    "force": false,
    "commit": "12a385059994c7de711b70b4e4c936366f22b6cdcb20e5f8fe55ed95f9735d593f",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

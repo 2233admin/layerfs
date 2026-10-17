@@ -10,7 +10,7 @@
  "ms": 440,
  "expect": [
   "sandbox.exec:exit:0",
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -29,7 +29,8 @@
    "message": "final-main acceptance test-depot-domain (exit 0)",
    "force": false,
    "commit": "127ccff9eceb5337825988540e716d50e46c7b5385f99b0992322637a3533a3807",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

@@ -10,7 +10,7 @@
  "ms": 566,
  "expect": [
   "sandbox.exec:exit:0",
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -29,7 +29,8 @@
    "message": "final-main acceptance doc-depot-store (exit 0)",
    "force": false,
    "commit": "121cf8f45bfeae0da0a63c7427141da9032443f2909774205684cf32a1fe850ca2",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

@@ -10,7 +10,7 @@
  "ms": 408,
  "expect": [
   "sandbox.exec:exit:0",
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -29,7 +29,8 @@
    "message": "M4 domain-tests (exit 0)",
    "force": false,
    "commit": "12999de0c6a75ac5470c2cad33a023a23718913573cb46b11d60354399ab9e040e",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

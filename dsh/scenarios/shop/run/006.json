@@ -11,7 +11,7 @@
  "expect": [
   "sandbox.mount:Mounted",
   "sandbox.exec:exit:0",
-  "sandbox.commit:UpToDate",
+  "sandbox.commit:UpToDate|Committed",
   "sandbox.unmount:Unmounted",
   "branch.publish:Added",
   "branch.fork:Forked"
@@ -39,7 +39,8 @@
    "message": "011 M2: tests (exit 0)",
    "force": false,
    "commit": "120766a35f90420d3a0f04efbb117f161031a9082b39f8aebfec3f7c837271474d",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   },
   {
    "op": "unmount",

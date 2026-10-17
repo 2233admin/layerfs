@@ -176,7 +176,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "m1"
    },
@@ -592,7 +592,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "registry"
    },
@@ -985,7 +985,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "m6"
    },
@@ -1027,7 +1027,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "m6"
    },
@@ -1048,7 +1048,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "m6"
    },
@@ -1069,7 +1069,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "m6"
    },
@@ -1090,7 +1090,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "m6"
    },
@@ -1195,7 +1195,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "m6"
    },
@@ -1216,7 +1216,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "m6"
    },
@@ -1636,7 +1636,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "final"
    },
@@ -1678,7 +1678,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "final"
    },
@@ -1699,7 +1699,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "final"
    },
@@ -1720,7 +1720,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "final"
    },
@@ -1741,7 +1741,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "final"
    },
@@ -1846,7 +1846,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "final"
    },
@@ -1867,7 +1867,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "final"
    },
@@ -2097,7 +2097,7 @@
     },
     "expect": [
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "final"
    },

@@ -10,7 +10,7 @@
  "ms": 455,
  "expect": [
   "sandbox.exec:exit:0",
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -29,7 +29,8 @@
    "message": "M6 candidate package-listings (exit 0)",
    "force": false,
    "commit": "1273cc9f750d5227b56e82391a975632d3e822cececa73fcb530e05d2526400462",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

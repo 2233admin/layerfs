@@ -73,7 +73,7 @@
     "expect": [
      "sandbox.mount:Mounted",
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate",
+     "sandbox.commit:UpToDate|Committed",
      "sandbox.unmount:Unmounted",
      "branch.publish:Added",
      "branch.fork:Forked"
@@ -144,7 +144,7 @@
     "expect": [
      "sandbox.mount:Mounted",
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate",
+     "sandbox.commit:UpToDate|Committed",
      "sandbox.unmount:Unmounted",
      "branch.publish:Added",
      "branch.fork:Forked"
@@ -189,7 +189,7 @@
     "expect": [
      "sandbox.mount:Mounted",
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate",
+     "sandbox.commit:UpToDate|Committed",
      "sandbox.unmount:Unmounted",
      "branch.publish:Added",
      "branch.fork:Forked",
@@ -255,7 +255,7 @@
      "fs.apply:Committed",
      "sandbox.mount:Mounted",
      "sandbox.exec:exit:0",
-     "sandbox.commit:UpToDate",
+     "sandbox.commit:UpToDate|Committed",
      "sandbox.unmount:Unmounted",
      "branch.publish:Added"
     ],

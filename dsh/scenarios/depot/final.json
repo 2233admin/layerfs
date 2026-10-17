@@ -475,6 +475,36 @@
       "via": "exec",
       "merged": null
      }
+    ],
+    "extras": [
+     {
+      "after": 15,
+      "message": "M6 candidate test-depot-domain (exit 0)"
+     },
+     {
+      "after": 16,
+      "message": "M6 candidate test-depot-server (exit 0)"
+     },
+     {
+      "after": 16,
+      "message": "M6 candidate test-depot-cli (exit 0)"
+     },
+     {
+      "after": 16,
+      "message": "M6 candidate doc-depot-domain (exit 0)"
+     },
+     {
+      "after": 16,
+      "message": "M6 candidate doc-depot-store (exit 0)"
+     },
+     {
+      "after": 20,
+      "message": "M6 candidate format-check (exit 0)"
+     },
+     {
+      "after": 20,
+      "message": "M6 candidate package-listings (exit 0)"
+     }
     ]
    },
    "final-main-acceptance": {
@@ -610,6 +640,40 @@
       "via": "exec",
       "merged": null
      }
+    ],
+    "extras": [
+     {
+      "after": 8,
+      "message": "final-main acceptance test-depot-domain (exit 0)"
+     },
+     {
+      "after": 9,
+      "message": "final-main acceptance test-depot-server (exit 0)"
+     },
+     {
+      "after": 9,
+      "message": "final-main acceptance test-depot-cli (exit 0)"
+     },
+     {
+      "after": 9,
+      "message": "final-main acceptance doc-depot-domain (exit 0)"
+     },
+     {
+      "after": 9,
+      "message": "final-main acceptance doc-depot-store (exit 0)"
+     },
+     {
+      "after": 13,
+      "message": "final-main acceptance format-check (exit 0)"
+     },
+     {
+      "after": 13,
+      "message": "final-main acceptance package-listings (exit 0)"
+     },
+     {
+      "after": 22,
+      "message": "final-main acceptance source/binary/process audit (exit 0)"
+     }
     ]
    },
    "implementation": {
@@ -699,6 +763,12 @@
       "via": "exec",
       "merged": null
      }
+    ],
+    "extras": [
+     {
+      "after": 6,
+      "message": "M1 health-test (exit 0)"
+     }
     ]
    },
    "registry": {
@@ -729,6 +799,12 @@
       "via": "exec",
       "merged": null,
       "optional": true
+     }
+    ],
+    "extras": [
+     {
+      "after": 4,
+      "message": "M4 domain-tests (exit 0)"
      }
     ]
    },

@@ -90,6 +90,12 @@
       "via": "fs",
       "merged": null
      }
+    ],
+    "extras": [
+     {
+      "after": 1,
+      "message": "013 M3: all tests (exit 0)"
+     }
     ]
    },
    "catalog": {
@@ -109,6 +115,12 @@
       "message": "010 M2: catalog tests (exit 0)",
       "via": "exec",
       "merged": null
+     }
+    ],
+    "extras": [
+     {
+      "after": 2,
+      "message": "011 M2: tests (exit 0)"
      }
     ]
    },
@@ -130,6 +142,12 @@
       "via": "fs",
       "merged": null
      }
+    ],
+    "extras": [
+     {
+      "after": 2,
+      "message": "016 M4: full API tests (exit 0)"
+     }
     ]
    },
    "skeleton": {
@@ -144,6 +162,12 @@
       "message": "007 M1: npm install (exit 0)",
       "via": "exec",
       "merged": null
+     }
+    ],
+    "extras": [
+     {
+      "after": 1,
+      "message": "008 M1: health tests (exit 0)"
      }
     ]
    },

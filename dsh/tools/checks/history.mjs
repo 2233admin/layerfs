@@ -55,29 +55,36 @@ export async function historyOf(lf, operator) {
       commits: commits.map((c) => ({ message: c.message, via: c.via, merged: name(c.secondParent) })),
     };
   }
-  return { ...out, ids };
+  const items = new Map(Object.values(chains).flatMap(({ commits }) => commits.map((c) => [c.id, c])));
+  return { ...out, ids, items };
 }
 
 /**
  * Differences between a recorded history and a run's, as messages. A
  * recorded Commit marked `optional` (a command step whose changes were all
- * generated files: Committed or UpToDate) may be missing from the run.
+ * generated files: Committed or UpToDate) may be missing from the run, and a
+ * Branch's `extras` (a recorded UpToDate, after its `after`-th Commit) may be
+ * present in it; the returned array's `extras` names those the run has, which
+ * the caller must show change no tracked file.
  */
 export function compareHistory(recorded, run) {
   const failures = [];
   const names = new Set([...Object.keys(recorded.branches), ...Object.keys(run.branches)]);
   // a recorded name ("orders#3") is the run's name after missing optional Commits
-  const shift = new Map();
+  const shift = new Map(), extras = [];
   for (const branch of names) {
     const want = recorded.branches[branch], got = run.branches[branch];
     if (!want) { failures.push(`Branch ${branch} is not in the record`); continue; }
     if (!got) { failures.push(`Branch ${branch} is missing`); continue; }
     let j = 0;
+    const extra = (i) => { for (const e of want.extras ?? []) if (e.after === i && got.commits[j]?.message === e.message) extras.push(`${branch}#${j++}`); };
+    extra(-1);
     want.commits.forEach((c, i) => {
       const actual = got.commits[j];
-      if (actual && actual.message === c.message) { shift.set(`${branch}#${i}`, `${branch}#${j}`); j++; return; }
-      if (c.optional) { shift.set(`${branch}#${i}`, j ? `${branch}#${j - 1}` : null); return; }
-      failures.push(`${branch}#${i}: recorded "${c.message}", the run has ${actual ? `"${actual.message}"` : "no Commit"} there`);
+      if (actual && actual.message === c.message) { shift.set(`${branch}#${i}`, `${branch}#${j}`); j++; }
+      else if (c.optional) shift.set(`${branch}#${i}`, j ? `${branch}#${j - 1}` : null);
+      else failures.push(`${branch}#${i}: recorded "${c.message}", the run has ${actual ? `"${actual.message}"` : "no Commit"} there`);
+      extra(i);
     });
     if (j < got.commits.length) failures.push(`${branch}: ${got.commits.length - j} Commit(s) after the recorded ones, first "${got.commits[j].message}"`);
   }
@@ -100,6 +107,7 @@ export function compareHistory(recorded, run) {
     const got = run.layers[i];
     if (got && mapped(l.source) !== got.source) failures.push(`L${i} published ${got.source}, recorded ${l.source}`);
   });
+  failures.extras = extras;
   return failures;
 }
 

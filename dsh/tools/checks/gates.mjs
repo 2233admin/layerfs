@@ -16,7 +16,7 @@
 //                is mounted
 import { execFileSync } from "node:child_process";
 import { compareHistory, historyOf } from "./history.mjs";
-import { trackedHashes } from "./tree.mjs";
+import { trackedChanges, trackedHashes } from "./tree.mjs";
 
 // an expected entry is a code ("Committed"), method:code, or alternatives
 // sharing one method ("sandbox.commit:Committed|UpToDate")
@@ -63,7 +63,14 @@ export function expectedOutcomes(scenario, linesOf) {
 
 /** The order checks: the run's history against final.json's recorded one. */
 export async function orderFailures(final, lf, operator) {
-  return compareHistory(final.history, await historyOf(lf, operator));
+  const run = await historyOf(lf, operator), failures = compareHistory(final.history, run);
+  // a run's Commit where the record has UpToDate must change no tracked file
+  const byRef = new Map([...run.ids].map(([id, ref]) => [ref, id]));
+  for (const ref of failures.extras) {
+    const changes = await trackedChanges(lf, run.items.get(byRef.get(ref)));
+    if (changes.length) failures.push(`${ref} is a Commit where the record has UpToDate, and it changes ${changes.length} tracked path(s), first ${changes[0].path}`);
+  }
+  return [...failures];
 }
 
 /** The patterns `varies` uses: a clock reading in a name, and the formats whose bytes hold run-time values. */

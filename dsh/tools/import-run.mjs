@@ -12,7 +12,7 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { variesOf } from "./checks/gates.mjs";
 import { historyOf } from "./checks/history.mjs";
-import { readAll, trackedHashes, trackedTree } from "./checks/tree.mjs";
+import { readAll, trackedChanges, trackedHashes, trackedTree } from "./checks/tree.mjs";
 
 const FORMATS = {
   shop: { read: async (i) => (await import("./import/shop.mjs")).readShop(i), title: "Shop", order: 7, blurb: "a builder agent's recorded run of a small web shop, from skeleton to admin page, over six milestones", target: 60, inputs: ["trace", "builder", "seed"] },
@@ -67,7 +67,7 @@ try {
     mounts.forEach((m, i) => mountPaths.set(m, paths[i]));
   }
 
-  const dropped = new Set(), optional = new Set(), kept = [], notes = [];
+  const dropped = new Set(), optional = new Set(), kept = [], notes = [], extras = [], wsBranch = new Map();
   const lastEnd = new Map(), trees = new Map();
   const treeOf = (ref) => { if (!trees.has(ref)) trees.set(ref, trackedTree(lf, ref)); return trees.get(ref); };
   for (const step of record.steps) {
@@ -90,7 +90,7 @@ try {
         calls.push({ op: m === "sandbox.create" ? "create" : "close", expect: `${m}:${kindOf(call)}` });
       } else if (WORKSPACE.has(m)) {
         const ws = m === "sandbox.mount" ? mountPaths.get(call) : call.args.path;
-        if (m === "sandbox.mount") calls.push({ op: "mount", branch: call.args.branch, ws, expect: `${m}:${kindOf(call)}` });
+        if (m === "sandbox.mount") { wsBranch.set(`${call.args.sandbox} ${ws}`, call.args.branch); calls.push({ op: "mount", branch: call.args.branch, ws, expect: `${m}:${kindOf(call)}` }); }
         if (m === "sandbox.unmount") calls.push({ op: "unmount", ws, discard: call.args.discard === true, expect: `${m}:${kindOf(call)}` });
         if (m === "sandbox.exec") calls.push(execOf(step, call, ws, notes));
         if (m === "sandbox.commit") {
@@ -99,7 +99,16 @@ try {
             expect = `${m}:Committed|UpToDate`;
             optional.add(call.commit);
           }
-          calls.push({ op: "commit", ws, message: call.args.message ?? null, force: call.args.force === true, commit: call.commit ?? null, expect });
+          // a recorded UpToDate may come back Committed when the command touched
+          // only generated files (cargo's cache tracker writes last-use times
+          // only once enough wall time has passed); replay.mjs and the order
+          // check verify that such a Commit changes no tracked file
+          const generated = call.ok && call.kind === "UpToDate";
+          if (generated) {
+            expect = `${m}:UpToDate|Committed`;
+            extras.push({ branch: wsBranch.get(`${call.args.sandbox} ${ws}`), message: call.args.message ?? null, head: call.commit ?? null });
+          }
+          calls.push({ op: "commit", ws, message: call.args.message ?? null, force: call.args.force === true, commit: call.commit ?? null, expect, ...(generated ? { generated: true } : {}) });
         }
       }
       // reads, sandbox.service, status and operator calls are dropped
@@ -175,6 +184,14 @@ try {
     };
   }
   if (dropped.size) notes.push(`history: ${dropped.size} dropped Commit(s) are left out of the order checks`);
+  // where a run may hold an extra generated-only Commit: after the head the recorded UpToDate saw
+  for (const e of extras) {
+    const branch = recorded.branches[e.branch] ?? fail(`an UpToDate Commit on ${e.branch}, which is not in the history`);
+    const ref = e.head && history.ids.get(e.head);
+    const k = ref?.startsWith(`${e.branch}#`) ? Number(ref.slice(e.branch.length + 1)) : -1;
+    const after = history.branches[e.branch].commits.slice(0, k + 1).filter((_, i) => !dropped.has(byRef.get(`${e.branch}#${i}`))).length - 1;
+    (branch.extras ??= []).push({ after, message: e.message });
+  }
   // main's files hashed by their bytes, in a Workspace of a Sandbox of the converter's own
   const hasher = await lf.sandbox.create(`${store.project}-import`.slice(0, 63), store.project, store.env.LAYERFS_IMAGE);
   let final;
@@ -221,35 +238,10 @@ function execOf(step, call, ws, notes) {
   return { op: "exec", ws, command: replaced, message: call.args.message ?? null, exit: Number(exit), output: Buffer.from(lines).subarray(-OUTPUT_BYTES).toString(), ms: Math.round(call.ms), expect: `sandbox.exec:exit:${exit}` };
 }
 
-/**
- * A Commit's tracked changes from its parent (a Branch's first Commit: from
- * its base Layer), by comparing the two tracked trees: entries added, removed
- * or of another type, and files whose content differs (fs.diff_files, which
- * compares binary files too). Ignored folders are never walked: diff_commits
- * would walk both whole trees, a build's cargo home and target included, again
- * for every page of its answer.
- */
-async function trackedChanges(commit, treeOf) {
-  const before = commit.parent ?? commit.base;
-  const [a, b] = [await treeOf(before), await treeOf(commit.id)];
-  const out = [];
-  for (const [path, type] of b) {
-    const was = a.get(path);
-    if (!was) out.push({ path, kind: "Added", type });
-    else if (was !== type) out.push({ path, kind: "Removed", type: was }, { path, kind: "Added", type });
-    else if (type === "file" && !(await lf.fs.diff_files(before, path, commit.id, path)).contentEqual) out.push({ path, kind: "Modified", type });
-    else if (type === "symlink") fail(`${path}: a symlink in the tracked tree is not compared yet`);
-  }
-  for (const [path, type] of a) if (!b.has(path)) out.push({ path, kind: "Removed", type });
-  // in diff_commits' order: by path segments
-  const segments = (p) => p.split("/");
-  return out.sort((x, y) => { const [p, q] = [segments(x.path), segments(y.path)]; for (let i = 0; i < Math.min(p.length, q.length); i++) if (p[i] !== q[i]) return p[i] < q[i] ? -1 : 1; return p.length - q.length; });
-}
-
 /** A write Commit's tracked changes, from the Store: what its fs.apply replays. */
 async function changesOf(commitId, commits, treeOf) {
   const commit = commits.get(commitId) ?? fail(`no Commit ${commitId} in the Store`);
-  const items = await trackedChanges(commit, treeOf);
+  const items = await trackedChanges(lf, commit, treeOf);
   const removed = items.filter((i) => i.kind === "Removed").map((i) => i.path);
   const top = removed.filter((p) => !removed.some((q) => q !== p && p.startsWith(`${q}/`)));
   const changes = [];
@@ -268,7 +260,7 @@ async function changesOf(commitId, commits, treeOf) {
 /** Whether every change a command's Commit made is to a path .gitignore excludes. */
 async function generatedOnly(commitId, commits, treeOf) {
   const commit = commits.get(commitId);
-  return commit ? (await trackedChanges(commit, treeOf)).length === 0 : false;
+  return commit ? (await trackedChanges(lf, commit, treeOf)).length === 0 : false;
 }
 
 /** The original Init's imported folder as data: every entry, its mode and its content. */

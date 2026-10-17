@@ -10,7 +10,7 @@
  "ms": 417,
  "expect": [
   "sandbox.exec:exit:0",
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -29,7 +29,8 @@
    "message": "M6 candidate test-depot-domain (exit 0)",
    "force": false,
    "commit": "12c0b1ba40fba96926b5743934703ad6bd14d8ac01c2822b8d68ea92ea6195d54e",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }
