@@ -6,4 +6,4 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | 000 | 60 | 571 | **watch** | Directory share | 2.9 MiB | [range-000](ranges/range-000.md) |
 | 001 | 60 | 1,114 | **watch** | Directory share | 2.7 MiB | [range-001](ranges/range-001.md) |
-| 002 | 63 | 1,533 | **optimize** | Scaling | 2.0 MiB | [range-002](ranges/range-002.md) |
+| 002 | 63 | 1,533 | **watch** | Scaling | 2.0 MiB | [range-002](ranges/range-002.md) |

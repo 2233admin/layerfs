@@ -4,19 +4,20 @@
 
 |  |  |
 | --- | --- |
-| Verdict | **optimize** |
+| Verdict | **watch** |
 | dsh commits | `6fdd04812` .. `0b0486796`: 63 commits, 10 mainline steps |
 | Checkpoint | `0b0486796b942b2e3e81f4065ad2a5498970b2ed`, tree `54f6d94a96ec` |
 | LayerFS depth | 1,114 → 1,533 Commits |
-| Binary | daemon `0ef24121723a40b9508456282e1a9fbbf9e42034e770756a3656e79845e4c404`, SDK `5b837149f9cc61983a275883c100d9493851041832676e3704e7e64a0dacf220`, image `sha256:d3773b4eac6a7a644887b17e36956cd1553786d47103f0170a3bb2b0ff6988de`, plan v2 |
-| Snapshot | 6.1 MiB new of 6.1 MiB; seal 2,931 ms, copy 214 ms |
-| Wall time (tooling, not operation latency) | 12.09 s tooling: prepare 0.21 · play 6.65 · consolidate 0.21 · verify 1.03 (diff_commits + full compareTree) · probes 0.47 · metrics 0.07 · seal 2.93 · snapshot copy 0.26 |
+| Binary | daemon `511dceeda1b5ec7e4c65b50f4f885bc60f25d6beac1c0735c7e044c12e1e7ad0`, SDK `506b646f7d0a119a862abe1e593b8a989bb8be91d22890f71e42f5e6e0d19d2d`, image `sha256:d3773b4eac6a7a644887b17e36956cd1553786d47103f0170a3bb2b0ff6988de`, plan v2 |
+| Snapshot | 6.1 MiB new of 6.1 MiB; seal 2,878 ms, copy 219 ms |
+| Wall time (tooling, not operation latency) | 13.62 s tooling: prepare 0.42 · play 7.34 · consolidate 0.21 · verify 1.80 (diff_commits + full compareTree) · probes 0.33 · metrics 0.07 · seal 2.88 · snapshot copy 0.27 |
 
 ## Attempts
 
 | # | Binary | Started | Result | Reason |
 | --- | --- | --- | --- | --- |
 | 1 | 0ef24121723a40b9508456282e1a9fbbf9e42034e770756a3656e79845e4c404 | 2026-10-17T18:04:12.475Z | optimize | Scaling: grep_tree: depth exponent 0.73; Counters: fork.returned_rows: depth exponent 0.768; Directory share: 0.549 |
+| 2 | 511dceeda1b5ec7e4c65b50f4f885bc60f25d6beac1c0735c7e044c12e1e7ad0 | 2026-10-17T20:10:07.256Z | watch | Scaling: list_largest: depth exponent 0.16 (2 seeded probe points); Counters: merge.fullscan_steps: depth exponent 0.324 (2 seeded probe points); Directory share: 0.54 |
 
 ## 1. Checks
 
@@ -25,13 +26,13 @@
 | Correctness | tree ok; steps 645/645; conflicts 0/0; tests 0/0 equal to native | all | pass |
 | Health | 0 open, ? overlays | 0, 0, flat | pass |
 | Speed | baseline not set (pilot) | — | pass |
-| Scaling | grep_tree: depth exponent 0.73 | < 0.15 | optimize |
-| Counters | fork.returned_rows: depth exponent 0.768 | < 0.05 | optimize |
-| Directory share | 0.55 | < 0.5 | watch |
+| Scaling | list_largest: depth exponent 0.16 (2 seeded probe points) | < 0.15 | watch |
+| Counters | merge.fullscan_steps: depth exponent 0.324 (2 seeded probe points) | < 0.05 | watch |
+| Directory share | 0.54 | < 0.5 | watch |
 | Reinstall growth | n/a | ≤ 2× | pass |
-| Delta at cap | 0.0308 (budget 0.3214) | < 0.1 | pass |
+| Delta at cap | 0.0316 (budget 0.3214) | < 0.1 | pass |
 | Range growth | 2.0 MiB | ≤ 3× median, ≤ 2 GiB | pass |
-| Snapshot time | 214 ms for 6.1 MiB new; size exponent -1.005 | < 0.15 | pass |
+| Snapshot time | 219 ms for 6.1 MiB new; size exponent n/a | < 0.15 | pass |
 | Disk projection | 0.42 | < 0.8 | pass |
 | Wall projection | n/a | ≤ 1 | pass |
 
@@ -69,58 +70,58 @@
 
 | Operation | Size class | n | p50 | p95 | p99 | max | Slowest phase |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| branch.diff_commits | — | 6 | 56.29 | 89.79 | 89.79 | 93.72 | sdk.read |
-| branch.fork | — | 3 | 3.30 | 3.30 | 3.30 | 4.00 | — |
-| branch.publish | — | 1 | 4.32 | 4.32 | 4.32 | 4.32 | — |
-| fs.apply | 2–4 | 18 | 7.92 | 8.57 | 8.57 | 9.41 | commit |
-| fs.diff_files | — | 28 | 5.67 | 7.99 | 8.17 | 9.43 | sdk.read |
-| fs.glob | — | 32 | 4.20 | 6.71 | 6.81 | 9.39 | — |
-| fs.grep | — | 34 | 5.78 | 13.37 | 14.60 | 15.52 | sdk.lines |
-| fs.list | — | 31 | 5.03 | 9.23 | 9.51 | 10.02 | — |
-| fs.read | — | 28 | 4.27 | 5.24 | 5.38 | 7.79 | sdk.lines |
-| fs.rm | — | 25 | 7.90 | 9.61 | 9.87 | 9.97 | commit |
-| fs.stat | — | 30 | 3.92 | 4.98 | 5.05 | 5.46 | — |
-| fs.write | — | 369 | 8.54 | 11.77 | 13.71 | 19.16 | commit |
-| operator.store.stats | — | 1 | 2.01 | 2.01 | 2.01 | 2.01 | — |
-| sandbox.commit | — | 7 | 11.75 | 13.01 | 13.01 | 15.88 | commit |
-| sandbox.create | — | 1 | 241.22 | 241.22 | 241.22 | 241.22 | — |
-| sandbox.exec | — | 33 | 45.98 | 58.99 | 219.62 | 348.71 | — |
-| sandbox.mount | — | 9 | 10.54 | 10.72 | 10.72 | 11.35 | sandbox.mount.bind |
-| sandbox.service | — | 1 | 223.83 | 223.83 | 223.83 | 223.83 | — |
-| sandbox.unmount | — | 9 | 5.91 | 6.97 | 6.97 | 8.09 | — |
+| branch.diff_commits | — | 6 | 193.35 | 222.39 | 222.39 | 234.12 | sdk.read |
+| branch.fork | — | 3 | 2.52 | 2.52 | 2.52 | 2.95 | — |
+| branch.publish | — | 1 | 3.68 | 3.68 | 3.68 | 3.68 | — |
+| fs.apply | 2–4 | 18 | 10.08 | 11.60 | 11.60 | 13.25 | commit |
+| fs.diff_files | — | 28 | 6.01 | 7.44 | 7.88 | 8.92 | sdk.read |
+| fs.glob | — | 32 | 4.20 | 7.29 | 8.74 | 10.04 | — |
+| fs.grep | — | 34 | 5.45 | 11.57 | 11.74 | 12.22 | sdk.lines |
+| fs.list | — | 31 | 4.91 | 9.99 | 10.28 | 10.48 | — |
+| fs.read | — | 28 | 4.08 | 4.49 | 4.58 | 5.08 | sdk.lines |
+| fs.rm | — | 25 | 9.89 | 11.13 | 11.21 | 11.80 | commit |
+| fs.stat | — | 30 | 3.85 | 4.58 | 4.73 | 4.78 | — |
+| fs.write | — | 369 | 9.96 | 12.88 | 14.30 | 19.46 | commit |
+| operator.store.stats | — | 1 | 2.38 | 2.38 | 2.38 | 2.38 | — |
+| sandbox.commit | — | 7 | 13.27 | 14.46 | 14.46 | 15.79 | commit |
+| sandbox.create | — | 1 | 243.93 | 243.93 | 243.93 | 243.93 | — |
+| sandbox.exec | — | 33 | 49.16 | 76.77 | 199.42 | 338.94 | — |
+| sandbox.mount | — | 9 | 10.58 | 12.10 | 12.10 | 13.20 | sandbox.mount.attach |
+| sandbox.service | — | 1 | 246.32 | 246.32 | 246.32 | 246.32 | — |
+| sandbox.unmount | — | 9 | 5.60 | 7.12 | 7.12 | 7.16 | — |
 
 ## 4. Scale probes
 
 | Probe | ms | Counters |
 | --- | --- | --- |
-| stat | 4.07 | statements 45, vm_steps 2556, fullscan_steps 0, sorts 0, returned_rows 303 |
-| read | 3.06 | statements 51, vm_steps 2592, fullscan_steps 0, sorts 0, returned_rows 305 |
-| list_small | 3.69 | statements 90, vm_steps 6616, fullscan_steps 0, sorts 0, returned_rows 798 |
-| list_largest | 9.88 | statements 543, vm_steps 28968, fullscan_steps 0, sorts 0, returned_rows 2902 |
-| grep_scoped | 3.69 | statements 84, vm_steps 3548, fullscan_steps 0, sorts 0, returned_rows 412 |
-| glob_scoped | 4.59 | statements 54, vm_steps 3368, fullscan_steps 0, sorts 0, returned_rows 402 |
-| grep_tree | 140.40 | statements 13716, vm_steps 218740, fullscan_steps 0, sorts 0, returned_rows 18512 |
-| glob_tree | 10.70 | statements 654, vm_steps 26118, fullscan_steps 0, sorts 0, returned_rows 2568 |
-| diff_files | 6.37 | statements 90, vm_steps 5105, fullscan_steps 0, sorts 0, returned_rows 606 |
-| list_commits | 3.75 | statements 69, vm_steps 1484, fullscan_steps 0, sorts 0, returned_rows 68 |
-| diff_commits | 98.46 | statements 8208, vm_steps 317331, fullscan_steps 0, sorts 0, returned_rows 30610 |
-| fork | 3.43 | statements 17, vm_steps 500, fullscan_steps 0, sorts 0, returned_rows 26 |
-| merge | 52.28 | statements 5603, vm_steps 161204, fullscan_steps 932, sorts 7, returned_rows 7716 |
-| oneshot_mount_exec | 56.85 | statements 57, vm_steps 1428, fullscan_steps 58, sorts 2, returned_rows 148 |
-| oneshot_commit | 71.32 | statements 265, vm_steps 13014, fullscan_steps 330, sorts 3, returned_rows 983 |
+| stat | 3.61 | statements 42, vm_steps 2537, fullscan_steps 0, sorts 0, returned_rows 302 |
+| read | 2.70 | statements 45, vm_steps 2555, fullscan_steps 0, sorts 0, returned_rows 303 |
+| list_small | 3.50 | statements 90, vm_steps 6615, fullscan_steps 0, sorts 0, returned_rows 798 |
+| list_largest | 11.22 | statements 543, vm_steps 28967, fullscan_steps 0, sorts 0, returned_rows 2902 |
+| grep_scoped | 4.07 | statements 69, vm_steps 3457, fullscan_steps 0, sorts 0, returned_rows 407 |
+| glob_scoped | 2.75 | statements 54, vm_steps 3367, fullscan_steps 0, sorts 0, returned_rows 402 |
+| grep_tree | 102.23 | statements 9051, vm_steps 190974, fullscan_steps 0, sorts 0, returned_rows 16957 |
+| glob_tree | 11.90 | statements 654, vm_steps 26117, fullscan_steps 0, sorts 0, returned_rows 2568 |
+| diff_files | 4.68 | statements 90, vm_steps 5104, fullscan_steps 0, sorts 0, returned_rows 606 |
+| list_commits | 3.60 | statements 68, vm_steps 1264, fullscan_steps 0, sorts 0, returned_rows 50 |
+| diff_commits | 11.04 | statements 512, vm_steps 19340, fullscan_steps 0, sorts 0, returned_rows 1986 |
+| fork | 3.07 | statements 16, vm_steps 271, fullscan_steps 0, sorts 0, returned_rows 7 |
+| merge | 38.63 | statements 1115, vm_steps 44077, fullscan_steps 933, sorts 7, returned_rows 3370 |
+| oneshot_mount_exec | 58.86 | statements 57, vm_steps 1332, fullscan_steps 60, sorts 2, returned_rows 140 |
+| oneshot_commit | 70.80 | statements 325, vm_steps 15107, fullscan_steps 331, sorts 3, returned_rows 1177 |
 
 ## 5. Storage
 
 | Measure | Value |
 | --- | --- |
-| Logical / canonical / stored / metadata | 2.09 GiB / 25.1 MiB / 3.6 MiB / 4.2 MiB |
-| Deduplication (logical / canonical) | 85.50 |
+| Logical / canonical / stored / metadata | 2.08 GiB / 25.0 MiB / 3.6 MiB / 4.2 MiB |
+| Deduplication (logical / canonical) | 85.41 |
 | Compression (canonical / stored) | 6.96 |
-| New stored per changed byte | 1.28 |
-| Directory share of new bytes | 0.55 |
+| New stored per changed byte | 1.25 |
+| Directory share of new bytes | 0.54 |
 | Delta share / at cap / stopped by budget | 0.59 / 0.03 / 0.32 |
-| Delta, this range | 0.59 of 1266 stored objects are deltas · at cap 0.03 (39) · refused bases: budget 18, cap 38 (budget share 0.32) · depths whole-file [0:42 1:80 2:46 3:32 4:27 5:24 6:24 7:21 8:18 9:12 10:12 11:11 12:7 13:9 14:8 15:8 16:5] chunk [0:422] metadata [0:55 1:54 2:53 3:53 4:54 5:55 6:50 7:50 8:34] (caps 16/8/8) |
-| Delta, since Init | 0.56 of 4712 stored objects are deltas · at cap 0.03 (125) · refused bases: budget 67, cap 123 (budget share 0.35) · depths whole-file [0:270 1:330 2:202 3:129 4:100 5:79 6:71 7:57 8:44 9:30 10:27 11:23 12:18 13:16 14:13 15:12 16:9] chunk [0:1602] metadata [0:203 1:201 2:200 3:200 4:196 5:194 6:186 7:184 8:116] (caps 16/8/8) |
+| Delta, this range | 0.59 of 1266 stored objects are deltas · at cap 0.03 (40) · refused bases: budget 18, cap 38 (budget share 0.32) · depths whole-file [0:42 1:80 2:46 3:32 4:27 5:24 6:24 7:21 8:17 9:12 10:12 11:11 12:7 13:9 14:8 15:8 16:6] chunk [0:422] metadata [0:55 1:54 2:53 3:53 4:54 5:55 6:50 7:50 8:34] (caps 16/8/8) |
+| Delta, since Init | 0.59 of 1266 stored objects are deltas · at cap 0.03 (40) · refused bases: budget 18, cap 38 (budget share 0.32) · depths whole-file [0:42 1:80 2:46 3:32 4:27 5:24 6:24 7:21 8:17 9:12 10:12 11:11 12:7 13:9 14:8 15:8 16:6] chunk [0:422] metadata [0:55 1:54 2:53 3:53 4:54 5:55 6:50 7:50 8:34] (caps 16/8/8) |
 | node_modules reinstall growth | — |
 | New stored bytes this range | 2.0 MiB |
 
@@ -132,6 +133,8 @@ Written by the runner from the last 3 ranges.
 
 - (none yet)
 
+
 ## 8. Evidence
 
 - `~/lfs-history/metrics/range-002.a1.json`
+- `~/lfs-history/metrics/range-002.a2.json`

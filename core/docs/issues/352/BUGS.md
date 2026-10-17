@@ -26,3 +26,10 @@
   needs per-directory change information the format lacks (SPEC §6 format kind).
   **Fixed** in `49499abac` (Store format: `binding_hint`, walk in
   `layerfs-content::compare`): [fixes/002-a1-diff-commits-change-walk.md](fixes/002-a1-diff-commits-change-walk.md).
+- **F-004 · report.mjs rewrites earlier ranges' recorded reports (tooling, lead,
+  2026-10-18).** After the same-binary gate change, `play` regenerated
+  `ranges/range-000.md` and `range-001.md`, replacing their recorded check
+  results and reasons with a re-evaluation under the new gate. The lead
+  restored the committed versions; recorded outcomes are never edited. Fix
+  (builder): `report.mjs` writes only the report of the range it just played and
+  keeps every earlier attempt's recorded check rows as written.
