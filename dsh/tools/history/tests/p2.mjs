@@ -14,7 +14,7 @@ import { aggregate, evaluate, probeSeries } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
 import { parseReport } from "../frozen.mjs";
-import { leadNote, loadBaselines, regate, writeBaseline } from "../report.mjs";
+import { leadNote, loadBaselines, probeSetupCommits, regate, writeBaseline } from "../report.mjs";
 import { atHead } from "../frozen.mjs";
 import { laneChanges, mergedTree } from "../agents.mjs";
 import { measure, record } from "../lib.mjs";
@@ -23,7 +23,7 @@ import {
   attributeFuse, callOf, checkpointDiff, consolidationSteps, decoyBytes, nextPhase, p2Plan, route, sandboxCommands, STEP_KINDS, Tree,
 } from "../steps.mjs";
 import {
-  buildOverview, callTable, categoryOf, categoryRows, CATEGORIES, checkOverview, derivedOverview, renderOverview, renderStats, stageSplit, tenths, timeLine,
+  buildOverview, callTable, categoryOf, withoutProbeSetupCommits, categoryRows, CATEGORIES, checkOverview, derivedOverview, renderOverview, renderStats, stageSplit, tenths, timeLine,
 } from "../stats.mjs";
 
 const tests = [];
@@ -465,4 +465,22 @@ test("regate: prints today's verdicts over recorded metrics and writes nothing",
   assert.deepEqual(rows.map((r) => [r.range, r.stored, r.verdict]), [[0, "optimize", "watch"], [1, "optimize", "watch"], [2, "optimize", "watch"]]);
   assert.deepEqual(readdirSync(d).map((f) => [f, readFileSync(join(d, f), "utf8")]), before, "no file written or changed");
   rmSync(d, { recursive: true, force: true });
+});
+
+test("F-015: the probe setup's Commits are not range work; a recorded Overview is corrected from its trace", () => {
+  const base = overviewInput();
+  const setup = [{ seq: 900, method: "fs.apply", label: "probe-setup:diff_commits", agent: "lead", kind: "Committed" }, { seq: 901, method: "fs.apply", label: "probe-setup:diff_commits", agent: "lead", kind: "Committed" },
+    { seq: 902, method: "branch.merge", label: "probe:merge", agent: "lead", kind: "Merged", newCommit: true }];
+  const o = buildOverview({ ...base, log: [...base.log, ...setup] });
+  assert.deepEqual(o, buildOverview(base), "probe and probe-setup records add no Commit");
+  // a recorded Overview that counted them (before the fix)
+  const bad = { ...o, agents: o.agents.map((a) => (a.agent === "lead" ? { ...a, commits: a.commits + 2 } : a)), branches: o.branches.map((b) => (b.name === "main" ? { ...b, commits: b.commits + 2 } : b)), commits: o.commits + 2, running: o.running + 2 };
+  const trace = [{ phase: "end", step: "probe-setup:diff_commits#1", method: "fs.apply", kind: "Committed" }, { phase: "start", step: "probe-setup:diff_commits#1", method: "fs.apply" },
+    { phase: "end", step: "probe-setup:diff_commits#2", method: "fs.apply", kind: "Committed" }, { phase: "end", step: "r007.s0001#3", method: "fs.write", kind: "Committed" },
+    { phase: "end", step: "probe-setup:diff_commits#4", method: "branch.list_commits", kind: "ok" }].map((x) => JSON.stringify(x)).join("\n");
+  assert.equal(probeSetupCommits(trace), 2);
+  const fixed = withoutProbeSetupCommits(bad, 2);
+  assert.deepEqual([fixed.commits, fixed.running, fixed.agents.at(-1).commits, fixed.branches.at(-1).commits], [o.commits, o.running, o.agents.at(-1).commits, o.branches.at(-1).commits]);
+  assert.equal(fixed.corrections[0].finding, "F-015");
+  assert.equal(withoutProbeSetupCommits(fixed, 2), fixed, "applied once");
 });

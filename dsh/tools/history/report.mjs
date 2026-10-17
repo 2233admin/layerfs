@@ -388,6 +388,12 @@ export function renderIndex(rows) {
  * evaluated now, once, and its result stored in its metrics file.
  * @returns {{ verdict: string, file: string, comment: string }}
  */
+/** The Commits the probe setup made in one attempt's trace (F-015): Committed fs/sandbox calls labelled probe-setup:. */
+export function probeSetupCommits(trace) {
+  return trace.split("\n").filter(Boolean).map((l) => JSON.parse(l))
+    .filter((d) => d.phase === "end" && String(d.step ?? "").startsWith("probe-setup:") && d.kind === "Committed" && /^(fs|sandbox)\./.test(d.method)).length;
+}
+
 /**
  * The dry run (F2: prints only): every range's latest attempt in `metricsDir`
  * re-evaluated by today's gates.mjs over the same history, seeds and
@@ -490,6 +496,19 @@ async function main() {
     const rows = regate({ metricsDir, oracleDir: opt("--oracle") ?? join(process.env.HOME, "lfs-history", "oracle"), baselinesDir: opt("--baselines") ?? join(process.env.HOME, "lfs-history", "metrics") });
     console.log("| Range | Run | Daemon | Stored | Now | Worst check |\n| --- | --- | --- | --- | --- | --- |");
     for (const r of rows) console.log(`| ${pad(r.range)}.a${r.attempt} | ${r.run} | ${r.daemon} | ${r.stored} | ${r.verdict} | ${r.worst.name} ${r.worst.result}: ${r.worst.value} |`);
+    return;
+  }
+  if (args[0] === "fix-overview") {
+    // F-015: removes the probe setup's Commits from an Overview recorded before the fix (counted from the attempt's trace)
+    const { withoutProbeSetupCommits } = await import("./stats.mjs");
+    const run = opt("--run"), range = Number(opt("--range")), attempt = Number(opt("--attempt") ?? 1);
+    if (!run || !Number.isInteger(range)) { console.error("usage: report.mjs fix-overview --run <id> --range N [--attempt K]"); process.exit(2); }
+    const dir = join(process.env.HOME, "lfs-history", "runs", run), manifest = JSON.parse(readFileSync(join(dir, "run.json"), "utf8"));
+    const file = join(manifest.outputs.metrics, `range-${pad(range)}.a${attempt}.json`), m = JSON.parse(readFileSync(file, "utf8"));
+    const n = probeSetupCommits(readFileSync(join(dir, "trace", `range-${pad(range)}.a${attempt}.jsonl`), "utf8"));
+    const o = withoutProbeSetupCommits(m.overview, n);
+    if (o !== m.overview) writeFileSync(file, JSON.stringify({ ...m, overview: o }, null, 1));
+    console.log(JSON.stringify({ file, probeSetupCommits: n, commits: o.commits, changed: o !== m.overview }));
     return;
   }
   if (args[0] === "records") {

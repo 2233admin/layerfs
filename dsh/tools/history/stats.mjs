@@ -117,6 +117,24 @@ export const timeLine = (wall) => {
   return `**Time ${sec(wall.totalMs)} s** (tooling): ${Object.keys(st).map((k) => `${k} ${(t[k] / 10).toFixed(1)}`).join(" · ")}`;
 };
 
+/** A probe's call record: the timed call (`probe:`) or its untimed setup (`probe-setup:`, F-014). Never the range's work. */
+export const isProbeLabel = (label) => /^probe(-setup)?:/.test(String(label ?? ""));
+
+/** Whether a call record made a new Commit: a Committed fs/sandbox call, or a merge that was not a fast-forward. */
+export const madeCommit = (e) => (e.kind === "Committed" && /^(fs|sandbox)\./.test(e.method)) || !!e.newCommit;
+
+/**
+ * F-015: an Overview recorded before the fix counted the probe setup's own
+ * Commits (`probe-setup:` labels, `n` of them, all the lead's) as range work.
+ * Returns the Overview without them, marked; an already corrected one unchanged.
+ */
+export function withoutProbeSetupCommits(o, n) {
+  if (!n || o.corrections?.some((c) => c.finding === "F-015")) return o;
+  const lessLead = (x) => (x.agent === "lead" || x.name === "main" ? { ...x, commits: x.commits - n } : x);
+  return { ...o, agents: o.agents.map(lessLead), branches: o.branches.map(lessLead), commits: o.commits - n, running: o.running - n,
+    corrections: [...(o.corrections ?? []), { finding: "F-015", probeSetupCommits: n, note: "the probe setup's Commits were counted as the lead's" }] };
+}
+
 export const CONFLICT_KINDS = [["commit-conflict", "Commit Conflict"], ["stale-clean-merge", "Stale clean merge"], ["decoy", "Decoy edit"], ["merge-race", "Merge / publish race"]];
 
 /**
@@ -126,7 +144,7 @@ export const CONFLICT_KINDS = [["commit-conflict", "Commit Conflict"], ["stale-c
  * the range; `laneOf` maps a step label to its lane (null: the lead's).
  */
 export function buildOverview({ plan, log, played, leadSteps, laneOf, events = [], race = null, merged = new Map(), tries = new Map(), published = new Set(), lanesPlayed, runningBefore, phase }) {
-  const commitsOf = (pred) => log.filter((e) => pred(e) && !String(e.label ?? "").startsWith("probe:") && (e.kind === "Committed" && /^(fs|sandbox)\./.test(e.method) || e.newCommit)).length;
+  const commitsOf = (pred) => log.filter((e) => pred(e) && !isProbeLabel(e.label) && madeCommit(e)).length;
   const agents = [];
   const conflictsOf = new Map();
   for (const c of plan.conflicts ?? []) for (const a of c.kind === "merge-race" ? ["lead"] : c.agents ?? []) conflictsOf.set(a, [...(conflictsOf.get(a) ?? []), c.kind]);
