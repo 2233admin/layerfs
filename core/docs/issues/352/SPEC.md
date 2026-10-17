@@ -578,6 +578,11 @@ gates.mjs `THRESHOLDS` (RESULTS.md, P1); the wall budget is 120 s per range,
 
 ## 6. Fixes without redoing checkpoints
 
+> **Incremental by default** (owner, 2026-10-18): [REBUILD.md](REBUILD.md) decides
+> which recovery a fix may use: forward-only first, then an additive migration of
+> the newest snapshot; a rebuild only with a written justification. It wins over
+> this section where they differ.
+
 A checkpoint's proof (git's tree plus the plan) is never redone. Its
 measurements are kept under the binary that took them. Only Store bytes are
 rebuilt, and only mechanically.
