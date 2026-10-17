@@ -73,7 +73,14 @@ export const demoApi = {
   info: () => call<DemoInfo>('GET', '').catch((error) => { if (error.status === 404) return null; throw error }),
   demo: (id: string) => call<Demo>('GET', `/${encodeURIComponent(id)}`),
   setSession: (id: string, sessionId: string) => call<Demo>('POST', `/${encodeURIComponent(id)}/session`, { sessionId }),
+  /** how fast the mock plays the demo from now on (mock/src/pace.js) */
+  setSpeed: (id: string, speed: Speed) => call<Demo>('POST', `/${encodeURIComponent(id)}/speed`, { speed }),
 }
+
+/** A demo's run speeds: a multiple of the scenario's pauses and typing, or 0 for none (Max). */
+export const SPEEDS = [1, 2, 4, 0] as const
+export type Speed = typeof SPEEDS[number]
+export const speedLabel = (speed: number) => (speed ? `${speed}×` : 'Max')
 
 /** Inits `name` from `source` for `folder` (Live, with `image` when given) or into the simulator (Sim) and reads its job until it ends, as api.init. */
 async function initProject(folder: string, source: string, name: string, mode: DemoMode, image: string | null, onJob: (job: InitJob) => void): Promise<void> {

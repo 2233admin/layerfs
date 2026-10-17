@@ -94,6 +94,23 @@ export function createView(root, o) {
   const files = createFiles(v);
   const pinned = {}, seenTabs = new Set(["main"]), OPEN_SDK = new Set();
   let sbLit = null, sbPulse = null, focusPane = null, cardTimer = null;
+  // Workspaces unmounted since an earlier render stay LEAVE_MS as a fading
+  // trail, by the wall clock: the model drops them at once, and a Workspace a
+  // script mounts and unmounts within a second still reads as one that was there
+  const LEAVE_MS = 1200, leaving = new Map();
+  let shownWs = {}, leaveTimer = null;
+  // a step's entrance animations (a new line, a new pane, a Branch row's
+  // flash) play on its first draw only: later redraws (a poll, a tree that
+  // loaded, the trail ending) would restart them, a flicker
+  let drawnSeq = null, fresh = -1;
+  function trackLeaving(W) {
+    const now = Date.now();
+    for (const [k, w] of Object.entries(shownWs)) if (!W.ws[k] && !leaving.has(k)) leaving.set(k, { w, at: now });
+    for (const [k, l] of leaving) if (W.ws[k] || now - l.at >= LEAVE_MS) leaving.delete(k);
+    shownWs = W.ws;
+    clearTimeout(leaveTimer);
+    if (leaving.size) leaveTimer = setTimeout(render, Math.max(16, Math.min(...[...leaving.values()].map((l) => l.at + LEAVE_MS - now))));
+  }
   const where = (n) => X.where(v.W, n), idle = (n) => X.idle(v.W, n);
   const lastHit = (loc) => (v.lastLoc === loc ? " hot" : "");
   const q = (sel) => root.querySelector(sel);
@@ -152,13 +169,13 @@ export function createView(root, o) {
 
   function mainView() {
     const W = v.W;
-    const histLines = W.hist.map((l) => lineHtml(l, l.t === W.seq, tag(l.agent) + " ")).join("") || `<span class="out">no calls yet</span>`;
+    const histLines = W.hist.map((l) => lineHtml(l, l.t === fresh, tag(l.agent) + " ")).join("") || `<span class="out">no calls yet</span>`;
     const rows = W.order.slice().sort((x, y) => W.branches[y].last - W.branches[x].last).map((b) => {
       const B = W.branches[b], on = X.agentsOn(W, b), age = W.clock - B.last, bad = X.conflicted(W, b), busy = on.length || X.mounted(W, b);
       const st = bad ? `<span style="color:var(--red)">⚠</span>` : busy ? `<span style="color:var(--green)">●</span>` : B.published ? `<span style="color:var(--purple)">↑</span>` : `<span style="color:var(--text-3)">○</span>`;
       const meta = bad ? "conflict" : B.published ? `→ ${W.mainHead}` : age < 1 ? "now" : `${age}s`;
       // small avatars stand in the slot (placeCrabs, mode "row"); the head and age follow
-      return `<div class="brow${busy ? "" : " idle"}${B.last === W.clock && W.seq ? " flash" : ""}" data-open="${esc(b)}" data-loc="row:${esc(b)}" style="--bc:var(${B.color})"><span class="st">${st}</span><span class="nm">${esc(b)}</span><span class="slot" data-slot="row:${esc(b)}"></span><span class="hd">${esc(B.head.replace("fork:", "") === b ? B.base : B.head)}</span><span class="meta">${meta}</span></div>`;
+      return `<div class="brow${busy ? "" : " idle"}${B.last === W.clock && W.seq && fresh === W.seq ? " flash" : ""}" data-open="${esc(b)}" data-loc="row:${esc(b)}" style="--bc:var(${B.color})"><span class="st">${st}</span><span class="nm">${esc(b)}</span><span class="slot" data-slot="row:${esc(b)}"></span><span class="hd">${esc(B.head.replace("fork:", "") === b ? B.base : B.head)}</span><span class="meta">${meta}</span></div>`;
     }).join("") || `<div class="brow idle"><span class="meta">no Branches yet</span></div>`;
     const project = W.engine.s.project ? W.engine.s.project.name : "project";
     return `<div class="col"><section class="term${lastHit("hist")}" data-loc="hist"><div class="thead"><span class="kind history">PROJECT</span><span class="ttl">${W.mainHead ? `${esc(project)} · main @ ${W.mainHead}` : "no project yet"}</span></div>
@@ -170,12 +187,13 @@ export function createView(root, o) {
 
   function branchView(b) {
     const W = v.W, B = W.branches[b];
-    const fsLines = (W.fsLog[b] || []).map((l) => lineHtml(l, l.t === W.seq, tag(l.agent) + " ")).join("") || `<span class="out">no fs calls on ${esc(b)} yet</span>`;
+    const fsLines = (W.fsLog[b] || []).map((l) => lineHtml(l, l.t === fresh, tag(l.agent) + " ")).join("") || `<span class="out">no fs calls on ${esc(b)} yet</span>`;
     const headId = B.head.startsWith("fork:") ? B.base : B.head;
-    const wss = Object.values(W.ws).filter((w) => w.branch === b).sort((x, y) => x.born - y.born);
-    const panes = wss.map((w) => { const [sb, path] = w.id.split(":"); return `<section class="term${w.bad ? " bad" : lastHit("ws:" + w.id)}${w.born === W.seq ? " enter" : ""}${focusPane === w.id ? " focus" : ""}" data-loc="ws:${esc(w.id)}" data-sb="${esc(sb)}">
-        <div class="thead"><span class="kind sandbox">WORKSPACE</span>${tag(w.agent)}<button class="sbchip" data-sbchip="${esc(sb)}" data-sbhl="${esc(sb)}" title="Runs in Sandbox ${esc(sb)} · hover: its other panes here · click: the Sandbox on the main tab">${esc(sb)}</button><span class="ttl">${esc(path.replace("/workspaces/", "ws/"))}</span><span class="sp"></span>${w.bad ? '<span class="pill warn">conflict</span>' : '<span class="pill run">mounted</span>'}</div>
-        <div class="tbody" data-scroll>${w.lines.map((l) => lineHtml(l, l.t === W.seq, l.dim ? "" : '<span class="prompt">$ </span>')).join("")}</div>${files.overlayHtml(w)}</section>`; }).join("");
+    const gone = [...leaving.values()].filter((l) => l.w.branch === b).map((l) => ({ ...l.w, leftAt: l.at }));
+    const wss = [...Object.values(W.ws).filter((w) => w.branch === b), ...gone].sort((x, y) => x.born - y.born);
+    const panes = wss.map((w) => { const [sb, path] = w.id.split(":"); return `<section class="term${w.leftAt ? " leaving" : w.bad ? " bad" : lastHit("ws:" + w.id)}${!w.leftAt && w.born === fresh ? " enter" : ""}${focusPane === w.id ? " focus" : ""}"${w.leftAt ? ` style="animation-delay:${w.leftAt - Date.now()}ms"` : ""} data-loc="ws:${esc(w.id)}" data-sb="${esc(sb)}">
+        <div class="thead"><span class="kind sandbox">WORKSPACE</span>${tag(w.agent)}<button class="sbchip" data-sbchip="${esc(sb)}" data-sbhl="${esc(sb)}" title="Runs in Sandbox ${esc(sb)} · hover: its other panes here · click: the Sandbox on the main tab">${esc(sb)}</button><span class="ttl">${esc(path.replace("/workspaces/", "ws/"))}</span><span class="sp"></span>${w.leftAt ? '<span class="pill">unmounted</span>' : w.bad ? '<span class="pill warn">conflict</span>' : '<span class="pill run">mounted</span>'}</div>
+        <div class="tbody" data-scroll>${w.lines.map((l) => lineHtml(l, l.t === fresh, l.dim ? "" : '<span class="prompt">$ </span>')).join("")}</div>${files.overlayHtml(w)}</section>`; }).join("");
     const recent = Object.values(W.nodes).filter((n) => n.branch === b && n.kind === "commit").slice(-4).reverse()
       .map((n) => `${n.id}  ${esc(n.by || "?")}: ${esc(n.msg || "")}`).join("\n");
     const cols = wss.length > 2 ? "1fr 1fr" : "1fr";
@@ -275,6 +293,9 @@ export function createView(root, o) {
       for (const [sel, top] of keep) { const el = layout.work.querySelector(sel); if (el) el.scrollTop = top; }
       return;
     }
+    trackLeaving(W);
+    fresh = W.seq === drawnSeq ? -1 : W.seq;
+    drawnSeq = W.seq;
     renderStatus();
     const work = layout.work;
     const keepScroll = [".ftree", ".fview", ".sblist .tbody"].map((sel) => { const el = work.querySelector(sel); return [sel, el ? el.scrollTop : 0]; });
@@ -581,6 +602,7 @@ export function createView(root, o) {
     setRight(tab, mode) { v.rightMode[tab] = mode; },
     avatar, render, placeCrabs, animate, files,
     dispose() {
+      clearTimeout(leaveTimer);
       root.removeEventListener("click", onClick);
       root.removeEventListener("mouseover", onOver);
       layout.work.removeEventListener("mouseout", onOut);

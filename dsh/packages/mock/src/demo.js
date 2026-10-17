@@ -7,6 +7,8 @@
 //                                          run (see progress.js)
 //   GET  /layerfs-demo/<id>                one demo, as in the list
 //   POST /layerfs-demo/<id>/session {sessionId}   the demo's Session from now on
+//   POST /layerfs-demo/<id>/speed {speed}         how fast the mock plays it
+//                                          from now on: 1, 2, 4 or 0 (Max), pace.js
 // A demo's Session is kept in <stateDir>/sessions.json; Replay replaces it.
 // A replayed run's demo (issue #347) also carries `live` (Live LayerFS only),
 // its Sandboxes' `image`, and `seed`, the folder its project is Inited from:
@@ -58,9 +60,9 @@ class SessionFile {
 /**
  * Registers the route; its disposer runs with the plugin fiber.
  * @param {object} ctx plugin context with webServer and connection
- * @param {{ scenarios: Map<string, object>, progress: import("./progress.js").Progress, workspace: string, stateDir: string, preset: string, provider: string, prompt: string, intro: string }} demo
+ * @param {{ scenarios: Map<string, object>, progress: import("./progress.js").Progress, pace: import("./pace.js").Pace, workspace: string, stateDir: string, preset: string, provider: string, prompt: string, intro: string }} demo
  */
-export function registerDemoRoutes(ctx, { scenarios, progress, workspace, stateDir, preset, provider, prompt, intro }) {
+export function registerDemoRoutes(ctx, { scenarios, progress, pace, workspace, stateDir, preset, provider, prompt, intro }) {
   const sessions = new SessionFile(stateDir), seeds = new Map();
   // written once, at the first read; a seed that cannot be written is the demo's error
   const seedOf = (id, scenario) => {
@@ -71,7 +73,7 @@ export function registerDemoRoutes(ctx, { scenarios, progress, workspace, stateD
     return seeds.get(id);
   };
   const view = (id, scenario, saved) => ({
-    id, title: scenario.title, blurb: scenario.blurb ?? null, agents: Object.keys(scenario.agents), speed: scenario.speed ?? 1,
+    id, title: scenario.title, blurb: scenario.blurb ?? null, agents: Object.keys(scenario.agents), speed: pace.get(id),
     live: scenario.live === true, image: scenario.image ?? null, ...seedOf(id, scenario),
     sessionId: saved[id] ?? null, run: progress.get(id),
   });
@@ -91,6 +93,10 @@ export function registerDemoRoutes(ctx, { scenarios, progress, workspace, stateD
         const body = await readJson(req);
         if (typeof body.sessionId !== "string" || !body.sessionId) return send(res, 400, { code: "invalid-session", message: "sessionId is required" });
         return send(res, 200, view(id, scenario, sessions.set(id, body.sessionId)));
+      }
+      if (req.method === "POST" && parts[1] === "speed" && parts.length === 2) {
+        pace.set(id, (await readJson(req)).speed);
+        return send(res, 200, view(id, scenario, sessions.read()));
       }
       return send(res, 404, { code: "not-found", message: `no route ${req.method} ${url.pathname}` });
     } catch (error) {

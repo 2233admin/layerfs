@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createAdapter } from "../src/adapter.js";
 import { agentOf, nextReply } from "../src/plan.js";
+import { Pace } from "../src/pace.js";
 import { Progress } from "../src/progress.js";
 import { compileScenario, loadScenarios, ScenarioError } from "../src/scenario.js";
 
@@ -266,6 +267,25 @@ assert.equal(out.at(-1).reason.kind, "aborted");
   live.abort();
   assert.equal((await pending).at(-1).reason.kind, "aborted");
   assert.deepEqual([stops.get("tour").state, stops.get("tour").error], ["stopped", "stopped while root worked"]);
+}
+
+// a demo's speed divides its pauses (pace.js); a change mid-pause applies to what is left
+{
+  const pace = new Pace(new Map([["d", { speed: 2 }]])), timed = async (ms) => { const t = Date.now(); await pace.wait("d", ms); return Date.now() - t; };
+  assert.equal(pace.get("d"), 2);
+  const half = await timed(200);
+  assert.ok(half >= 95 && half < 190, `200 ms at 2× took ${half} ms`);
+  pace.set("d", 0);
+  assert.ok(await timed(10_000) < 20, "Max leaves pauses out");
+  pace.set("d", 1);
+  const t = Date.now(), long = pace.wait("d", 10_000);
+  setTimeout(() => pace.set("d", 0), 50);
+  await long;
+  assert.ok(Date.now() - t < 150, "a pause under way follows a new speed");
+  assert.throws(() => pace.set("d", 3), /speed is one of/);
+  const ab = new AbortController(), cut = pace.wait("d", 1, ab.signal); // speed 0: no wait at all
+  await cut; pace.set("d", 1); const held = pace.wait("d", 5000, ab.signal); ab.abort();
+  await assert.rejects(held, { name: "AbortError" });
 }
 
 console.log(`mock: ok (${scenarios.size} scenarios played)`);

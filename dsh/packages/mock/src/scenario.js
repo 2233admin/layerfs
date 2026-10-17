@@ -8,7 +8,8 @@
 //   { type: "layerfs-mock-scenario", version: 2, title, blurb?, fixture?,
 //     order?, speed?, live?, image?, seed?, lib?, agents: { root: Step[], <child>: Step[], … } }
 // `order` places the demo in lists (lower first; unordered ones last, by name);
-// `speed` is the LayerFS tab's playback speed the demo starts at (1, 2 or 4).
+// `speed` is how fast the mock plays the demo at first (1, 2 or 4): it divides
+// the pauses and typing; the client changes it while a run plays (pace.js).
 // A replayed run (issue #347) sets `live: true` (it runs on real LayerFS only,
 // never the simulator), the runtime `image` digest its Sandboxes run, and
 // `seed`, a seed.json under the scenario folder holding the folder its
