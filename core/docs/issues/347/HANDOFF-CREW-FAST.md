@@ -1,5 +1,9 @@
 # #350 Crew: fast-path handoff (2026-10-17)
 
+> **Status:** Done. Headless run 17 and the closing Live Play
+> (session-4edd234d-e4a1-43e2-b963-a8a4b5f6e7d2) passed every gate; findings
+> are BUGS rows 40–46. Kept as the record of the plan.
+
 You are finishing issue #350 (Crew), part of #347. Read this whole file before
 acting. The original handoff, `HANDOFF.md`, still applies **except where this
 file changes it** (the owner's decisions below).

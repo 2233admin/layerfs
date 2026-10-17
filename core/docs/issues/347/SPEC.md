@@ -1,6 +1,6 @@
 # dsh demo conversion — #347
 
-> **Status:** Current implementation plan; Shop (#348) is closed, Depot (#349) is converted, Crew is in progress.
+> **Status:** Current implementation plan; Shop (#348) is closed, Depot (#349) is converted, Crew (#350) is converted with its verification commands disabled and passed its closing Live Play (2026-10-17).
 
 Convert the three finished application runs of collection
 [#336](https://github.com/Ephemeral-AI-Lab/layerfs/issues/336) into Live demos of

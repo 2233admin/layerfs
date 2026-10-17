@@ -83,12 +83,15 @@ const PROOF_RACES = [
 const ranTests = (output) => [...String(output).matchAll(/^(?:not )?ok \d+ - (.*)$/gm)].map((m) => m[1].trim());
 
 /**
- * Whether a recorded command drives a browser through Selenium: it runs a
- * browser script or proof (compiling one does not count), or its recorded
- * output shows Selenium or a test named for a browser (`verification=no-browser`).
+ * Whether a recorded command belongs to a browser proof (`verification=no-browser`):
+ * it names a browser (a browser script, proof, flag or the proof's data), or
+ * its recorded output shows Selenium or a test named for a browser. A command
+ * that reads a proof's data needs the proof to have run (W2-0100 logs in to
+ * W2-0096's server), and the bytecode a script's py_compile leaves is removed
+ * only by its proof (P1b-0110), so both go with the proof.
  */
 export const drivesBrowser = (command, output) =>
-  /-browser\.py(?!\s*(&&|$|'))|--browser|browser-smoke|selenium/i.test(String(command).replace(/py_compile[^&]*/g, "")) ||
+  /browser|selenium/i.test(String(command)) ||
   /selenium|chromedriver|^(?:not )?ok \d+ - .*\bbrowser\b/im.test(String(output));
 
 /** Whether `output` fails with one of the race's errors, raised in its file, and no test. */

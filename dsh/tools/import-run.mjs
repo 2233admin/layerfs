@@ -99,8 +99,8 @@ try {
       if (WRITES.has(m)) {
         if (call.ok === false) fail(`${step.label}: a refused ${m} is not replayed yet`);
         const all = await changesOf(call.commit);
-        // with verification off no run makes bytecode (only the disabled checks did), so a write leaves it alone
-        const changes = verification === "off" ? all.filter((c) => !BYTECODE.test(c.path)) : all;
+        // with verification off or no-browser no run makes bytecode (only the disabled py_compile checks did), so a write leaves it alone
+        const changes = verification !== "on" ? all.filter((c) => !BYTECODE.test(c.path)) : all;
         if (!changes.length) { dropped.add(call.commit); notes.push(`${step.label}: ${m} ${short(call.commit)} has no tracked content change${all.length ? " but bytecode" : ""}; dropped`); continue; }
         if (changes.length < all.length) notes.push(`${step.label}: ${m} ${short(call.commit)}: its bytecode changes are left out (no run makes bytecode)`);
         calls.push({ op: "write", branch: call.args.branch, message: fullMessage(call), changes, commit: call.commit, expect: `fs.apply:${kindOf(call)}` });
