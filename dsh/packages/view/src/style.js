@@ -87,6 +87,7 @@ export const CSS = `
 .lfs .term.hot { box-shadow: 0 0 0 1.5px var(--accent), 0 6px 18px rgba(0,0,0,.12); }
 .lfs .term.bad { box-shadow: 0 0 0 1.5px var(--red), 0 6px 18px rgba(255,59,48,.18); }
 .lfs .term.enter { animation: lfs-grow .35s ease-out; }
+.lfs .term.leaving { animation: lfs-leave 1.2s ease-in forwards; pointer-events: none; }
 .lfs .thead { height: 30px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px; background: var(--term-head); color: var(--term-text); font-size: 12px; border-bottom: 1px solid var(--term-border); white-space: nowrap; overflow: hidden; }
 .lfs .thead .ttl { font: 12px var(--font); color: var(--term-dim); overflow: hidden; text-overflow: ellipsis; }
 .lfs .thead .sp { flex: 1; }
@@ -384,6 +385,7 @@ export const CSS = `
 @keyframes lfs-claw { 50% { transform: translateY(-2px); } }
 @keyframes lfs-blink { 50% { opacity: .1; } }
 @keyframes lfs-grow { from { transform: scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes lfs-leave { from { opacity: 1; } to { opacity: 0; transform: scale(.98); } }
 @keyframes lfs-fadein { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 @keyframes lfs-pop { from { transform: scale(0); } to { transform: scale(1); } }
 @keyframes lfs-flash { 0% { background: var(--accent-bg); } 100% { background: transparent; } }

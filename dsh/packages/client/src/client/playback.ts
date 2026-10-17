@@ -1,41 +1,23 @@
-// Plays a session's SDK calls in the LayerFS tab one step at a time, for
-// live agents and demos alike. A step is one drawn trace line (the SDK's own
-// service Sandbox and operator reads ride with the next one). New lines wait
-// behind the step on screen, and each step stays for its kind's minimum time
-// (HOLD_MS, divided by the speed) before the next one plays. So a bash call
-// that mounts, runs, commits and unmounts a Workspace within a second still
-// shows the window, the run and the Commit. A long queue plays faster, to stay
-// about CATCH_UP steps behind at most; no step is dropped. When the tab
-// opens, calls that ended over RECENT_MS ago are shown at once and the rest
-// play, so a run just started (a demo's Play) plays from its first call.
+// Plays a session's SDK calls in the LayerFS tab in step with the run: each
+// step (one drawn trace line; the SDK's own service Sandbox and operator reads
+// ride with the next one) shows LAG_MS after the call ended, so the gaps on
+// screen are the run's own gaps and the view never falls behind it. LAG_MS is
+// longer than the Host poll (1.5 s), so a call is usually here before its
+// time. Steps whose time has passed (the tab opened, a rebuild, a late poll)
+// apply at once and draw once. How fast a demo runs is the mock's business
+// (mock/src/pace.js), not the playback's; a Workspace that a script mounts and
+// unmounts within a second still shows, as the view's fading trail.
 import * as X from '../../../model/src/index.js'
 
-/** Playback speeds: a multiple of the hold times, or 0 for none (each call shows as it lands). */
-export const SPEEDS = [1, 2, 4, 0] as const
-export type Speed = typeof SPEEDS[number]
-export const speedLabel = (speed: Speed) => (speed ? `${speed}×` : 'Max')
-
-/** Minimum time on screen at 1×, by SDK method, in ms. */
-const HOLD_MS: Record<string, number> = {
-  'sandbox.create': 1000, 'sandbox.mount': 1800, 'sandbox.exec': 1800, 'operator.process.start': 1800,
-  'operator.process.cancel': 1200, 'sandbox.status': 900, 'sandbox.commit': 1600, 'sandbox.unmount': 1000, 'sandbox.close': 800,
-  'branch.fork': 1300, 'branch.merge': 2000, 'branch.publish': 2000, 'project.init': 1300,
-}
-const WRITE_MS = 1300, READ_MS = 900, REFUSED_MS = 1500
-const WRITES = new Set(['fs.write', 'fs.edit', 'fs.apply', 'fs.mkdir', 'fs.rm', 'fs.cp', 'fs.mv'])
-const CATCH_UP = 30
-const RECENT_MS = 2 * 60_000
-
-/** How long a step stays at 1×: its method's time, and longer for a refusal (Conflict, Busy). */
-export function holdOf(line: { method: string, ok?: boolean }): number {
-  const base = HOLD_MS[line.method] ?? (WRITES.has(line.method) ? WRITE_MS : READ_MS)
-  return base + (line.ok === false ? REFUSED_MS : 0)
-}
+const LAG_MS = 2000
 
 /** The same rule as the trace source's (model/src/sources/trace.js): lines that are not steps of their own. */
 const rides = (method: string) => method === 'sandbox.service' || (method.startsWith('operator.') && method !== 'operator.process.start' && method !== 'operator.process.cancel')
 
-export interface Step { a: string, line: any, replay: (W: any) => void, instant?: boolean }
+export interface Step { a: string, line: any, replay: (W: any) => void, due: number }
+
+/** When a line shows: LAG_MS after it ended, by the Host's clock. */
+export const dueOf = (line: { start: string, ms?: number }) => Date.parse(line.start) + (line.ms || 0) + LAG_MS
 
 export class Playback {
   W: any
@@ -52,54 +34,46 @@ export class Playback {
   /**
    * @param fresh a new view model (an empty trace replay)
    * @param show draws the model after `step`, or after catching up (null)
-   * @param speed the speed now
+   * @param now the clock lines are timed by (the Host's, as this browser sees it)
    */
-  constructor(private fresh: () => any, private show: (W: any, step: Step | null) => void, private speed: () => Speed) {
+  constructor(fresh: () => any, show: (W: any, step: Step | null) => void, now: () => number = Date.now) {
+    this.show = show
+    this.now = now
     this.W = fresh()
   }
+  private show: (W: any, step: Step | null) => void
+  private now: () => number
 
   /** Steps still to play. */
   get waiting() { return this.queue.length }
 
-  /**
-   * Takes a session's lines so far (agents named): the new ones queue. On
-   * `opening`, the lines before the first that ended within RECENT_MS are
-   * applied at once and drawn once.
-   */
-  feed(lines: any[], agent: string, opening: boolean): Promise<void> {
-    // one feed at a time: an opening's fast-forward finishes before the next poll's lines queue
-    const next = this.feeding.then(() => this.take(lines, agent, opening))
+  /** Takes a session's lines so far (agents named): the new ones queue, each for its time. */
+  feed(lines: any[], agent: string): Promise<void> {
+    const next = this.feeding.then(() => this.take(lines, agent))
     this.feeding = next.catch(() => {})
     return next
   }
 
-  private async take(lines: any[], agent: string, opening: boolean) {
+  private async take(lines: any[], agent: string) {
     const ends = X.endLines(lines)
     if (!ends.length) return
     this.t0 ??= Date.parse(ends[0].start)
-    const t0 = this.t0, recent = Date.now() - RECENT_MS
-    let instant = opening ? ends.findIndex((line) => Date.parse(line.start) + (line.ms || 0) >= recent) : 0
-    if (instant < 0) instant = ends.length
-    for (const [k, line] of ends.entries()) {
+    const t0 = this.t0
+    for (const line of ends) {
       if (this.seen.has(line.id)) continue
       this.seen.add(line.id)
       this.pending.push(line)
       if (rides(line.method)) continue
       const batch = this.pending
       this.pending = []
-      this.queue.push({ a: line.agent || agent, line, replay: (W) => { for (const l of batch) X.replayLine(W, l, { agent, t0 }) } })
-      if (k < instant) this.queue[this.queue.length - 1].instant = true
+      // a step never shows before the one before it
+      // a line ended before now, so with a browser clock behind the Host's it still shows within LAG_MS
+      const due = Math.max(Math.min(dueOf(line), this.now() + LAG_MS), this.queue.length ? this.queue[this.queue.length - 1].due : 0)
+      this.queue.push({ a: line.agent || agent, line, due, replay: (W) => { for (const l of batch) X.replayLine(W, l, { agent, t0 }) } })
     }
-    if (opening) {
-      while (this.queue[0]?.instant) { await X.runStep(this.W, this.queue.shift()!, {}); this.played++ }
-      this.show(this.W, null)
-    }
-    this.wake?.() // a longer queue may shorten the hold under way
-    void this.play()
+    this.wake?.()
+    await this.play()
   }
-
-  /** The speed changed: a step waiting out its hold rechecks it now. */
-  nudge() { this.wake?.() }
 
   stop() { this.stopped = true; this.queue = []; this.wake?.() }
 
@@ -108,27 +82,29 @@ export class Playback {
     this.running = true
     try {
       while (this.queue.length && !this.stopped) {
-        const step = this.queue.shift()!
-        await X.runStep(this.W, step, {})
-        this.played++
+        await this.until(this.queue[0].due)
         if (this.stopped) return
-        this.show(this.W, step)
-        await this.hold(holdOf(step.line), Date.now())
+        // every step whose time has come, drawn once: the last one animates
+        // when it is the run's latest, else the view just catches up
+        const now = this.now()
+        let last: Step | null = null
+        while (this.queue.length && this.queue[0].due <= now) {
+          last = this.queue.shift()!
+          await X.runStep(this.W, last, {})
+          this.played++
+        }
+        if (last) this.show(this.W, now - last.due < LAG_MS ? last : null)
       }
-      if (!this.stopped) this.show(this.W, null)
     } finally {
       this.running = false
     }
   }
 
-  /** Waits out `ms` at the current speed, from `since`; a speed change takes effect at once. */
-  private async hold(ms: number, since: number) {
-    for (;;) {
-      const speed = this.speed(), behind = Math.max(1, this.queue.length / CATCH_UP)
-      const left = speed ? ms / speed / behind - (Date.now() - since) : 0
-      if (left <= 0 || this.stopped) return
-      await new Promise<void>((resolve) => { const timer = setTimeout(resolve, left); this.wake = () => { clearTimeout(timer); resolve() } })
-      this.wake = null
-    }
+  /** Waits until `due`; a stop or a new line wakes it to look again. */
+  private async until(due: number) {
+    const left = due - this.now()
+    if (left <= 0) return
+    await new Promise<void>((resolve) => { const timer = setTimeout(resolve, left); this.wake = () => { clearTimeout(timer); resolve() } })
+    this.wake = null
   }
 }

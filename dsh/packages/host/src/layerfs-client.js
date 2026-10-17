@@ -15,7 +15,7 @@ export function deploymentEnv(spec, project) {
   return {
     HOME: spec.home,
     DOCKER: spec.docker,
-    IMAGE: spec.image ?? "",
+    IMAGE: project.image ?? spec.image ?? "",
     DAEMON: spec.daemon ?? "",
     VOLUME: project.volume,
   };

@@ -148,7 +148,13 @@ export class ReplayEngine {
       }
       case "branch.merge": {
         const left = s.branches[a.branch], right = s.branches[a.with];
-        const known = s.commits[this.m.node(line.head)];
+        const label = this.m.node(line.head), known = label ? s.commits[label] : null;
+        // A merge that needs no Commit (head null) leaves a fresh Branch on the merged Layer.
+        if (!line.head) {
+          const onto = a.with === "main" || a.branch === "main" ? (s.main && s.main.head) : (right ? right.base : null);
+          this.branch(line.branch, { base: onto || (left ? left.base : null), head: null, from: "fork:" + a.branch });
+          return ok("Merged", { kind: "Merged", branch: line.branch, head: null, fastForward: false });
+        }
         this.branch(line.branch, { base: left ? left.base : null, from: left ? left.head || "fork:" + a.branch : null });
         const head = known ? known.id : this.addCommit(line.head, line.branch, { parent: left ? left.head : null, mergedFrom: right ? right.head : null, message: a.message || `merge ${a.branch} ${a.with}`, via: "merge" });
         s.branches[line.branch].head = head;

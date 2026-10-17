@@ -114,6 +114,21 @@ if (mode === "sim") {
   for (const [node, by] of Object.entries(w.attrib)) assert.equal(by, "main", node);
   assert.ok(Object.keys(w.attrib).length >= expected.minNodes);
   assert.ok(w.hist.every((h) => h.group === expected.step) && w.hist.length > 0);
+  // A merge that needs no Commit (head null) makes a fresh Branch on main's Layer, and a
+  // later merge with an unknown Commit is a new Commit, not a fast-forward to it (#347 row 51)
+  const R = new X.ReplayEngine({ project: "p" }), L0 = "a".repeat(64), C1 = "12" + "b".repeat(64);
+  const end = (method, args, rest) => R.apply({ method, args, ok: true, phase: "end", ...rest });
+  end("project.init", {}, {});
+  end("branch.fork", { name: "a", from: "main" }, { branch: "a", base: L0, head: null });
+  end("branch.merge", { branch: "a", with: "main", name: "b" }, { branch: "b", head: null });
+  end("branch.merge", { branch: "b", with: "main", name: "c" }, { branch: "c", head: C1, commit: C1 });
+  end("branch.fork", { name: "d", from: "c" }, { branch: "d", base: L0, head: C1 });
+  assert.ok(!("null" in R.s.commits), "no Commit without an id");
+  assert.equal(R.s.branches.b.head, null);
+  assert.equal(R.s.branches.b.base, R.s.main.head);
+  assert.equal(R.m.real(R.s.branches.c.head), C1);
+  assert.equal(R.s.commits[R.s.branches.c.head].via, "merge");
+  assert.equal(R.s.branches.d.from, R.s.branches.c.head);
   console.log(`PASS dsh view trace: ${lines.length} lines, ${s.branchOrder.length} Branches, ${s.sandboxOrder.length} Sandboxes, ${Object.keys(w.attrib).length} attributed nodes`);
 } else if (mode === "live") {
   const key = process.argv[3], port = process.argv[4] || "8327";

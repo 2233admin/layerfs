@@ -3,7 +3,7 @@
   "version": 2,
   "title": "5 agents",
   "order": 5,
-  "speed": 2,
+  "speed": 1,
   "blurb": "A lead and five subagents on two Branches: every Bash call mounts a Workspace of its own in the Branch's shared Sandbox, commits and unmounts. Stale Workspaces merge on commit, .lww settles build output, two agents change the same line, a risky try goes to a fork, and the lead merges, publishes and blames.",
   "fixture": "../../demo-workspace",
   "lib": "../shared/terminal.mjs",

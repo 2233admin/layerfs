@@ -6,9 +6,14 @@
 //
 // scenario.json:
 //   { type: "layerfs-mock-scenario", version: 2, title, blurb?, fixture?,
-//     order?, speed?, lib?, agents: { root: Step[], <child>: Step[], … } }
+//     order?, speed?, live?, image?, seed?, lib?, agents: { root: Step[], <child>: Step[], … } }
 // `order` places the demo in lists (lower first; unordered ones last, by name);
-// `speed` is the LayerFS tab's playback speed the demo starts at (1, 2 or 4).
+// `speed` is how fast the mock plays the demo at first (1, 2 or 4): it divides
+// the pauses and typing; the client changes it while a run plays (pace.js).
+// A replayed run (issue #347) sets `live: true` (it runs on real LayerFS only,
+// never the simulator), the runtime `image` digest its Sandboxes run, and
+// `seed`, a seed.json under the scenario folder holding the folder its
+// project is Inited from instead of the demo workspace (seed.js).
 // A step is one of:
 //   { <tool>: args, say?, phase?, note?, expect?, retry?, as? }   one tool call
 //   { reply: "…", until?: [child, …], phase?, note? }   the agent's text; ends its turn
@@ -36,6 +41,7 @@ const NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const REF = /^@([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)$/;
 const CALL = /^[A-Za-z_$][\w$]*$/;
 const SPEEDS = [1, 2, 4];
+const IMAGE = /^sha256:[0-9a-f]{64}$/;
 
 /** The preset's tools: argument names, and which arguments are agent or job ids. */
 export const TOOLS = {
@@ -84,13 +90,20 @@ export function loadScenario(folder) {
 export function compileScenario(raw, { name, folder, where = name }) {
   const fail = (path, message) => { throw new ScenarioError(`${where} ${path}`, message); };
   if (!isObject(raw)) fail("", "must be an object");
-  only(raw, ["type", "version", "title", "blurb", "fixture", "order", "speed", "lib", "agents"], "", fail);
+  only(raw, ["type", "version", "title", "blurb", "fixture", "order", "speed", "live", "image", "seed", "lib", "agents"], "", fail);
   if (raw.type !== TYPE) fail("type", `must be "${TYPE}"`);
   if (raw.version !== 2) fail("version", "must be 2");
   if (typeof raw.title !== "string" || !raw.title) fail("title", "must be a non-empty string");
   if (raw.blurb !== undefined && typeof raw.blurb !== "string") fail("blurb", "must be a string");
   if (raw.order !== undefined && !Number.isInteger(raw.order)) fail("order", "must be an integer");
   if (raw.speed !== undefined && !SPEEDS.includes(raw.speed)) fail("speed", `is one of ${SPEEDS.join(", ")}`);
+  if (raw.live !== undefined && typeof raw.live !== "boolean") fail("live", "must be true or false");
+  if (raw.image !== undefined && !(typeof raw.image === "string" && IMAGE.test(raw.image))) fail("image", "must be an image digest sha256:<64 hex>");
+  let seed = null;
+  if (raw.seed !== undefined) {
+    seed = resolve(folder, String(raw.seed));
+    if (relative(folder, seed).startsWith("..") || !existsSync(seed) || !statSync(seed).isFile()) fail("seed", `${raw.seed} is not a file in the scenario folder`);
+  }
   let lib = null;
   if (raw.lib !== undefined) {
     lib = resolve(folder, String(raw.lib));
@@ -117,7 +130,7 @@ export function compileScenario(raw, { name, folder, where = name }) {
   for (const agent of Object.keys(agents)) {
     if (agent !== "root" && !parents.has(agent)) fail(`agents.${agent}`, "no subagent step starts this agent");
   }
-  return { name, title: raw.title, blurb: raw.blurb ?? "", fixture, order: raw.order ?? null, speed: raw.speed ?? 1, agents, prompts, parents };
+  return { name, title: raw.title, blurb: raw.blurb ?? "", fixture, order: raw.order ?? null, speed: raw.speed ?? 1, live: raw.live === true, image: raw.image ?? null, seed, agents, prompts, parents };
 }
 
 function compileSteps(steps, path, context) {

@@ -2,7 +2,8 @@
 // Connection's Host/Origin checks and browser authentication, like /api.
 //   GET  /layerfs/status                      configuration and SDK location
 //   GET  /layerfs/workspace?folder=<abs>      the folder's projects
-//   POST /layerfs/init {folder, source?, name?, backend?}   start Init LayerFS (backend "sim": the simulator); answers its job (see jobs.js)
+//   POST /layerfs/init {folder, source?, name?, backend?, image?}   start Init LayerFS (backend "sim": the simulator;
+//                                          image: the project's own runtime image); answers its job (see jobs.js)
 //   GET  /layerfs/init/<job>                  the Init's step and counts
 //   GET  /layerfs/session/<id>                the root session's project, agents and trace lines
 //   POST /layerfs/session/<id>/project {project}  choose the project (null: none) until locked; answers as GET
@@ -64,7 +65,7 @@ export function registerRoutes(ctx, { spec, bindings, collector, trees, jobs = n
     const url = new URL(String(req.url), "http://localhost"), parts = url.pathname.slice(PREFIX.length).split("/").filter(Boolean);
     try {
       if (req.method === "GET" && parts[0] === "status" && parts.length === 1)
-        return send(res, 200, { configured: missingDeployment(spec).length === 0, missing: missingDeployment(spec), sdk: spec.sdk, traceDir: spec.traceDir, home: spec.home });
+        return send(res, 200, { configured: missingDeployment(spec).length === 0, missing: missingDeployment(spec), sdk: spec.sdk, traceDir: spec.traceDir, home: spec.home, docker: spec.docker, image: spec.image, daemon: spec.daemon });
       if (req.method === "GET" && parts[0] === "workspace" && parts.length === 1) {
         const folder = url.searchParams.get("folder");
         if (!folder) return send(res, 400, { code: "invalid-folder", message: "folder is required" });
@@ -72,7 +73,7 @@ export function registerRoutes(ctx, { spec, bindings, collector, trees, jobs = n
       }
       if (req.method === "POST" && parts[0] === "init" && parts.length === 1) {
         const body = await readJson(req);
-        const prepared = prepareInit(spec, bindings, { folder: body.folder, source: body.source || body.folder, name: body.name || undefined, backend: body.backend || undefined }, jobs.pending());
+        const prepared = prepareInit(spec, bindings, { folder: body.folder, source: body.source || body.folder, name: body.name || undefined, backend: body.backend || undefined, image: body.image || undefined }, jobs.pending());
         return send(res, 202, { job: jobs.begin(prepared) });
       }
       if (req.method === "GET" && parts[0] === "init" && parts.length === 2) {

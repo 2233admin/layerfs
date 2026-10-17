@@ -3,9 +3,10 @@
 // (backend "sim") is imported into the simulator (sim/) instead: no Docker,
 // no deployment settings.
 import { execFile } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { lstat, opendir } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { setTimeout as pause } from "node:timers/promises";
 import { promisify } from "node:util";
 import { missingDeployment } from "./config.js";
@@ -14,6 +15,9 @@ import { clientFor, isSim, release } from "./layerfs-client.js";
 const run = promisify(execFile);
 const NAME = /^[a-z0-9](?:[a-z0-9_.-]{0,61}[a-z0-9])?$/;
 const WATCH_MS = 250;
+const IMAGE = /^sha256:[0-9a-f]{64}$/;
+/** The demo scenarios (the mock plugin's default folder), for their `live` flag. */
+const SCENARIOS = fileURLToPath(new URL("../../../scenarios/", import.meta.url));
 
 const refuse = (code, message) => Object.assign(new Error(message), { code });
 
@@ -52,15 +56,26 @@ export async function scanSource(source, report = () => {}) {
   return counts;
 }
 
+/** Whether `name` is the simulator project of a demo that runs on Live LayerFS only (`live` in its scenario). */
+export function liveOnlyDemo(name, scenarios = SCENARIOS) {
+  const id = /^demo-(.+)-sim$/.exec(name ?? "")?.[1];
+  if (!id) return false;
+  try { return JSON.parse(readFileSync(join(scenarios, id, "scenario.json"), "utf8")).live === true; } catch { return false; }
+}
+
 /**
  * Checks an Init request and names its project, without changing anything.
+ * `image` gives the project's Sandboxes their own runtime image (a replayed
+ * demo's), instead of the Host's.
  * @param {object} spec resolved Host settings
  * @param {import("./binding.js").BindingStore} bindings
- * @param {{ folder: string, source?: string, name?: string, backend?: "sim" }} request
+ * @param {{ folder: string, source?: string, name?: string, backend?: "sim", image?: string }} request
  * @param {Set<string>} [pending] names of Inits still running
  */
-export function prepareInit(spec, bindings, { folder, source = folder, name, backend }, pending = new Set()) {
+export function prepareInit(spec, bindings, { folder, source = folder, name, backend, image }, pending = new Set()) {
   if (backend !== undefined && backend !== "sim") throw refuse("invalid-backend", "backend is \"sim\" or omitted");
+  if (image !== undefined && (backend === "sim" || !IMAGE.test(image))) throw refuse("invalid-image", "image is a runtime image digest sha256:<64 hex>, for a Live project");
+  if (backend === "sim" && liveOnlyDemo(name)) throw refuse("live-only", `${name} is a demo that runs on Live LayerFS only`);
   const missing = backend === "sim" ? [] : missingDeployment(spec);
   if (missing.length) throw refuse("not-configured", `LayerFS is not configured: set ${missing.join(" and ")} for layerfs-host in the profile patch`);
   for (const path of [folder, source]) {
@@ -71,6 +86,7 @@ export function prepareInit(spec, bindings, { folder, source = folder, name, bac
   const project = { name: name ?? freeName(nameFrom(source), taken, spec.home), source, volume: "", created: Date.now() };
   if (taken.has(project.name) || existsSync(join(spec.home, project.name))) throw refuse("name-taken", `a LayerFS project named ${project.name} exists`);
   project.volume = `dsh-layerfs-${project.name}-${project.created.toString(36)}`;
+  if (image) project.image = image;
   if (backend === "sim") Object.assign(project, { backend, volume: `sim-${project.name}` });
   return { folder, project };
 }

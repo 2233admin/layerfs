@@ -11,6 +11,7 @@ import { LlmAdapter } from "@deepseek-ai/dsh-llm";
 import z from "@deepseek-ai/schemastery";
 import { createAdapter, PROVIDER } from "./adapter.js";
 import { registerDemoRoutes } from "./demo.js";
+import { Pace } from "./pace.js";
 import { Progress } from "./progress.js";
 import { loadScenarios } from "./scenario.js";
 
@@ -19,6 +20,7 @@ export const inject = ["llm"];
 export const Config = z.object({
   scenarios: z.string().description("Folder of scenario folders (default: the scenarios folder of this checkout)"),
   typingMs: z.natural().max(1000).default(18).description("Pause between streamed words, in milliseconds"),
+  fast: z.boolean().description("Development runs: no typing and no scenario pauses (default: LAYERFS_DEMO_FAST=1 in the environment)"),
   workspace: z.string().description("Demo workspace folder, each Init's source (default: the demo-workspace folder of this checkout)"),
   stateDir: z.string().description("Each demo's Session (default: <profile>/dsh-layerfs-demo)"),
   preset: z.string().default("layerfs-dsh-minimalist").description("Agent preset of the demo Sessions"),
@@ -31,11 +33,13 @@ export function apply(ctx, config) {
   // an invalid scenario stops the plugin with the step at fault named
   const scenarios = loadScenarios(dir);
   const progress = new Progress(scenarios);
-  const adapter = createAdapter(LlmAdapter, scenarios, { typingMs: config.typingMs, progress, intro: config.intro });
+  const pace = new Pace(scenarios);
+  const fast = config.fast ?? process.env.LAYERFS_DEMO_FAST === "1";
+  const adapter = createAdapter(LlmAdapter, scenarios, { typingMs: config.typingMs, fast, progress, intro: config.intro, pace });
   ctx.effect(() => ctx.llm.registerAdapter([PROVIDER], adapter), "layerfs-mock: model");
   const profile = ctx.get("profileContext");
   const demo = {
-    scenarios, progress, provider: PROVIDER, preset: config.preset, prompt: config.prompt, intro: config.intro,
+    scenarios, progress, pace, provider: PROVIDER, preset: config.preset, prompt: config.prompt, intro: config.intro,
     workspace: config.workspace || fileURLToPath(new URL("../../../demo-workspace", import.meta.url)),
     stateDir: config.stateDir || join(profile ? profile.dir : join(homedir(), ".dsh"), "dsh-layerfs-demo"),
   };

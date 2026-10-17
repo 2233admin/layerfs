@@ -63,11 +63,12 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
 
   An unbound session shows Setup: pick one of the folder's projects, or Init.
 
-  **Playback.** The tab plays calls one at a time, for real agents and demos alike. A bash call that mounts, runs, commits and unmounts a Workspace takes well under a second, so drawing only the latest state would never show its window. Instead:
-  - each new call stays on screen for a minimum time by kind ([`playback.ts`](packages/client/src/client/playback.ts)): a mount, a command or a background start 1.8 s, a Commit 1.6 s, a merge or publish 2 s, other writes 1.3 s, reads 0.9 s, and 1.5 s more for a refusal such as Conflict or Busy;
-  - calls that arrive meanwhile wait their turn, and the tab shows how many are left to play. A queue over 30 calls plays faster, so the tab stays about that far behind at most. No call is skipped;
-  - when the tab opens, calls that ended over 2 minutes ago appear at once and the rest play. A run that just started, such as a demo's Play, plays from its first call;
-  - the speed button beside Follow cycles 1×, 2×, 4× and Max (no hold: each call shows as it lands). The choice is kept in the browser. A demo's session starts at the demo's own `speed` (5 agents at 2×, as in the design preview) and keeps its own choice.
+  **Playback.** The tab plays calls in step with the run, for real agents and demos alike ([`playback.ts`](packages/client/src/client/playback.ts)):
+  - each call shows 2 s after it ended, so the gaps on screen are the run's own gaps and the tab never falls behind. The 2 s are longer than the Host poll (1.5 s), so a call is usually here before its time;
+  - calls whose time has passed (the tab opened, a rebuild when an agent is named, a late poll) appear at once, drawn once. Nothing plays twice;
+  - a bash call that mounts, runs, commits and unmounts a Workspace within a second shows each step at its time, and the Workspace's pane then fades out over 1.2 s ("unmounted"), a trail kept by the view only ([`view.js`](packages/view/src/view.js)).
+
+  **Demo speed.** A demo's strip, above the composer, has a speed control beside Sim and Live: 1×, 2×, 4× and Max. It sets how fast the mock runs the demo, not how fast the tab animates it: the speed divides the scenario's pauses and the typing between streamed words, and Max leaves them out ([`pace.js`](packages/mock/src/pace.js), `POST /layerfs-demo/<id>/speed`). A pause under way follows a change at once. Commands, LayerFS calls and waits on other agents take their own time at any speed. A demo starts at its scenario's `speed`, 1× for every demo. Where a scenario's pauses order two agents' commits (5 agents: ben's `--lint` lands before cy's `--profile`, which then conflicts), a faster speed narrows that margin while the commands keep their time, so a planned Conflict may not happen; check-demo then fails it. It applies to a run under way too; the LayerFS tab has no speed control.
 
   **Terminals and their command lines.** Every SDK call an agent makes prints one command line in one terminal. The single table for both is [`packages/model/src/cli.js`](packages/model/src/cli.js); `node packages/model/tests/cli.mjs` fails when an SDK or operator method has no row there.
 
@@ -118,13 +119,24 @@ The `dsh-layerfs-demo` bundle adds the LayerFS mock model: an LLM provider that 
 | `merge` | root | the design preview's Commit & merge, 21 steps: a clean stale commit, a commit Conflict, merge into a new Branch, a merge Conflict, publish |
 | `sandbox` | root | one Sandbox with two Workspaces, a background build job, and the MountsActive, Busy and Dirty refusals |
 | `agents` | root and five | the design preview's 5 agents, 52 steps (62 bash calls): a Workspace per call in each Branch's shared Sandbox, stale merges, `.lww`, a same-line Conflict fixed in the kept Workspace, a dev server and curl, a try on a fork, merge, publish and blame |
+| `shop` | root | Live only. #334's Builder 2 replayed, 19 steps: a small web shop built over six milestones, 12 recorded commands (npm, esbuild, node tests, a server smoke) run again |
+| `depot` | root | Live only. #337's Builder 2 replayed, 103 steps: a Rust inventory service and its browser client, 82 recorded commands (cargo fetch and builds from crates.io, cargo and Python tests, Chromium) run again in Workspaces that stay mounted across steps |
+| `crew` | root + 5 | Live only. #340's Builder 2 r3 replayed, 1,550 steps: a lead and 17 agents playing as 6 roles build one application on Branches of their own; 304 recorded commands, of which the 147 that only verify and belong to a browser proof are disabled (their run files say `"verification": "no-browser"`) and the other 157 run; the roles run at the same time and wait for each other only where they touched the same Branch |
+
+#### Replayed runs
+
+`shop`, `depot` and `crew` (see [#347](../core/docs/issues/347/SPEC.md)) replay a recorded application run on Live LayerFS. Each scenario sets `"live": true`, so the strip offers only Live and the Host refuses a Sim Init of its project; `image` names the runtime image its Sandboxes use, and `seed.json` is the folder the original Init imported, which Play writes out once under `<profile>/dsh-layerfs-demo/seeds/` and Inits from. Each bash step is `step(<NNN>)` of [`scenarios/shared/replay.mjs`](scenarios/shared/replay.mjs), which makes the recorded SDK calls of `run/NNN.json` in order: recorded writes are applied as they were, recorded commands run again in a Workspace of the same Branch (except, where the run file says `"verification": "off"`, those that only verify: their step says so and runs nothing), and each reply must be the recorded one (a command's exit code included), or the step exits 1 and the run stops. `final.json` holds each tracked file's SHA-256 on the recorded final `main` and each Branch's recorded history, for check-demo; its `varies` names what a replay cannot reproduce byte for byte (a clock reading in a name, SQLite databases, bytecode, server logs), decided from the record.
+
+`tools/import-run.mjs` generates these folders from a run's records and a restored copy of its stopped Store (`tools/restore-store.mjs`). It keeps steps that write, run a command or change history and drops reads; pauses are `clamp(gap × k, 400, 3000)` ms with `k` set so they add up to the demo's target thinking time.
+
+dsh's bash tool reports a command that exits non-zero as an ordinary result ending in `[exit code: N]`; the mock stops the run on that marker (and on a signal or timeout marker) as it does on an error result.
 
 A scenario is `scenario.json` (format `layerfs-mock-scenario` version 2), with its `scripts/` or a shared `lib`. Each agent has a list of steps:
 - a call step: one preset tool and its arguments. A bash step names a `script` (sent as `node --input-type=module <<'JS'`), a `run` (calls of the scenario's `lib`, imported and awaited in such a script) or a `command`. `expect` lists the LayerFS outcomes its trace should show, `retry` reruns it on matching output, and `as` names a background job;
 - a reply step: the turn's closing text. `until` makes the agent wait for those subagents to report first;
 - a pause step: milliseconds before the next step.
 
-`@name` in an argument is a subagent or job started earlier. A subagent's `description` is its name in the scenario. `order` places the demo in lists and `speed` sets its playback speed. Every scenario's `fixture` is `demo-workspace/`, the shared website; its install, build, test and serve are small shell scripts, not npm: test checks each page's heading and that every `@/…` import resolves, and serve answers each page's heading on localhost:3000 (with python3). The sandbox demo's scripts keep their notes between bash calls under `<temp>/dsh-layerfs/demo-notes/<project>/`, outside the workspace folder, because Init imports everything in it.
+`@name` in an argument is a subagent or job started earlier. A subagent's `description` is its name in the scenario. `order` places the demo in lists and `speed` sets how fast the mock runs it at first. Every scenario's `fixture` is `demo-workspace/`, the shared website; its install, build, test and serve are small shell scripts, not npm: test checks each page's heading and that every `@/…` import resolves, and serve answers each page's heading on localhost:3000 (with python3). The sandbox demo's scripts keep their notes between bash calls under `<temp>/dsh-layerfs/demo-notes/<project>/`, outside the workspace folder, because Init imports everything in it.
 
 The tour, conflicts, merge and agents demos are the design preview's stories ([`sdk_sim/demo.js`](../sdk_sim/demo.js)) step for step, without its captions and progress cards: each step is one bash call of [`scenarios/shared/terminal.mjs`](scenarios/shared/terminal.mjs), which makes the same SDK calls as that step's terminal line and prints what the terminal printed (`npm ci`, `npm run build`, `npm test` and `npm run start` become the shell scripts). An agent's call mounts a Workspace of its own in its Branch's shared Sandbox, runs, commits and unmounts; after a Conflict the Workspace is kept for the agent's next call, and a trailing `&` keeps it for the server. The lead wakes the agents of each step with send_message and waits for them; each agent's pause is the preview's thinking time, and the call takes its typing and running time, so a burst's calls overlap and commit in the same order as in the preview. The calls keep their notes (a terminal's Workspace, an agent's kept one, the C<n> labels) under the project's LayerFS home entry, which is removed with the project.
 
@@ -199,6 +211,8 @@ You need:
        # home / traceDir: <os temp>/dsh-layerfs/{home,traces}
    ```
 
+   Keep `home` and `traceDir` in the OS temp area: bash calls in Workspace Write mode run in dsh's sandbox, which lets them write only there, and a LayerFS call there writes both (a `sandbox.create` elsewhere fails `PermissionDenied`).
+
 4. Start dsh web (`pnpm dsh web` in the dsh checkout, with `DSH_HOME` set).
    1. Open the LayerFS panel and Init a workspace.
    2. Start a "New LayerFS session".
@@ -213,7 +227,12 @@ Only dsh web is checked; dsh desktop serves the same web client but was not test
 | `node ../sdk_sim/test_dsh_view.mjs sim` | the view model against the simulator's stories |
 | `node tools/init-project.mjs <profile dir> <folder> <image> <daemon>` | Init outside dsh |
 | `node tools/demo.mjs [<demo> <folder>]` | lists the demos, or copies the demo website into another folder |
-| `node tools/check-demo.mjs '<dsh web URL with ?token=…>' <session id> <demo>` | checks a finished demo session: every agent ran, and each bash step with `expect` left those LayerFS outcomes on the trace |
+| `node tools/check-demo.mjs '<dsh web URL with ?token=…>' <session id> <demo> [--wait <s>]` | checks a finished demo session: every agent ran, and each bash step with `expect` left those LayerFS outcomes on the trace. For a replayed run also: no Sandbox of the project is open, every Branch's history is as recorded, and `main`'s tracked files match `final.json` |
+| `node tools/run-scenario.mjs <demo> --out <dir> [--pace] [--keep]` | plays a replayed demo headlessly on Live LayerFS, without dsh web or the mock model, agents at the same time, then runs the same gates and writes `receipt.json`. Pauses are skipped unless `--pace`; order comes only from the recorded order and `until` |
+| `node tools/restore-store.mjs <id> <folder with global/> <work dir> <project>` | opens a copy of a stopped Store in a new volume and LayerFS home, for `import-run.mjs` (needs `LAYERFS_READER`, a checkout built at the Store's schema) |
+| `node tools/import-run.mjs <shop\|depot\|crew> <id> <store.json> key=value…` | generates `scenarios/<id>/` from a recorded run. `verification=on\|off\|no-browser` runs or disables the commands that only verify, or only those of a browser proof (Crew: no-browser); `cache=<dir>` (outside the repository) keeps what it read from the Store, so a re-import takes seconds |
+| `node tools/check-scenario.mjs <demo>` | a converted scenario's static checks, in seconds: run files, expects, disabled commands, and the lead's starts, turns and waits |
+| `LAYERFS_DEMO_FAST=1` (dsh web's environment) | the mock and `terminal.mjs` skip typing, thinking and terminal delays; nothing else changes |
 | `node tools/check-session.mjs '<dsh web URL with ?token=…>' <session id>` | checks that a session's tab draws what LayerFS reports: Branches, heads, `main`, Sandboxes, which agent made each Commit and Layer, and bash-call groups |
 
 The design preview `sdk_sim/dsh_design.html` imports the same model and renderer, so it and the tab draw the same thing.
