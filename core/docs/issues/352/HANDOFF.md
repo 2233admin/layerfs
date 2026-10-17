@@ -92,6 +92,9 @@ When you need one of these, stop and say so on #352.
 - **Fast loops while developing.** Run one step, one lane or one range before a
   whole phase. Use the fast-rebuild player to reach a range quickly. Measured
   runs use the measured player only, at final binary identity.
+- **Maximum speed, always** (SPEC.md §2). The headless player has no delays.
+  The `dsh-history` scenario plays at Max (`"speed": 0`), including P4's Live
+  window. Agents run concurrently. Never slow a run down to make it pass.
 - **Order comes from barriers.** It never comes from pauses or delays. A planned
   conflict that depends on timing is a bug in the plan.
 - **One sample per case.** Follow AGENTS.md §3: no best-of, no rerun of an

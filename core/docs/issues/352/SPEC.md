@@ -118,6 +118,26 @@ dsh/scenarios/dsh-history/
 - Existing checks are reused: `check-scenario.mjs` for the plan, and check-demo's
   gates (expected, closed, order, final tree) at every checkpoint.
 
+### Maximum speed, always
+
+Iteration never waits on purpose. Every second goes to LayerFS work, the commands
+and the checks.
+
+- **The headless player runs with no delays.** `run.mjs` has no pauses, typing
+  delays or playback holds. It never passes `--pace` to the `run-scenario.mjs`
+  machinery.
+- **The mock agent script runs at Max.** `dsh/scenarios/dsh-history/scenario.json`
+  sets `"speed": 0`. Every dsh run during iteration, including P4's Live window,
+  plays at Max. A slower speed is only for the owner to watch, set from the
+  strip, and is never part of a gate.
+- **Order comes from barriers only.** Agents run concurrently, as planned. A run
+  that passes only at a lower speed is a bug in the plan or in LayerFS; slowing
+  down is never a fix.
+- **Agents run in parallel.** Lanes run concurrently up to the planned agent
+  count. The lead's consolidation waits only for its own lanes.
+- **No idle time between ranges.** The runner starts range k+1 as soon as range
+  k's checkpoint, report and (when due) snapshot are written.
+
 ## 3. What each range produces
 
 At each range's completion, the runner writes three things:
