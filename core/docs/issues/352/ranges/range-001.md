@@ -67,6 +67,8 @@
 
 ## 3. Operation latency
 
+Binary: daemon `0ef24121723a` (attempt 1).
+
 | Operation | Size class | n | p50 | p95 | p99 | max | Slowest phase |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | branch.diff_commits | — | 7 | 44.27 | 61.28 | 61.28 | 68.57 | sdk.read |
@@ -90,6 +92,8 @@
 | sandbox.unmount | — | 12 | 6.74 | 7.69 | 7.69 | 9.45 | — |
 
 ## 4. Scale probes
+
+Binary: daemon `0ef24121723a` (attempt 1).
 
 | Probe | ms | Counters |
 | --- | --- | --- |
@@ -128,9 +132,16 @@
 
 Written by the runner from the last 3 ranges.
 
-## 7. Findings and action (written by the lead)
+## 7. Findings and action
 
-- (none yet)
+No optimize or stop attempt.
+
+### Lead's note (written by the lead)
+
+- Watch: directory share 0.52; probe at milestone 4.
+- Scaling and counter checks had two points at range 1; reported as pass under the gates of the time and kept as recorded (F2, F8 note).
+- Binary `0ef24121` belongs to the abandoned line `p1-pilot`; the main line `p1-pilot-b` fast-rebuilt this range in the new format and verified it against the oracle, without new measurements.
+- Process note: as for range 000, the comment preceded the push by about a minute. Annotations added 2026-10-18 for the format rule; no recorded value changed.
 
 
 ## 8. Evidence
