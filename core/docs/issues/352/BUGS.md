@@ -118,5 +118,6 @@
   rebuilds the whole checkpoint's plan (range 3: 3 pages × ~26k statements), and
   statements per entry track tree files (~0.25 × files), which grows with depth
   in this replay. Actions: the fixer carries the plan in the cursor (kind 1); the
-  builder makes the gate measure per checkpoint (all pages) and normalise the
-  counter by tree files, keeping the one-file probe as the depth control.
+  builder makes the gate measure per checkpoint (all pages) per changed entry,
+  keeping the one-file probe as the depth control. Not normalised by tree files:
+  the per-entry tree-size growth is itself a §4 violation and is fixed in F-012.
