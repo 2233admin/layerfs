@@ -46,6 +46,50 @@ pub enum Opcode {
     CopyFileRange,
 }
 pub const OPCODES: usize = Opcode::CopyFileRange as usize + 1;
+impl Opcode {
+    /// Snake-case names, indexed by `Opcode as usize`, as telemetry reports them.
+    pub const NAMES: [&'static str; OPCODES] = [
+        "lookup",
+        "forget",
+        "batch_forget",
+        "getattr",
+        "setattr",
+        "readlink",
+        "mknod",
+        "mkdir",
+        "unlink",
+        "rmdir",
+        "symlink",
+        "rename",
+        "link",
+        "open",
+        "read",
+        "write",
+        "flush",
+        "release",
+        "fsync",
+        "opendir",
+        "readdir",
+        "readdirplus",
+        "releasedir",
+        "fsyncdir",
+        "statfs",
+        "setxattr",
+        "getxattr",
+        "listxattr",
+        "removexattr",
+        "access",
+        "create",
+        "getlk",
+        "setlk",
+        "bmap",
+        "ioctl",
+        "poll",
+        "fallocate",
+        "lseek",
+        "copy_file_range",
+    ];
+}
 
 /// The single terminal disposition of one received unit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

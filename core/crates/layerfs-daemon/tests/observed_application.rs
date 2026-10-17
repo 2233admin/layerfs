@@ -474,6 +474,109 @@ fn traced_records_share_the_scope_and_untraced_replies_stay_plain() {
     drop(process);
     f.cleanup();
 }
+/// One counter of a traced reply's map at `path` (`sql` › `writer`, `fuse`, …).
+fn counter(telemetry: &layerfs_bridge::control::SdkValue, path: &[&str], name: &str) -> i64 {
+    path.iter()
+        .try_fold(telemetry, |value, step| value.get(step))
+        .and_then(|group| group.get_int(name))
+        .unwrap_or_else(|| panic!("{path:?}.{name} in {telemetry:?}"))
+}
+/// The size of a traced reply's map at `path`.
+fn width(telemetry: &layerfs_bridge::control::SdkValue, path: &[&str]) -> usize {
+    use layerfs_bridge::control::SdkValue;
+    match path
+        .iter()
+        .try_fold(telemetry, |value, step| value.get(step))
+    {
+        Some(SdkValue::Map(fields)) => fields.len(),
+        other => panic!("{path:?} is not a map: {other:?}"),
+    }
+}
+/// #352: a traced call carries its Store SQL work (the sessions' totals after
+/// it minus before it), and a traced status or unmount of an attached
+/// Workspace carries its kernel opcode counts since attach.
+#[test]
+fn traced_calls_carry_sql_work_and_status_unmount_carry_opcodes() {
+    let f = support::Fixture::new("observed-traced-work", None);
+    let log = f.directory.join("stderr.log");
+    let (process, _address, mut control) = start(&f, File::create(&log).unwrap());
+    layerfs_api::internal::trace(&mut control, Some([6; 32]));
+    let bound = layerfs_api::internal::workspace(&mut control)
+        .bind(
+            WorkspaceId::from_authority([79; 32]).unwrap(),
+            f.project.branch.branch.id,
+        )
+        .unwrap();
+    let telemetry = layerfs_api::internal::take_telemetry(&mut control);
+    assert_eq!(telemetry.len(), 1);
+    let bind = &telemetry[0];
+    assert_eq!(width(bind, &["sql", "writer"]), 27);
+    assert_eq!(width(bind, &["sql", "readers"]), 27);
+    // Bind opens the Workspace's reader: its opening statements are this call's.
+    assert!(counter(bind, &["sql", "readers"], "statements") > 0);
+    assert!(bind.get("fuse").is_none(), "bind carries no opcode counts");
+    let ready = layerfs_api::internal::workspace(&mut control)
+        .attach(bound.token)
+        .unwrap();
+    let guard = MountGuard(ready.directory.clone());
+    let attach = layerfs_api::internal::take_telemetry(&mut control);
+    assert!(attach.iter().all(|value| value.get("fuse").is_none()));
+    let file = Path::new(&ready.directory).join("traced.txt");
+    fs::write(&file, b"traced").unwrap();
+    assert_eq!(fs::read(&file).unwrap(), b"traced");
+    // Unmount is admitted on a quiet connection: observe untraced, bounded.
+    layerfs_api::internal::trace(&mut control, None);
+    let deadline = std::time::Instant::now() + Duration::from_secs(8);
+    let mut last = None;
+    loop {
+        let work = layerfs_api::internal::workspace(&mut control)
+            .status(bound.token)
+            .unwrap()
+            .kernel
+            .unwrap()
+            .work
+            .unwrap();
+        let now = (work.active, work.completed);
+        if work.active == 0 && last == Some(now) {
+            break;
+        }
+        last = Some(now);
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the connection did not become quiet: {work:?}"
+        );
+        thread::sleep(Duration::from_millis(2));
+    }
+    layerfs_api::internal::trace(&mut control, Some([6; 32]));
+    layerfs_api::internal::workspace(&mut control)
+        .status(bound.token)
+        .unwrap();
+    let status = layerfs_api::internal::take_telemetry(&mut control);
+    assert_eq!(status.len(), 1);
+    let status = &status[0];
+    assert_eq!(width(status, &["fuse"]), 39 + 8);
+    for name in ["lookup", "create", "write", "release", "served"] {
+        assert!(counter(status, &["fuse"], name) > 0, "{name}");
+    }
+    layerfs_api::internal::workspace(&mut control)
+        .unmount(bound.token, false)
+        .unwrap();
+    let unmount = layerfs_api::internal::take_telemetry(&mut control);
+    assert_eq!(unmount.len(), 1);
+    // Counts are since attach: the final ones are at least the status ones.
+    for name in ["lookup", "write", "served"] {
+        assert!(counter(&unmount[0], &["fuse"], name) >= counter(status, &["fuse"], name));
+    }
+    assert!(width(&unmount[0], &["sql"]) > 0);
+    drop(guard);
+    layerfs_api::internal::trace(&mut control, None);
+    assert_eq!(
+        control.call(Request::EndSession).unwrap(),
+        Reply::SessionEnded
+    );
+    drop(process);
+    f.cleanup();
+}
 #[test]
 fn resource_and_output_failure_preserve_original_status_reply() {
     let f = support::Fixture::new("observed-resource-and-sink", None);

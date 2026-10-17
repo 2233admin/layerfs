@@ -23,9 +23,12 @@ const answer = (op, args) => {
   return { value: { items: [], hasMore: false } };
 };
 // A traced call (args.observe) gets daemon telemetry like the real binding:
-// flat timing nodes [name, parent, us, outcome, incomplete].
+// flat timing nodes [name, parent, us, outcome, incomplete], per-call SQL work,
+// and the Workspace's FUSE opcode counts on status and unmount.
 const telemetry = (op) => [{
   timing: { nodes: [["commit", -1, 2500, "ok", false], ["capture", 0, 400, "ok", false], ["construct", 0, 1500, "ok", false], ["captured.namespace", 2, 1400, "ok", false]], omitted: 0 },
+  sql: { writer: { statements: 3, fullscan_steps: 0 }, readers: { statements: 2, vm_steps: 40 } },
+  ...(op === "sandbox.status" || op === "sandbox.unmount" ? { fuse: { lookup: 5, getattr: 7, served: 12 } } : {}),
   ...(op === "sandbox.commit" ? { storage: { pack_write_bytes: 4096 }, construction: { files_constructed: 1 } } : {}),
 }];
 exports.calls = [];

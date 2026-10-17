@@ -574,18 +574,21 @@ The fixer follows these steps when a range ends as optimize or stop.
 - in the SDK call trace: phase timing trees, 42 storage counters and 31
   construction counters per exchange.
 
-**Wiring check (P0, done): neither reaches the per-call trace yet.** The trace
-reply (`layerfs-daemon/src/telemetry.rs`, `value`) carries:
+**Wiring (P0 found it missing; P1 wired it).** The trace reply
+(`layerfs-daemon/src/telemetry.rs`, `value`) carries:
 - phase timing, on every call;
+- `sql`, on every call: `writer` and `readers` (all reader sessions, live and
+  closed, summed), each the 27 scalar `SqlWork` counters as the session group's
+  totals after the exchange minus before it. Concurrent exchanges' work on the
+  same sessions is included, so read it from a call that ran alone;
+- `fuse`, on `status` and `unmount` of an attached Workspace (Linux): its 39
+  opcode counts since attach, the frame dispositions (`served`, `inline`,
+  `refused`, `terminal`), forget and store units and the largest READ and WRITE.
+  An exec's own opcodes are the difference between the status before it (the
+  SDK's exec makes one) and the next status;
 - storage and construction counters, only on calls that commit.
 
-`SqlWork` goes only to the daemon's own diagnostic records. FUSE opcode counts
-stay inside the mount. The builder's first P1 task is to add both to the reply:
-- per call, `SqlWork` as the difference between the session's totals before and
-  after the call;
-- per Workspace, the opcode counts at `status` and `unmount`.
-
-The SDK trace passes them through, and P1's baselines need them.
+The SDK trace passes them through unchanged (`sdk/js/README.md`, Call trace).
 
 **Counters before time.** Counters are deterministic, so they show growth without
 noise. Diagnose from counters first, and confirm with time.

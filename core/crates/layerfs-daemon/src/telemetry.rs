@@ -10,6 +10,7 @@
 //! operation to get the same Commit and read phase reports.
 use crate::control::{Failure, Success};
 use layerfs_bridge::control::SdkValue;
+use layerfs_persistence::SqlWork;
 use layerfs_telemetry::timer::{
     Active, NodeOutcome, Timing, TimingNode, TimingReport, TimingScope,
 };
@@ -96,15 +97,20 @@ pub fn phase<T, E>(
     })
 }
 
-/// The telemetry of one traced request: its timing, the Commit's storage
+/// The telemetry of one traced request: its timing, its Store SQL work, the
+/// Workspace's kernel opcode counts when given, the Commit's storage
 /// diagnostics and construction receipt when it committed, and the failed
 /// diagnostic write, if any.
 pub(crate) fn value(
     reports: Vec<TimingReport>,
     outcome: &Result<Success, Failure>,
     diagnostic: Option<&std::io::Error>,
+    sql: Option<SdkValue>,
+    fuse: Option<SdkValue>,
 ) -> SdkValue {
     let mut fields = vec![("timing".to_owned(), timing(&reports))];
+    fields.extend(sql.map(|sql| ("sql".to_owned(), sql)));
+    fields.extend(fuse.map(|fuse| ("fuse".to_owned(), fuse)));
     let (namespace, storage) = crate::application::commit_parts(outcome);
     if let Some(storage) = storage {
         fields.push((
@@ -128,6 +134,92 @@ pub(crate) fn value(
         fields.push(("diagnosticError".to_owned(), error_value(error)));
     }
     SdkValue::Map(fields)
+}
+
+/// Store SQL sessions' totals: the writer's, and all readers' summed.
+pub(crate) type SqlTotals = (Option<SqlWork>, Option<SqlWork>);
+
+/// The call's SQL work: each session group's totals after the call minus
+/// before it. Concurrent calls on the same sessions are included. A group
+/// whose counters were unavailable at either end is left out; None when both are.
+pub(crate) fn sql(before: SqlTotals, after: SqlTotals) -> Option<SdkValue> {
+    let difference = |before: Option<SqlWork>, after: Option<SqlWork>| {
+        let (before, after) = (sql_values(&before?), sql_values(&after?));
+        let delta: Vec<u64> = after
+            .iter()
+            .zip(before)
+            .map(|(after, before)| after.saturating_sub(before))
+            .collect();
+        Some(named(&SQL_FIELDS, &delta))
+    };
+    let fields: Vec<_> = [
+        ("writer", difference(before.0, after.0)),
+        ("readers", difference(before.1, after.1)),
+    ]
+    .into_iter()
+    .filter_map(|(name, value)| Some((name.to_owned(), value?)))
+    .collect();
+    (!fields.is_empty()).then_some(SdkValue::Map(fields))
+}
+
+/// The scalar `SqlWork` counters, in `SQL_FIELDS` order (observation
+/// sections 13 and 14 begin with them).
+pub(crate) fn sql_values(w: &SqlWork) -> [u64; 27] {
+    [
+        w.statements,
+        w.vm_steps,
+        w.fullscan_steps,
+        w.sorts,
+        w.autoindex_rows,
+        w.reprepares,
+        w.returned_rows,
+        w.bound_bytes,
+        w.statement_ns,
+        w.commit_ns,
+        w.transactions,
+        w.write_transactions,
+        w.write_commits,
+        w.commits,
+        w.read_snapshots,
+        w.rollbacks,
+        w.transaction_ns,
+        w.read_snapshot_ns,
+        w.sealed_inserts,
+        w.sealed_body_bytes,
+        w.blob_open_calls,
+        w.blob_reopen_calls,
+        w.blob_read_calls,
+        w.blob_requested_bytes,
+        w.blob_read_bytes,
+        w.blob_read_ns,
+        w.blob_close_calls,
+    ]
+}
+
+/// The Workspace's kernel opcode counts, frame dispositions and largest
+/// request sizes since attach.
+#[cfg(target_os = "linux")]
+pub(crate) fn fuse(w: &layerfs_fuse::request::OpcodeWork) -> SdkValue {
+    use layerfs_fuse::request::Opcode;
+    let extra = [
+        ("served", w.served),
+        ("inline", w.inline),
+        ("refused", w.refused),
+        ("terminal", w.terminal),
+        ("forget_units", w.forget_units),
+        ("store_units", w.store_units),
+        ("largest_read", w.largest_read),
+        ("largest_write", w.largest_write),
+    ];
+    SdkValue::Map(
+        Opcode::NAMES
+            .iter()
+            .copied()
+            .zip(w.opcodes)
+            .chain(extra)
+            .map(|(name, value)| (name.to_owned(), SdkValue::Int(value as i64)))
+            .collect(),
+    )
 }
 
 /// Telemetry that did not fit the reply frame beside the reply.
@@ -230,6 +322,37 @@ fn flatten(
         flatten(child, index, depth + 1, whole, budget, nodes);
     }
 }
+
+/// The scalar Store SQL work counters, `SqlWork` names.
+pub(crate) const SQL_FIELDS: [&str; 27] = [
+    "statements",
+    "vm_steps",
+    "fullscan_steps",
+    "sorts",
+    "autoindex_rows",
+    "reprepares",
+    "returned_rows",
+    "bound_bytes",
+    "statement_ns",
+    "commit_ns",
+    "transactions",
+    "write_transactions",
+    "write_commits",
+    "commits",
+    "read_snapshots",
+    "rollbacks",
+    "transaction_ns",
+    "read_snapshot_ns",
+    "sealed_inserts",
+    "sealed_body_bytes",
+    "blob_open_calls",
+    "blob_reopen_calls",
+    "blob_read_calls",
+    "blob_requested_bytes",
+    "blob_read_bytes",
+    "blob_read_ns",
+    "blob_close_calls",
+];
 
 /// The Commit storage diagnostics, in observation section 16 order.
 pub(crate) const STORAGE_FIELDS: [&str; 42] = [

@@ -122,6 +122,12 @@ try {
     assert.equal(tree.children[1].children[0].name, "captured.namespace");
     assert.equal(commit.daemon[0].storage.pack_write_bytes, 4096);
     assert.equal(commit.daemon[0].construction.files_constructed, 1);
+    // SQL work passes through on every exchange; opcode counts on status and unmount.
+    assert.deepEqual(commit.daemon[0].sql, { writer: { statements: 3, fullscan_steps: 0 }, readers: { statements: 2, vm_steps: 40 } });
+    for (const line of lines.filter((line) => line.daemon)) {
+      assert.equal("fuse" in line.daemon[0], ["sandbox.status", "sandbox.unmount"].includes(line.method), line.method);
+    }
+    assert.equal(lines.find((line) => line.method === "sandbox.status").daemon[0].fuse.getattr, 7);
     const refused = lines.find((line) => line.args.path === "/missing");
     assert.equal(refused.ok, false);
     assert.equal(refused.code, "NoSuchPath");

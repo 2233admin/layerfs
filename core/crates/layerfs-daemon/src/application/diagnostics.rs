@@ -180,9 +180,28 @@ impl Application {
         // later counter acquisition and diagnostic sink outcome.
         // A traced request records this thread's timing roots; the guard
         // ends recording on every exit, unwinding included.
+        // A traced call's SQL work is the Store sessions' totals after it
+        // minus before it.
+        let sessions = traced
+            .then(|| self.observed_store(crate::bootstrap::OpenedStore::sql_sessions))
+            .flatten();
+        let before = sessions.as_ref().map(crate::bootstrap::SqlSessions::totals);
         let recording = traced.then(crate::telemetry::Recording::start);
         let outcome = self.control_operation(operation, slot);
         let reports = recording.map(crate::telemetry::Recording::finish);
+        let sql = sessions
+            .as_ref()
+            .zip(before)
+            .and_then(|(sessions, before)| crate::telemetry::sql(before, sessions.totals()));
+        // A traced status or unmount carries the Workspace's kernel opcode
+        // counts since attach.
+        #[cfg(target_os = "linux")]
+        let fuse = observer
+            .as_ref()
+            .filter(|_| *traced && matches!(operation, Request::Status(_) | Request::Unmount(_)))
+            .map(|observer| crate::telemetry::fuse(&observer.facts().opcodes));
+        #[cfg(not(target_os = "linux"))]
+        let fuse = None;
         // One explicitly charged read-only observer call. It transfers its typed
         // value before the snapshot. This observation never replaces the
         // original outcome.
@@ -287,7 +306,8 @@ impl Application {
             // The SDK trace route reports a failed diagnostic write beside
             // the reply and keeps its connection.
             Some(reports) => {
-                let telemetry = crate::telemetry::value(reports, &outcome, diagnostic.as_ref());
+                let telemetry =
+                    crate::telemetry::value(reports, &outcome, diagnostic.as_ref(), sql, fuse);
                 (outcome, None, Some(telemetry))
             }
             None => (outcome, diagnostic, None),
@@ -306,6 +326,14 @@ impl Application {
             .map_or_else(Vec::new, |opened| opened.reader_indices())
     }
     fn observed_sql(&self, reader: Option<usize>) -> Option<layerfs_persistence::SqlWork> {
+        self.observed_store(|opened| opened.session_diagnostics(reader).ok().flatten())
+            .flatten()
+    }
+    /// `read` over the installed, existing or failed-install opened Store.
+    fn observed_store<T>(
+        &self,
+        read: impl FnOnce(&crate::bootstrap::OpenedStore) -> T,
+    ) -> Option<T> {
         let state = self.state.lock().ok()?;
         let startup = &state.startup;
         let opened = startup
@@ -319,7 +347,7 @@ impl Application {
                     .as_ref()
                     .and_then(|failed| failed.opened.as_ref())
             })?;
-        opened.session_diagnostics(reader).ok().flatten()
+        Some(read(opened))
     }
 }
 fn operation_code(operation: &Request) -> u64 {

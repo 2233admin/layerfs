@@ -198,67 +198,11 @@ pub(super) fn sql<W: Write>(
     let Some(w) = work else {
         return rows.row(section, index, None);
     };
-    rows.row(
-        section,
-        index,
-        Some(&[
-            w.statements,
-            w.vm_steps,
-            w.fullscan_steps,
-            w.sorts,
-            w.autoindex_rows,
-            w.reprepares,
-            w.returned_rows,
-            w.bound_bytes,
-            w.statement_ns,
-            w.commit_ns,
-            w.transactions,
-            w.write_transactions,
-            w.write_commits,
-            w.commits,
-            w.read_snapshots,
-            w.rollbacks,
-            w.transaction_ns,
-            w.read_snapshot_ns,
-            w.sealed_inserts,
-            w.sealed_body_bytes,
-            w.blob_open_calls,
-            w.blob_reopen_calls,
-            w.blob_read_calls,
-            w.blob_requested_bytes,
-            w.blob_read_bytes,
-            w.blob_read_ns,
-            w.blob_close_calls,
-            w.statement_phases[0].calls,
-            w.statement_phases[0].wall_ns,
-            w.statement_phases[1].calls,
-            w.statement_phases[1].wall_ns,
-            w.statement_phases[2].calls,
-            w.statement_phases[2].wall_ns,
-            w.statement_phases[3].calls,
-            w.statement_phases[3].wall_ns,
-            w.statement_phases[4].calls,
-            w.statement_phases[4].wall_ns,
-            w.statement_phases[5].calls,
-            w.statement_phases[5].wall_ns,
-            w.statement_phases[6].calls,
-            w.statement_phases[6].wall_ns,
-            w.commit_phases[0].calls,
-            w.commit_phases[0].wall_ns,
-            w.commit_phases[1].calls,
-            w.commit_phases[1].wall_ns,
-            w.commit_phases[2].calls,
-            w.commit_phases[2].wall_ns,
-            w.commit_phases[3].calls,
-            w.commit_phases[3].wall_ns,
-            w.commit_phases[4].calls,
-            w.commit_phases[4].wall_ns,
-            w.commit_phases[5].calls,
-            w.commit_phases[5].wall_ns,
-            w.commit_phases[6].calls,
-            w.commit_phases[6].wall_ns,
-        ]),
-    )?;
+    let mut values = crate::telemetry::sql_values(&w).to_vec();
+    for phase in w.statement_phases.iter().chain(&w.commit_phases) {
+        values.extend([phase.calls, phase.wall_ns]);
+    }
+    rows.row(section, index, Some(&values))?;
     Ok(())
 }
 /// The Commit construction receipt and storage diagnostics an outcome holds.

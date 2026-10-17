@@ -184,7 +184,14 @@ every exit including unwinding. Product roots call `telemetry::timed`; untraced
 it is `Timing::disabled`. Telemetry holds `timing` (pre-order nodes
 `[name, parent, microseconds, outcome, incomplete]`, at most 256, with an
 `omitted` count; root reports keep the telemetry crate's node limits),
-`storage` (the Commit's 42 Storage Diagnostics, section 16 order) and
+`sql` (#352: the request's Store SQL work, `writer` and `readers`, each the
+27 scalar `SqlWork` counters of that session group's totals after the request
+minus before it; reader totals are live plus retired readers summed under one
+registry turn; concurrent requests' work on the same sessions is included and
+an unavailable group is left out), `fuse` (#352, Linux: on a traced status or
+unmount of an attached Workspace, its 39 kernel opcode counts since attach,
+the four frame dispositions, forget and store units and the largest READ and
+WRITE sizes), `storage` (the Commit's 42 Storage Diagnostics, section 16 order) and
 `construction` (the Commit's 31 captured namespace work fields, section 15
 order) when the operation committed, and `diagnosticError` (`kind`, `message`)
 when the numeric record write failed. On the traced route that failure is

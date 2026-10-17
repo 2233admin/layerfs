@@ -17,6 +17,27 @@ pub struct OpenedStore {
     writer: Arc<StorageProvider>,
     readers: Arc<Mutex<ReaderObservations>>,
 }
+/// The Store's SQL sessions, observed without holding the daemon's state.
+pub(crate) struct SqlSessions {
+    writer: Arc<StorageProvider>,
+    readers: Arc<Mutex<ReaderObservations>>,
+}
+impl SqlSessions {
+    /// The writer's totals, and every reader's (live plus retired) summed
+    /// under one registry turn so a reader closing meanwhile counts once.
+    /// Either is None when a session's counters are unavailable.
+    pub(crate) fn totals(&self) -> (Option<SqlWork>, Option<SqlWork>) {
+        let writer = self.writer.diagnostics().ok();
+        let readers = self.readers.lock().ok().and_then(|readers| {
+            let mut total = readers.retired?;
+            for provider in readers.live.values().filter_map(Weak::upgrade) {
+                accumulate(&mut total, provider.diagnostics().ok()?);
+            }
+            Some(total)
+        });
+        (writer, readers)
+    }
+}
 pub struct StoreDiagnostics {
     pub writer: SqlWork,
     pub readers: Vec<SqlWork>,
@@ -53,6 +74,12 @@ impl OpenedStore {
             .and_then(Weak::upgrade)
             .map(|provider| provider.diagnostics().map_err(StorageError::from))
             .transpose()
+    }
+    pub(crate) fn sql_sessions(&self) -> SqlSessions {
+        SqlSessions {
+            writer: self.writer.clone(),
+            readers: self.readers.clone(),
+        }
     }
     pub fn diagnostics(&self) -> StorageResult<StoreDiagnostics> {
         Ok(StoreDiagnostics {
