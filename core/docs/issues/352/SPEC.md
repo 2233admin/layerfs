@@ -106,6 +106,33 @@ Workspace, with `CI=1` and no network.
 that passes natively and fails in LayerFS is a stop finding (a LayerFS bug). It is
 never skip-listed after the fact.
 
+### Runtime image
+
+Every replay Sandbox and the native calibration use one image, so a test sees
+the same Node and package manager in both. Built on 2026-10-18 from
+[`dsh/tools/history/runtime/Dockerfile`](../../../../dsh/tools/history/runtime/Dockerfile):
+
+| Fact | Value |
+| --- | --- |
+| Tag | `layerfs-352-runtime:node24` |
+| Image id (`LAYERFS_IMAGE`, `--image`) | `sha256:d3773b4eac6a7a644887b17e36956cd1553786d47103f0170a3bb2b0ff6988de` |
+| Base | `node:24.21.0-bookworm@sha256:3d27e5c11e5786e309ec3e03f93ae536eb36e6e5eb3714d5eb3300a36157add0` (arm64) |
+| Size | 414 MB |
+| Node, npm, corepack | 24.21.0, 11.19.0, 0.36.0 |
+| Package managers, prepared offline | yarn 4.14.1 (range 0), pnpm 11.7.0 (ranges 1–187), pnpm 11.28.5 (ranges 188–201); each project's `packageManager` picks its own |
+| Also | git 2.39.5, python 3.11.2, gcc 12, make 4.3; Debian 12, glibc 2.36 (as the daemon's build) |
+| Environment | `COREPACK_ENABLE_NETWORK=0`, `CI=1` |
+
+Why not the earlier demos' image (`layerfs-issue337-runtime:frozen`, 9 GB): it
+has Node 22.23.1, which ranges 0–9 refuse (`engines.node >=24`), and no pnpm
+or yarn, which corepack would have to download with the network off.
+
+Checked offline (`--network none`): each package manager answers its version
+inside a project naming it. Not yet checked: a LayerFS `sandbox.create` with
+this image id; the first P1 Sandbox proves it. A changed image gets a new id,
+and every run records the id it used (snapshot manifests, `tests-NNN.json`,
+the metrics' `binary.image`).
+
 ### The two nested cycles
 
 **Outer cycle (one per range, ends at a checkpoint):**

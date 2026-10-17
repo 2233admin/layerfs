@@ -164,7 +164,9 @@ reaches it (SPEC.md §6). The fixer's playbook (D0–D6) depends on them.
 1. One Init of a dsh checkout with `node_modules`; record its stored-to-raw
    ratio in `RESULTS.md` against SPEC.md §7's estimate.
 2. Regenerate the plan as v2 and its oracles; fill the pnpm store once
-   (`pnpm fetch`); run `calibrate-tests.mjs` for the pilot's ranges.
+   (`pnpm fetch`); run `calibrate-tests.mjs` for the pilot's ranges. The image
+   is `layerfs-352-runtime:node24` (SPEC.md §2, Runtime image); prove one
+   `sandbox.create` with its id first.
 3. Wire the written tools into the runner: seal, then `snapshot.mjs take` when
    `due` says so, with the manifest facts (SPEC.md §7); the range's unit tests
    with `vitestCommand` and `compareResults`; `head` and `snapshot` in the

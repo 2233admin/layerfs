@@ -2,6 +2,7 @@
 // Runs each range's candidate unit tests once natively, outside LayerFS, and
 // records which the range runs (#352 SPEC §2, Tests, steps 4–5):
 //   node dsh/tools/history/calibrate-tests.mjs --repo <dsh.git> --plan <dir> --image I
+// (I: the replay's runtime image id, SPEC §2, Runtime image)
 //     --pnpm-store <volume> [--checkout <dir>] [--from N] [--to M]
 // For each range in order it moves the one working tree to the checkpoint
 // (oracle.mjs checkout), installs node_modules from the offline pnpm store
