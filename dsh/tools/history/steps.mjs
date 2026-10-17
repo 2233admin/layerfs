@@ -238,6 +238,47 @@ export function sqlCounters(line) {
   return out;
 }
 
+const DELTA_KEYS = {
+  payload: ["prepared_full", "trials", "prefix_selected", "full_losses", "no_candidate", "absent_candidates", "ineligible_candidates", "depth_capped", "work_exceeded"],
+  metadata: ["leaves", "delta_leaves", "full_leaves", "trials", "depth_capped", "work_exceeded"],
+};
+const DELTA_LISTS = { payload: ["whole_file_depths", "chunk_depths"], metadata: ["depths"] };
+const addList = (a = [], b = []) => Array.from({ length: Math.max(a.length, b.length) }, (_, i) => (a[i] ?? 0) + (b[i] ?? 0));
+
+/** Two delta work records summed (either may be null). */
+export function addDelta(a, b) {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  const out = {};
+  for (const group of ["payload", "metadata"]) {
+    out[group] = {};
+    for (const k of DELTA_KEYS[group]) out[group][k] = (a[group]?.[k] ?? 0) + (b[group]?.[k] ?? 0);
+    for (const k of DELTA_LISTS[group]) out[group][k] = addList(a[group]?.[k], b[group]?.[k]);
+  }
+  return out;
+}
+
+/** The delta selection work of trace lines (each Save's stored depths and refusals), summed; null when none saved. */
+export const deltaWork = (lines) => lines.flatMap((l) => (l.daemon ?? []).map((d) => d.delta).filter(Boolean)).reduce(addDelta, null);
+
+/**
+ * SPEC §3d, Delta: from summed delta work and the role caps, the share of
+ * stored objects kept as deltas, the depth histogram per role, the share at
+ * the depth cap, and of the refused bases the share refused by the chain-work
+ * budget rather than the depth cap.
+ */
+export function deltaSummary(work, caps) {
+  if (!work) return null;
+  const depths = { wholeFile: work.payload.whole_file_depths, chunk: work.payload.chunk_depths, metadata: work.metadata.depths };
+  const sum = (list) => list.reduce((n, x) => n + x, 0);
+  const objects = sum(Object.values(depths).map(sum)), deltas = objects - sum(Object.values(depths).map((l) => l[0] ?? 0));
+  const atCap = Object.entries(depths).reduce((n, [role, list]) => n + (list[caps[role]] ?? 0), 0);
+  const capped = work.payload.depth_capped + work.metadata.depth_capped, budget = work.payload.work_exceeded + work.metadata.work_exceeded;
+  const ratio = (n, d) => (d ? +(n / d).toFixed(4) : null);
+  return { objects, deltas, share: ratio(deltas, objects), atCap: ratio(atCap, objects), atCapObjects: atCap,
+    byBudget: ratio(budget, budget + capped), refusedByBudget: budget, refusedByCap: capped, caps, depths };
+}
+
 /** One trace line as gates.aggregate's input: method, client ms, input size and the top daemon phases. */
 export function callOf(line) {
   const a = line.args ?? {};

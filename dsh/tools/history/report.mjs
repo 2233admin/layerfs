@@ -33,6 +33,23 @@ export function loadAttempts(dir) {
 }
 
 /** One range's report, following ranges/TEMPLATE.md. */
+const STAGES = [["prepare", "prepareMs"], ["play", "playMs"], ["consolidate", "consolidateMs"], ["verify", "verifyMs"], ["probes", "probesMs"], ["tests", "testsMs"],
+  ["metrics", "metricsMs"], ["seal", "sealMs"], ["snapshot copy", "snapshotMs"], ["report", "reportMs"]];
+
+/** The runner's wall time per stage: tooling time, never operation latency. */
+export function stageLine(wall) {
+  if (!wall) return "—";
+  const parts = STAGES.filter(([, k]) => wall[k] != null).map(([name, k]) => `${name} ${fmt(wall[k] / 1000)}${k === "verifyMs" && wall.verify ? ` (${wall.verify})` : ""}`);
+  return `${fmt(wall.totalMs / 1000)} s tooling: ${parts.join(" · ")}`;
+}
+
+/** The delta row of §5: shares, refusals and the depth histogram per role. */
+export function deltaLine(d) {
+  if (!d?.depths) return null;
+  const hist = (list) => (list?.length ? list.map((n, depth) => (n ? `${depth}:${n}` : null)).filter(Boolean).join(" ") : "—");
+  return `${fmt(d.share)} of ${d.objects} stored objects are deltas · at cap ${fmt(d.atCap)} (${d.atCapObjects}) · refused bases: budget ${d.refusedByBudget}, cap ${d.refusedByCap} (budget share ${fmt(d.byBudget)}) · depths whole-file [${hist(d.depths.wholeFile)}] chunk [${hist(d.depths.chunk)}] metadata [${hist(d.depths.metadata)}] (caps ${d.caps.wholeFile}/${d.caps.chunk}/${d.caps.metadata})`;
+}
+
 export function renderRange({ plan, summary, attempts, gates, lead }) {
   const m = attempts.at(-1), g = gates.at(-1);
   const w = m.work || {}, s = m.storage || {};
@@ -45,7 +62,7 @@ export function renderRange({ plan, summary, attempts, gates, lead }) {
     ["LayerFS depth", `${fmt(m.depth?.before)} → ${fmt(m.depth?.after)} Commits`],
     ["Binary", `daemon \`${m.binary?.daemon ?? "?"}\`, SDK \`${m.binary?.sdk ?? "?"}\`, image \`${m.binary?.image ?? "?"}\`, plan v${m.plan?.version ?? "?"}`],
     ["Snapshot", m.snapshot ? `${plan.milestone ? "milestone, " : ""}${bytes(m.snapshot.newBytes)} new of ${bytes(m.snapshot.size)}; seal ${fmt(m.snapshot.sealMs ?? null)} ms, copy ${fmt(m.snapshot.copyMs)} ms` : plan.snapshot ? "planned, not taken" : "none"],
-    ["Wall time", m.wall ? `${fmt(m.wall.totalMs / 1000)} s (play ${fmt((m.wall.playMs ?? 0) / 1000)}, verify ${fmt((m.wall.verifyMs ?? 0) / 1000)}, tests ${fmt((m.wall.testsMs ?? 0) / 1000)}, seal ${fmt((m.wall.sealMs ?? 0) / 1000)})` : "—"],
+    ["Wall time (tooling, not operation latency)", stageLine(m.wall)],
   ]), "");
   out.push("## Attempts", "", table(["#", "Binary", "Started", "Result", "Reason"], attempts.map((a, i) => [
     a.attempt, a.binary?.daemon ?? "?", a.started ?? "—", gates[i].verdict,
@@ -77,6 +94,8 @@ export function renderRange({ plan, summary, attempts, gates, lead }) {
     ["New stored per changed byte", s.changedBytes ? s.newStored / s.changedBytes : null],
     ["Directory share of new bytes", s.directoryShare],
     ["Delta share / at cap / stopped by budget", s.delta ? `${fmt(s.delta.share)} / ${fmt(s.delta.atCap)} / ${fmt(s.delta.byBudget)}` : null],
+    ["Delta, this range", deltaLine(s.delta)],
+    ["Delta, since Init", deltaLine(s.deltaTotal)],
     ["node_modules reinstall growth", s.reinstallGrowth],
     ["New stored bytes this range", bytes(s.newStored)],
   ]), "");
@@ -135,10 +154,12 @@ export function renderComment({ plan, summary, attempts, gates, findings = [] })
   return [
     `### Range ${pad(plan.range)} · **${g.verdict}** · attempt ${m.attempt}`, "",
     `dsh \`${plan.dsh.first.slice(0, 9)}\`..\`${plan.checkpoint.slice(0, 9)}\` (${plan.dsh.commits} commits) · depth ${fmt(m.depth?.before)} → ${fmt(m.depth?.after)} · daemon \`${m.binary?.daemon ?? "?"}\` · wall ${m.wall ? `${fmt(m.wall.totalMs / 1000)} s` : "—"}`, "",
+    `**Tooling time (not operation latency):** ${stageLine(m.wall)}`, "",
     failing.length ? table(["Check", "Value", "Result"], failing.map((x) => [x.name, x.value, x.result])) : `All ${g.checks.length} checks pass.`, "",
     `**Work:** ${fmt(w.bashCalls ?? summary?.bashCalls)} bash calls · ${fmt(w.lfsCommits ?? summary?.lfsCommits)} LayerFS Commits · conflicts ${c.conflicts ? `${c.conflicts.hit}/${c.conflicts.planned}` : "—"} · unit tests ${c.tests ? `${c.tests.equal}/${c.tests.run} equal to native` : "—"}`,
     `**Slowest p95:** ${slow.length ? slow.map((r) => `${r.op}${r.sizeClass && r.sizeClass !== "—" ? ` (${r.sizeClass})` : ""} ${fmt(r.p95)} ms`).join(" · ") : "—"}`,
-    `**Storage:** +${bytes(s.newStored)} stored (total ${bytes(s.stored == null ? null : s.stored + (s.metadata ?? 0))}) · dedupe ${s.canonical ? fmt(s.logical / s.canonical) : "—"} · compression ${s.stored ? fmt(s.canonical / s.stored) : "—"} · snapshot ${m.snapshot ? `+${bytes(m.snapshot.newBytes)} in ${fmt(m.snapshot.copyMs)} ms` : "none"}`, "",
+    `**Storage:** +${bytes(s.newStored)} stored (total ${bytes(s.stored == null ? null : s.stored + (s.metadata ?? 0))}) · dedupe ${s.canonical ? fmt(s.logical / s.canonical) : "—"} · compression ${s.stored ? fmt(s.canonical / s.stored) : "—"} · snapshot ${m.snapshot ? `+${bytes(m.snapshot.newBytes)} in ${fmt(m.snapshot.copyMs)} ms` : "none"}`,
+    `**Delta:** ${s.delta ? `share ${fmt(s.delta.share)} · at cap ${fmt(s.delta.atCap)} · budget share of refusals ${fmt(s.delta.byBudget)}` : "—"}`, "",
     renderOptimization({ plan, attempts, gates, findings }), "",
     `**Next:** ${next}`, "",
     `Report: [range-${pad(plan.range)}.md](${REPORTS}/range-${pad(plan.range)}.md)`, "",

@@ -34,13 +34,15 @@ import {
   binaries, closure, consolidate, HISTORY, Mismatch, probeFixture, probes, readTrace, REPO, Run,
   step, teardown, verify, writeJson,
 } from "./lib.mjs";
-import { diskGuard, EXIT, pad, PHASES, phaseOps, Tree } from "./steps.mjs";
+import { addDelta, deltaSummary, diskGuard, EXIT, pad, PHASES, phaseOps, Tree } from "./steps.mjs";
 
 const here = new URL(".", import.meta.url).pathname;
 const IMAGE = "sha256:d3773b4eac6a7a644887b17e36956cd1553786d47103f0170a3bb2b0ff6988de";
 const DAEMON = join(REPO, "core/target/cluster2-linux/release/layerfs-daemon");
 /** SPEC §8's control arm: the old depths. */
 export const POLICIES = { default: null, control: { smallFileThreshold: 131072, wholeFileDepth: 8, chunkDepth: 4 } };
+/** The depth cap per role of a run's Store policy (the defaults of SPEC §8, or its override). */
+export const caps = (policy) => ({ wholeFile: policy?.wholeFileDepth ?? 16, chunk: policy?.chunkDepth ?? 8, metadata: policy?.metadataDepth ?? 8 });
 const RUN_ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
 const docker = (args) => execFileSync("docker", args, { encoding: "utf8" }).trim();
 
@@ -148,6 +150,7 @@ function snapshot(run, k, facts) {
 /** Plays range k. Returns the exit code the range ends with (0 to go on). */
 async function playRange(run, k, mode) {
   const phase = PHASES[run.manifest.phase], measured = mode === "measured";
+  // Tooling wall time per stage (never operation latency: that is m.ops).
   const plan = run.plan(k), t0 = performance.now(), wall = {};
   const lap = (name, since) => { wall[name] = Math.round(performance.now() - since); };
   // prepare: binaries, disk, calibration
@@ -159,6 +162,7 @@ async function playRange(run, k, mode) {
   if (!guard.ok) { console.error(`range ${k} refused: ${guard.why}`); return EXIT.guard; }
   if (phase.tests && measured && !existsSync(join(run.planDir, `tests-${pad(k)}.json`))) { console.error(`range ${k} refused: no tests-${pad(k)}.json; calibrate it first`); return EXIT.guard; }
   if (!run.lf) await run.client();
+  lap("prepareMs", t0);
   const outputs = run.manifest.outputs, attempt = measured ? nextAttempt(outputs.metrics, k) : 0;
   const traceFile = measured ? join(run.dir, "trace", `range-${pad(k)}.a${attempt}.jsonl`) : null;
   if (traceFile) mkdirSync(join(run.dir, "trace"), { recursive: true });
@@ -184,13 +188,16 @@ async function playRange(run, k, mode) {
       run.state.depth.commits++;
     }
     for (const op of ops) await step(run, k, op.id, ctx);
+    lap("playMs", since);
+    since = performance.now();
     await consolidate(run, k, "reconcile", ctx);
     published = await consolidate(run, k, "publish", ctx);
-    lap("playMs", since);
+    lap("consolidateMs", since);
     since = performance.now();
     const snapshotDue = measured && (phase.snapshot === "every" || due({ planned: plan.snapshot, verdict: "pass", sinceMs: run.state.sinceMs, lastCostMs: run.state.lastSnapshotMs }).due);
     proof = await verify(run, k, { prevHead: run.state.head, head: published.source.commit, layer: published.publishedLayer.id, prevCommit: run.state.prevCommit, full: snapshotDue });
     lap("verifyMs", since);
+    wall.verify = snapshotDue ? "diff_commits + full compareTree" : "diff_commits";
     if (!proof.ok) failure = `the checkpoint differs from git: ${JSON.stringify({ paths: proof.paths, ids: proof.ids, tree: proof.tree && { missing: proof.tree.missing.slice(0, 5), extra: proof.tree.extra.slice(0, 5), content: proof.tree.content.slice(0, 5), mode: proof.tree.mode.slice(0, 5) } }).slice(0, 1500)}`;
     if (!failure && phase.tests && measured) { since = performance.now(); tests = await closure(run, k, "tests", { layer: published.publishedLayer.id }); lap("testsMs", since); }
     if (!failure && phase.probes && measured) { since = performance.now(); probeOut = await probes(run, k, { branch, tree: ctx.tree }); lap("probesMs", since); }
@@ -204,12 +211,17 @@ async function playRange(run, k, mode) {
   m.head = head; m.layer = layer; m.failure = failure;
   m.depth = { before: depthBefore, after: run.state.depth.commits + ctx.work.commits };
   if (!measured) {
-    console.log(`range ${k}: ${failure ? `STOP ${failure}` : "ok"} (${run.calls} calls, ${Math.round(performance.now() - t0)} ms)`);
+    const stages = { kind: "tooling", totalMs: Math.round(performance.now() - t0), ...wall };
+    writeJson(join(run.dir, "fast", `range-${pad(k)}.json`), { range: k, mode, head, failure, calls: run.calls, wall: stages });
+    console.log(`range ${k}: ${failure ? `STOP ${failure}` : "ok"} (${run.calls} calls; tooling ${JSON.stringify(stages)})`);
     if (failure) { run.state.dirty = k; run.save(); return EXIT.stop; }
     advance(run, k, plan, head, layer, ctx, performance.now() - t0);
     return EXIT.done;
   }
   // measured: storage, metrics, snapshot, report
+  let since = performance.now();
+  const t = readTrace(traceFile);
+  const deltaTotal = addDelta(run.state.deltaTotal ?? null, t.delta);
   const after = await run.op.store.stats().catch(() => null);
   const snap = await run.op.inspect.snapshot().catch(() => null);
   const changes = diffTrees(run.repo, run.state.prevCommit, plan.checkpoint).filter((c) => !c.gitlink && c.mode !== "000000");
@@ -220,9 +232,10 @@ async function playRange(run, k, mode) {
     newStored, newMetadata: after.metadata - before.metadata, newPacks: after.stored - before.stored,
     changedBytes: changes.reduce((n, c) => n + (sizes.get(c.blob) ?? 0), 0),
     directoryShare: newStored > 0 ? +((after.metadata - before.metadata) / newStored).toFixed(3) : null,
-    delta: null, reinstallGrowth: null,
+    delta: deltaSummary(t.delta, caps(run.manifest.policy)),
+    deltaTotal: deltaSummary(deltaTotal, caps(run.manifest.policy)),
+    reinstallGrowth: null,
   };
-  const t = readTrace(traceFile);
   m.ops = aggregate(t.calls);
   m.probes = Object.fromEntries(Object.entries(probeOut).map(([name, p]) => [name, { ms: p.ms, ...(p.error ? { error: p.error } : {}), counters: t.probe[name] ?? {} }]));
   const open = snap?.sandboxes?.reduce((n, s) => n + (s.workspaces?.length ?? 0), 0) ?? null;
@@ -239,24 +252,31 @@ async function playRange(run, k, mode) {
     ignored: { ok: true },
     tests: tests ?? { equal: 0, run: 0 },
   };
+  lap("metricsMs", since);
   m.budget = { diskProjected: guard.projected, diskBudget: free.dockerFree + (run.state.storeBytes ?? 0) };
   if (!failure && m.snapshotDue) {
     try {
       const sealed = await seal(run);
       wall.sealMs = sealed.sealMs;
-      const since = performance.now();
+      since = performance.now();
       m.snapshot = snapshot(run, k, { dsh: plan.checkpoint, tree: plan.tree, head, layer, depth: m.depth.after, daemon: run.manifest.binary.daemon,
         sdk: run.manifest.binary.sdk, planVersion: run.manifest.planVersion, policy: run.manifest.policy ?? "default", pageSize: 4096, ...sealed,
-        state: { next: k + 1, layer, head, prevCommit: plan.checkpoint, depth: { ...run.state.depth, commits: m.depth.after } } });
+        state: { next: k + 1, layer, head, prevCommit: plan.checkpoint, depth: { ...run.state.depth, commits: m.depth.after }, deltaTotal } });
       lap("snapshotMs", since);
     } catch (error) { failure = `snapshot: ${error.message}`; m.failure = failure; m.checks.history.ok = false; }
   }
-  m.wall = { totalMs: Math.round(performance.now() - t0), ...wall };
+  m.wall = { kind: "tooling", totalMs: Math.round(performance.now() - t0), ...wall };
   const file = join(outputs.metrics, `range-${pad(k)}.a${attempt}.json`);
   writeJson(file, m);
   if (failure) { run.state.dirty = k; run.save(); }
-  else advance(run, k, plan, head, layer, ctx, m.wall.totalMs, m);
+  else { run.state.deltaTotal = deltaTotal; advance(run, k, plan, head, layer, ctx, m.wall.totalMs, m); }
+  since = performance.now();
   const r = spawnSync("node", [join(here, "report.mjs"), "--metrics", outputs.metrics, "--plan", run.planDir, "--docs", outputs.docs], { encoding: "utf8" });
+  // The report's own time is known only after it ran: added to the metrics
+  // file (the report shown reads it from the next range's run on).
+  m.wall.reportMs = Math.round(performance.now() - since);
+  m.wall.totalMs = Math.round(performance.now() - t0);
+  writeJson(file, m);
   process.stdout.write(r.stdout); process.stderr.write(r.stderr);
   console.log(`range ${k} attempt ${attempt}: ${failure ? `STOP ${failure}` : "checkpoint ok"}; metrics ${file}`);
   if (failure) return EXIT.stop;

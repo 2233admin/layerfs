@@ -10,8 +10,10 @@ import { join } from "node:path";
 import {
   CHUNK, compareIds, comparePaths, diskGuard, EXIT, FS_MAX, idBatches, parseTreePage, phaseOps, route,
   sandboxCommands, sandboxExpect, sqlCounters, callOf, traceLines, Tree, TREE_IDS, viaSandbox,
+  addDelta, deltaSummary, deltaWork,
 } from "../steps.mjs";
-import { nextAttempt, options, outputs, POLICIES } from "../run.mjs";
+import { caps, nextAttempt, options, outputs, POLICIES } from "../run.mjs";
+import { deltaLine, stageLine } from "../report.mjs";
 
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
@@ -171,6 +173,32 @@ test("runner: exit codes, outputs by label, attempts, options and the control po
   assert.equal(nextAttempt(m, 4), 3);
   assert.deepEqual(options(["play", "--run", "x", "--from", "0"]), { _: ["play"], run: "x", from: "0" });
   assert.deepEqual(POLICIES.control, { smallFileThreshold: 131072, wholeFileDepth: 8, chunkDepth: 4 });
+});
+
+test("delta work: summed over trace lines, shares, cap and budget, the control caps", () => {
+  const payload = (o) => ({ prepared_full: 0, trials: 0, prefix_selected: 0, full_losses: 0, no_candidate: 0, absent_candidates: 0, ineligible_candidates: 0, depth_capped: 0, work_exceeded: 0, whole_file_depths: [], chunk_depths: [], ...o });
+  const metadata = (o) => ({ leaves: 0, delta_leaves: 0, full_leaves: 0, trials: 0, depth_capped: 0, work_exceeded: 0, depths: [], ...o });
+  const lines = [
+    { daemon: [{ delta: { payload: payload({ work_exceeded: 1, whole_file_depths: [2, 1], chunk_depths: [1, 0, 0, 0, 0, 0, 0, 0, 1] }), metadata: metadata({ depths: [3, 1] }) } }] },
+    { daemon: [{ sql: {} }] },
+    { daemon: [{ delta: { payload: payload({ depth_capped: 3, whole_file_depths: [0, 1] }), metadata: metadata({ work_exceeded: 1, depths: [1] }) } }] },
+  ];
+  const work = deltaWork(lines);
+  assert.deepEqual(work.payload.whole_file_depths, [2, 2]);
+  assert.deepEqual(work.metadata.depths, [4, 1]);
+  assert.equal(deltaWork([{ daemon: [{}] }]), null);
+  assert.equal(addDelta(null, work), work);
+  const d = deltaSummary(work, caps(null));
+  assert.deepEqual([d.objects, d.deltas, d.share, d.atCapObjects, d.refusedByBudget, d.refusedByCap, d.byBudget], [11, 4, 0.3636, 1, 2, 3, 0.4]);
+  assert.deepEqual(caps(POLICIES.control), { wholeFile: 8, chunk: 4, metadata: 8 });
+  assert.equal(deltaSummary(null, caps(null)), null);
+  assert.ok(deltaLine(d).includes("whole-file [0:2 1:2]") && deltaLine(d).includes("caps 16/8/8"));
+});
+
+test("stage timing: tooling time per stage, labelled", () => {
+  const line = stageLine({ kind: "tooling", totalMs: 15700, prepareMs: 400, playMs: 9000, consolidateMs: 1900, verifyMs: 600, verify: "diff_commits", sealMs: 2900, reportMs: 100 });
+  assert.ok(line.startsWith("15.70 s tooling: prepare 0.40 · play 9 · consolidate 1.90 · verify 0.60 (diff_commits) · seal 2.90 · report 0.10"), line);
+  assert.equal(stageLine(null), "—");
 });
 
 let failed = 0;

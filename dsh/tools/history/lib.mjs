@@ -22,7 +22,7 @@ import { compareResults, parseVitestJson, vitestCommand } from "./unit-tests.mjs
 import { INSTALL } from "./calibrate-tests.mjs";
 import {
   abs, callOf, compareIds, comparePaths, idBatches, pad, parseTreePage, PHASES, phaseOps, PROBE_DIR, quote,
-  route, sandboxCommands, sandboxExpect, sqlCounters, traceLines, Tree, TREE_IDS, TREE_PAGE,
+  deltaWork, route, sandboxCommands, sandboxExpect, sqlCounters, traceLines, Tree, TREE_IDS, TREE_PAGE,
 } from "./steps.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -366,7 +366,8 @@ export function readTrace(file) {
     probe[name] ??= {};
     for (const [key, n] of Object.entries(c)) probe[name][key] = (probe[name][key] || 0) + n;
   }
-  return { calls, probe, lines: lines.length };
+  const delta = deltaWork(lines.filter((x) => !String(x.step ?? "").startsWith("probe:")));
+  return { calls, probe, delta, lines: lines.length };
 }
 
 export { PHASES, phaseOps, Tree };
