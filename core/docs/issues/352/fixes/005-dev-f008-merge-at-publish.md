@@ -3,11 +3,15 @@
 | | |
 | --- | --- |
 | Trigger | P2 dev run `p2-dev` (builder) and fork `diag-f008-old` (fixer): range 005 stopped, `sandbox.commit` answered `HeadMoved` where the plan has `Committed` (r005.s0051, r005.s0048). Stop class. No measured attempt, so no `finding-NNN.aK.json` |
+| Kind | 1 forward-only (REBUILD.md) |
+| Old Stores | open unchanged (no schema change) |
+| Old data | still read as before |
+| Compatibility test | the batch's final daemon opens a range-4 snapshot fork written by `511dceed` and reads it (REBUILD.md §4); see the F-005 record for the run |
 | Playbook step | D1 (step outcome differs from the plan) |
-| Kind | code path (no Store format change) |
+| Fix kind (SPEC §6) | code path (no Store format change) |
 | Binaries | old daemon `511dceed…` → new daemon `18ab5415c7ea59a59ac7adc8a410bdfed141d6e15f0fe42721cfa8bb36cd421f` (kept in `core/target/issue352/daemon-18ab5415/`); SDK addon unchanged `506b646f7d0a…` |
 | Commits | the commit that adds this file; regression tests `core/crates/layerfs-daemon/tests/concurrent_commits.rs` (host and Linux), converted `mounted_parallel_commits.rs` (Linux) |
-| Recovery | fork of snapshot range 4 (`p1-pilot-b`), phase p2, play range 5 with no `--serialize-commits` |
+| Recovery | fork newest snapshot (range 4); rerun range 5: fork of snapshot range 4 (`p1-pilot-b`), phase p2, play range 5 with no `--serialize-commits` |
 
 ## Old design
 

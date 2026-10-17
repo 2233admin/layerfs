@@ -69,6 +69,13 @@ export function page(pageSize = 50, pagePos = 0) {
   return { pageSize, pagePos };
 }
 
+export function diffOptions({ cursor, hunks } = {}) {
+  if ((cursor !== undefined && cursor !== null && typeof cursor !== "string") || (hunks !== undefined && typeof hunks !== "boolean")) {
+    throw new LayerFSError("InvalidInput", "cursor must be a path string and hunks a boolean", null);
+  }
+  return { ...(cursor == null ? {} : { cursor }), ...(hunks === undefined ? {} : { hunks }) };
+}
+
 export function checkedMessage(message) {
   if (message === undefined) return undefined;
   if (typeof message !== "string" || Buffer.byteLength(message) > 4096 || [...message].some((c) => (c.codePointAt(0) < 32 && c !== "\n" && c !== "\t") || (c.codePointAt(0) >= 127 && c.codePointAt(0) <= 159) || (c.codePointAt(0) >= 0xd800 && c.codePointAt(0) <= 0xdfff))) {

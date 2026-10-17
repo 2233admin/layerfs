@@ -3,11 +3,15 @@
 | | |
 | --- | --- |
 | Trigger | P2 dev run (builder, daemon `511dceed`): two concurrent unmounts of different Workspaces in one Sandbox failed "Workspace absent". The player was switched to one Sandbox per agent. No measured attempt |
+| Kind | 1 forward-only (REBUILD.md) |
+| Old Stores | open unchanged (addon only) |
+| Old data | still read as before |
+| Compatibility test | the batch's final daemon opens a range-4 snapshot fork written by `511dceed` and reads it (REBUILD.md §4); see the F-005 record for the run |
 | Playbook step | D1 (a call outcome differs from the plan) |
-| Kind | code path, SDK addon only (`sdk/js/native/src/discovery.rs`); daemon and Store unchanged |
+| Fix kind (SPEC §6) | code path, SDK addon only (`sdk/js/native/src/discovery.rs`); daemon and Store unchanged |
 | Binaries | SDK addon `506b646f7d0a…` (kept in `core/target/issue352/sdk-506b646f/`) → `4e141e5162c9df07fc0ca917407d1d4e6d511138e78bb865b9aa0b87bf185e6d`; daemon unchanged by this fix (`18ab5415…`) |
 | Commits | the commit that adds this file; regression test `sdk/js/test/verify/concurrent_unmount_real.mjs` |
-| Recovery | none needed (pre-P2) |
+| Recovery | fork newest snapshot (none needed pre-P2) |
 
 ## Old design
 

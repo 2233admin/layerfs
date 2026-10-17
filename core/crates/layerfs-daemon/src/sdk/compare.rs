@@ -130,6 +130,7 @@ fn change(
     reader: &StorePorts,
     change: &PathChange,
     budget: &mut usize,
+    with_hunks: bool,
 ) -> Result<Option<SdkValue>, SdkRefusal> {
     let kind = match change.kind {
         ChangeKind::Added => "Added",
@@ -149,7 +150,11 @@ fn change(
         }
         content = !directories
             && (l.value.kind != r.value.kind || l.value.content_root != r.value.content_root);
-        if content && l.value.kind == InodeKind::RegularFile && r.value.kind == l.value.kind {
+        if with_hunks
+            && content
+            && l.value.kind == InodeKind::RegularFile
+            && r.value.kind == l.value.kind
+        {
             if let (Some(a), Some(b)) = (
                 snapshot::text(reader, Some(l))?,
                 snapshot::text(reader, Some(r))?,
@@ -199,8 +204,49 @@ impl BindingHints for CatalogHints<'_> {
     }
 }
 
-/// The listed changes from `left` to `right` after the cursor, within the
-/// reply budget, and the cursor to resume from. Content's change walk reads
+/// Where a page starts and what it lists: the caller's offset or its cursor
+/// (the last path an earlier page listed), and whether line hunks are wanted.
+struct Request {
+    limit: usize,
+    pos: u64,
+    cursor: Option<String>,
+    hunks: bool,
+}
+
+/// The page after the listed one: offset and cursor, `Null` when complete.
+struct Next {
+    pos: SdkValue,
+    cursor: SdkValue,
+}
+
+fn request(args: &SdkValue) -> Result<Request, SdkRefusal> {
+    let (limit, pos) = args::paging(args)?;
+    let cursor = match args.get("cursor") {
+        None | Some(SdkValue::Null) => None,
+        Some(SdkValue::Text(path)) => Some(checked(path)?),
+        Some(_) => return Err(invalid("cursor must be a path or null")),
+    };
+    let hunks = match args.get("hunks") {
+        None | Some(SdkValue::Null) => true,
+        Some(SdkValue::Bool(value)) => *value,
+        Some(_) => return Err(invalid("hunks must be a boolean")),
+    };
+    Ok(Request {
+        limit,
+        pos,
+        cursor,
+        hunks,
+    })
+}
+
+/// Component order of the walk: each directory before its children, names in
+/// byte order.
+fn order(a: &str, b: &str) -> std::cmp::Ordering {
+    a.split('/').cmp(b.split('/'))
+}
+
+/// The listed changes from `left` to `right` after the offset or cursor, within
+/// the reply budget, and where the next page starts. Content's change walk reads
 /// what changed; without recorded bindings it is the full walk of both trees.
 fn changes(
     store: &Arc<Store>,
@@ -208,10 +254,14 @@ fn changes(
     left: &Snap,
     right: &Snap,
     args: &SdkValue,
-) -> Result<(Vec<SdkValue>, SdkValue), SdkRefusal> {
-    let (limit, pos) = args::paging(args)?;
+) -> Result<(Vec<SdkValue>, Next), SdkRefusal> {
+    let request = request(args)?;
     if left.root == right.root {
-        return Ok((Vec::new(), SdkValue::Null));
+        let done = Next {
+            pos: SdkValue::Null,
+            cursor: SdkValue::Null,
+        };
+        return Ok((Vec::new(), done));
     }
     let hints = CatalogHints {
         catalog: store.history(),
@@ -225,26 +275,43 @@ fn changes(
         Some(walk) => walk,
         None => ChangeWalk::full(reader, &left.tree, &right.tree).map_err(args::content)?,
     };
-    emit(reader, &mut walk, limit, pos)
+    emit(reader, &mut walk, &request)
 }
 
-/// Lists the differing pairs after `pos`, at most `limit` and within budget.
+/// Lists the differing pairs after the offset or cursor, at most `limit` and
+/// within budget. A cursor resumes the walk: pairs at or before it are passed
+/// over and only the directories on its path are entered, so a later page
+/// does not walk what earlier pages listed.
 fn emit(
     reader: &StorePorts,
     walk: &mut ChangeWalk<'_>,
-    limit: usize,
-    pos: u64,
-) -> Result<(Vec<SdkValue>, SdkValue), SdkRefusal> {
+    request: &Request,
+) -> Result<(Vec<SdkValue>, Next), SdkRefusal> {
+    let (limit, pos) = (request.limit, request.pos);
+    let skip = if request.cursor.is_some() { 0 } else { pos };
     let (mut items, mut seen, mut budget, mut more) = (Vec::new(), 0u64, REPLY_BUDGET, false);
+    let mut last = None;
     while let Some(pair) = walk.next_pair().map_err(args::content)? {
         let (path, before, after) = &pair;
+        if let Some(cursor) = &request.cursor {
+            if order(path, cursor) != std::cmp::Ordering::Greater {
+                let on_path = cursor == path
+                    || cursor
+                        .strip_prefix(path.as_str())
+                        .is_some_and(|rest| rest.starts_with('/'));
+                if on_path {
+                    walk.enter(&pair).map_err(args::content)?;
+                }
+                continue;
+            }
+        }
         let children_only = matches!((before, after), (Some(x), Some(y))
             if x.serial == y.serial
                 && x.value.kind == InodeKind::Directory
                 && y.value.kind == InodeKind::Directory
                 && x.value.metadata_root == y.value.metadata_root);
         if before != after && !children_only {
-            if seen < pos {
+            if seen < skip {
                 seen += 1;
             } else {
                 let cost = path.len() + ITEM_COST;
@@ -264,14 +331,25 @@ fn emit(
                     left: *before,
                     right: *after,
                 };
-                if let Some(item) = change(reader, &listed, &mut budget)? {
+                if let Some(item) = change(reader, &listed, &mut budget, request.hunks)? {
                     items.push(item);
+                    last = Some(path.clone());
                 }
             }
         }
         walk.enter(&pair).map_err(args::content)?;
     }
-    let next = args::next_page(pos, items.len(), more);
+    let next = Next {
+        pos: args::next_page(pos, items.len(), more),
+        cursor: match (more, last) {
+            (true, Some(path)) => SdkValue::Text(path),
+            (true, None) => request
+                .cursor
+                .clone()
+                .map_or(SdkValue::Null, SdkValue::Text),
+            (false, _) => SdkValue::Null,
+        },
+    };
     Ok((items, next))
 }
 
@@ -301,8 +379,12 @@ fn listed(
         ("from", from),
         ("to", to),
         ("items", SdkValue::List(items)),
-        ("hasMore", SdkValue::Bool(!matches!(next, SdkValue::Null))),
-        ("nextPagePos", next),
+        (
+            "hasMore",
+            SdkValue::Bool(!matches!(next.pos, SdkValue::Null)),
+        ),
+        ("nextPagePos", next.pos),
+        ("nextCursor", next.cursor),
     ])
 }
 

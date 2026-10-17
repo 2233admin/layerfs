@@ -77,6 +77,10 @@
   127 → 213 ms (401k → 703k VM steps) from range 5 to 7 (dev run); per entry
   3.3 → 6.5 → 13.0 ms against the ~11 ms one-file probe; later pages re-skip
   from the start. Dev ranges 7–11 gated optimize on it. Owner: the fixer.
+  **Fixed** (fixer, D3, kind 1): `nextCursor`/`cursor` resume the change walk and
+  `hunks: false` lists paths only; range-4 checkpoint 2,541 → 411 ms (2 pages
+  instead of 12) with both. The player should adopt them.
+  [fixes/007-dev-f010-diff-cursor.md](fixes/007-dev-f010-diff-cursor.md).
 - **F-011 · old-format Stores are refused (lead, 2026-10-18, REBUILD.md).**
   `binding_hint` (002.a1) was handled as a Store-format change (kind 3, fast
   rebuild) although `diff_commits` already falls back to a full walk for roots

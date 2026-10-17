@@ -121,7 +121,7 @@ and supervises no commands.
 | project (2) | `init(sourcePath)`, `list_branches(pageSize?, pagePos?)` |
 | fs reads (7) | `read(ref, path, startLine?, endLine?)`, `list(ref, path?, pageSize?, pagePos?)`, `stat(ref, path)`, `grep(ref, pattern, path?, pageSize?, pagePos?)`, `glob(ref, pattern, path?, pageSize?, pagePos?)`, `diff_files(leftRef, leftPath, rightRef, rightPath)`, `blame(ref, path, fromLine?)` |
 | fs writes (7) | `write(branch, path, content, message?)`, `edit(branch, path, oldText, newText, message?)`, `apply(branch, changes, message?)`, `mkdir(branch, path, message?)`, `rm(branch, path, message?)`, `cp(branch, from, to, message?)`, `mv(branch, from, to, message?)` |
-| branch (6) | `fork(name, fromRef?)`, `list_commits(branch, pageSize?, pagePos?)`, `diff_commits(from, to, pageSize?, pagePos?)`, `diff_branches(from, to, pageSize?, pagePos?)`, `merge(a, b, name, message?)`, `publish(branch, commit?)` |
+| branch (6) | `fork(name, fromRef?)`, `list_commits(branch, pageSize?, pagePos?)`, `diff_commits(from, to, pageSize?, pagePos?, { cursor?, hunks? }?)`, `diff_branches(from, to, pageSize?, pagePos?, { cursor?, hunks? }?)`, `merge(a, b, name, message?)`, `publish(branch, commit?)` |
 | sandbox (7) | `create(name, project, image)`, `mount(id, branch)` → path, `exec(id, path, command, message?)`, `status(id, path)`, `commit(id, path, message?, force?)`, `unmount(id, path, discard?)`, `close(id)` |
 
 Every grouped method returns a Promise and takes positional arguments only; no
@@ -164,7 +164,12 @@ before choosing a smaller call or an ordinary Sandbox step for a larger atomic
 change. Calls are never split or replayed automatically. This call bound does
 not limit file, namespace or Workspace size.
 
-Pages have `items` and `hasMore`; advance by `pagePos + items.length`. Defaults
+Pages have `items` and `hasMore`; advance by `pagePos + items.length`.
+`diff_commits` and `diff_branches` also answer `nextCursor`, the last path the
+page listed: passing it back as `cursor` resumes the walk after that path, so a
+page costs its own changes instead of re-walking earlier pages. `hunks: false`
+lists the changes without line hunks (`hunks` is `null`), so a page fills by
+paths rather than by file contents. Defaults
 are 50/0, max pageSize 1000, with safe integers only. Byte bounds can shorten a
 page; they never mean EOF when `hasMore` is true. Deep offsets skip through bounded
 windows linearly. Names use byte order; recursive paths use deterministic
