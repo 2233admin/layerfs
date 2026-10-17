@@ -121,3 +121,15 @@ Storage is unchanged.
 - `discovery::refresh` asks Status for every mount record on every call.
   This is O(mounts) per call; with the pool these exchanges run in parallel
   but are still paid.
+- **Tail attribution not done (lead, 2026-10-18).** The lead did not accept
+  the p95 rise without attribution. The two range-8 dev traces were deleted
+  by `run.mjs cleanup` before the request arrived. The lead also ruled out
+  reruns. Numbers kept from the deleted traces:
+  - Span 15.5 → 14.9 s.
+  - Daemon `commit` p50 4.5 → 6.5 ms, p95 85.5 → 123.9 ms.
+  - Commit `begin` p50 0.8 → 0.9 ms, p95 25.7 → 69.2 ms.
+  - Slowest new reads, `fs.read` 110 ms and `fs.grep` 116 ms: reader
+    transaction 1.1 and 2.6 ms, client queue 0.2–0.3 ms.
+
+  Writer busy time and the in-daemon split were not computed. Attributing
+  them needs one range-8 play per addon on fresh range-7 forks.
