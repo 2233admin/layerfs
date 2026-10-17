@@ -128,3 +128,12 @@
   6.6 / 8.0 (ranges 0–4); range 3 733 → 42 ms. Same 103 changes in a 400- and a
   30,100-file tree: 477 and 549 statements. Daemon `361bb09e`;
   [fixes/002-rebase-f012-diff-plan-memo.md](fixes/002-rebase-f012-diff-plan-memo.md).
+- **F-013 · per-entry gate trips on a fixed per-checkpoint cost (tooling,
+  lead, 2026-10-18).** `p1-rebase-b` (daemon `361bb09e`) gated optimize at
+  range 2: checkpoint `diff_commits` ms per entry against tree files, exponent
+  0.952. Total statements were flat (1,557 → 1,389 → 1,413 for 327, 240, 208
+  entries) while tree files grew 255 → 373: per-entry cost = a/n + b rises as n
+  falls. Fix (builder): judge the fixed part a and the marginal part b
+  separately, each flat with tree size and depth; never normalise by tree files;
+  unseparable points are "not judged" (watch). The recorded optimize verdict of
+  that baseline run stays as recorded.
