@@ -32,4 +32,5 @@
   results and reasons with a re-evaluation under the new gate. The lead
   restored the committed versions; recorded outcomes are never edited. Fix
   (builder): `report.mjs` writes only the report of the range it just played and
-  keeps every earlier attempt's recorded check rows as written.
+  keeps every earlier attempt's recorded check rows as written. **Fixed** in
+  `badd7494d` (stored gate results, `report.mjs check`, format rule F1–F8).

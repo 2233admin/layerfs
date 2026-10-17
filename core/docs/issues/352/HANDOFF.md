@@ -123,9 +123,8 @@ container/volume prefixes, `assemble` waits); still missing there are
 agent at a time.
 
 **Open findings:** F-001 (fs request cap 65,519 bytes; fix before P3), F-002
-(full-scan steps, bounded, watch), F-004 (`report.mjs` rewrote recorded reports
-of earlier ranges after a gate change; the lead restored them; fix before the
-next range). Watches: directory share ~0.53, list_largest, merge.fullscan_steps.
+(full-scan steps, bounded, watch), F-004 (fixed in `badd7494d`: attempts render from stored
+gate results; earlier reports stay byte-identical). Watches: directory share ~0.53, list_largest, merge.fullscan_steps.
 
 **Resources:** volumes `layerfs-issue352-p1-pilot` (abandoned line, evidence),
 `layerfs-issue352-p1-pilot-b` (main line), `layerfs-issue352-pnpm-store`; snapshots
@@ -134,12 +133,13 @@ each run folder.
 
 ### Next, in order
 
-1. **Builder:** fix F-004 (a regression test: playing range k leaves earlier
-   reports byte-identical). In the same change, render the finding's
-   before/after improvement table and the links to its `fixes/` records into
-   the rerun's report (`ranges/range-NNN.md`), not only into the comment. Until
-   then the lead copies them into §7 (range 002 is the example). Commit; the
-   lead pushes.
+1. **Done before handoff:** F-004 and the report format rule F1–F8 (SPEC §3)
+   are implemented (`badd7494d`); `report.mjs check NNN` passes for 000–002.
+   Before every checkpoint commit run `node dsh/tools/history/report.mjs check
+   NNN` (≤ 60 s timeout); a failing report is not committed or commented.
+   Pilot checks without a baseline now read "not judged" (watch), and Wall
+   projection stays watch until a wall budget is recorded: set it at P1 close
+   (step 4) from the measured wall time, as a recorded decision.
 2. **Lead:** `node dsh/tools/history/run.mjs play --run p1-pilot-b --from 3 --to 4
    --mode measured` in the background; commit, push, comment per range
    (LESSONS.md §2). Range 4 is a milestone: restore its snapshot into a fresh

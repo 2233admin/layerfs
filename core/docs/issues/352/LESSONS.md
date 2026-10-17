@@ -35,10 +35,13 @@ verify ~1 s); a fix took 50–65 min of fixer time; the first builder tasks took
   range with `RANGES.md` cut to its own row, then the next.
 - `git push`, `gh` and Docker need the sandbox disabled.
 - Record every decision in RESULTS.md's decision log the moment it is made.
-- **Write §7 of every report that had a finding or a rerun** before committing it:
-  the trigger, diagnosis, the before/after table and links to the `fixes/`
-  records. `report.mjs` puts that table only in the comment (until the builder
-  fixes it); range 002's first commit missed it.
+- **Run `report.mjs check NNN` before every checkpoint commit** (format rule
+  F1–F8, SPEC §3). The generated Finding block carries the before/after table;
+  the lead writes the "Lead's note" (never empty unless pass). Range 002's first
+  commit had an empty §7 and no table; the rule exists because of it.
+- To amend an earlier report (lead annotations only, never recorded values),
+  commit it on its own before checking the next range: F2 compares earlier
+  reports with HEAD.
 
 ## 3. Troubleshooting
 
