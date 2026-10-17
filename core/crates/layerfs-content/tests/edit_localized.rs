@@ -773,16 +773,18 @@ fn a_pure_deletion_never_walks_the_rightmost_path() {
 #[test]
 fn an_overwrite_still_demands_the_predecessor_path() {
     // The negative pin against over-gating: an overwrite's replacement scan still
-    // consumes the rightmost payload hint, so its walk and its scan remain.
+    // consumes a delta-base hint, so its scan remains. #352 F-005 replaced the
+    // rightmost walk (one load) with the byte-range aligner, whose mapping pages
+    // are served by the operation's page memo: 6 -> 5.
     let (deletion, overwrite) = aligned_pair();
     assert_eq!(
-        overwrite.0, 6,
-        "the split, the rightmost walk and the replacement scan, with the compare \
-         pass's mapping page memo-served"
+        overwrite.0, 5,
+        "the split and the replacement scan, with the compare pass's and the \
+         aligner's mapping pages memo-served"
     );
     assert!(
         overwrite.0 <= 7,
-        "the split, the rightmost walk and the replacement scan: {}",
+        "the split and the replacement scan: {}",
         overwrite.0
     );
     assert_eq!(

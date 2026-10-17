@@ -16,7 +16,7 @@ use super::references::{Child as ChildDescriptor, Node as ExtentNode, Summary as
 use crate::error::{ContentError, ContentResult};
 use crate::file::mapping::{ExtentSlice, MAX_ENTRIES, MAX_LEVEL};
 
-pub(super) use super::engine::{DeferredSink, Engine as EditObjects};
+pub(super) use super::engine::{Engine as EditObjects, SharedSink};
 
 /// Summaries of a branch's children, recovering each child's own totals.
 pub fn child_summaries(children: &[ChildDescriptor], level: u8) -> ContentResult<Vec<NodeSummary>> {

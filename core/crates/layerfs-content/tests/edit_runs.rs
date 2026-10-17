@@ -645,7 +645,7 @@ fn sparse_emission_preserves_predecessor_and_refuses_occupied_scope_before_accep
                     .predecessors()
                     .entries()
                     .iter()
-                    .all(|hint| hint.provenance() == PredecessorProvenance::UnchangedPrefix));
+                    .all(|hint| hint.provenance() == PredecessorProvenance::ReusedRange));
                 assert_eq!(object.predecessors().len(), 1);
                 self.hints += 1;
             }
@@ -670,7 +670,7 @@ fn sparse_emission_preserves_predecessor_and_refuses_occupied_scope_before_accep
     run(&store, built.root, &edits, &source, &mut seen, None).unwrap();
     assert!(
         seen.hints >= 2,
-        "head and repeated zero chunks keep the declared predecessor"
+        "head and repeated zero chunks are offered their byte-range base"
     );
     let mut rejected = Seen {
         store: MemoryStore::new(),

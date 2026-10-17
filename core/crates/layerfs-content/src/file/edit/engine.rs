@@ -69,6 +69,18 @@ impl<'a> Engine<'a> {
             started: false,
         }
     }
+    /// One stored mapping page's canonical bytes, through this operation's page
+    /// memo, so a page the edit already read is not demanded again.
+    pub fn read_page(&mut self, id: ObjectId, root: bool) -> ContentResult<Vec<u8>> {
+        if let Some(canonical) = self.pages.get(id, root) {
+            return Ok(canonical.to_vec());
+        }
+        self.counters.nodes_read = self.counters.nodes_read.saturating_add(1);
+        let canonical = self.reader.read_canonical(id)?;
+        self.pages.make_room_for(1);
+        self.pages.insert(id, root, canonical.clone());
+        Ok(canonical)
+    }
     pub fn load_node(&mut self, summary: Summary, root: bool) -> ContentResult<Node> {
         let node = match summary.id {
             EditRef::Stored(id) => {
@@ -498,6 +510,15 @@ pub(super) struct DeferredSink<'a, 'b> {
 impl<'a, 'b> DeferredSink<'a, 'b> {
     pub fn new(objects: &'b mut Engine<'a>) -> Self {
         Self { objects }
+    }
+}
+/// A [`DeferredSink`] over an engine that the same scan also reads mapping
+/// pages through: each use borrows the engine only for its own call.
+pub(super) struct SharedSink<'c, 'a, 'b>(pub &'c std::cell::RefCell<&'b mut Engine<'a>>);
+impl FinalizedConsumer for SharedSink<'_, '_, '_> {
+    fn accept(&mut self, object: FinalizedObject) -> ContentResult<()> {
+        let mut engine = self.0.borrow_mut();
+        DeferredSink::new(&mut engine).accept(object)
     }
 }
 impl FinalizedConsumer for DeferredSink<'_, '_> {

@@ -125,7 +125,7 @@ impl<'a, 'r, 's> PredecessorCursor<'a, 'r, 's> {
     /// Advances the frontier to the next extent at or after `start`.
     fn next_extent(&mut self, start: u64) -> ContentResult<Option<(u64, u64, ExtentSlice)>> {
         let (reader, scope) = (self.reader, self.scope);
-        let found = self.walk.next(start, &mut |id| {
+        let found = self.walk.next(start, &mut |id, _| {
             reader.read_canonical_scoped(id, scope.child("mapping.predecessor"))
         })?;
         if found.is_some() {

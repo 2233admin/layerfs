@@ -4,7 +4,19 @@ use crate::file::{
     mapping::{ExtentBuilder, MappingBuild},
     FileRun, FileRuns,
 };
-use crate::{ConstructionCapacities, ContentError, ContentResult, FinalizedConsumer, ObjectId};
+use crate::{
+    ConstructionCapacities, ContentError, ContentResult, FinalizedConsumer, ObjectId,
+    PredecessorProvenance,
+};
+
+/// Chooses a scanned chunk's advisory delta base from its logical start in the
+/// build, its length and its identity.
+pub(crate) type Hint<'h> = &'h mut dyn FnMut(u64, u64, ObjectId) -> ContentResult<Option<ObjectId>>;
+
+/// The hint that offers no base.
+pub(crate) fn no_hint(_: u64, _: u64, _: ObjectId) -> ContentResult<Option<ObjectId>> {
+    Ok(None)
+}
 
 pub(crate) struct ChunkRuns {
     scanner: Scanner,
@@ -24,7 +36,7 @@ impl ChunkRuns {
     pub(crate) fn data(
         &mut self,
         bytes: &[u8],
-        predecessor: Option<ObjectId>,
+        hint: Hint<'_>,
         consumer: &mut dyn FinalizedConsumer,
     ) -> ContentResult<()> {
         if bytes.is_empty() {
@@ -38,7 +50,7 @@ impl ChunkRuns {
             bytes,
             &mut |chunk| {
                 self.builder
-                    .push_chunk(chunk, predecessor, consumer)
+                    .push_chunk_hinted(chunk, PredecessorProvenance::ReusedRange, hint, consumer)
                     .map(|_| ())
             },
             &mut self.counters,
@@ -47,7 +59,7 @@ impl ChunkRuns {
     pub(crate) fn zero(
         &mut self,
         length: u64,
-        predecessor: Option<ObjectId>,
+        hint: Hint<'_>,
         consumer: &mut dyn FinalizedConsumer,
     ) -> ContentResult<u64> {
         if length == 0 {
@@ -60,19 +72,25 @@ impl ChunkRuns {
         self.scanner
             .zeros(length, &mut self.counters, &mut |chunk, count| {
                 self.builder
-                    .push_repeated_chunk_with_predecessor(chunk, count, predecessor, consumer)
+                    .push_repeated_chunk_hinted(
+                        chunk,
+                        count,
+                        PredecessorProvenance::ReusedRange,
+                        hint,
+                        consumer,
+                    )
                     .map(|_| ())
             })
     }
     pub(crate) fn finish(
         mut self,
-        predecessor: Option<ObjectId>,
+        hint: Hint<'_>,
         consumer: &mut dyn FinalizedConsumer,
     ) -> ContentResult<MappingBuild> {
         self.scanner.finish(
             &mut |chunk| {
                 self.builder
-                    .push_chunk(chunk, predecessor, consumer)
+                    .push_chunk_hinted(chunk, PredecessorProvenance::ReusedRange, hint, consumer)
                     .map(|_| ())
             },
             &mut self.counters,
@@ -91,7 +109,7 @@ impl ChunkRuns {
 pub(crate) fn build(
     capacities: &ConstructionCapacities,
     source: &mut dyn FileRuns,
-    predecessor: Option<ObjectId>,
+    hint: Hint<'_>,
     consumer: &mut dyn FinalizedConsumer,
 ) -> ContentResult<MappingBuild> {
     let mut chunks = ChunkRuns::new(capacities);
@@ -99,12 +117,12 @@ pub(crate) fn build(
     loop {
         match source.read_run(&mut input)? {
             FileRun::Data(count) if count != 0 && count <= input.len() => {
-                chunks.data(&input[..count], predecessor, consumer)?;
+                chunks.data(&input[..count], &mut *hint, consumer)?;
             }
             FileRun::Zero(length) if length != 0 => {
-                chunks.zero(length, predecessor, consumer)?;
+                chunks.zero(length, &mut *hint, consumer)?;
             }
-            FileRun::End => return chunks.finish(predecessor, consumer),
+            FileRun::End => return chunks.finish(hint, consumer),
             _ => return Err(ContentError::InvalidRecord("file run window")),
         }
     }

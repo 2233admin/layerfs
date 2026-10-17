@@ -124,13 +124,26 @@ impl ExtentBuilder {
         predecessor: Option<ObjectId>,
         consumer: &mut dyn FinalizedConsumer,
     ) -> ContentResult<ObjectId> {
+        let provenance = PredecessorProvenance::UnchangedPrefix;
+        self.push_chunk_hinted(raw, provenance, &mut |_, _, _| Ok(predecessor), consumer)
+    }
+
+    /// [`Self::push_chunk`] whose advisory predecessor `hint` chooses from the
+    /// chunk's logical start in this build, its length and its own identity.
+    pub(crate) fn push_chunk_hinted(
+        &mut self,
+        raw: &[u8],
+        provenance: PredecessorProvenance,
+        hint: &mut dyn FnMut(u64, u64, ObjectId) -> ContentResult<Option<ObjectId>>,
+        consumer: &mut dyn FinalizedConsumer,
+    ) -> ContentResult<ObjectId> {
         let mut object = FinalizedObject::new(ObjectRole::Chunk, encode_chunk_object(raw)?)?;
-        if let Some(predecessor) = predecessor {
+        let id = object.id();
+        if let Some(predecessor) = hint(self.build.logical_len, raw.len() as u64, id)? {
             let mut predecessors = AdvisoryPredecessors::new();
-            predecessors.push(predecessor, PredecessorProvenance::UnchangedPrefix)?;
+            predecessors.push(predecessor, provenance)?;
             object = object.with_predecessors(predecessors);
         }
-        let id = object.id();
         consumer.accept(object)?;
         self.build.chunks = add(self.build.chunks, 1)?;
         self.push_extent(ExtentSlice::new(id, 0, raw.len() as u32)?, consumer)?;

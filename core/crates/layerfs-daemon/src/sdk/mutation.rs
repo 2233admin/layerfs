@@ -145,11 +145,26 @@ impl<'a> Mutation<'a> {
     }
     pub(crate) fn write(&mut self, path: &str, bytes: &[u8]) -> Result<()> {
         let (serial, same) = self.target(path, bytes.len() as u64)?;
-        if same && self.read(serial, 0, bytes.len() as u32)? == bytes {
-            return Ok(());
+        let mut changed = !same;
+        let mut offset = 0;
+        for piece in bytes.chunks(layerfs_bridge::duplex::MAX_PLAINTEXT_BYTES) {
+            changed |= self.put(serial, same, offset, piece)?;
+            offset += piece.len() as u64;
         }
-        self.write_at(serial, 0, bytes)?;
-        self.truncate(serial, bytes.len() as u64)
+        if changed {
+            self.truncate(serial, bytes.len() as u64)?;
+        }
+        Ok(())
+    }
+    /// Writes `piece` at `offset` unless the file, of the same length, holds
+    /// it already; true when written. Pieces are at most one record, so a
+    /// write's overlay jobs stay bounded whatever the file's size.
+    fn put(&mut self, serial: u64, same: bool, offset: u64, piece: &[u8]) -> Result<bool> {
+        if same && self.read(serial, offset, piece.len() as u32)? == piece {
+            return Ok(false);
+        }
+        self.write_at(serial, offset, piece)?;
+        Ok(true)
     }
     /// Writes a body streamed after the call, `length` bytes, a received record
     /// at a time. Over a file of the same length only the records that differ
@@ -163,11 +178,8 @@ impl<'a> Mutation<'a> {
         let (serial, same) = self.target(path, length)?;
         let mut changed = !same;
         bodies.take(length, |offset, record| {
-            if same && self.read(serial, offset, record.len() as u32)? == record {
-                return Ok(());
-            }
-            changed = true;
-            self.write_at(serial, offset, record)
+            changed |= self.put(serial, same, offset, record)?;
+            Ok(())
         })?;
         if changed {
             self.truncate(serial, length)?;

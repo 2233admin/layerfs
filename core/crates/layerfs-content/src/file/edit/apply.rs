@@ -382,14 +382,19 @@ fn replace_chunked(
     // mapping root lives in `summary` and every other field of the file state is
     // derived once, at emission.
     let mut result_len = state.logical_len;
+    let base = state;
     let state = match backing {
         Some(backing) => super::state::State::Backed(backing),
         None => super::state::State::Memory(super::state::Memory::default()),
     };
     let mut objects = crate::file::edit::tree::EditObjects::new(reader, consumer, pages, state);
+    let mut aligner = crate::file::mapping::Aligner::new(base);
+    // Result position minus base position after the edits applied so far.
+    let mut shift = 0_i128;
     for index in 0..request.edits.len() {
         let declared = request.edits.edit_at(index)?;
         let replacement_len = declared.replacement_len();
+        let base_start = u64::try_from(i128::from(declared.start()) - shift).unwrap_or(0);
         // Resolve fallible metadata before boundary mutation or base demands.
         request
             .source
@@ -419,30 +424,29 @@ fn replace_chunked(
             None
         } else {
             // The replacement is scanned into its own subtree through the same
-            // canonical builder complete construction uses. Its first payload may
-            // continue the retained payload immediately before the insert position,
-            // which is a physical hint only — and only the scan consumes it, so a
-            // pure deletion never pays the rightmost walk that computes it.
-            let predecessor = match left {
-                Some(left) => edit
-                    .child("edit.split")
-                    .run(|_| rightmost_payload(&mut objects, left))?,
-                None => None,
-            };
+            // canonical builder complete construction uses. Each new payload is
+            // offered the base payload its byte range corresponds to (#352 F-005);
+            // the hint is physical only, and a pure deletion never pays for it.
+            let start = declared.start();
+            aligner.anchor(start, base_start, &mut |id, root| {
+                objects.read_page(id, root)
+            })?;
             edit.child("content.chunk").run(|_| {
-                let mut sink = crate::file::edit::tree::DeferredSink::new(&mut objects);
+                let objects = std::cell::RefCell::new(&mut objects);
+                let mut sink = crate::file::edit::tree::SharedSink(&objects);
                 request.source.check_legacy_length(index, replacement_len)?;
-                let build = crate::file::chunk_runs::build(
-                    capacities,
-                    &mut source,
-                    predecessor,
-                    &mut sink,
-                )?;
+                let mut hint = |offset: u64, len: u64, id: ObjectId| {
+                    let read = &mut |page, root| objects.borrow_mut().read_page(page, root);
+                    aligner.offer(start.saturating_add(offset), len, id, read)
+                };
+                let build =
+                    crate::file::chunk_runs::build(capacities, &mut source, &mut hint, &mut sink)?;
                 Ok(build
                     .root
                     .map(|root| super::references::Summary::from_canonical(root, true)))
             })?
         };
+        shift = shift + i128::from(replacement_len) - i128::from(declared.removed_len());
         let prefix = crate::file::edit::tree::concat_optional(&mut objects, left, middle)?;
         let joined = crate::file::edit::tree::concat_optional(&mut objects, prefix, right)?;
         let mapping = match joined {
@@ -472,37 +476,6 @@ fn replace_chunked(
     })
 }
 
-/// Payload of the rightmost extent under `summary`, if it has any.
-///
-/// Walking one path to the boundary is bounded by the tree height and is the only
-/// stored work the physical delta hint needs.
-fn rightmost_payload(
-    objects: &mut crate::file::edit::tree::EditObjects<'_>,
-    summary: super::references::Summary,
-) -> ContentResult<Option<ObjectId>> {
-    let mut current = summary;
-    let mut root = true;
-    loop {
-        match objects.load_node(current, root)? {
-            super::references::Node::Leaf { extents, .. } => {
-                return Ok(extents.last().map(|extent| extent.payload_object_id()))
-            }
-            super::references::Node::Branch {
-                level, children, ..
-            } => {
-                if children.is_empty() {
-                    return Err(ContentError::InvalidRecord("empty branch"));
-                }
-                let summaries = crate::file::edit::tree::child_summaries(&children, level - 1)?;
-                current = *summaries
-                    .last()
-                    .ok_or(ContentError::InvalidRecord("empty branch"))?;
-                root = false;
-            }
-        }
-    }
-}
-
 /// Streams a whole-file base and its replacements through the complete builder.
 fn stream_combined(
     capacities: &ConstructionCapacities,
@@ -512,9 +485,14 @@ fn stream_combined(
     edit: &TimingScope<'_, Active>,
 ) -> ContentResult<ConstructedFile> {
     let mut source = PlanRuns::new(view, request.edits, request.source)?;
-    let build = edit
-        .child("content.chunk")
-        .run(|_| crate::file::chunk_runs::build(capacities, &mut source, None, consumer))?;
+    let build = edit.child("content.chunk").run(|_| {
+        crate::file::chunk_runs::build(
+            capacities,
+            &mut source,
+            &mut crate::file::chunk_runs::no_hint,
+            consumer,
+        )
+    })?;
     if build.logical_len != request.edits.final_len() {
         return Err(ContentError::LengthMismatch {
             expected: request.edits.final_len(),

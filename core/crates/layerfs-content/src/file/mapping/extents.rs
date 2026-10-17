@@ -41,11 +41,12 @@ impl Walk {
 
     /// The next extent with its logical range. Subtrees that end at or before
     /// `start` are skipped unread; extents of the leaf that holds `start` are
-    /// returned from that leaf's first one. `read` acquires one mapping page.
+    /// returned from that leaf's first one. `read` acquires one mapping page,
+    /// given its identity and whether it is the tree's root.
     pub(crate) fn next(
         &mut self,
         start: u64,
-        read: &mut dyn FnMut(ObjectId) -> ContentResult<Vec<u8>>,
+        read: &mut dyn FnMut(ObjectId, bool) -> ContentResult<Vec<u8>>,
     ) -> ContentResult<Option<(u64, u64, ExtentSlice)>> {
         loop {
             if let Some(extent) = self.leaf.next() {
@@ -69,7 +70,7 @@ impl Walk {
             {
                 continue;
             }
-            let node = decode_node_with_context(&read(summary.id)?, root)?;
+            let node = decode_node_with_context(&read(summary.id, root)?, root)?;
             if node.level() != summary.level
                 || node.logical_len() != summary.bytes
                 || node.extent_count() != summary.extents
@@ -172,7 +173,7 @@ impl ExtentCursor {
     ) -> ContentResult<Option<Extent>> {
         loop {
             let pages = &mut self.pages;
-            let found = self.walk.next(self.start, &mut |id| {
+            let found = self.walk.next(self.start, &mut |id, _| {
                 *pages += 1;
                 reader.read_canonical_scoped(id, scope.child("mapping.extents"))
             })?;

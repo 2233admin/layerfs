@@ -51,6 +51,13 @@
   `stream_combined`, `file/edit/apply.rs:517`). Fix accepted: offer the old
   file's chunk at the same position as base; no Store format change. Lands after
   F-001, before P2's measured run.
+  **Fixed** (fixer, D5, kind 1): the localized edit route offers each new chunk
+  the old chunk sharing most of its bytes, aligned on unchanged chunks (fallback:
+  the unchanged neighbour's successor). Range-4 fork, 1 MiB file: insert near the
+  start 37,029 → 3,941 stored bytes (0/3 → 3/3 chunks as deltas), middle edit
+  25,649 → 4,785; the append was already a delta. Files built without a base
+  (new inodes) still store FULL. Daemon `cbfa5e7f`;
+  [fixes/004-dev-f005-chunk-delta-base.md](fixes/004-dev-f005-chunk-delta-base.md).
 - **F-006 · health cannot judge overlay files left (lead, 2026-10-18).** The
   health row reads "? overlays", so a leaked Workspace overlay would go unseen.
   Owner: the builder (measure it per range, REPORT_FORMAT.md). **Done** in

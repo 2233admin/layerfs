@@ -38,16 +38,40 @@ impl ExtentBuilder {
         predecessor: Option<ObjectId>,
         consumer: &mut dyn FinalizedConsumer,
     ) -> ContentResult<Option<ObjectId>> {
+        let provenance = PredecessorProvenance::UnchangedPrefix;
+        self.push_repeated_chunk_hinted(
+            raw,
+            count,
+            provenance,
+            &mut |_, _, _| Ok(predecessor),
+            consumer,
+        )
+    }
+
+    /// [`Self::push_repeated_chunk_with_predecessor`] whose advisory predecessor
+    /// `hint` chooses from the run's logical start, its length and the chunk's
+    /// identity.
+    pub(crate) fn push_repeated_chunk_hinted(
+        &mut self,
+        raw: &[u8],
+        count: u64,
+        provenance: PredecessorProvenance,
+        hint: &mut dyn FnMut(u64, u64, ObjectId) -> ContentResult<Option<ObjectId>>,
+        consumer: &mut dyn FinalizedConsumer,
+    ) -> ContentResult<Option<ObjectId>> {
         if count == 0 {
             return Ok(None);
         }
         let mut object = FinalizedObject::new(ObjectRole::Chunk, encode_chunk_object(raw)?)?;
-        if let Some(predecessor) = predecessor {
+        let id = object.id();
+        let run = (raw.len() as u64)
+            .checked_mul(count)
+            .ok_or(ContentError::LengthOverflow)?;
+        if let Some(predecessor) = hint(self.build.logical_len, run, id)? {
             let mut hints = AdvisoryPredecessors::new();
-            hints.push(predecessor, PredecessorProvenance::UnchangedPrefix)?;
+            hints.push(predecessor, provenance)?;
             object = object.with_predecessors(hints);
         }
-        let id = object.id();
         let extent = ExtentSlice::new(id, 0, raw.len() as u32)?;
         let bytes = (raw.len() as u64)
             .checked_mul(count)

@@ -1,6 +1,8 @@
 //! Hole-aware complete construction through the ordinary canonical builder.
 use crate::file::{
-    cdc::MAXIMUM_CHUNK_BYTES, chunk_runs::ChunkRuns, construct_bytes, mapping, ConstructedFile,
+    cdc::MAXIMUM_CHUNK_BYTES,
+    chunk_runs::{no_hint, ChunkRuns},
+    construct_bytes, mapping, ConstructedFile,
 };
 use crate::{
     ConstructionCapacities, ConstructionPolicy, ContentError, ContentResult, FinalizedConsumer,
@@ -90,17 +92,21 @@ pub fn construct_runs(
                     prefix.extend_from_slice(&input[..used as usize]);
                 }
                 if prefix.len() == cutoff {
-                    chunks.data(&prefix, None, consumer)?;
+                    chunks.data(&prefix, &mut no_hint, consumer)?;
                     prefix.clear();
                     chunked = true;
                 }
             }
             if chunked && used < length {
                 if zero {
-                    let processed = chunks.zero(length - used, None, consumer)?;
+                    let processed = chunks.zero(length - used, &mut no_hint, consumer)?;
                     zeros_processed = add(zeros_processed, processed)?;
                 } else {
-                    chunks.data(&input[used as usize..length as usize], None, consumer)?;
+                    chunks.data(
+                        &input[used as usize..length as usize],
+                        &mut no_hint,
+                        consumer,
+                    )?;
                 }
             }
         }
@@ -122,7 +128,7 @@ pub fn construct_runs(
                 peak_pending: 0,
             });
         }
-        let build = chunks.finish(None, consumer)?;
+        let build = chunks.finish(&mut no_hint, consumer)?;
         let summary = build
             .root
             .ok_or(ContentError::InvalidRecord("empty run mapping"))?;

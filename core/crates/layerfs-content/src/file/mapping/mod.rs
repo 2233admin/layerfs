@@ -2,6 +2,7 @@
 //!
 //! Entry module: declarations and re-exports only.
 
+mod align;
 mod build;
 mod codec;
 mod extents;
@@ -10,6 +11,7 @@ mod read;
 mod repeated;
 mod types;
 
+pub(crate) use align::Aligner;
 pub(crate) use build::build_streaming_with_predecessor;
 pub use build::{build_streaming, emit_empty_leaf, emit_file_state, ExtentBuilder, MappingBuild};
 pub use codec::{

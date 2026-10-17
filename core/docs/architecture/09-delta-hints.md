@@ -26,7 +26,7 @@ descriptive counterpart this proposal builds on.
 | Part | Kind | Authority |
 | --- | --- | --- |
 | §14.2 the gap, §14.3 the mechanism | **Descriptive** — read from source at the pin, both trees | Same as the set |
-| §14.4 the design | **Built** in `core/` for the complete-construction route; still proposed for the `apply_edits` routes | Source |
+| §14.4 the design | **Built** in `core/` for the complete-construction route, and for `replace_chunked` as byte-range alignment (#352 F-005, `file/mapping/align.rs`); still proposed for `stream_combined` | Source |
 | §14.5 bounds | **Built** as named constants; the four-slot reduction is still proposed | Source for the constants, draft for the reduction |
 | §14.6 the measurement plan | **Proposed** — one lane measured, the four cases not run | Draft |
 | §14.7 expectations | **Hypothesis**, explicitly not a finding | Do not cite |
@@ -71,13 +71,18 @@ exact region*. Core offers the region's left neighbour instead — which in a bi
 or a text file is unrelated content, so the trial usually loses and the chunk is
 stored FULL.
 
-**This diagram is the `apply_edits` route, and it is still true.** The
+**This diagram was the `apply_edits` route until #352 F-005.** `replace_chunked`
+now offers each new chunk the old payload sharing most of its bytes, aligned at
+the edit's start and re-aligned on every new chunk equal to an old one (an insert
+shifts positions, so absolute offsets would pair unrelated chunks); with no
+overlap it offers the successor of the nearest unchanged neighbour
+(`file/mapping/align.rs`, [fix record](../issues/352/fixes/004-dev-f005-chunk-delta-base.md)).
+The rest of this paragraph describes the pin. The
 complete-construction route (`construct_bytes` → `construct_chunked` →
 `build_streaming`) had a *different* gap at the pin — it offered `None` to every
 chunk — and that one is now closed: the route consults the cursor in §14.4 when the
-caller offers a previous version's stored root. `replace_chunked` and
-`stream_combined` are unchanged and still offer the left neighbour and nothing,
-respectively.
+caller offers a previous version's stored root. `stream_combined`
+still offers nothing.
 
 The reference tree does not have this gap:
 

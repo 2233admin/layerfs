@@ -677,8 +677,10 @@ fn an_interior_join_reads_its_boundary_child_once() {
     // 22 -> 20. The bound says what this test protects — the boundary child is
     // decoded once per join, not twice — while allowing a later item to lower the
     // total again; the exact current value is stated here so a rise is visible.
+    // #352 F-005 removed the rightmost walk that computed the replacement's delta
+    // hint (the byte-range aligner reads through the page memo): 20 -> 18.
     let (nodes, root) = edited_nodes("interior-multi-level");
-    assert_eq!(nodes, 20, "the current count with the shared page memo");
+    assert_eq!(nodes, 18, "the current count with the shared page memo");
     assert!(
         nodes <= 22,
         "the boundary child is decoded once per join, not twice: {nodes}"
