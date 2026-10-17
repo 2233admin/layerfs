@@ -5,3 +5,4 @@
 | Range | dsh commits | Depth | Verdict | Worst check | New stored | Report |
 | --- | --- | --- | --- | --- | --- | --- |
 | 000 | 60 | 571 | **watch** | Directory share | 2.9 MiB | [range-000](ranges/range-000.md) |
+| 001 | 60 | 1,114 | **watch** | Directory share | 2.7 MiB | [range-001](ranges/range-001.md) |
