@@ -314,62 +314,277 @@ merge series across binaries.
 
 The fixer follows these steps when a range ends as optimize or stop.
 
-1. **Compare like with like.**
-   - Use the same operation kind, size class, binary and cache state.
-   - Compare distributions (p50, p95) against the baseline, never single calls.
-   - The scale probes are the clean comparison: their input never changes, so a
-     change between ranges comes from depth or tree size.
-   - For real operations, fit latency against input size, depth and tree size.
-     The depth coefficient must be about zero.
-2. **Find the phase.** Compare the daemon phase tree in the call trace between the
-   baseline and the slow range. For a commit, the phases are capture, construct,
-   merge, publish and install. For a mount, they are Branch lookup, bind and
-   attach.
-3. **Algorithm or physical cost.** Read the counters: rows read, pages touched,
-   ancestors walked, locator and pack misses, chain links decoded.
+**What already exists:**
+- per-call SQL work: statements, VM steps, full-scan steps, sorts, auto-index
+  rows, reprepares, rows (`SqlWork`, `layerfs-persistence/src/backend/sqlite/connection.rs`);
+- per-mount FUSE opcode counts (`layerfs-fuse/src/request/accounting.rs`);
+- in the SDK call trace: phase timing trees, 42 storage counters and 31
+  construction counters per exchange.
 
-   | Counter | Time | Cause |
-   | --- | --- | --- |
-   | Grows with depth | Grows | The code walks history (ancestors, chains, scans): fix the algorithm |
-   | Flat | Grows | Physical: DB size, page-cache misses, WAL, fragmentation, chain decoding: fix layout or caching |
-   | Grows with tree size | Grows | Fine only if the operation's own input grew; otherwise it touches more tree than it needs |
+The builder confirms in P0–P1 that the SQL work and FUSE opcode counts reach the
+per-call trace, and wires them in if they do not.
 
-4. **Separate history from tree size** with controls:
-   - the same probe on two milestone snapshots (same input, different depth);
+**Counters before time.** Counters are deterministic, so they show growth without
+noise. Diagnose from counters first, and confirm with time.
+
+#### D0. Where the time goes
+
+Split each slow call's wall time before choosing a step:
+
+```
+client wall (trace ms)
+ ├─ client / native queue   = ms − Σ daemon exchanges
+ ├─ round trips             = daemon exchanges × per-exchange overhead
+ └─ daemon exchange
+     ├─ SQL                 (SqlWork)
+     ├─ content / storage   (decode, construct, chain links, pack reads)
+     └─ FUSE kernel ↔ daemon (opcode counts; exec only)
+```
+
+The largest share decides which step below to follow.
+
+#### D1. Time and speed (a regression against the baseline)
+
+1. **Confirm it.** Compare against the same operation kind, size class, binary and
+   cache state. Compare p50 and p95 distributions, never single calls.
+   Outside load (Docker CPU, host disk, swap) makes the range INELIGIBLE, not a
+   finding.
+2. **Find the phase.** Diff the phase tree against the baseline, and follow the
+   phase that grew down to its leaf.
+3. **Work or waiting.**
+   - The leaf's counters grew too: the call does more work. Go to D2 or D5.
+   - The counters are flat: the call waits (cache misses, I/O, a lock, WAL). Go to D4.
+4. **Concurrency.** Re-time the call alone on a restored snapshot, as a diagnostic.
+   If it is fast alone, look for Store arbitration contention or serialization
+   between agents.
+
+#### D2. Scale and complexity analysis
+
+1. For each operation, fit latency **and** every counter against:
+   - its own input (bytes, files changed, entries, files in scope);
+   - tree size;
+   - history depth.
+2. Read the exponent of `log(counter)` against `log(variable)`:
+   - about 0: independent, which depth always requires;
+   - about 1: linear;
+   - above 1: superlinear, always a bug.
+3. Check each operation against the scaling rules (§4). For example, `stat` has
+   exponent 0 on tree size and on depth; `list` may reach 1 only on its own
+   directory's entries.
+4. Separate depth from tree size with the controls:
+   - the same probe on two milestone snapshots;
    - the squashed-history Store (same tree, no history);
-   - the one-Commit-per-git-commit Store (same history, coarser Commits).
-5. **Reproduce small and read the code.** Restore the snapshot and run only the
-   slow operation, as a diagnostic and not a measurement. Run `EXPLAIN QUERY PLAN`
-   on the slow phase's SQL, looking for full scans and missing indexes. Look for
-   loops over ancestors, Layers or chain links.
-6. **Fix and prove it.**
-   - First, write a regression test that asserts a **counter** stays flat as depth
-     grows (for example, rows read by a commit at depth 100 and at depth 10,000).
-     A counter test is deterministic and fast.
-   - Then compare old and new binaries with the probes on the same milestone
-     snapshots, and record the result in `OPTIMIZATIONS.md`.
+   - the one-Commit-per-git-commit Store.
+5. Lock the finding in with a test. Build Stores at two depths (for example 100
+   and 10,000), and assert that the counter is equal at both.
 
-## 7. Disk and Store
+#### D3. Round-trip detection
+
+1. **Exchanges per call.** The trace has one `daemon` entry per control exchange
+   (a mount makes about 3: lookup, bind, attach). Compare each method's count
+   with its expected count.
+2. **Exchanges that grow with input.** One exchange per file, per directory or per
+   page, where one batched exchange would do, is the N+1 pattern. Fit exchanges
+   against input size; any exponent above 0 is a candidate.
+3. **Chatty callers.** Many same-kind calls in a row from one step (`stat` after
+   `stat`) mean the player or the dsh plugin works per item. Fix it with a batch
+   or paged method.
+4. **Inside the daemon:**
+   - statements per call that grow with input mean a query in a loop: batch it
+     with `IN (...)`, a join, or a temporary table;
+   - more transactions per call than needed is the same problem one level up.
+5. **Across FUSE:** many requests per syscall is a kernel-cache problem (D6).
+
+#### D4. Inefficient database work
+
+1. **Read SqlWork per call:**
+   - `fullscan_steps` > 0 on a hot path: an index is missing or unused;
+   - `autoindex_rows` > 0: SQLite is building a temporary index;
+   - `sorts` where order should come from an index: the index does not match the
+     `ORDER BY`;
+   - many VM steps per returned row: the query reads far more than it returns.
+2. **Read the plan.** Run `EXPLAIN QUERY PLAN` on each statement in the slow
+   phase, against a restored snapshot (see `layerfs-persistence/examples/explain_reservation.rs`).
+   Look for `SCAN` where `SEARCH … USING INDEX` should be, and for
+   `USE TEMP B-TREE`.
+3. **History-proportional SQL.** Recursive ancestor walks, `MAX()` or `COUNT(*)`
+   over history tables: VM steps rise with depth even when the plan looks right.
+4. **Physical state:**
+   - WAL size before the seal;
+   - free pages and fragmentation;
+   - page-cache misses, when the DB is larger than the cache;
+   - 4 KiB pages touched per call.
+
+   The page size stays 4 KiB. Fix with layout and caching instead: tighter rows,
+   covering indexes, clustering hot rows, cache size, checkpoint cadence.
+5. **Verify by counter:** full-scan steps drop to 0, and VM steps per call stop
+   depending on depth.
+
+#### D5. Algorithm
+
+1. **Find the loop.** The counter that grew (rows read, pages touched, ancestors
+   walked, chain links decoded, objects constructed) names it. Read that code
+   path in the leaf phase.
+2. **History-proportional patterns:**
+   - walking ancestors to find a merge base or a file's last change, with no skip
+     index or cached generation number;
+   - rebuilding a tree from Layers instead of reading a materialized one;
+   - hot files at the delta depth cap (each read decodes a long chain);
+   - recomputing per call what could be cached per Commit (merge base, directory
+     sizes, logical construction).
+3. **Tree-proportional patterns:**
+   - a diff or merge that visits unchanged subtrees instead of skipping equal
+     subtree ids;
+   - a mount that constructs eagerly instead of lazily.
+4. **State the intended bound**, for example "merge = O(paths changed since the
+   base)". Show that the counter fits it, using the depth test from D2.
+5. **Profile last.** Use `perf` or a sampling profiler in the container, only after
+   counters have located the phase, on a restored snapshot, as a diagnostic.
+
+#### D6. FUSE operations (exec)
+
+1. **Native comparison.** Run the same command on the same tree natively (an
+   exported copy) and in the Workspace. Track the ratio per command type:
+   `node`, `pnpm install`, test runners, tree walks.
+2. **Opcodes per command.** Count LOOKUP, GETATTR, READDIR, OPEN, READ, WRITE and
+   RELEASE per exec. Normalize per syscall (`strace -c` in the container, as a
+   diagnostic) and per file touched.
+   - Many GETATTRs per file: the attribute cache is not working.
+   - The same LOOKUPs repeated across commands: entries are not retained.
+3. **Cache settings.**
+   - Entry and attribute TTL are 60 s (`request/reply.rs`). A one-shot Workspace
+     is a new mount, so it pays every lookup cold; optimize that case.
+   - Readahead and `max_read` are negotiated.
+   - Writeback caching is not negotiated, so every `write(2)` is a round trip;
+     `pnpm install` will show it.
+   - Check READDIRPLUS. Without it, `ls -l` and tree walks pay one LOOKUP per entry.
+4. **Time per opcode.** Daemon time per opcode against the counts shows whether
+   a few slow requests or many fast ones dominate. A LOOKUP or GETATTR that slows
+   with depth is a Store read: go to D4 or D5.
+5. **Mount and first access.** On a fresh mount, time the first `readdir` of the
+   root and of a deep directory. Neither may depend on tree size or depth,
+   because logical construction must be lazy.
+6. **Overlay to Commit.** Count overlay files after exec. `capture` must follow
+   files changed, not files read.
+
+#### Recording a finding
+
+Each finding goes to `BUGS.md` or `OPTIMIZATIONS.md` with:
+- its playbook step (D0–D6);
+- the counter that shows it, with its exponent before and after;
+- the fix commit;
+- the old-vs-new probe table on the same milestone snapshots.
+
+## 7. Checkpoints, snapshots and disk
+
+### Store rules
 
 - **Store profile:** Disposable / WAL / `synchronous=OFF` only. Durable stays
   `NOT_RUN — disabled by owner until explicit reauthorization`. Latency therefore
   excludes fsync cost.
 - **SQLite page size:** stays **4 KiB** (`profile.rs`, `PRAGMA page_size=4096`).
   Do not change it for storage gains. This is an owner rule.
-- **The global Store is the central storage.** Its checkpoint is `Handles::seal()`
-  (WAL checkpoint and close) followed by a copy to host disk. Workspace overlays
-  are separate throwaway databases and are not snapshotted.
-- **Disk:**
-  - Docker Desktop's disk image is the real limit (64 GiB in use); the Mac has
-    ~397 GiB free.
-  - Store estimate: 5–20 GiB.
-  - Snapshots go to host disk under `~/lfs-history/snapshots/`. Keep the last 2
-    plus milestones (depth ~10k, ~20k, …).
-  - Before each range, the disk guard checks free space in the Docker disk and on
-    the host against the next range's projection. It stops when that space falls
-    under 2× the projection.
-- **Old snapshots stay valid.** Open uses the Store's recorded policy, so later
-  default changes do not invalidate a snapshot.
+- **The global Store is the central storage.** Workspace overlays are separate,
+  throwaway databases and are never snapshotted.
+
+There are two kinds of checkpoint:
+- **Proof checkpoint:** every range; cheap and permanent.
+- **Snapshot:** less often; expensive and disposable.
+
+### Proof checkpoint (every range, never redone)
+
+After consolidation, the runner verifies the range's oracle:
+- tree identity;
+- history shape;
+- step outcomes;
+- planned conflicts;
+- ignored output;
+- the range's tests.
+
+It records the result in `ranges/range-NNN.md` and `RANGES.md`, with:
+- the LayerFS main head Commit id and the depth;
+- the binary and the plan version.
+
+That record is the checkpoint. Git's tree and the plan never change, so a passed
+proof is never rerun, even after a fix. Rebuilt Store bytes are checked against
+the same oracle.
+
+### Snapshot (sealed Store copy)
+
+**When:**
+- every range in the pilot (P1), then every 5 ranges;
+- right after the checkpoint of a range whose gate is optimize, before the fix
+  starts, so a restore never replays the range that triggered it.
+
+**How:**
+1. **Quiesce.** No Workspace mounted and no step in flight. Long-lived Sandboxes
+   may stay, empty.
+2. **Seal.** `Handles::seal()` checkpoints the WAL into the main file and closes
+   the Store.
+3. **Copy** from the Docker volume to `~/lfs-history/snapshots/range-NNN/`. Hash
+   every file and write `manifest.json`.
+4. **Reopen** and continue. Seal and copy time are recorded separately and are
+   never part of operation latency.
+
+**Manifest:**
+- range, dsh commit and tree id, LayerFS main head Commit id, depth;
+- daemon, SDK and image ids, and the plan version;
+- the `store_policy` row (cutoff and depths), the schema version, and page size 4096;
+- each file's size and SHA-256;
+- seal time and copy time;
+- the WAL size before the seal (a health signal; see §5).
+
+**Verification:**
+- Every snapshot: check the file hashes against the manifest.
+- Each milestone: restore into a fresh volume and LayerFS home. Run the oracle
+  check on main and `PRAGMA quick_check`. A snapshot that was never restored is
+  not proven restorable.
+
+### Retention
+
+| Kind | Kept |
+| --- | --- |
+| Rolling | The latest 2; delete older ones, with literal paths only |
+| Milestones | Forever. About 6: range 5 (pilot end), then ~25%, 50%, 75% and 100% of the history, plus the demo seed if it is not one of these |
+| Failed Store | One copy, `failed-NNN/`, until its diagnosis is in `BUGS.md` |
+
+Milestones serve:
+- the old-vs-new binary probes (§6);
+- the Live demo seed (P4);
+- data-fix verification.
+
+### Uses
+
+| Use | How |
+| --- | --- |
+| Code-path fix | Restore the latest snapshot; fast-forward later ranges with the fast-rebuild player; rerun the failing range measured |
+| Data written wrong | Verify snapshots newest first with the fixed checker; resume from the newest good one |
+| Store format change | Migrate the newest good snapshot, or fast-rebuild from the plan in the new format, checking every range's oracle |
+| Probes | Both binaries run the same probes on the same milestone snapshots |
+| Live demo | Seed the dsh demo from a milestone and play ~3 ranges from it |
+
+**Snapshots stay valid.** Open uses the Store's recorded policy, so later default
+changes (such as the delta depths) do not invalidate a snapshot.
+
+**Two meanings of "checkpoint":** SQLite's WAL checkpoint (merging the WAL into
+the main file) is not a proof checkpoint. It runs inside the seal and
+automatically during the run.
+
+### Disk
+
+- Docker Desktop's disk image is the real limit (64 GiB in use). The Mac has
+  ~397 GiB free.
+- Store estimate: 5–20 GiB at the end.
+- **The disk guard** runs before each range. It projects the space the run will
+  hold:
+  - the working Store after the next range;
+  - 2 rolling snapshots;
+  - all milestones taken and planned;
+  - a failed copy.
+
+  The Docker disk and the host disk are checked separately. The guard stops when
+  free space falls under 2× that projection. Over 80% of the budget is a watch
+  item and over 100% is a stop (§5).
 
 ## 8. Delta depth
 

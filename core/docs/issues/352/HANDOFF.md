@@ -103,8 +103,10 @@ When you need one of these, stop and say so on #352.
 - **Run lengths.** A range or a phase is a long run: start it in the background
   and read its log. Every test or check invocation has a wall timeout of at most
   120 s (`perl -e 'alarm 120; exec @ARGV' …`). Build first with `--no-run`.
-- **Disk guard.** Run it before every range (SPEC.md §7). Keep the last 2
-  snapshots plus milestones, and delete others with literal paths only.
+- **Checkpoints and disk.** Follow SPEC.md §7: a proof checkpoint every range,
+  a sealed snapshot on its cadence with a manifest, milestones restored and
+  verified, retention of the last 2 plus about 6 milestones, and the disk guard
+  before every range.
 
 ## Orchestration
 
@@ -122,6 +124,10 @@ Three agents run the work.
    stop, or when the phase is done. Its exit wakes you, so do not poll.
 2. On waking, read the report. Give the fixer the report and the stop reason.
 3. When the fixer reports, recover per SPEC.md §6 and start the runner again.
+
+**First builder task (P0–P1):** confirm that per-call SQL work (`SqlWork`) and
+per-mount FUSE opcode counts reach the SDK call trace, and wire them in if they do
+not. The fixer's playbook (SPEC.md §6, D0–D6) depends on them.
 
 **Rules:**
 - Continue the same builder and fixer with SendMessage, so they keep what they
