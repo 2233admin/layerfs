@@ -267,6 +267,18 @@ try {
     const before = native.deploys.length;
     await new LayerFS("website").project.list_branches();
     assert.equal(native.deploys[before].docker, "/var/run/docker.sock");
+    // Unset, no container prefix; set, it reaches every create, the service's too.
+    assert.equal("containerPrefix" in native.deploys[before], false);
+    process.env.LAYERFS_CONTAINER_PREFIX = "layerfs-issue352-t-";
+    await new LayerFS("website2").project.list_branches();
+    await new LayerFS("website2").sandbox.create("box", "website2", "sha256:" + "a".repeat(64));
+    assert.deepEqual(native.deploys.slice(-2).map((d) => d.containerPrefix), ["layerfs-issue352-t-", "layerfs-issue352-t-"]);
+    delete process.env.LAYERFS_CONTAINER_PREFIX;
+    // A client's Store policy goes with its Init only.
+    await new LayerFS("website3", { storePolicy: { wholeFileDepth: 8, chunkDepth: 4 } }).project.init("/src/website");
+    assert.deepEqual(native.args.at(-1).policy, { wholeFileDepth: 8, chunkDepth: 4 });
+    await new LayerFS("website3").project.init("/src/website");
+    assert.equal("policy" in native.args.at(-1), false);
     delete process.env.LAYERFS_IMAGE;
     const calls = native.calls.length;
     await assert.rejects(new LayerFS("website").project.list_branches(), { code: "InvalidInput", message: /deploy\.image/ });

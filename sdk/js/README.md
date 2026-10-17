@@ -20,7 +20,12 @@ await layerfs.sandbox.unmount(id, path);
 await layerfs.sandbox.close(id);
 ```
 
-Construction captures environment strings. Project names use 1–63 lowercase ASCII
+Construction captures environment strings. `new LayerFS(project, { storePolicy })`
+selects the Store policy `project.init` records instead of the default:
+`{ smallFileThreshold, wholeFileDepth, chunkDepth, metadataDepth }`, each
+defaulting to the default policy's value (131072 bytes, depths 16, 8 and 8). An
+invalid policy is refused as `InvalidInput` before the project entry is made.
+The recorded policy governs the Store for its life. Project names use 1–63 lowercase ASCII
 letters, digits, `_`, `-`, `.` and start/end alphanumeric. Init is explicit;
 subsequent clients discover the existing project without reacquiring its source
 or reinstalling over live state. Ordinary Store calls lazily create or reopen a
@@ -64,6 +69,7 @@ client when its Sandbox closes; construct a new client for a new Sandbox.
 | `LAYERFS_VOLUME` | Existing named local VM volume shared by the project's daemons. |
 | `LAYERFS_DAEMON` | Host path to the built Linux daemon executable. |
 | `LAYERFS_NATIVE` | Optional addon path; defaults to `native/layerfs.node`. |
+| `LAYERFS_CONTAINER_PREFIX` | Optional. Names every container this client creates `<prefix><Sandbox id>`, the service Sandbox as `<prefix>service.<project>`, so a run can tell its own containers apart. Docker's name rule applies (an ASCII letter or digit, then letters, digits, `_`, `.`, `-`, at most 128). A name another container holds refuses the create before any effect. Unset, Docker chooses the name. |
 | `LAYERFS_TRACE` | Optional per-call trace file (see [Call trace](#call-trace)); unset means no trace. |
 | `LAYERFS_TRACE_STEP` | Optional step label put on each trace line as `step`; read at every call. |
 | `LAYERFS_TRACE_START` | `1` adds a start line before each traced call; read at every call. |

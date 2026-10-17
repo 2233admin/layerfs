@@ -87,9 +87,12 @@ impl Docker {
             })();
             result.map_err(|e| response.fail(e, None))?;
             phase = CreatePhase::Create;
-            let mut response = self.exchange("POST", "/v1.54/containers/create", false, |w| {
-                request.encode(w)
-            })?;
+            // `naming` admitted only characters that need no URL escape.
+            let path = match &self.container_name {
+                Some(name) => format!("/v1.54/containers/create?name={name}"),
+                None => "/v1.54/containers/create".to_owned(),
+            };
+            let mut response = self.exchange("POST", &path, false, |w| request.encode(w))?;
             if response.status != 201 {
                 return Err(response.fail(RuntimeError::Http(response.status), None));
             }

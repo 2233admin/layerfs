@@ -31,6 +31,8 @@ pub(crate) fn init(args: &SdkValue) -> Outcome {
     let name = text(args, "name")?;
     let source = PathBuf::from(text(args, "path")?);
     let home = crate::discovery::home(args)?;
+    // checked first: a refused policy leaves no project entry
+    let policy = policy(args)?;
     let directory = home.join(name);
     // The home entry is the project: creating it is the one existence check,
     // so a name whose entry was removed can be initialized again.
@@ -53,7 +55,7 @@ pub(crate) fn init(args: &SdkValue) -> Outcome {
         store: PersistenceConfig::sqlite(directory.join("sealed.sqlite"))
             .with_sqlite_profile(SqlitePersistenceProfile::Disposable),
         locator: LOCATOR.into(),
-        policy: StoragePolicy::frozen_default(),
+        policy,
         catalog: HistoryCatalogConfig {
             binding_key: random()?.to_vec(),
             cursor_key: random()?,
@@ -97,6 +99,37 @@ pub(crate) fn init(args: &SdkValue) -> Outcome {
     };
     crate::discovery::save_project(&directory, &project)?;
     Ok(answer)
+}
+
+/// The Store policy Init records: the default, or the caller's `policy`
+/// ({ smallFileThreshold, wholeFileDepth, chunkDepth, metadataDepth }, each
+/// defaulting to the default's), validated before anything is made.
+fn policy(args: &SdkValue) -> Result<StoragePolicy, layerfs_bridge::control::SdkRefusal> {
+    let base = StoragePolicy::frozen_default();
+    let Some(given) = args.get("policy") else {
+        return Ok(base);
+    };
+    let field = |name: &str, default: u64| match given.get(name) {
+        None | Some(SdkValue::Null) => Ok(default),
+        Some(SdkValue::Int(n)) if *n >= 0 => Ok(*n as u64),
+        Some(_) => Err(refused(
+            "InvalidInput",
+            format!("policy.{name} must be a whole number"),
+        )),
+    };
+    let depth = |name: &str, default: u8| {
+        u8::try_from(field(name, u64::from(default))?)
+            .map_err(|_| refused("InvalidInput", format!("policy.{name} is out of range")))
+    };
+    StoragePolicy::new(
+        base.format_profile(),
+        field("smallFileThreshold", base.small_file_threshold_bytes())?,
+        depth("wholeFileDepth", base.whole_file_delta_max_depth())?,
+        depth("chunkDepth", base.chunk_delta_max_depth())?,
+    )
+    .with_metadata_depth(depth("metadataDepth", base.metadata_delta_max_depth())?)
+    .validated()
+    .map_err(|error| refused("InvalidInput", format!("policy: {error}")))
 }
 
 /// Removes a finished Init's counts, whichever way it ended.

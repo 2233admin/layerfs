@@ -17,6 +17,9 @@ pub struct Docker {
     pub(super) socket: PathBuf,
     pub(super) control_wait: Duration,
     pub(super) deadline: Option<Instant>,
+    /// The name the next container this client creates gets; None lets the
+    /// Engine choose one.
+    pub(super) container_name: Option<String>,
 }
 pub(super) struct Response {
     pub status: u16,
@@ -38,7 +41,24 @@ impl Docker {
             socket: socket.as_ref().to_owned(),
             control_wait,
             deadline: None,
+            container_name: None,
         })
+    }
+    /// Names the containers this client creates `name`: an ASCII letter or
+    /// digit, then up to 127 letters, digits, `_`, `.` or `-` (the Engine's
+    /// rule). A name another container holds refuses the create before any
+    /// effect; it is never replaced or adopted.
+    pub fn naming(mut self, name: &str) -> Result<Self, RuntimeError> {
+        let valid = name.len() <= 128
+            && name.bytes().enumerate().all(|(i, b)| {
+                b.is_ascii_alphanumeric() || (i != 0 && matches!(b, b'_' | b'.' | b'-'))
+            })
+            && !name.is_empty();
+        if !valid {
+            return Err(RuntimeError::Protocol("container name"));
+        }
+        self.container_name = Some(name.to_owned());
+        Ok(self)
     }
     pub(super) fn exchange(
         &self,

@@ -183,7 +183,19 @@ fn create_claimed(
         manifest.daemon_sqlite = installed.daemon_sqlite.clone();
         manifest
     });
-    let docker = Docker::new(docker, ENGINE).map_err(failed)?;
+    let mut docker = Docker::new(docker, ENGINE).map_err(failed)?;
+    // A deployment's container prefix names the container `<prefix><id>`
+    // (the service Sandbox without its leading `_`), so a run can tell its
+    // own containers from any other.
+    if let Some(prefix) = args
+        .get("deploy")
+        .and_then(|d| d.get_text("containerPrefix"))
+    {
+        let name = format!("{prefix}{}", id.trim_start_matches('_'));
+        docker = docker
+            .naming(&name)
+            .map_err(|_| refused("InvalidInput", format!("container name {name}")))?;
+    }
     // Read only if this process ends before the intent is resolved.
     crate::discovery::save(
         &directory.join("create.intent"),

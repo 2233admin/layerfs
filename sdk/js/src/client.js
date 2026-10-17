@@ -46,12 +46,14 @@ export function deployment(options = {}, needsImage = true) {
     image: options.image ?? env("IMAGE"),
     volume: options.volume ?? env("VOLUME"),
     daemon: options.daemon ?? env("DAEMON"),
+    containerPrefix: options.containerPrefix ?? env("CONTAINER_PREFIX"),
   };
   for (const [name, value] of Object.entries(deploy)) {
-    if (name === "image" && !needsImage) continue;
+    if ((name === "image" && !needsImage) || name === "containerPrefix") continue;
     if (!value) throw new LayerFSError("InvalidInput", `deploy.${name} is not configured (LAYERFS_${name.toUpperCase()})`, null);
   }
   if (!deploy.image) delete deploy.image;
+  if (!deploy.containerPrefix) delete deploy.containerPrefix;
   return deploy;
 }
 

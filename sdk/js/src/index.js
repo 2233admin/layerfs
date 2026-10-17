@@ -32,8 +32,12 @@ export class LayerFS {
    * then DSH_LAYERFS_TRACE); `options.traceStep` labels its lines
    * (overrides LAYERFS_TRACE_STEP, then DSH_LAYERFS_TRACE_STEP). Deployment
    * settings read LAYERFS_HOME, _DOCKER, _IMAGE, _VOLUME and _DAEMON, each
-   * else its DSH_LAYERFS_ twin. `options.sandbox` selects an existing
-   * Sandbox for this client's Store calls. */
+   * else its DSH_LAYERFS_ twin; LAYERFS_CONTAINER_PREFIX, when set, names
+   * every container this client creates `<prefix><Sandbox id>`.
+   * `options.sandbox` selects an existing Sandbox for this client's Store
+   * calls. `options.storePolicy` ({ smallFileThreshold, wholeFileDepth,
+   * chunkDepth, metadataDepth }) is the Store policy `project.init` records
+   * instead of the default. */
   constructor(projectName, options = {}) {
     if (typeof projectName !== "string" || !/^[a-z0-9](?:[a-z0-9_.-]{0,61}[a-z0-9])?$/.test(projectName)) {
       throw new LayerFSError("InvalidInput", "a project name is required", null);
@@ -51,7 +55,9 @@ export class LayerFS {
         image: env("IMAGE"),
         volume: env("VOLUME"),
         daemon: env("DAEMON"),
+        ...(env("CONTAINER_PREFIX") ? { containerPrefix: env("CONTAINER_PREFIX") } : {}),
       },
+      storePolicy: options.storePolicy,
     };
     const selected = options.sandbox === undefined ? null : sandboxId(options.sandbox);
     this.sandboxes = new Set(selected ? [selected] : []);

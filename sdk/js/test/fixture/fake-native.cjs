@@ -34,11 +34,13 @@ const telemetry = (op) => [{
 exports.calls = [];
 exports.observed = [];
 exports.deploys = [];
+exports.args = [];
 exports.busyServices = 0;
 const traced = (op, args) => {
   exports.calls.push(op);
   exports.observed.push(args.observe ?? null);
   if (args.deploy) exports.deploys.push(args.deploy);
+  exports.args.push(args);
   const plain = answer(op, args);
   return args.observe ? { ...plain, telemetry: telemetry(op) } : plain;
 };
