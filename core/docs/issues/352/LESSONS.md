@@ -35,6 +35,10 @@ verify ~1 s); a fix took 50–65 min of fixer time; the first builder tasks took
   range with `RANGES.md` cut to its own row, then the next.
 - `git push`, `gh` and Docker need the sandbox disabled.
 - Record every decision in RESULTS.md's decision log the moment it is made.
+- **Write §7 of every report that had a finding or a rerun** before committing it:
+  the trigger, diagnosis, the before/after table and links to the `fixes/`
+  records. `report.mjs` puts that table only in the comment (until the builder
+  fixes it); range 002's first commit missed it.
 
 ## 3. Troubleshooting
 
