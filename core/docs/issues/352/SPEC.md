@@ -546,6 +546,16 @@ for a ~5% storage gain. Report raw deltas for both.
 
 ## 5. Gates per range
 
+> **Checkpoint diff_commits (F-013, 2026-10-18).** Cost = a + b·n: a fixed per
+> checkpoint, b per changed entry n, each flat with depth and tree size. Per
+> axis: if n does not grow with the axis, the checkpoint's total statements
+> (then ms) are fitted; if n grows, per entry is fitted; if n grows and per
+> entry does not rise, the parts cannot be separated and the check is "not
+> judged" (watch). Never normalised by tree files. Why: per entry alone rises
+> whenever n falls (a false optimize at p1-rebase-b range 2), and neither the
+> one-file probe nor one checkpoint's pages give the fixed part
+> (`dsh/tools/history/gates.mjs` header).
+
 Thresholds compare against a baseline taken from ranges 1–5, for the same
 operation kind and size class. Set the exact numbers after the pilot and record
 them here.

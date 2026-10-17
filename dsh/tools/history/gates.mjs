@@ -2,6 +2,21 @@
 // the ranges before it and the pilot baseline. Pure functions; report.mjs
 // reads the files and writes the reports.
 //
+// The checkpoint diff_commits gate (F-013, builder's choice, 2026-10-18): a
+// checkpoint's difference costs a + b·n, a fixed per checkpoint and b per
+// changed entry n; both must stay flat with depth and with tree size (SPEC §4).
+// Per entry alone (a/n + b) rises whenever n falls, whatever the tree does
+// (p1-rebase-b range 2, a false optimize). a and b are not estimated from the
+// one-file probe: it does not carry the checkpoint's fixed work (subtracting
+// it still leaves (S − a)/n rising 4.3 → 6.1 on flat totals), and one
+// checkpoint has one or two pages, too few for an intercept. Instead, per axis
+// (depth, tree files): where n does not grow with the axis, the total is
+// judged (a rise means a or b grew); where n grows with it, per entry is
+// judged (a rise means b grew, or a faster than n); otherwise a and b cannot
+// be separated and the fit is "not judged", watch (F8). Statements first,
+// then ms. Never normalised by tree files. Limit: a b that grows exactly as n
+// falls keeps the total flat; it shows once n stops falling.
+//
 // A range's metrics file (the runner writes one per attempt):
 //   { range, attempt, binary, head (main's head Commit id), depth: { before, after }, wall: { totalMs, ... },
 //     checks: { tree: { ok, files, missing, extra, content, mode }, history: { ok },
@@ -92,6 +107,33 @@ export function buildBaseline(metrics) {
     ops: Object.fromEntries([...ops].map(([k, v]) => [k, { p50: quantile(v.p50, 0.5), p95: quantile(v.p95, 0.5) }])),
     probes: Object.fromEntries([...probes].map(([k, v]) => [k, quantile(v, 0.5)])),
   };
+}
+
+/**
+ * The checkpoint diff's fits (F-013). Statements first, then ms; each against
+ * depth and against tree files. Total = a + b·n: a fixed part per checkpoint,
+ * b per changed entry. Where entries n do not grow with the axis (exponent
+ * ≤ the watch band), the total is judged: a rise means a or b grew. Where n
+ * grows with it, per entry (a/n + b) is judged: a rise means b (or a, faster
+ * than n) grew; no rise cannot separate a from b, so the fit is not judged
+ * (watch, F8), never pass. Nothing is divided by tree files.
+ */
+export function splitFits(op, pts, th) {
+  const fits = [];
+  for (const [axis, at] of [["depth", (x) => x.depth?.after], ["tree files", treeFiles]]) {
+    const eN = exponent(pts.map((x) => [at(x), x.perUnit[op].entries]));
+    for (const [total, per, what] of [["statements", "statementsPerEntry", "statements"], ["ms", "msPerEntry", "ms"]]) {
+      if (pts.at(-1)?.perUnit[op][total] == null) continue;
+      const against = axis === "depth" ? undefined : axis;
+      if (eN == null) { fits.push({ name: `${op} checkpoint ${what}`, against, e: null }); continue; }
+      if (eN <= th.watch) { fits.push({ name: `${op} checkpoint ${what} in total (entries exponent ${eN})`, against, e: exponent(pts.map((x) => [at(x), x.perUnit[op][total]])) }); continue; }
+      const eP = exponent(pts.map((x) => [at(x), x.perUnit[op][per]]));
+      if (band(eP, th) !== "pass") fits.push({ name: `${op} checkpoint ${what} per entry (entries exponent ${eN})`, against, e: eP });
+      else fits.push({ name: `${op} checkpoint ${what}`, against, e: null, result: "watch",
+        note: `entries grow with ${axis} (exponent ${eN}) and ${what} per entry does not rise (${eP}): the fixed and per-entry parts cannot be separated` });
+    }
+  }
+  return fits;
 }
 
 /** Least-squares slope of log(y) on log(x): how y grows with x (0 flat, 1 linear). */
@@ -201,25 +243,24 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
       if (TREE_FLAT.has(name)) counterFits.push({ name: `${name}.${k}`, against: "tree files", e: exponent(all.map((x) => [treeFiles(x), x.probes?.[name]?.counters?.[k]])) });
     }
   }
-  // An operation judged per unit of its own input (SPEC §4, F-012: diff_commits may grow with the entries
-  // changed, never with depth or tree size): the checkpoint's whole difference (all pages) per changed entry,
-  // statements first, then ms, each fitted against depth and against tree files, over attempts with the same
-  // basis (run.mjs perUnit). Never normalised by tree files: a rise against either is a finding.
+  // An operation judged against its own input (SPEC §4): the checkpoint diff's fixed and marginal parts
+  // (splitFits, header); a legacy per-page basis keeps its per-entry fit against depth.
   for (const [op, p] of Object.entries(m.perUnit || {})) {
     const pts = all.filter((x) => x.perUnit?.[op] && x.perUnit[op].basis === p.basis);
-    for (const [key, what] of [["statementsPerEntry", "statements"], ["msPerEntry", "ms"]]) {
-      if (p[key] == null) continue;
-      const name = p.basis === "checkpoint" ? `${op} checkpoint ${what} per ${p.unit}` : `${op} per ${p.unit}`;
-      probeFits.push({ name, e: exponent(pts.map((x) => [x.depth?.after, x.perUnit[op][key]])) });
-      if (p.basis === "checkpoint") probeFits.push({ name, against: "tree files", e: exponent(pts.map((x) => [treeFiles(x), x.perUnit[op][key]])) });
-    }
+    if (p.basis === "checkpoint") probeFits.push(...splitFits(op, pts, t.depthExponent));
+    else probeFits.push({ name: `${op} per ${p.unit}`, e: exponent(pts.map((x) => [x.depth?.after, x.perUnit[op].msPerEntry])) });
   }
-  const top = (fits, th) => fits.length
-    ? { ...fits.reduce((m2, f) => ((f.e ?? -Infinity) > (m2.e ?? -Infinity) ? f : m2)), result: worst(fits.map((f) => band(f.e, th))) }
-    : { name: null, e: null, result: "pass" };
+  // the fit that decides: the worst result, then the highest exponent; a fit may carry its own result (not judged)
+  const top = (fits, th) => {
+    if (!fits.length) return { name: null, e: null, result: "pass" };
+    const r = fits.map((f) => f.result ?? band(f.e, th));
+    const i = r.reduce((b, x, j) => (RANK[x] > RANK[r[b]] || (RANK[x] === RANK[r[b]] && (fits[j].e ?? -Infinity) > (fits[b].e ?? -Infinity)) ? j : b), 0);
+    return { ...fits[i], result: worst(r) };
+  };
   const scale = top(probeFits, t.depthExponent), counter = top(counterFits, t.counterExponent);
   const fit = (f, what) => (fitted < MINIMUM_POINTS ? { value: insufficient(fitted), result: "watch" }
     : !f.name ? { value: `not judged: no ${what}`, result: "watch" }
+    : f.note ? { value: `not judged: ${f.name}: ${f.note}`, result: f.result }
     : f.e == null ? { value: `not judged: ${f.name}: no ${f.against ?? "depth"} exponent (points without ${f.against ?? "depth"} or value)`, result: "watch" }
     : { value: `${f.name}: ${f.against ?? "depth"} exponent ${f.e}${seeded.length ? ` (${seeded.length} seeded probe point${seeded.length > 1 ? "s" : ""})` : ""}`, result: f.result });
   const sv = fit(scale, "probes"), cv = fit(counter, "counters");

@@ -414,3 +414,21 @@ test("checkpointDiff sums every page of the checkpoint step, per changed entry",
   assert.deepEqual([d.pages, d.entries, d.ms, d.statements, d.msPerEntry, d.statementsPerEntry, d.basis], [2, 120, 40, 400, 0.3333, 3.333, "checkpoint"]);
   assert.equal(checkpointDiff([], log, "r003.verify"), null);
 });
+
+test("F-013: fixed and per-entry parts; flat total with falling entries passes, unseparable is watch", () => {
+  const cp = (entries, statements, ms) => ({ unit: "entry", basis: "checkpoint", pages: 1, entries, statements, ms, statementsPerEntry: statements / entries, msPerEntry: ms / entries });
+  const mk = (range, depth, files, c) => ({ range, binary: { daemon: "d" }, depth: { after: depth }, inputs: { tree: { files } }, checks: {}, perUnit: { "branch.diff_commits": c } });
+  const scaling = (xs) => evaluate(xs.at(-1), xs.slice(0, -1)).checks.find((c) => c.name === "Scaling");
+  // p1-rebase-b ranges 0-2 (daemon 361bb09e): totals flat, entries falling, tree growing
+  const real = [[571, 255, 327, 1557, 18.6], [1114, 307, 240, 1389, 14.2], [1533, 373, 208, 1413, 16.9]].map(([d, f, n, s, ms], i) => mk(i, d, f, cp(n, s, ms)));
+  const r = scaling(real);
+  assert.equal(r.result, "pass", r.value);
+  // entries grow with tree and depth, per entry flat: a and b not separable
+  const grow = [[1000, 400, 100], [2000, 800, 200], [4000, 1600, 400]].map(([d, f, n], i) => mk(i, d, f, cp(n, n * 6, n * 0.05)));
+  const w = scaling(grow);
+  assert.equal(w.result, "watch", w.value);
+  assert.match(w.value, /not judged: .*cannot be separated/);
+  // entries grow and per entry grows with tree files: trips
+  const walk = [[1000, 400, 100], [2000, 800, 200], [4000, 1600, 400]].map(([d, f, n], i) => mk(i, d, f, cp(n, n * 0.25 * f, n * 0.05)));
+  assert.equal(scaling(walk).result, "optimize");
+});
