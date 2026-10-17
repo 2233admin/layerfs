@@ -1,6 +1,7 @@
 # Handoff prompt — #352
 
-> **Status:** Current; give this whole file to the agent that runs #352.
+> **Status:** Current; the agent that runs #352 starts from [PROMPT.md](PROMPT.md),
+> which points here.
 
 You own LayerFS issue [#352](https://github.com/Ephemeral-AI-Lab/layerfs/issues/352)
 (dsh history replay). You work in `/Users/yifanxu/Ephemeral-AI-Lab/layerfs` on
@@ -14,9 +15,10 @@ work. For each range:
 
 Optimize what the gates flag. Run phases P0–P5 in order.
 
-**Keep going until P5 is done or a Stop gate needs the owner.** Do not ask
-questions and do not wait for replies. Make the best decision, write it down in
-`BUGS.md`, `RESULTS.md` or `OPTIMIZATIONS.md`, and continue.
+**Keep going until the terminal pass** (PROMPT.md, "When you are done"). Do not
+ask questions, do not ask for authority, and do not wait for replies. Make the
+best decision, write it down in `BUGS.md`, `RESULTS.md` or `OPTIMIZATIONS.md`,
+and continue. A stop gate is a bug cycle you run, not a reason to wait.
 
 ## Authority
 
@@ -27,7 +29,10 @@ You need no further approval to:
 - change the delta depths further, following SPEC.md §8;
 - commit and push `dsh-history-replay`, and comment on #352;
 - create the Docker volumes, containers and host folders the run needs, under
-  names starting with `layerfs-issue352-` and under `~/lfs-history/`.
+  names starting with `layerfs-issue352-` and under `~/lfs-history/`, and remove
+  your own (by literal name or path) when SPEC.md §7 no longer keeps them;
+- use the image `layerfs-352-runtime:node24`, and rebuild it from its Dockerfile
+  when a range needs it (a new id is a new binary; record it).
 
 You do **not** have authority to:
 - change the SQLite page size (it stays 4 KiB);
@@ -35,7 +40,11 @@ You do **not** have authority to:
 - raise Docker Desktop's disk limit;
 - merge into `main`.
 
-When you need one of these, stop and say so on #352.
+Never do these. When the work seems to need one, find the way within your
+authority (re-plan range sizes or test caps, remove your own data that is no
+longer kept), record the decision and continue. Only a hard block that nothing
+within your authority clears ends the run early: post a "BLOCKED" comment on
+#352 with what would clear it (PROMPT.md), and stop.
 
 ## Read first
 
