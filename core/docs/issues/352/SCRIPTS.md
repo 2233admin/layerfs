@@ -352,6 +352,10 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   normalised by tree files. The one-file `diff_commits` probe stays on raw
   counters, fitted against depth and tree files (`TREE_FLAT`). Older attempts'
   per-page medians are a different basis and never share a fit.
+- **Probe inputs and versions** (F-014): see SPEC §3c "As built". A probe's
+  setup (forks, fixture writes, the stats that size its input) runs untimed
+  under `probe-setup:<name>`; only the probed call is timed and counted under
+  `probe:<name>`. `report.mjs regate --metrics <dir>` is the gates' dry run.
 - **A speed baseline per daemon.** `baseline.json` stays the pilot's
   (`511dceed`, `p1-pilot-b` ranges 2–4). A later daemon gets its own
   `baseline-<daemon12>.json` beside it, built by `report.mjs baseline --run

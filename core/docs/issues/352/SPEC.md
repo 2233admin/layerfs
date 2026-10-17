@@ -475,6 +475,21 @@ per 2 writes). In addition, the **scale probes** run once per range:
 | one-shot `mount` + `exec true` + `unmount` | — | tree size, history depth |
 | one-shot `commit` of one 2 KiB file | one file | tree size, history depth |
 
+> **As built (F-014, 2026-10-18).** Each fixed-input probe records its input
+> in the metrics (`probes.<name>.input`): bytes (stat, read), entries
+> (list_small), files in scope (grep/glob scoped), both files' bytes
+> (diff_files), changed files (diff_commits), files per side (merge), page size
+> (list_commits), one 2 KiB file (one-shot commit). The `diff_commits` probe is
+> version 2 (`probes.diff_commits.version`): it forks its own Branch, adds one
+> fixed 2 KiB file, and diffs exactly those two adjacent Commits; version 1
+> diffed the lane's newest Commit, whose change grew with the range (4 → 60
+> files). The gates fit a probe only over points of its version and recorded
+> input; a different earlier input, a missing input or too few such points is
+> "not judged" (watch). `list_largest` and grep/glob over the tree may grow and
+> are exempt. The other probes' inputs were already fixed. Recorded values and
+> verdicts stay as recorded; `report.mjs regate` re-evaluates recorded metrics
+> and prints only.
+
 ### d. Storage
 
 Read from `operator.store.stats()` and per-Commit `sizes`:

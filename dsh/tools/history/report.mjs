@@ -2,6 +2,7 @@
 // Writes the range reports (#352 SPEC §3, ranges/TEMPLATE.md) and the index:
 //   node dsh/tools/history/report.mjs --metrics <dir> --plan <dir> --docs <core/docs/issues/352> [--range N]
 //   node dsh/tools/history/report.mjs check <NNN> [--metrics <dir>] [--docs <dir>]   (reportcheck.mjs: F1–F8)
+//   node dsh/tools/history/report.mjs regate --metrics <dir>   (dry run: today's gates over recorded metrics; prints only, F2)
 //   node dsh/tools/history/report.mjs records [--docs <dir>]   (every fixes/ record states its REBUILD.md §4 kind fields)
 //   node dsh/tools/history/report.mjs baseline --run <id> --metrics <dir> --ranges 2-4 [--out <dir>]   (one daemon's speed baseline)
 //   node dsh/tools/history/report.mjs stats --metrics <dir> --docs <dir>   (STATS.md alone, e.g. its backfill)
@@ -387,6 +388,29 @@ export function renderIndex(rows) {
  * evaluated now, once, and its result stored in its metrics file.
  * @returns {{ verdict: string, file: string, comment: string }}
  */
+/**
+ * The dry run (F2: prints only): every range's latest attempt in `metricsDir`
+ * re-evaluated by today's gates.mjs over the same history, seeds and
+ * per-daemon baselines (`baselinesDir`), beside its stored verdict. Writes
+ * nothing: no stored gate, report, comment or baseline.
+ * @returns {{ range, attempt, run, daemon, stored, verdict, worst: { name, result, value } }[]}
+ */
+export function regate({ metricsDir, oracleDir, baselinesDir = metricsDir }) {
+  const attempts = loadAttempts(metricsDir);
+  const last = [...attempts.values()].map((ys) => ys.at(-1)).map((m) => withInputs(m, oracleDir));
+  const pilotFile = join(baselinesDir, "baseline.json");
+  const pilot = existsSync(pilotFile) ? JSON.parse(readFileSync(pilotFile, "utf8")) : null;
+  const baselines = loadBaselines(baselinesDir, pilot);
+  const seeds = loadSeeds(metricsDir).map((p) => withInputs(p, oracleDir));
+  return last.map((m) => {
+    const g = evaluate(m, last.filter((x) => x.range < m.range), m.range < 5 ? null : baselines.get(m.binary?.daemon ?? null) ?? pilot, undefined, seeds);
+    const rank = { pass: 0, watch: 1, optimize: 2, stop: 3 };
+    const worst = g.checks.reduce((w, c) => (rank[c.result] > rank[w.result] ? c : w), { name: "—", result: "pass", value: "" });
+    return { range: m.range, attempt: m.attempt, run: m.run, daemon: String(m.binary?.daemon ?? "?").slice(0, 8), stored: m.gate?.verdict ?? "—", verdict: g.verdict,
+      worst: { name: worst.name, result: worst.result, value: String(worst.value) } };
+  });
+}
+
 export function reportRange({ metricsDir, planDir, docs, oracleDir, range }) {
   const summaries = new Map(JSON.parse(readFileSync(join(planDir, "plan.json"), "utf8")).ranges.map((r) => [r.range, r]));
   const attempts = loadAttempts(metricsDir), findings = loadFindings(metricsDir);
@@ -458,6 +482,14 @@ async function main() {
     for (const line of result.lines) console.log(line);
     if (result.failed.length) { console.log(`range ${pad(range)}: FAIL ${result.failed.join(" ")}`); process.exit(1); }
     console.log(`range ${pad(range)}: PASS F1–F8`);
+    return;
+  }
+  if (args[0] === "regate") {
+    const metricsDir = opt("--metrics");
+    if (!metricsDir) { console.error("usage: report.mjs regate --metrics <dir> [--oracle <dir>] [--baselines <dir>]"); process.exit(2); }
+    const rows = regate({ metricsDir, oracleDir: opt("--oracle") ?? join(process.env.HOME, "lfs-history", "oracle"), baselinesDir: opt("--baselines") ?? join(process.env.HOME, "lfs-history", "metrics") });
+    console.log("| Range | Run | Daemon | Stored | Now | Worst check |\n| --- | --- | --- | --- | --- | --- |");
+    for (const r of rows) console.log(`| ${pad(r.range)}.a${r.attempt} | ${r.run} | ${r.daemon} | ${r.stored} | ${r.verdict} | ${r.worst.name} ${r.worst.result}: ${r.worst.value} |`);
     return;
   }
   if (args[0] === "records") {

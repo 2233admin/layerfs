@@ -389,7 +389,7 @@ async function playRange(run, k, mode) {
   // the checkpoint tree the scoped probes read (gates.mjs SCOPED)
   const oracle = JSON.parse(readFileSync(join(run.manifest.oracle, `oracle-${pad(k)}.json`), "utf8"));
   m.inputs = { tree: { files: oracle.files, bytes: oracle.bytes } };
-  m.probes = Object.fromEntries(Object.entries(probeOut).map(([name, p]) => [name, { ms: p.ms, ...(p.error ? { error: p.error } : {}), counters: t.probe[name] ?? {} }]));
+  m.probes = Object.fromEntries(Object.entries(probeOut).map(([name, p]) => [name, { ms: p.ms, ...(p.version ? { version: p.version } : {}), ...(p.input ? { input: p.input } : {}), ...(p.error ? { error: p.error } : {}), counters: t.probe[name] ?? {} }]));
   const open = snap?.sandboxes?.reduce((n, s) => n + (s.workspaces?.length ?? 0), 0) ?? null;
   const hl = await sandboxHealth(run);
   m.health = { workspacesOpen: open, overlaysLeft: hl?.overlaysLeft ?? null, daemonRssMb: hl?.daemonRssMb ?? null, openFiles: hl?.openFiles ?? null, sandboxes: hl ? `${hl.sandboxes} of ${hl.of}` : null };

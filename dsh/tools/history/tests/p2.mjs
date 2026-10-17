@@ -7,14 +7,14 @@
 //   node dsh/tools/history/tests/p2.mjs
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { aggregate, evaluate } from "../gates.mjs";
+import { aggregate, evaluate, probeSeries } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
 import { parseReport } from "../frozen.mjs";
-import { leadNote, loadBaselines, writeBaseline } from "../report.mjs";
+import { leadNote, loadBaselines, regate, writeBaseline } from "../report.mjs";
 import { atHead } from "../frozen.mjs";
 import { laneChanges, mergedTree } from "../agents.mjs";
 import { measure, record } from "../lib.mjs";
@@ -283,13 +283,35 @@ test("STATS.md: a row per range, a cumulative row, P1 ranges derived and marked"
   assert.ok(only.includes("| fs.write |") && /\| fs\.write \| [a-z]+ \| 5 \| — \| — \|/.test(only), only);
 });
 
-test("Scaling: diff_commits judged per entry against depth when three attempts recorded it", () => {
-  const mk = (range, depth, ms) => ({ range, binary: { daemon: "d" }, depth: { after: depth }, checks: {}, probes: { stat: { ms: 3 } }, perUnit: { "branch.diff_commits": { unit: "entry", msPerEntry: ms } } });
-  const g = evaluate(mk(3, 4000, 0.4), [mk(1, 1000, 0.1), mk(2, 2000, 0.2)]);
-  const row = g.checks.find((c) => c.name === "Scaling");
-  assert.match(row.value, /branch\.diff_commits per entry: depth exponent 1/);
-  assert.equal(row.result, "optimize");
+test("Scaling: a legacy per-page diff_commits series is not judged (F-013), never optimize or pass", () => {
+  const mk = (range, depth, ms) => ({ range, binary: { daemon: "d" }, depth: { after: depth }, checks: {}, probes: { fork: { ms: 3 } }, perUnit: { "branch.diff_commits": { unit: "entry", msPerEntry: ms } } });
+  const row = evaluate(mk(3, 4000, 0.4), [mk(1, 1000, 0.1), mk(2, 2000, 0.2)]).checks.find((c) => c.name === "Scaling");
+  assert.match(row.value, /not judged: branch\.diff_commits per entry: a per-page median/);
+  assert.equal(row.result, "watch");
 });
+
+test("F-014: probes fit only same-version, same-input points; growing probes are exempt; no input is not judged", () => {
+  const mk = (range, depth, probes) => ({ range, binary: { daemon: "d" }, depth: { after: depth }, inputs: { tree: { files: 100 * (range + 1), bytes: 1e4 * (range + 1) } }, checks: {}, probes });
+  const one = (ms, input, version) => ({ ms, counters: { statements: 100 }, ...(input ? { input } : {}), ...(version ? { version } : {}) });
+  const row = (xs, name = "Scaling") => evaluate(xs.at(-1), xs.slice(0, -1)).checks.find((c) => c.name === name);
+  const same = [1, 2, 3].map((i) => mk(i, 1000 * i, { diff_commits: one(5, { files: 1 }, 2) }));
+  assert.equal(row(same).result, "pass", row(same).value);
+  // the input drifted (the v1 defect): refused with the reason
+  const drift = [1, 2, 3].map((i) => mk(i, 1000 * i, { diff_commits: one(5 * i, { files: [4, 5, 60][i - 1] }, 2) }));
+  assert.match(row(drift).value, /not judged: diff_commits: input \{"files":60\} differs from range 1 \(\{"files":4\}\), 2/);
+  assert.equal(row(drift).result, "watch");
+  // versions never share a fit: two v1 points and one v2 point are too few
+  const mixed = [mk(1, 1000, { diff_commits: one(5, { files: 1 }) }), mk(2, 2000, { diff_commits: one(5, { files: 1 }) }), mk(3, 3000, { diff_commits: one(50, { files: 1 }, 2) })];
+  assert.match(row(mixed).value, /not judged: diff_commits: 1 of 3 points of probe version 2/);
+  assert.equal(row(mixed).result, "watch");
+  // a fixed-input probe without its input is not judged; a growing probe needs none and is fitted
+  const legacy = [1, 2, 3].map((i) => mk(i, 1000 * i, { stat: one(3) }));
+  assert.match(row(legacy).value, /stat: input not recorded/);
+  const grows = [1, 2, 3].map((i) => mk(i, 1000 * i, { list_largest: one(3 * i, { entries: 10 * i }) }));
+  assert.equal(row(grows).result, "optimize", "list_largest is exempt from the same-input rule and still fitted");
+  assert.deepEqual(probeSeries("list_largest", grows[2], grows).note, undefined);
+});
+
 
 test("atHead: a folder outside git is null, quietly", () => {
   const file = join(dir, "outside", "r.md");
@@ -431,4 +453,16 @@ test("F-013: fixed and per-entry parts; flat total with falling entries passes, 
   // entries grow and per entry grows with tree files: trips
   const walk = [[1000, 400, 100], [2000, 800, 200], [4000, 1600, 400]].map(([d, f, n], i) => mk(i, d, f, cp(n, n * 0.25 * f, n * 0.05)));
   assert.equal(scaling(walk).result, "optimize");
+});
+
+test("regate: prints today's verdicts over recorded metrics and writes nothing", () => {
+  const d = mkdtempSync(join(tmpdir(), "regate-"));
+  const m = (range) => ({ range, attempt: 1, run: "r", mode: "measured", binary: { daemon: "d".repeat(64) }, depth: { after: 1000 * (range + 1) }, checks: {}, gate: { verdict: "optimize", checks: [] },
+    probes: { diff_commits: { ms: 5, version: 2, input: { files: 1 }, counters: { statements: 100 } } } });
+  for (const k of [0, 1, 2]) writeFileSync(join(d, `range-00${k}.a1.json`), JSON.stringify(m(k)));
+  const before = readdirSync(d).map((f) => [f, readFileSync(join(d, f), "utf8")]);
+  const rows = regate({ metricsDir: d, oracleDir: join(d, "none") });
+  assert.deepEqual(rows.map((r) => [r.range, r.stored, r.verdict]), [[0, "optimize", "watch"], [1, "optimize", "watch"], [2, "optimize", "watch"]]);
+  assert.deepEqual(readdirSync(d).map((f) => [f, readFileSync(join(d, f), "utf8")]), before, "no file written or changed");
+  rmSync(d, { recursive: true, force: true });
 });

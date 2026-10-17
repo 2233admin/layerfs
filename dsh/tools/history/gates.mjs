@@ -109,6 +109,36 @@ export function buildBaseline(metrics) {
   };
 }
 
+/** Probes whose input may grow by SPEC §3c (fitted per their own input instead): exempt from the same-input rule. */
+export const GROWS = new Set(["list_largest", "grep_tree", "glob_tree"]);
+/** Probes with a fixed input by SPEC §3c; they record it (lib.mjs probes) and are not judged without it. */
+export const FIXED_INPUT = new Set(["stat", "read", "list_small", "grep_scoped", "glob_scoped", "diff_files", "diff_commits", "merge", "list_commits", "oneshot_commit"]);
+
+/**
+ * A probe's fit series (F-014): the points of `all` with the probe's version
+ * (unversioned = 1). A fixed-input probe that recorded its input is fitted
+ * only over points with the same recorded input; an earlier same-version point
+ * with a different input refuses the fit ("not judged", watch, with the
+ * reason), and fewer than MINIMUM_POINTS such points are not judged either.
+ * A fixed-input probe (FIXED_INPUT) that recorded no input (before F-014) is
+ * not judged: its input cannot be confirmed (the v1 diff_commits probe drifted).
+ */
+export function probeSeries(name, m, all) {
+  const p = m.probes[name], v = p.version ?? 1;
+  const same = all.filter((x) => x.probes?.[name] && (x.probes[name].version ?? 1) === v);
+  let pts = same;
+  if (FIXED_INPUT.has(name) && p.input == null) return { pts: [], note: "input not recorded (before F-014): a fixed input cannot be confirmed" };
+  if (p.input != null && !GROWS.has(name)) {
+    const key = JSON.stringify(p.input);
+    const differ = same.filter((x) => x.probes[name].input != null && JSON.stringify(x.probes[name].input) !== key);
+    if (differ.length) return { pts: [], note: `input ${key} differs from range ${differ.map((x) => `${x.range} (${JSON.stringify(x.probes[name].input)})`).join(", ")}` };
+    pts = same.filter((x) => x.probes[name].input != null);
+  }
+  const n = pts.filter((x) => x.depth?.after > 0).length;
+  if (n < MINIMUM_POINTS) return { pts, note: `${n} of ${MINIMUM_POINTS} points of probe version ${v}${p.input != null && !GROWS.has(name) ? " with this input" : ""}` };
+  return { pts };
+}
+
 /**
  * The checkpoint diff's fits (F-013). Statements first, then ms; each against
  * depth and against tree files. Total = a + b·n: a fixed part per checkpoint,
@@ -237,10 +267,13 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   // The probe and the counter with the highest depth exponent, and the worst band of any.
   const probeFits = [], counterFits = [];
   for (const name of Object.keys(m.probes || {})) {
-    probeFits.push({ name: `${name}${unit(name)}`, e: exponent(all.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.ms, scoped)])) });
+    // F-014: only points of the same probe version, and for a fixed-input probe the same recorded input
+    const { pts, note } = probeSeries(name, m, all);
+    if (note) { probeFits.push({ name, e: null, result: "watch", note }); counterFits.push({ name, e: null, result: "watch", note }); continue; }
+    probeFits.push({ name: `${name}${unit(name)}`, e: exponent(pts.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.ms, scoped)])) });
     for (const k of Object.keys(m.probes[name].counters || {})) {
-      counterFits.push({ name: `${name}.${k}${unit(name)}`, e: exponent(all.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.counters?.[k], scoped)])) });
-      if (TREE_FLAT.has(name)) counterFits.push({ name: `${name}.${k}`, against: "tree files", e: exponent(all.map((x) => [treeFiles(x), x.probes?.[name]?.counters?.[k]])) });
+      counterFits.push({ name: `${name}.${k}${unit(name)}`, e: exponent(pts.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.counters?.[k], scoped)])) });
+      if (TREE_FLAT.has(name)) counterFits.push({ name: `${name}.${k}`, against: "tree files", e: exponent(pts.map((x) => [treeFiles(x), x.probes?.[name]?.counters?.[k]])) });
     }
   }
   // An operation judged against its own input (SPEC §4): the checkpoint diff's fixed and marginal parts
@@ -248,7 +281,7 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   for (const [op, p] of Object.entries(m.perUnit || {})) {
     const pts = all.filter((x) => x.perUnit?.[op] && x.perUnit[op].basis === p.basis);
     if (p.basis === "checkpoint") probeFits.push(...splitFits(op, pts, t.depthExponent));
-    else probeFits.push({ name: `${op} per ${p.unit}`, e: exponent(pts.map((x) => [x.depth?.after, x.perUnit[op].msPerEntry])) });
+    else probeFits.push({ name: `${op} per ${p.unit}`, e: null, result: "watch", note: "a per-page median per entry cannot separate the fixed and per-entry parts (F-013)" });
   }
   // the fit that decides: the worst result, then the highest exponent; a fit may carry its own result (not judged)
   const top = (fits, th) => {

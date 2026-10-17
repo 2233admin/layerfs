@@ -460,6 +460,9 @@ export async function teardown(run) {
 }
 
 /** The probe fixture (SPEC §3c): a 2 KiB file, a 5-entry folder and two 8 KiB files, in one Commit. */
+/** `n` bytes of probe text lines seeded by `seed` (a fixed size whatever the seed's length, up to 20 characters). */
+export const probeText = (seed, n) => Array.from({ length: Math.ceil(n / 64) }, (_, i) => `${seed.padEnd(20).slice(0, 20)} line ${String(i).padStart(4, "0")} probe ${"x".repeat(20)}\n`).join("").slice(0, n);
+
 export function probeFixture() {
   const text = (seed, n) => Array.from({ length: Math.ceil(n / 64) }, (_, i) => `${seed} line ${String(i).padStart(4, "0")} probe ${"x".repeat(36)}\n`).join("").slice(0, n);
   return [
@@ -482,24 +485,33 @@ export async function probes(run, k, { branch, tree }) {
   const sb = await setup(run);
   run.rec.tree = tree;
   const list = [
-    ["stat", () => lf.fs.stat("main", `${P}/small.txt`)],
-    ["read", () => lf.fs.read("main", `${P}/small.txt`, 1, 50)],
-    ["list_small", () => lf.fs.list("main", `${P}/dir`, 50, 0)],
+    // `input` (F-014): the probe's input size, recorded so the gate fits only points with the same input (SPEC §3c)
+    ["stat", () => lf.fs.stat("main", `${P}/small.txt`), { input: (v) => ({ bytes: v.size }) }],
+    ["read", () => lf.fs.read("main", `${P}/small.txt`, 1, 50), { setup: () => lf.fs.stat("main", `${P}/small.txt`), input: (v, s) => ({ bytes: s.size }) }],
+    ["list_small", () => lf.fs.list("main", `${P}/dir`, 50, 0), { input: (v) => ({ entries: v.items.length }) }],
     ["list_largest", () => lf.fs.list("main", abs(big.dir), 1000, 0)],
-    ["grep_scoped", () => lf.fs.grep("main", "probe", `${P}/dir`, 50, 0)],
-    ["glob_scoped", () => lf.fs.glob("main", "*.txt", `${P}/dir`, 50, 0)],
+    ["grep_scoped", () => lf.fs.grep("main", "probe", `${P}/dir`, 50, 0), { setup: () => lf.fs.list("main", `${P}/dir`, 50, 0), input: (v, s) => ({ files: s.items.length }) }],
+    ["glob_scoped", () => lf.fs.glob("main", "*.txt", `${P}/dir`, 50, 0), { setup: () => lf.fs.list("main", `${P}/dir`, 50, 0), input: (v, s) => ({ files: s.items.length }) }],
     ["grep_tree", () => lf.fs.grep("main", "LFS352_NEVER_PRESENT", "/", 50, 0)],
     ["glob_tree", () => lf.fs.glob("main", "**/*.md", "/", 50, 0)],
-    ["diff_files", () => lf.fs.diff_files("main", `${P}/a.txt`, "main", `${P}/b.txt`)],
-    ["list_commits", () => lf.branch.list_commits(branch, 20, 0)],
-    ["diff_commits", async () => { const c = (await lf.branch.list_commits(branch, 2, 0)).items; return c.length === 2 ? lf.branch.diff_commits(c[1].id, c[0].id, 50, 0) : null; }],
+    ["diff_files", () => lf.fs.diff_files("main", `${P}/a.txt`, "main", `${P}/b.txt`), { setup: async () => [(await lf.fs.stat("main", `${P}/a.txt`)).size, (await lf.fs.stat("main", `${P}/b.txt`)).size], input: (v, s) => ({ bytes: s }) }],
+    ["list_commits", () => lf.branch.list_commits(branch, 20, 0), { input: (v) => ({ pageSize: 20, items: v.items.length }) }],
+    // v2 (F-014): two adjacent Commits of its own Branch with one fixed 2 KiB file added; only the diff is timed
+    ["diff_commits", (ids) => lf.branch.diff_commits(ids.from, ids.to, 50, 0, { hunks: false }), { version: 2, input: (v) => ({ files: v.items.length }), setup: async () => {
+      await lf.branch.fork(`probe-${r}-d`, "main");
+      const from = (await lf.branch.list_commits(`probe-${r}-d`, 1, 0)).items[0].id;
+      await lf.fs.apply(`probe-${r}-d`, [{ op: "write", path: `${P}/diff-one.txt`, content: probeText(`diff ${r}`, 2048) }], "probe diff");
+      const c = (await lf.branch.list_commits(`probe-${r}-d`, 2, 0)).items;
+      if (c.length !== 2 || c[1].id !== from) throw new Error(`probe diff_commits: the Commit after ${from} is not adjacent`);
+      return { from, to: c[0].id };
+    } }],
     ["fork", () => lf.branch.fork(`probe-${r}`, "main")],
     ["merge", async () => {
       await lf.branch.fork(`probe-${r}-a`, "main"); await lf.branch.fork(`probe-${r}-b`, "main");
       await lf.fs.apply(`probe-${r}-a`, [{ op: "mkdir", path: `${P}/m` }, { op: "write", path: `${P}/m/a1.txt`, content: `a1 ${r}\n` }, { op: "write", path: `${P}/m/a2.txt`, content: `a2 ${r}\n` }], "probe a");
       await lf.fs.apply(`probe-${r}-b`, [{ op: "mkdir", path: `${P}/m` }, { op: "write", path: `${P}/m/b1.txt`, content: `b1 ${r}\n` }, { op: "write", path: `${P}/m/b2.txt`, content: `b2 ${r}\n` }], "probe b");
       return lf.branch.merge(`probe-${r}-a`, `probe-${r}-b`, `probe-${r}-m`, "probe merge");
-    }],
+    }, { input: () => ({ filesPerSide: 2 }) }],
     ["oneshot_mount_exec", async () => { const ws = await lf.sandbox.mount(sb, `probe-${r}`); await lf.sandbox.exec(sb, ws, "true"); return lf.sandbox.unmount(sb, ws, true); }],
     ["oneshot_commit", async () => {
       const ws = await lf.sandbox.mount(sb, `probe-${r}`);
@@ -508,13 +520,20 @@ export async function probes(run, k, { branch, tree }) {
       const c = await lf.sandbox.commit(sb, ws, "probe commit");
       await lf.sandbox.unmount(sb, ws, false);
       return c;
-    }],
+    }, { input: () => ({ files: 1, bytes: 2048 }) }],
   ];
   const out = {};
-  for (const [name, f] of list) {
-    run.label(`probe:${name}`);
-    const t0 = performance.now();
-    try { await f(); out[name] = { ms: +(performance.now() - t0).toFixed(3) }; } catch (e) { out[name] = { ms: null, error: `${e.code ?? ""} ${e.message}`.slice(0, 200) }; }
+  // a probe's setup runs untimed under its own label (its counters are not the probe's); `version` marks a changed input
+  for (const [name, f, { version, setup, input } = {}] of list) {
+    const v = version ? { version } : {};
+    try {
+      let prepared;
+      if (setup) { run.label(`probe-setup:${name}`); prepared = await setup(); }
+      run.label(`probe:${name}`);
+      const t0 = performance.now();
+      const value = await f(prepared);
+      out[name] = { ms: +(performance.now() - t0).toFixed(3), ...v, ...(input ? { input: input(value, prepared) } : {}) };
+    } catch (e) { out[name] = { ms: null, ...v, error: `${e.code ?? ""} ${e.message}`.slice(0, 200) }; }
   }
   return out;
 }
@@ -526,15 +545,16 @@ export function readTrace(file, log = null) {
   for (const l of lines) { const m = /^(.*)#(\d+)$/.exec(String(l.step ?? "")); if (m) { l.step = m[1]; l.seq = Number(m[2]); } }
   attributeFuse(lines);
   const bySeq = new Map((log ?? []).map((e) => [e.seq, e]));
-  const isProbe = (l) => String(l.step ?? "").startsWith("probe:");
+  const isProbe = (l) => /^probe(-setup)?:/.test(String(l.step ?? ""));
   const calls = lines.filter((l) => !isProbe(l)).map((l) => callOf(l, bySeq.get(l.seq)?.method === l.method ? bySeq.get(l.seq) : null));
   const probe = {};
   for (const l of lines.filter(isProbe)) {
+    if (l.step.startsWith("probe-setup:")) continue;
     const name = l.step.slice(6), c = sqlCounters(l);
     probe[name] ??= {};
     for (const [key, n] of Object.entries(c)) probe[name][key] = (probe[name][key] || 0) + n;
   }
-  const delta = deltaWork(lines.filter((x) => !String(x.step ?? "").startsWith("probe:")));
+  const delta = deltaWork(lines.filter((x) => !isProbe(x)));
   // construction work of the replay's own Saves (probes left out): files built, unchanged, symlinks
   const construction = {};
   for (const l of lines.filter((x) => !isProbe(x))) for (const d of l.daemon ?? []) for (const [key, n] of Object.entries(d.construction ?? {})) construction[key] = (construction[key] ?? 0) + n;
