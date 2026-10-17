@@ -52,6 +52,10 @@ bare clone of `https://github.com/deepseek-ai/deepseek-harness` at
 
 ### Ignored files
 
+> **Installs** (owner decision 2026-10-18, firm): [INSTALLS.md](INSTALLS.md). Every
+> install is a real `pnpm install` by exec inside the Workspace, reading a pnpm
+> store mounted from outside it. It wins over this section where they differ.
+
 LayerFS stores everything `.gitignore` covers, so the replay makes those files as
 a real project would. They dominate the Store's growth (§7, Disk), so they follow
 these rules:
