@@ -17,7 +17,7 @@
 //!   semantic conflict and not a silent retry.
 
 use crate::error::HistoryResult;
-use crate::identity::{BranchId, CatalogId, CommitId, LayerId, LayerStackId, NodeId};
+use crate::identity::{BranchId, CatalogId, CommitId, HistoryName, LayerId, LayerStackId, NodeId};
 use crate::records::{
     AddLayerOutcome, AddLayerRequest, BranchMergeRequest, BranchRecord, BranchSnapshot,
     CommitHistoryRequest, CommitOutcome, CommitRecord, CommitRequest, ForkRequest,
@@ -72,6 +72,14 @@ pub trait HistoryCatalog: Send + Sync {
 
     /// One Branch by identity.
     fn branch(&self, id: BranchId) -> HistoryResult<Option<BranchRecord>>;
+
+    /// One Branch by its name in a stack, through the name index: the
+    /// stack's other Branches are not read.
+    fn branch_named(
+        &self,
+        stack: LayerStackId,
+        name: &HistoryName,
+    ) -> HistoryResult<Option<BranchRecord>>;
 
     /// One coherent Branch snapshot with its resolved roots.
     fn branch_snapshot(&self, id: BranchId) -> HistoryResult<Option<BranchSnapshot>>;

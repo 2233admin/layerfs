@@ -114,35 +114,26 @@ pub(crate) fn project(store: &Arc<Store>, args: &SdkValue) -> Result<LayerStackR
     ))
 }
 
-/// One Branch by name.
+/// One Branch by name, through the stack's name index.
 pub(crate) fn branch(
     store: &Arc<Store>,
     stack: &LayerStackRecord,
     wanted: &str,
 ) -> Result<BranchRecord, SdkRefusal> {
-    let mut page = Page {
-        cursor: None,
-        limit: MAXIMUM_PAGE_RECORDS,
+    let found = match HistoryName::new(wanted) {
+        Ok(name) if wanted != super::branch::MAIN => store
+            .history()
+            .branch_named(stack.id, &name)
+            .map_err(history)?,
+        _ => None,
     };
-    loop {
-        let found = store.history().branches(stack.id, &page).map_err(history)?;
-        if let Some(branch) = found
-            .records
-            .into_iter()
-            .find(|branch| branch.name.as_str() == wanted && wanted != super::branch::MAIN)
-        {
-            return Ok(branch);
-        }
-        match found.continuation {
-            Some(cursor) => page.cursor = Some(cursor),
-            None => break,
-        }
-    }
-    Err(refuse(
-        "NoSuchBranch",
-        format!("Branch {wanted} does not exist"),
-        SdkValue::Null,
-    ))
+    found.ok_or_else(|| {
+        refuse(
+            "NoSuchBranch",
+            format!("Branch {wanted} does not exist"),
+            SdkValue::Null,
+        )
+    })
 }
 
 /// A Branch's newest node: its head Commit, else its base Layer.

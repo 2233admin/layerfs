@@ -8,7 +8,7 @@
 use super::params;
 use super::transaction::Transaction;
 use layerfs_history::error::{HistoryError, HistoryResult, Missing};
-use layerfs_history::identity::{BranchId, CatalogId, LayerStackId};
+use layerfs_history::identity::{BranchId, CatalogId, HistoryName, LayerStackId};
 use layerfs_history::records::{
     BranchRecord, BranchSnapshot, ForkRequest, ForkSource, Page, PageResult,
 };
@@ -17,6 +17,8 @@ use super::query::{self, Context, Cursor, Range};
 use super::rows::{branch_row, many, one, sql};
 
 const BRANCH_BY_ID: &str = "branch_branch_by_id";
+
+const BRANCH_BY_NAME: &str = "branch_branch_by_name";
 
 const BRANCH_FIRST_PAGE: &str = "branch_branch_first_page";
 
@@ -29,6 +31,20 @@ const INSERT_BRANCH: &str = "branch_insert_branch";
 /// Reads one Branch by identity.
 pub(crate) fn branch(tx: &Transaction<'_>, id: BranchId) -> HistoryResult<Option<BranchRecord>> {
     one(tx, BRANCH_BY_ID, [id.as_slice()], branch_row)
+}
+
+/// Reads one Branch by its name in a stack, through the unique name index.
+pub(crate) fn branch_named(
+    tx: &Transaction<'_>,
+    stack: LayerStackId,
+    name: &HistoryName,
+) -> HistoryResult<Option<BranchRecord>> {
+    one(
+        tx,
+        BRANCH_BY_NAME,
+        params![stack.as_slice(), name.as_str()],
+        branch_row,
+    )
 }
 
 /// Reads one coherent Branch snapshot with every root it resolves to.

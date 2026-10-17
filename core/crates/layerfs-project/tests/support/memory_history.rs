@@ -66,6 +66,13 @@ impl HistoryCatalog for MemoryHistory {
     fn branch(&self, _id: BranchId) -> HistoryResult<Option<BranchRecord>> {
         Err(HistoryError::Unsupported("memory Init fixture operation"))
     }
+    fn branch_named(
+        &self,
+        _stack: LayerStackId,
+        _name: &HistoryName,
+    ) -> HistoryResult<Option<BranchRecord>> {
+        Err(HistoryError::Unsupported("memory Init fixture operation"))
+    }
     fn branch_snapshot(&self, _id: BranchId) -> HistoryResult<Option<BranchSnapshot>> {
         Err(HistoryError::Unsupported("memory Init fixture operation"))
     }

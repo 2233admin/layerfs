@@ -23,6 +23,9 @@ pub(crate) fn history(key: &str) -> Result<&'static str, BackendError> {
         "branch_branch_by_id" => Ok(include_str!(
             "../../../sql/sqlite/queries/history/branch_branch_by_id.sql"
         )),
+        "branch_branch_by_name" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/branch_branch_by_name.sql"
+        )),
         "branch_branch_first_page" => Ok(include_str!(
             "../../../sql/sqlite/queries/history/branch_branch_first_page.sql"
         )),

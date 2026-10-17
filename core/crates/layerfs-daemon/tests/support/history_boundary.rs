@@ -31,6 +31,7 @@ impl HistoryCatalog for ObservedHistory {
         layer_stack(id: LayerStackId) -> HistoryResult<Option<LayerStackRecord>>;
         layer_stacks(page: &Page) -> HistoryResult<PageResult<LayerStackRecord>>;
         branch(id: BranchId) -> HistoryResult<Option<BranchRecord>>;
+        branch_named(stack: LayerStackId, name: &HistoryName) -> HistoryResult<Option<BranchRecord>>;
         branch_snapshot(id: BranchId) -> HistoryResult<Option<BranchSnapshot>>;
         branches(stack: LayerStackId, page: &Page) -> HistoryResult<PageResult<BranchRecord>>;
         commit(id: CommitId) -> HistoryResult<Option<CommitRecord>>;

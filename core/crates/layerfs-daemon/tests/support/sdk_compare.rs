@@ -25,6 +25,8 @@ pub struct Work {
     pub object_batches: u64,
     pub object_ids: u64,
     pub statements: u64,
+    /// SQL rows returned to the daemon, writer and readers together.
+    pub rows: u64,
 }
 
 impl Fixture {
@@ -196,6 +198,12 @@ impl Fixture {
                     .iter()
                     .map(|reader| reader.statements)
                     .sum::<u64>(),
+            rows: sql.writer.returned_rows
+                + sql
+                    .readers
+                    .iter()
+                    .map(|reader| reader.returned_rows)
+                    .sum::<u64>(),
         }
     }
 
@@ -205,6 +213,7 @@ impl Fixture {
             object_batches: after.object_batches - before.object_batches,
             object_ids: after.object_ids - before.object_ids,
             statements: after.statements - before.statements,
+            rows: after.rows - before.rows,
         }
     }
 

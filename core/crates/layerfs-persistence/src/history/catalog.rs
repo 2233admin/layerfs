@@ -36,6 +36,14 @@ impl HistoryCatalog for HistoryProvider {
         self.read(|tx| branch::branch(tx, id))
     }
 
+    fn branch_named(
+        &self,
+        stack: LayerStackId,
+        name: &HistoryName,
+    ) -> HistoryResult<Option<BranchRecord>> {
+        self.read(|tx| branch::branch_named(tx, stack, name))
+    }
+
     fn branch_snapshot(&self, id: BranchId) -> HistoryResult<Option<BranchSnapshot>> {
         self.read(|tx| branch::branch_snapshot(tx, id))
     }
