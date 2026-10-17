@@ -18,14 +18,19 @@ It builds on the dsh plugin and its demos (#345, #346, #347).
 
 ## 1. Source facts
 
-The source is the repository at `/Users/yifanxu/Ephemeral-AI-Lab/deepseek-harness`.
-Read it only, through a separate clone; its `.git` holds stray tmp packs.
+The source is deepseek-harness. The owner's checkout
+(`/Users/yifanxu/Ephemeral-AI-Lab/deepseek-harness`) is never read or edited for the
+replay. It is a partial clone (`blob:none`): it holds commits and trees but not
+historical file contents, so a local clone of it fails. The replay reads a full
+bare clone of `https://github.com/deepseek-ai/deepseek-harness` at
+`~/lfs-history/dsh.git` (304 MiB, every blob present), made once with
+`git clone --bare`.
 
 | Fact | Value |
 | --- | --- |
 | Commits | 22,395 (8,645 merges) |
 | Mainline (first-parent) commits | 2,188 |
-| Files at HEAD | 16,297 |
+| Files at HEAD | 16,297 tracked (133 MB): 16,273 regular, 10 executable, 14 symlinks |
 | Git pack | 303 MiB |
 | Last 2,000 mainline steps | ~70 files, +1,889 / −613 lines each |
 | Dates | 2026-06-10 to 2026-10-17 |
@@ -34,13 +39,13 @@ Read it only, through a separate clone; its `.git` holds stray tmp packs.
 
 | Unit | Estimate |
 | --- | --- |
-| Ranges | ~230, each 30–100 dsh commits (target 60), ending at a mainline commit |
+| Ranges | 202 (P0), each 30–100 dsh commits (target 60), ending at a mainline commit |
 | Lanes per range | 2–4 LayerFS Branches, each grouping side branches by repository area |
 | Agents | 5–10 plus a lead; always more agents than lanes, several per lane |
 | Sandboxes | 4–8, long-lived; each holds many Workspaces |
 | Workspaces per range | ~50–100, at least 70% one-shot (mount → exec → commit → unmount) |
 | fs : Sandbox file mutations | 9 : 1 |
-| LayerFS Commits | 150k–300k in total, one per fs mutation, Sandbox Commit, merge and publish |
+| LayerFS Commits | ~249k in total (P0), one per fs mutation, Sandbox Commit, merge and reconcile write |
 | Bash calls | ~30k–40k: one per dsh commit's fs batch, one per one-shot Workspace |
 
 `node_modules` is installed, because LayerFS stores ignored files. Installs run in
@@ -93,12 +98,16 @@ One plan feeds two players.
 
 ```
 dsh/tools/history/
+  git.mjs       git access: raw diffs, trees, sizes, and the blob cache
+  ranges.mjs    mainline steps, range cutting, snapshot cadence
+  plan-range.mjs one range's plan, and replayPlan, its static check
   plan.mjs      read the dsh clone; write ranges, lanes, agents, steps and planned
                 conflicts from a fixed seed
-  oracle.mjs    each checkpoint: path, mode, SHA-256; history shape; expected conflicts
+  oracle.mjs    each checkpoint: tree id and expected history; compareTree; checkout
   run.mjs       headless player: measured mode, and fast-rebuild mode (no timing,
                 Sandbox tests or agents)
-  gates.mjs     the range outputs (§3) and the gate decision (§5)
+  gates.mjs     the gate decision (§5), latency aggregation, the pilot baseline
+  report.mjs    ranges/range-NNN.md and RANGES.md; exit code for the runner
   scenario.mjs  turn a window of ranges into a dsh scenario
 dsh/scenarios/dsh-history/
   scenario.json the Live demo: a window of ~3 ranges seeded from a milestone snapshot
@@ -117,6 +126,52 @@ dsh/scenarios/dsh-history/
   `tools/restore-store.mjs` already restores one for the checks.
 - Existing checks are reused: `check-scenario.mjs` for the plan, and check-demo's
   gates (expected, closed, order, final tree) at every checkpoint.
+
+### P0 results (2026-10-17, plan v1, seed 352)
+
+`plan.mjs` and `oracle.mjs` are built and tested
+(`dsh/tools/history/tests/history.mjs`, 15 tests on a synthetic repository). Over
+the whole history the plan takes 16 s and the oracles 20 s.
+
+| Total | Planned |
+| --- | --- |
+| Ranges | **202** (7 oversize, up to 246 commits, where one merge brings that many) |
+| dsh commits replayed | 13,749 non-merge commits (merges are reconciled, not replayed) |
+| Bash calls / steps | 37,292 / 35,847 (p50 171 per range, p90 240) |
+| LayerFS Commits | 249,004 (p50 1,030 per range, max 6,207) |
+| File mutations fs : Sandbox | 218,595 : 23,166 (9.4 : 1) |
+| Workspaces | 19,038, of which 18,661 one-shot (98%) |
+| Read calls in steps | 63,296 |
+| Reconcile writes | 21,983; 84% are file versions that only git's merges produced |
+| Planned conflicts | 202 Commit Conflicts, 175 stale clean merges, 202 decoys, 40 merge races |
+| Installs | 197 ranges (`pnpm-lock.yaml` changes on 645 mainline commits) |
+| Snapshots / milestones | 48 / ranges 4, 50, 100, 151, 201 |
+
+Design decisions the build settled:
+
+- **Lanes by area.** A path's area (its first two folders) decides its lane, and a
+  commit that spans lanes is split, one part per lane. Lanes never touch the same
+  path, so their merges into main are clean. The only conflicts are the planned
+  ones.
+- **Agents.** A side branch's commits go to one agent of the lane. Agents are
+  numbered `a01`…`a10` within a range.
+- **Expected outcomes are computed per file.** A write equal to the lane's
+  current content expects UpToDate (1,319 of them). An `rm` of a file the lane no
+  longer has is dropped (401).
+- **Symlinks, executables and mode changes go through a Sandbox `apply` step**,
+  because an fs write cannot set a mode.
+- **Static check.** `replayPlan` plays each range's steps and its reconcile over
+  the previous checkpoint without LayerFS. It must give exactly the next
+  checkpoint's tree, and every `check` or `hold-resolve` step must see the blob
+  it expects. All 202 ranges pass. `plan.mjs` refuses to write a plan that fails.
+- **The tree is compared by git blob id**, not SHA-256: the verifier hashes each
+  LayerFS file as `sha1("blob <len>\0" + bytes)` and compares it with
+  `git ls-tree`, so no file list is stored in the oracle.
+- **Checkout.** One working tree, `~/lfs-history/checkout`, moves to each range's
+  checkpoint with `oracle.mjs checkout`. Git rewrites only the files that changed
+  (0.13 s for a range), so there is never a second copy. Intermediate versions
+  inside a range come from the blob cache, a long-lived `git cat-file --batch`
+  process with an LRU, because a checkout holds only the checkpoint.
 
 ### Maximum speed, always
 
@@ -137,6 +192,41 @@ and the checks.
   count. The lead's consolidation waits only for its own lanes.
 - **No idle time between ranges.** The runner starts range k+1 as soon as range
   k's checkpoint, report and (when due) snapshot are written.
+
+### Speed-ups
+
+These rules keep the build and the run short. The measured numbers are not
+affected, because each one removes waiting or repeated work, never timed product
+work.
+
+1. **The plan is precomputed and static.** P0 tools run in seconds, so the plan is
+   regenerated forward (`--from N`) instead of being edited by hand.
+2. **Content comes from the blob cache and one moving checkout**, never from a
+   git process per file or a fresh checkout per range.
+3. **Verify the tree with one exec.** A one-shot Workspace on a fork of main
+   runs one node script that prints each tracked file's git blob id and mode;
+   `compareTree` checks it against git. Never 16k `fs.read` calls. The tracked
+   set is decided as `dsh/tools/checks/tree.mjs` does.
+4. **Offline installs.** Fill a pnpm store once from the lockfiles of all ranges
+   (`pnpm fetch`), keep it on its own Docker volume outside LayerFS, and install
+   with `--offline --frozen-lockfile`. There is no network wait, and an install
+   always gives the same result.
+5. **Tiered tests.** `quick` every range (smoke: build of the packages the range
+   changed), `full` at milestones (the plan marks which).
+6. **Fast-forward, never restart.** Recovery restores the newest good snapshot
+   and fast-rebuilds the ranges after it with the fast-rebuild player (no timing,
+   no tests, no Sandboxes beyond what content needs). No range is replayed from 0.
+7. **Release daemon only.** Measure only the release build, so a debug build's
+   speed never sets a baseline.
+8. **Concurrency as planned.** Lanes and agents run at the same time. The runner
+   moves to the next range as soon as the checkpoint is written, and the lead
+   wakes only when the runner stops.
+9. **Snapshots stream.** Seal, then stream the copy (`tar | zstd -T0`) to host
+   disk while the next range starts on the reopened Store. Copy time is recorded
+   separately.
+10. **Budget from the pilot.** P1 measures wall time per range. P1 ends only when
+   wall time × 202 fits the budget the owner sets. Otherwise re-plan (larger ranges,
+   fewer checks, lighter tests) before P2.
 
 ## 3. What each range produces
 
@@ -233,7 +323,7 @@ Read from `operator.store.stats()` and per-Commit `sizes`:
   share whose chain stopped at the chain-work budget instead of the depth cap.
 - **Directory share:** metadata bytes as a share of the range's new bytes.
 - **Efficiency:** the range's new stored bytes per changed git bytes.
-- **Projection:** the Store size at ~230 ranges, against the disk budget.
+- **Projection:** the Store size at 202 ranges, against the disk budget.
 - **Long history:** whether new bytes per changed byte or per-call latency rise
   with depth. Read this from the latency table's depth slope and from the internal
   counters (rows read, pages touched, ancestors walked per call). A counter that
@@ -267,7 +357,7 @@ history is part of any operation's input.
 | blame | revisions of that file | other files' history |
 
 So `ls` on a directory of 50,000 entries may be slow, but `ls` on a 5-entry
-directory must stay as fast at range 230 as at range 1. A violation is an
+directory must stay as fast at range 202 as at range 1. A violation is an
 *optimize* finding even when the time is still small.
 
 ### Logical construction and mount
@@ -341,8 +431,18 @@ The fixer follows these steps when a range ends as optimize or stop.
 - in the SDK call trace: phase timing trees, 42 storage counters and 31
   construction counters per exchange.
 
-The builder confirms in P0–P1 that the SQL work and FUSE opcode counts reach the
-per-call trace, and wires them in if they do not.
+**Wiring check (P0, done): neither reaches the per-call trace yet.** The trace
+reply (`layerfs-daemon/src/telemetry.rs`, `value`) carries:
+- phase timing, on every call;
+- storage and construction counters, only on calls that commit.
+
+`SqlWork` goes only to the daemon's own diagnostic records. FUSE opcode counts
+stay inside the mount. The builder's first P1 task is to add both to the reply:
+- per call, `SqlWork` as the difference between the session's totals before and
+  after the call;
+- per Workspace, the opcode counts at `status` and `unmount`.
+
+The SDK trace passes them through, and P1's baselines need them.
 
 **Counters before time.** Counters are deterministic, so they show growth without
 noise. Diagnose from counters first, and confirm with time.
@@ -668,12 +768,12 @@ most chains before depth 8. Doubling its depth would change little.
 
 | Phase | Scope | Done when |
 | --- | --- | --- |
-| P0 · Plan and oracles | `plan.mjs` and `oracle.mjs` over the whole history, without LayerFS | Plan and oracle exist for every range; `check-scenario.mjs` passes |
+| P0 · Plan and oracles | `plan.mjs` and `oracle.mjs` over the whole history, without LayerFS | **Done 2026-10-17:** plan and oracle for all 202 ranges; every plan passes the `replayPlan` static check |
 | P1 · Pilot | First ~300 commits, fs only, one lane, snapshot every range, plus the delta control arm | Every checkpoint matches git; baselines and gate thresholds recorded |
 | P2 · Multi-agent | Lanes, the 5–10 agent crew, one-shot Workspaces, planned conflicts | Every planned conflict hit and resolved; identity holds |
 | P3 · Sandbox share | The 9 : 1 split, FUSE timing, `node_modules` installs, test tiers | Deduplication and FUSE gates pass |
 | P4 · Recovery and demo | Milestone snapshots, probes, one kill and resume, one fast rebuild, the Live demo window seeded from a snapshot | Recovery proved; the demo passes check-demo in dsh |
-| P5 · Full history | All ~230 ranges. Controls: squashed history, and one Commit per git commit | Latency-vs-depth and storage curves, with history cost separated from tree size and from Commit granularity |
+| P5 · Full history | All 202 ranges. Controls: squashed history, and one Commit per git commit | Latency-vs-depth and storage curves, with history cost separated from tree size and from Commit granularity |
 
 ## 10. Outputs in this folder
 

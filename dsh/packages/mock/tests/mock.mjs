@@ -17,7 +17,7 @@ import { compileScenario, loadScenarios, ScenarioError } from "../src/scenario.j
 const scenarios = loadScenarios(fileURLToPath(new URL("../../../scenarios/", import.meta.url)));
 assert.deepEqual([...scenarios.keys()], ["tour", "parallel", "conflicts", "merge", "sandbox", "agents", "shop", "depot", "crew"]);
 assert.equal(scenarios.get("shop").live, true, "a replayed run plays only on Live LayerFS");
-assert.equal(scenarios.get("agents").speed, 2, "5 agents plays at 2× as the original did");
+assert.equal(scenarios.get("agents").speed, 1, "5 agents starts at 1×: its planned Conflict is arranged by pauses (#347 BUGS row 54)");
 assert.equal(scenarios.get("tour").speed, 1);
 // a run step imports the scenario's lib and awaits each call
 assert.match(scenarios.get("tour").agents.root[0].call.args.command, /^node --input-type=module <<'JS'\nconst t = await import\("file:\/\/\/.*\/scenarios\/shared\/terminal\.mjs"\);\nawait t\.history\("fork feature-home"\);\nJS$/);

@@ -60,6 +60,15 @@ When you need one of these, stop and say so on #352.
 
 ## What is already done
 
+- **P0 is done.** `dsh/tools/history/` holds the git helpers and blob cache,
+  `plan.mjs`, `oracle.mjs`, `gates.mjs` and `report.mjs`, with tests (in
+  `npm test`). The plan (`~/lfs-history/plan/`) and the oracles
+  (`~/lfs-history/oracle/`) exist for all 202 ranges, and every range's plan
+  passes the static check. The results are in SPEC.md §2, "P0 results". Your
+  work starts at P1, with `run.mjs`.
+- **dsh source:** the full bare clone is `~/lfs-history/dsh.git` (SPEC.md §1). The
+  owner's checkout is a partial clone and cannot be cloned locally.
+
 - Issue #352, SPEC.md and this file.
 - The delta depth defaults are doubled for new Stores: chunk 4 → 8, whole-file
   8 → 16; metadata stays 8 (SPEC.md §8). Tests of layerfs-content, -storage,
@@ -69,8 +78,8 @@ When you need one of these, stop and say so on #352.
 ## Environment
 
 - **dsh source:** `/Users/yifanxu/Ephemeral-AI-Lab/deepseek-harness`. Never edit
-  it. Make your own clone (for example `~/lfs-history/dsh.git`) and read history
-  from that clone only. The original's `.git` has stray tmp packs.
+  it. Read history only from `~/lfs-history/dsh.git`, the full bare clone from
+  GitHub.
 - **Run folders:** `~/lfs-history/` for the plan, oracles, snapshots and metrics.
   Commit only what SPEC.md §10 lists and the small demo folder.
 - **Linux daemon:** `core/target/cluster2-linux/release/layerfs-daemon`. Rebuild
@@ -128,9 +137,9 @@ Three agents run the work.
 2. On waking, read the report. Give the fixer the report and the stop reason.
 3. When the fixer reports, recover per SPEC.md §6 and start the runner again.
 
-**First builder task (P0–P1):** confirm that per-call SQL work (`SqlWork`) and
-per-mount FUSE opcode counts reach the SDK call trace, and wire them in if they do
-not. The fixer's playbook (SPEC.md §6, D0–D6) depends on them.
+**First builder task (P1):** wire per-call SQL work (`SqlWork`) and per-Workspace
+FUSE opcode counts into the SDK call trace. The P0 check found that neither
+reaches it (SPEC.md §6). The fixer's playbook (D0–D6) depends on them.
 
 **Rules:**
 - Continue the same builder and fixer with SendMessage, so they keep what they

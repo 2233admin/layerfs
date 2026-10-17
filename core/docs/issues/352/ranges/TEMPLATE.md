@@ -99,7 +99,7 @@ size alone.
 | Directory share of new bytes | | |
 | Delta share; depth distribution per role; at cap; stopped by budget | | |
 | `node_modules` reinstall growth | | |
-| Projection at ~230 ranges / disk budget | | |
+| Projection at 202 ranges / disk budget | | |
 
 ## 6. Trends
 
