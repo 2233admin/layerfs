@@ -380,6 +380,23 @@ At each range's completion, the runner writes three things:
 - one finding record, and one entry in `BUGS.md` or `OPTIMIZATIONS.md`, per
   optimize or stop.
 
+### Report format rule (owner, 2026-10-18; binding)
+
+A range report is evidence. `report.mjs check <NNN>` enforces every rule below,
+and the lead runs it before each checkpoint commit: a report that fails the check
+is not committed and its comment is not posted.
+
+| # | Rule |
+| --- | --- |
+| F1 | **Fixed shape.** Header table, Attempts, §1 Checks … §8 Evidence, in [TEMPLATE.md](ranges/TEMPLATE.md)'s order and headings. No section is dropped; an empty one says why (`n/a: P1 has no tests`). |
+| F2 | **Recorded outcomes are frozen.** Each attempt's row (binary, start, verdict, reason) and its check rows come from the gate result stored in that attempt's `range-NNN.aK.json` when it ran, never from a re-evaluation under later gates. Playing range k writes only range k's report; every earlier report stays byte-identical (F-004). |
+| F3 | **Every optimize or stop attempt has a Finding block in the report**, generated from `finding-NNN.aK.json` (findings.mjs): trigger (check, value, threshold); diagnosis (playbook step, cause, counter and its exponent before → after); fix (summary, kind, commits, regression tests); recovery; and the **before/after table**. Until the finding file exists, the block says `Diagnosis pending` and names the file. The issue comment carries the same content from the same source; the comment never has a finding the report lacks. |
+| F4 | **Before/after table columns:** measure · before · after · change · old binary · new binary · snapshot or checkpoint · cache state. One row per measure; units on every number; the old and new series are never merged into one fit. |
+| F5 | **Links.** Each Finding block links its `fixes/NNN-aK-<slug>.md` records (one per cause, each with old/new design and performance) and its BUGS.md or OPTIMIZATIONS.md line; every link is relative and resolves in the committed tree. |
+| F6 | **The lead's §7 is never empty** when the latest verdict is not pass: watch items with the probe planned for the next milestone, the action taken, and any process note (a restored report, a skipped step). `(none yet)` fails the check. |
+| F7 | **Labels.** Every latency or counter carries its binary; tooling time is labeled tooling, never operation latency; diagnostic and seeded points are labeled as such. |
+| F8 | **No silent pass.** A check that cannot be judged (no baseline, too few same-binary points, missing input) says so and is at least watch. |
+
 The sections below list what the report contains.
 
 ### a. Range

@@ -107,12 +107,27 @@ size alone.
 The five measures that moved most against the previous range and against the
 baseline, each with its direction over the last 3 ranges.
 
-## 7. Findings and action (written by the lead)
+## 7. Findings and action
+
+### Finding NNN.aK (generated, one block per optimize or stop attempt; SPEC §3 F3–F5)
+
+| | |
+| --- | --- |
+| Trigger | check · value · threshold |
+| Diagnosis | playbook step · cause · counter, exponent before → after |
+| Fix | summary · kind (code path, data written, Store format) · commits · regression tests |
+| Recovery | how the Store was rebuilt or forked; which attempt reran |
+| Records | `fixes/NNN-aK-<slug>.md` (each) · BUGS.md / OPTIMIZATIONS.md line |
+
+| Measure | Before | After | Change | Old binary | New binary | Snapshot / checkpoint | Cache |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+
+`Diagnosis pending: finding-NNN.aK.json` until the fixer writes it.
+
+### Lead's note (written by the lead; never empty unless the verdict is pass)
 
 - Watch items, and the probes planned for the next milestone.
-- For optimize or stop: what was diagnosed (phase, counter, control), the fix
-  kind, and the recovery. Link to `BUGS.md` or `OPTIMIZATIONS.md` and to the fix
-  commit.
+- The action taken, and any process note.
 
 ## 8. Evidence
 
