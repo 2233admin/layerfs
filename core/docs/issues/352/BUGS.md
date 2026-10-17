@@ -145,3 +145,10 @@
   probe's own Branch, with a probe version in the metrics; gates never fit
   across versions; the other probes are checked for the same drift. Recorded
   values stay; the baseline is re-measured as `p1-rebase-c`.
+- **F-016 · gate reads a bounded, periodic chain cost as depth growth
+  (tooling, 007.a1, 2026-10-18).** `list_small` cycles with the metadata depth
+  cap (8). Owner: the builder, after F-017; an unbounded series must still trip.
+- **F-017 · fs calls of all agents serialize on one Sandbox control
+  connection (product, 007.a1 S1, 2026-10-18).** `registry.rs`
+  `control: Mutex<Control>`; reads queue behind Commits (range 7: 1 ms work,
+  19 ms p50 client). Owner: the fixer, now.
