@@ -3,6 +3,7 @@ use crate::backend::records::BackendError;
 use std::{
     collections::VecDeque,
     sync::{Condvar, Mutex},
+    thread::ThreadId,
     time::{Duration, Instant},
 };
 
@@ -16,6 +17,9 @@ struct Queue {
     next: u64,
     active: bool,
     pending: VecDeque<u64>,
+    /// The thread holding the publication lane: its own nested SQL work runs
+    /// inside the turn it already owns instead of queueing behind itself.
+    holder: Option<ThreadId>,
 }
 
 #[derive(Default)]
@@ -24,17 +28,30 @@ pub(crate) struct Admission {
     changed: Condvar,
 }
 
-pub(crate) struct Turn<'a>(&'a Admission);
+pub(crate) struct Turn<'a> {
+    admission: &'a Admission,
+    /// Work by the lane holder inside its held turn; releasing it is the hold's.
+    pub(crate) nested: bool,
+}
 
 impl Admission {
     pub(crate) fn enter(&self, deadline: Instant) -> Result<Turn<'_>, BackendError> {
         let mut queue = self.queue.lock().map_err(|_| BackendError::Unknown)?;
+        if queue.holder == Some(std::thread::current().id()) {
+            return Ok(Turn {
+                admission: self,
+                nested: true,
+            });
+        }
         if Instant::now() >= deadline {
             return Err(BackendError::Busy);
         }
         if !queue.active && queue.pending.is_empty() {
             queue.active = true;
-            return Ok(Turn(self));
+            return Ok(Turn {
+                admission: self,
+                nested: false,
+            });
         }
         if queue.pending.len() == WAITERS {
             return Err(BackendError::Capacity);
@@ -54,7 +71,10 @@ impl Admission {
             if !queue.active && queue.pending.front() == Some(&ticket) {
                 queue.pending.pop_front();
                 queue.active = true;
-                return Ok(Turn(self));
+                return Ok(Turn {
+                    admission: self,
+                    nested: false,
+                });
             }
             (queue, _) = self
                 .changed
@@ -64,16 +84,45 @@ impl Admission {
     }
 }
 
+impl Turn<'_> {
+    /// Keeps this turn for the calling thread until `release_hold`: its later
+    /// SQL work enters as nested turns, and every other caller queues.
+    pub(crate) fn hold(self) -> Result<(), BackendError> {
+        let mut queue = self
+            .admission
+            .queue
+            .lock()
+            .map_err(|_| BackendError::Unknown)?;
+        queue.holder = Some(std::thread::current().id());
+        drop(queue);
+        std::mem::forget(self);
+        Ok(())
+    }
+}
+
+impl Admission {
+    /// Ends a turn kept by `Turn::hold`.
+    pub(crate) fn release_hold(&self) {
+        let mut queue = self.queue.lock().unwrap_or_else(|error| error.into_inner());
+        queue.holder = None;
+        queue.active = false;
+        self.changed.notify_all();
+    }
+}
+
 impl Drop for Turn<'_> {
     fn drop(&mut self) {
+        if self.nested {
+            return;
+        }
         // The operation never owns this mutex while invoking a caller or SQL.
         // Even a poisoned queue is released; future admissions still refuse it.
         let mut queue = self
-            .0
+            .admission
             .queue
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         queue.active = false;
-        self.0.changed.notify_all();
+        self.admission.changed.notify_all();
     }
 }

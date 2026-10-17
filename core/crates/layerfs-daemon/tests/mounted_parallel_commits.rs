@@ -2,8 +2,9 @@
 //! on separate Workspaces, independent captures/roots and short Store writer
 //! admission. A real external flock stages before-effect admission; every
 //! process and observation has an independent finite bound. Both Workspaces
-//! bind one Branch head, so after #327 the second publication is answered
-//! `HeadMoved` once (no overwrite, no second merge).
+//! bind one Branch head. Since #352 F-008 each Commit reads the head, merges
+//! and publishes inside the Store's publication lane, so the second merges once
+//! with the first's Commit and both publish (no HeadMoved, no second merge).
 #![cfg(target_os = "linux")]
 #[allow(dead_code)]
 #[path = "support/installed_store.rs"]
@@ -179,14 +180,19 @@ fn parallel_workspace_commits_keep_distinct_captures_and_one_admission_each() {
             }
         }
         if let Ok(done) = result {
-            if let Reply::Committed(CommitOutcome::Committed { record, .. }) = done.reply {
+            let outcome = match done.reply {
+                Reply::Committed(outcome) => Some((outcome, false)),
+                Reply::MergeCommitted(merged) => Some((merged.outcome, true)),
+                _ => None,
+            };
+            if let Some((CommitOutcome::Committed { record, .. }, merged)) = outcome {
                 let operation = rig
                     .harness
                     .service
                     .operation(if tag == 1 { a.token } else { b.token })
                     .unwrap();
                 let actual = model::canonical(operation.client(), record.root);
-                roots.push((tag, record.root, actual));
+                roots.push((tag, merged, actual));
             }
         }
     }
@@ -205,20 +211,45 @@ fn parallel_workspace_commits_keep_distinct_captures_and_one_admission_each() {
         "both public Commits overlap while awaiting Store admission"
     );
     assert!(duplicate_refused, "one ongoing Commit per Workspace");
-    // Both read the head before Store admission; the second publication
-    // finds it moved and is answered once, with nothing published or merged.
+    // Both bound one head; the lane orders their publications, and the
+    // second merges once with the first's Commit.
     assert_eq!(
         (roots.len(), moved),
-        (1, 1),
-        "one Commit publishes, the other's head moved during publication"
+        (2, 0),
+        "both Commits publish; none meets a moved head: {outcomes:?}"
     );
-    for (tag, _, actual) in &roots {
-        model::assert_same(
-            if *tag == 1 { &ea } else { &eb },
-            actual,
-            "independent exact captured tree",
-        );
+    let file = |flat: &model::Flat, name: &[u8]| {
+        flat.iter()
+            .find(|(path, _)| path.ends_with(name))
+            .map(|(_, seen)| (seen.kind, seen.payload.clone()))
+    };
+    for (tag, merged, actual) in &roots {
+        if *merged {
+            for (name, expected) in [(&b"only-a"[..], &ea), (&b"only-b"[..], &eb)] {
+                assert_eq!(
+                    file(actual, name),
+                    file(expected, name),
+                    "merged tree keeps both files"
+                );
+                assert!(file(actual, name).is_some());
+            }
+        } else {
+            model::assert_same(
+                if *tag == 1 { &ea } else { &eb },
+                actual,
+                "independent exact captured tree",
+            );
+        }
     }
-    model::assert_same(&ea, &live_a, "Workspace A live install stays isolated");
-    model::assert_same(&eb, &live_b, "Workspace B live install stays isolated");
+    assert_eq!(roots.iter().filter(|(_, merged, _)| *merged).count(), 1);
+    // The first keeps its exact tree; the merged one installs the merge.
+    for (tag, merged, actual) in &roots {
+        let live = if *tag == 1 { &live_a } else { &live_b };
+        if *merged {
+            assert_eq!(file(live, b"only-a"), file(actual, b"only-a"));
+            assert_eq!(file(live, b"only-b"), file(actual, b"only-b"));
+        } else {
+            model::assert_same(if *tag == 1 { &ea } else { &eb }, live, "live install");
+        }
+    }
 }

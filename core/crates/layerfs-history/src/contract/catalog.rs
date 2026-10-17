@@ -174,6 +174,15 @@ pub trait HistoryCatalog: Send + Sync {
     /// Creates one Branch sharing the selected ancestry.
     fn fork(&self, request: &ForkRequest) -> HistoryResult<BranchSnapshot>;
 
+    /// Holds the Store's publication lane for the calling thread until the
+    /// returned value is dropped: no other publication, in this process or
+    /// another, can interleave with the caller's read of a head and its
+    /// publication against it. The caller's own history calls run inside it.
+    /// A provider with no concurrent publishers returns an empty hold.
+    fn publish_lane(&self) -> HistoryResult<PublishLane> {
+        Ok(PublishLane(None))
+    }
+
     /// Publishes one saved candidate as a Commit against the expected Branch
     /// head in one write transaction. A moved head is `HeadMoved` unless the
     /// request forces an overwrite. UpToDate compares the current root.
@@ -196,6 +205,24 @@ impl std::fmt::Debug for HistoryCatalogConfig {
             .field("binding_key", &self.binding_key)
             .field("incarnation", &self.incarnation)
             .field("cursor_key", &"[redacted]")
+            .finish()
+    }
+}
+
+/// A held publication lane, released when dropped.
+pub struct PublishLane(Option<Box<dyn std::any::Any>>);
+
+impl PublishLane {
+    /// Wraps a provider's hold; dropping the lane drops it.
+    pub fn new(hold: Box<dyn std::any::Any>) -> Self {
+        Self(Some(hold))
+    }
+}
+
+impl std::fmt::Debug for PublishLane {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("PublishLane")
+            .field(&self.0.is_some())
             .finish()
     }
 }

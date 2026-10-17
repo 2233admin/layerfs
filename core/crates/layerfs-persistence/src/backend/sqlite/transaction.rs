@@ -183,7 +183,7 @@ impl Session {
         }
         let start = Instant::now();
         let deadline = start + super::admission::WINDOW;
-        let _turn = self.admission.enter(deadline).map_err(E::from)?;
+        let turn = self.admission.enter(deadline).map_err(E::from)?;
         let mut s = self
             .state
             .lock()
@@ -191,7 +191,8 @@ impl Session {
         if s.quarantined {
             return Err(BackendError::Unknown.into());
         }
-        if writable {
+        // A held publication lane already owns the writer for its nested work.
+        if writable && !turn.nested {
             // State owns this before BEGIN, including across a poisoned unwind.
             s.writer_hold = Some(
                 super::writer_admission::Writer::acquire(&self.path, deadline).map_err(E::from)?,

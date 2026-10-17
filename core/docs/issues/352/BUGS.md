@@ -61,6 +61,11 @@
   The plan expects such a Commit to merge cleanly (SPEC §2, stale clean merge).
   Owner: the fixer, first priority. A dev-only `--serialize-commits 1` aid
   exists and is refused for measured runs.
+  **Fixed** (fixer, D1, code path): head read, merge and publish run inside the
+  Store's publication lane (`layerfs-persistence` `lane.rs`,
+  `HistoryCatalog::publish_lane`); fs writes merge too and conflict as
+  `Conflict`. Daemon `18ab5415`; range 5 on a range-4 fork passes (old: STOP
+  r005.s0048). [fixes/005-dev-f008-merge-at-publish.md](fixes/005-dev-f008-merge-at-publish.md).
 - **F-009 · concurrent unmounts of two Workspaces in one Sandbox fail
   "Workspace absent" (builder, 2026-10-18).** Worked around in the player with
   one Sandbox per agent. Owner: the fixer.

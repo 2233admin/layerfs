@@ -145,6 +145,16 @@ impl BoundWorkspace {
                             })
                         }
                     };
+                // The head is read, merged with and published against inside
+                // the Store's publication lane: no other publication lands
+                // between them, so a stale Commit merges once with the head
+                // current at its publication and never meets a moved head.
+                let lane = phase(timing, "lane", || {
+                    self.store
+                        .history
+                        .publish_lane()
+                        .map_err(CommitError::History)
+                })?;
                 let current = phase(timing, "head", || {
                     self.refuse_markers(&save, candidate)?;
                     self.store
@@ -155,18 +165,6 @@ impl BoundWorkspace {
                 })?;
                 let moved = current.branch.head_commit != snapshot.branch.head_commit
                     || current.branch.base_layer != snapshot.branch.base_layer;
-                if moved && via == CommitVia::Files {
-                    return Err(CommitError::History(
-                        layerfs_history::HistoryError::HeadMoved(Box::new(
-                            layerfs_history::error::MovedState {
-                                expected_head: snapshot.branch.head_commit,
-                                actual_head: current.branch.head_commit,
-                                expected_base: snapshot.branch.base_layer,
-                                actual_base: current.branch.base_layer,
-                            },
-                        )),
-                    ));
-                }
                 let root = if moved && !force {
                     let (root, report) = phase(timing, "merge", || {
                         self.merge_candidate(&save, &snapshot, &current, candidate)
@@ -214,10 +212,10 @@ impl BoundWorkspace {
                         root,
                     )
                 })?;
-                Ok((root, candidate, current, moved, logical))
+                Ok((root, candidate, current, moved, logical, lane))
             })();
             retained.storage = Some(super::producer::since(storage.diagnostics(), before));
-            let (candidate, ours, current, moved, logical) = built?;
+            let (candidate, ours, current, moved, logical, lane) = built?;
             if candidate != ours {
                 replaced = Some((ours.0, candidate.0));
             }
@@ -322,6 +320,7 @@ impl BoundWorkspace {
                     CommitOutcome::Committed { record, .. } => (Some(record.id), record.root),
                     CommitOutcome::UpToDate { head, root } => (*head, *root),
                 };
+                drop(lane);
                 retained.published = Some(outcome);
                 if root != candidate.0 {
                     return Err(CommitError::Context(

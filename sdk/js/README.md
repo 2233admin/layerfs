@@ -149,6 +149,13 @@ identity/timestamps. Destinations are exact and must not exist. Same-path/subtre
 moves or copies are InvalidInput. Mkdir creates parents and an existing directory
 is a no-op. Edit requires exactly one match and streams large files.
 
+Branch writes, like `sandbox.commit`, read the Branch head, merge with it and
+publish inside the Store's short publication lane, so concurrent writers never
+meet a moved head. A call whose private Workspace was bound before another
+publication merges with it once: different paths are `Committed`; a path both
+changed is refused as `Conflict` (`detail.conflicts`, `detail.head`) with nothing
+committed. Nothing is resent or merged again.
+
 One SDK request must fit a 65,519-byte encoded control record, including its
 paths, metadata and tracing fields. Before-send size admission returns `TooLarge`
 with null detail; no change index exists because no change was attempted.

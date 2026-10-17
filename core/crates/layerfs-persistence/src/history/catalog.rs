@@ -134,6 +134,11 @@ impl HistoryCatalog for HistoryProvider {
         self.write(|tx| branch::fork(tx, request))
     }
 
+    fn publish_lane(&self) -> HistoryResult<PublishLane> {
+        let hold = self.session.hold_lane()?;
+        Ok(PublishLane::new(Box::new(hold)))
+    }
+
     fn commit_branch(&self, request: &CommitRequest) -> HistoryResult<CommitOutcome> {
         self.write(|tx| commit::commit_branch(tx, request))
     }

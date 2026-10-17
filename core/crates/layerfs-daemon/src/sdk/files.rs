@@ -166,26 +166,51 @@ fn commit(service: &Service, args: &SdkValue, changes: &[SdkValue]) -> Answer {
             discard: true,
         })
         .map_err(|e| args::failed(format!("{e:?}")))?;
-    Ok(
-        match outcome
-            .history
-            .ok_or_else(|| args::failed("private mutation produced a merge conflict"))?
-        {
-            CommitOutcome::Committed { record, .. } => SdkValue::map([
-                ("kind", SdkValue::text("Committed")),
-                ("branch", SdkValue::text(branch_name)),
-                ("head", SdkValue::text(args::hex(record.id.as_slice()))),
-                ("commit", args::commit_value(&record, Some(branch_name))),
-            ]),
-            CommitOutcome::UpToDate { head, root } => SdkValue::map([
-                ("kind", SdkValue::text("UpToDate")),
+    // The Branch moved since the private binding and changed a path this call
+    // changed too: nothing was published, as for a Workspace Commit.
+    let Some(history) = outcome.history else {
+        let merge = outcome.merge.as_ref();
+        let paths = merge.map_or_else(Vec::new, |m| {
+            m.conflicts
+                .iter()
+                .map(|c| SdkValue::text(c.path.clone()))
+                .collect()
+        });
+        return Err(args::refuse(
+            "Conflict",
+            format!(
+                "the head moved and {} path(s) conflict with this call; nothing was committed",
+                paths.len()
+            ),
+            SdkValue::map([
                 ("branch", SdkValue::text(branch_name)),
                 (
                     "head",
-                    SdkValue::opt_text(head.map(|id| args::hex(id.as_slice()))),
+                    SdkValue::opt_text(
+                        merge
+                            .and_then(|m| m.head)
+                            .map(|id| args::hex(id.as_slice())),
+                    ),
                 ),
-                ("root", SdkValue::text(args::hex(root.as_bytes()))),
+                ("conflicts", SdkValue::List(paths)),
             ]),
-        },
-    )
+        ));
+    };
+    Ok(match history {
+        CommitOutcome::Committed { record, .. } => SdkValue::map([
+            ("kind", SdkValue::text("Committed")),
+            ("branch", SdkValue::text(branch_name)),
+            ("head", SdkValue::text(args::hex(record.id.as_slice()))),
+            ("commit", args::commit_value(&record, Some(branch_name))),
+        ]),
+        CommitOutcome::UpToDate { head, root } => SdkValue::map([
+            ("kind", SdkValue::text("UpToDate")),
+            ("branch", SdkValue::text(branch_name)),
+            (
+                "head",
+                SdkValue::opt_text(head.map(|id| args::hex(id.as_slice()))),
+            ),
+            ("root", SdkValue::text(args::hex(root.as_bytes()))),
+        ]),
+    })
 }
