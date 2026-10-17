@@ -77,3 +77,9 @@
   127 → 213 ms (401k → 703k VM steps) from range 5 to 7 (dev run); per entry
   3.3 → 6.5 → 13.0 ms against the ~11 ms one-file probe; later pages re-skip
   from the start. Dev ranges 7–11 gated optimize on it. Owner: the fixer.
+- **F-011 · old-format Stores are refused (lead, 2026-10-18, REBUILD.md).**
+  `binding_hint` (002.a1) was handled as a Store-format change (kind 3, fast
+  rebuild) although `diff_commits` already falls back to a full walk for roots
+  without hints: it should have been kind 2. Forward fix: open older Stores,
+  create the table when missing, record hints from then on. Nothing is rebuilt.
+  Owner: the fixer, after F-005.
