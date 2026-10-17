@@ -28,8 +28,29 @@ recovery and demo, P5 full history (SPEC §9). P0 is done. Before P1's first
 range, do HANDOFF.md's "First builder task" and "Then, before the pilot's first
 range" steps.
 
-Use three agents: you are the lead; start one builder subagent and one fixer
-subagent, and keep using the same two (SendMessage) while their context lasts.
+## Agents: you plus exactly two subagents
+
+  lead (you)  owns the run: starts the runner, reads each report, decides the
+              gate action, commits, pushes and comments on #352, keeps the
+              state files. You do not write tool or product code yourself.
+  builder     builds and extends the tools (runner, lib, plan, oracle, gates,
+              probes, report, demo seed) and makes the forward plan changes you
+              ask for. Busy mostly in P0–P1, then on demand.
+  fixer       diagnoses and fixes every optimize and stop finding (SPEC §6
+              playbook D0–D6): regression test, fix, old-vs-new probes, fix kind,
+              finding record. Works only while the runner is stopped.
+
+Rules:
+- Start each subagent once and keep using it with SendMessage, so it keeps
+  what it learned. Replace one with a fresh subagent, pointed at the state
+  files, only when its context is exhausted. Never more than these two.
+- Subagents do not start subagents of their own.
+- Nothing runs alongside a measured range: no build, no diagnosis, no test.
+- One writer at a time: the builder and the fixer never edit code at the same
+  time.
+- State lives in files (RANGES.md, ranges/, BUGS.md, OPTIMIZATIONS.md,
+  RESULTS.md, ~/lfs-history/), not in anyone's context. When your own context
+  is long, hand off to a fresh lead given this prompt and those files.
 
 ## Every iteration (every range)
 

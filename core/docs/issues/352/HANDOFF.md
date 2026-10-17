@@ -187,6 +187,7 @@ reaches it (SPEC.md §6). The fixer's playbook (D0–D6) depends on them.
 - Continue the same builder and fixer with SendMessage, so they keep what they
   learned. Start a fresh one, pointed at the state files, only when its context
   is exhausted.
+- Exactly these two subagents: never more, and they start none of their own.
 - Nothing runs alongside a measured range: no build, no diagnosis, no test. The
   fixer works only while the runner is stopped.
 - One writer at a time: the builder and the fixer never edit code concurrently.
