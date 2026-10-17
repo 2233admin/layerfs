@@ -137,3 +137,11 @@
   separately, each flat with tree size and depth; never normalise by tree files;
   unseparable points are "not judged" (watch). The recorded optimize verdict of
   that baseline run stays as recorded.
+- **F-014 · the "one-file" `diff_commits` probe had a drifting input
+  (tooling, builder, 2026-10-18).** It diffed the lane's newest Commit, which
+  changed 4, 5, 15 and 60 files at ranges 0–3 (`p1-rebase-b`), so its raw
+  statements (152, 146, 140, 239) tripped Counters against tree files (0.694).
+  SPEC §3c defines one changed file. Fix (builder): a true one-file diff on the
+  probe's own Branch, with a probe version in the metrics; gates never fit
+  across versions; the other probes are checked for the same drift. Recorded
+  values stay; the baseline is re-measured as `p1-rebase-c`.
