@@ -24,3 +24,5 @@
   finding).** `compare.rs` `changes()` reads both trees; probes give VM-step
   exponent 0.59 against depth with one changed file. A change-proportional diff
   needs per-directory change information the format lacks (SPEC §6 format kind).
+  **Fixed** in `49499abac` (Store format: `binding_hint`, walk in
+  `layerfs-content::compare`): [fixes/002-a1-diff-commits-change-walk.md](fixes/002-a1-diff-commits-change-walk.md).
