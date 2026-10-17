@@ -489,7 +489,7 @@ export async function probes(run, k, { branch, tree }) {
     ["stat", () => lf.fs.stat("main", `${P}/small.txt`), { input: (v) => ({ bytes: v.size }) }],
     ["read", () => lf.fs.read("main", `${P}/small.txt`, 1, 50), { setup: () => lf.fs.stat("main", `${P}/small.txt`), input: (v, s) => ({ bytes: s.size }) }],
     ["list_small", () => lf.fs.list("main", `${P}/dir`, 50, 0), { input: (v) => ({ entries: v.items.length }) }],
-    ["list_largest", () => lf.fs.list("main", abs(big.dir), 1000, 0)],
+    ["list_largest", () => lf.fs.list("main", abs(big.dir), 1000, 0), { input: (v) => ({ dir: big.dir, entries: v.items.length }) }],
     ["grep_scoped", () => lf.fs.grep("main", "probe", `${P}/dir`, 50, 0), { setup: () => lf.fs.list("main", `${P}/dir`, 50, 0), input: (v, s) => ({ files: s.items.length }) }],
     ["glob_scoped", () => lf.fs.glob("main", "*.txt", `${P}/dir`, 50, 0), { setup: () => lf.fs.list("main", `${P}/dir`, 50, 0), input: (v, s) => ({ files: s.items.length }) }],
     ["grep_tree", () => lf.fs.grep("main", "LFS352_NEVER_PRESENT", "/", 50, 0)],

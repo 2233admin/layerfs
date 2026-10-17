@@ -148,6 +148,10 @@
 - **F-016 · gate reads a bounded, periodic chain cost as depth growth
   (tooling, 007.a1, 2026-10-18).** `list_small` cycles with the metadata depth
   cap (8). Owner: the builder, after F-017; an unbounded series must still trip.
+  **Fixed** (builder, gate): chain-reading probes are judged as a bound, the
+  max over the latest cap period against the first (1.0× bounded), not a depth
+  exponent; fewer than a period plus one point is not judged. `list_largest`
+  is fitted per entry of its directory. gates.mjs header, SPEC §5.
 - **F-017 · fs calls of all agents serialize on one Sandbox control
   connection (product, 007.a1 S1, 2026-10-18).** `registry.rs`
   `control: Mutex<Control>`; reads queue behind Commits (range 7: 1 ms work,

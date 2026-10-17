@@ -563,6 +563,18 @@ for a ~5% storage gain. Report raw deltas for both.
 
 ## 5. Gates per range
 
+> **Chain-reading probes (F-016, 2026-10-18).** stat, read, list_small,
+> grep/glob scoped and diff_files read the fixture through metadata delta
+> chains: their cost rises one link per range and resets at the metadata
+> delta cap (8; list_small 60 → 228 blob reads, then 60). They are judged as a
+> bound, not a depth exponent: the maximum over the latest cap period against
+> the maximum over the first (counters: any rise over 1.0× is watch, over
+> 1.05× optimize; ms: 1.2× / 1.5×). Fewer than a period plus one point, or no
+> recorded cap, is "not judged" (watch). Cost per decoded link was rejected:
+> it stays flat under unbounded chain growth. `list_largest` is fitted per
+> entry of the directory it lists (its recorded input); a growing probe
+> without its own input is "not judged" (`dsh/tools/history/gates.mjs` header).
+
 > **Checkpoint diff_commits (F-013, 2026-10-18).** Cost = a + b·n: a fixed per
 > checkpoint, b per changed entry n, each flat with depth and tree size. Per
 > axis: if n does not grow with the axis, the checkpoint's total statements

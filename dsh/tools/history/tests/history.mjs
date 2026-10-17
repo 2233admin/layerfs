@@ -220,7 +220,9 @@ test("a whole-tree grep is judged per tree byte when the attempt records its inp
   assert.equal(flat.checks.find((c) => c.name === "Counters").result, "pass");
   assert.match(flat.checks.find((c) => c.name === "Scaling").value, /per tree byte/);
   const legacy = evaluate(at(7, 1e-5, false), hist, buildBaseline(hist.slice(0, 5)));
-  assert.equal(legacy.checks.find((c) => c.name === "Scaling").result, "optimize", "an attempt without inputs is judged raw, as recorded");
+  // F-016: a growing probe without its own input is not judged (F8), never fitted raw against depth
+  assert.equal(legacy.checks.find((c) => c.name === "Scaling").result, "watch");
+  assert.match(legacy.checks.find((c) => c.name === "Scaling").value, /not judged: grep_tree: its own input/);
   const deeper = [0, 1, 2, 3, 4, 5, 6].map((i) => at(i, 1e-5 * (i + 1)));
   const g = evaluate(at(7, 8e-5), deeper, buildBaseline(deeper.slice(0, 5)));
   assert.equal(g.checks.find((c) => c.name === "Scaling").result, "optimize", "cost per byte that grows with depth is still a finding");

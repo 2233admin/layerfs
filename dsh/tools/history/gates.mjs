@@ -2,6 +2,15 @@
 // the ranges before it and the pilot baseline. Pure functions; report.mjs
 // reads the files and writes the reports.
 //
+// Chain-reading probes (F-016, builder's choice, 2026-10-18): stat, read,
+// list_small, grep/glob scoped and diff_files read the fixture through
+// metadata delta chains, whose position rises one link per range and resets
+// at the cap (8): list_small cycled 60 → 228 blob reads. They are judged as a
+// bound, not a depth exponent: the max over the latest cap period against the
+// max over the first (chainBound); 1.0 is bounded. Chosen over cost per
+// decoded link, which stays flat under unbounded chain growth too (each extra
+// link is one more read) and so would hide it. Needs a period plus one points.
+//
 // The checkpoint diff_commits gate (F-013, builder's choice, 2026-10-18): a
 // checkpoint's difference costs a + b·n, a fixed per checkpoint and b per
 // changed entry n; both must stay flat with depth and with tree size (SPEC §4).
@@ -128,6 +137,7 @@ export function probeSeries(name, m, all) {
   const same = all.filter((x) => x.probes?.[name] && (x.probes[name].version ?? 1) === v);
   let pts = same;
   if (FIXED_INPUT.has(name) && p.input == null) return { pts: [], note: "input not recorded (before F-014): a fixed input cannot be confirmed" };
+  if (SCOPED[name] && !(SCOPED[name](m) > 0)) return { pts: [], note: `its own input (${SCOPE_UNIT[name]}s) is not recorded: a growing probe is fitted per unit of it` };
   if (p.input != null && !GROWS.has(name)) {
     const key = JSON.stringify(p.input);
     const differ = same.filter((x) => x.probes[name].input != null && JSON.stringify(x.probes[name].input) !== key);
@@ -137,6 +147,35 @@ export function probeSeries(name, m, all) {
   const n = pts.filter((x) => x.depth?.after > 0).length;
   if (n < MINIMUM_POINTS) return { pts, note: `${n} of ${MINIMUM_POINTS} points of probe version ${v}${p.input != null && !GROWS.has(name) ? " with this input" : ""}` };
   return { pts };
+}
+
+/**
+ * Probes that read the fixture through metadata delta chains (F-016): their
+ * cost follows the chain position, which rises by one link per range and
+ * resets at the metadata delta cap, so a depth exponent over a few points
+ * reads a sawtooth as growth. They are judged as a bound: the maximum over
+ * the latest cap period against the maximum over the first one, from the
+ * first point on (a fresh base is at most one period away). Bounded cycling
+ * gives 1.0; growth without a reset raises the latest period's maximum.
+ * Fewer than a period plus one point, or no recorded cap, is not judged.
+ */
+export const CHAIN = new Set(["stat", "read", "list_small", "grep_scoped", "glob_scoped", "diff_files"]);
+/** The bound's bands: counters are deterministic (any rise is a finding), ms carries noise. */
+export const BOUND = { counters: { watch: 1.0, act: 1.05 }, ms: { watch: 1.2, act: 1.5 } };
+
+export function chainBound(name, m, pts, t = BOUND) {
+  const period = m.storage?.delta?.caps?.metadata ?? m.storage?.deltaTotal?.caps?.metadata ?? null;
+  const one = (label, value, th) => {
+    const v = pts.map(value).filter((x) => x != null);
+    if (period == null) return { name: label, e: null, result: "watch", note: "no metadata delta cap recorded: the chain period is unknown" };
+    if (v.length < period + 1) return { name: label, e: null, result: "watch", note: `${v.length} of ${period + 1} points: a bound needs a full metadata delta-cap period (${period}) plus one` };
+    const first = Math.max(...v.slice(0, period)), last = Math.max(...v.slice(-period)), ratio = +(last / first).toFixed(3);
+    return { name: label, e: ratio, result: band(ratio, th), text: `max over the latest cap period ${last} vs the first ${first}: ${ratio}× (bound, period ${period})` };
+  };
+  return {
+    probe: [one(`${name} (chain-bounded)`, (x) => x.probes?.[name]?.ms, t.ms)],
+    counters: Object.keys(m.probes[name].counters || {}).map((k) => one(`${name}.${k} (chain-bounded)`, (x) => x.probes?.[name]?.counters?.[k], t.counters)),
+  };
 }
 
 /**
@@ -182,7 +221,8 @@ export function exponent(points) {
  * carries the checkpoint tree as `inputs.tree` (run.mjs, from the oracle); an
  * attempt recorded without it is judged as it was, raw.
  */
-export const SCOPED = { grep_tree: (x) => x.inputs?.tree?.bytes };
+export const SCOPED = { grep_tree: (x) => x.inputs?.tree?.bytes, list_largest: (x) => x.probes?.list_largest?.input?.entries };
+const SCOPE_UNIT = { grep_tree: "tree byte", list_largest: "entry of the largest directory" };
 /** Probes whose raw counters must stay flat with tree size as well as depth (SPEC §4): the one-file diff. */
 export const TREE_FLAT = new Set(["diff_commits"]);
 const treeFiles = (x) => x.inputs?.tree?.files;
@@ -263,16 +303,17 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   const fitted = all.filter((x) => x.depth?.after > 0).length;
   // A probe with its own growing input is fitted per unit of that input, when this attempt recorded it.
   const scoped = m.inputs != null;
-  const unit = (name) => (scoped && SCOPED[name] ? " per tree byte" : "");
+  const unit = (name) => (SCOPED[name] ? ` per ${SCOPE_UNIT[name]}` : "");
   // The probe and the counter with the highest depth exponent, and the worst band of any.
   const probeFits = [], counterFits = [];
   for (const name of Object.keys(m.probes || {})) {
     // F-014: only points of the same probe version, and for a fixed-input probe the same recorded input
     const { pts, note } = probeSeries(name, m, all);
     if (note) { probeFits.push({ name, e: null, result: "watch", note }); counterFits.push({ name, e: null, result: "watch", note }); continue; }
-    probeFits.push({ name: `${name}${unit(name)}`, e: exponent(pts.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.ms, scoped)])) });
+    if (CHAIN.has(name)) { const b = chainBound(name, m, pts); probeFits.push(...b.probe); counterFits.push(...b.counters); continue; }
+    probeFits.push({ name: `${name}${unit(name)}`, e: exponent(pts.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.ms, true)])) });
     for (const k of Object.keys(m.probes[name].counters || {})) {
-      counterFits.push({ name: `${name}.${k}${unit(name)}`, e: exponent(pts.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.counters?.[k], scoped)])) });
+      counterFits.push({ name: `${name}.${k}${unit(name)}`, e: exponent(pts.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.counters?.[k], true)])) });
       if (TREE_FLAT.has(name)) counterFits.push({ name: `${name}.${k}`, against: "tree files", e: exponent(pts.map((x) => [treeFiles(x), x.probes?.[name]?.counters?.[k]])) });
     }
   }
@@ -294,6 +335,7 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   const fit = (f, what) => (fitted < MINIMUM_POINTS ? { value: insufficient(fitted), result: "watch" }
     : !f.name ? { value: `not judged: no ${what}`, result: "watch" }
     : f.note ? { value: `not judged: ${f.name}: ${f.note}`, result: f.result }
+    : f.text ? { value: `${f.name}: ${f.text}`, result: f.result }
     : f.e == null ? { value: `not judged: ${f.name}: no ${f.against ?? "depth"} exponent (points without ${f.against ?? "depth"} or value)`, result: "watch" }
     : { value: `${f.name}: ${f.against ?? "depth"} exponent ${f.e}${seeded.length ? ` (${seeded.length} seeded probe point${seeded.length > 1 ? "s" : ""})` : ""}`, result: f.result });
   const sv = fit(scale, "probes"), cv = fit(counter, "counters");

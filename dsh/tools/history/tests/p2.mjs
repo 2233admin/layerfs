@@ -307,8 +307,10 @@ test("F-014: probes fit only same-version, same-input points; growing probes are
   // a fixed-input probe without its input is not judged; a growing probe needs none and is fitted
   const legacy = [1, 2, 3].map((i) => mk(i, 1000 * i, { stat: one(3) }));
   assert.match(row(legacy).value, /stat: input not recorded/);
-  const grows = [1, 2, 3].map((i) => mk(i, 1000 * i, { list_largest: one(3 * i, { entries: 10 * i }) }));
-  assert.equal(row(grows).result, "optimize", "list_largest is exempt from the same-input rule and still fitted");
+  const grows = [1, 2, 3].map((i) => mk(i, 1000 * i, { list_largest: one(3 * i * i, { entries: 10 * i }) }));
+  assert.equal(row(grows).result, "optimize", "list_largest is exempt from the same-input rule and fitted per entry");
+  const perEntryFlat = [1, 2, 3].map((i) => mk(i, 1000 * i, { list_largest: { ...one(3 * i, { entries: 10 * i }), counters: { statements: 100 * i } } }));
+  assert.equal(row(perEntryFlat).result, "pass", row(perEntryFlat).value);
   assert.deepEqual(probeSeries("list_largest", grows[2], grows).note, undefined);
 });
 
@@ -483,4 +485,22 @@ test("F-015: the probe setup's Commits are not range work; a recorded Overview i
   assert.deepEqual([fixed.commits, fixed.running, fixed.agents.at(-1).commits, fixed.branches.at(-1).commits], [o.commits, o.running, o.agents.at(-1).commits, o.branches.at(-1).commits]);
   assert.equal(fixed.corrections[0].finding, "F-015");
   assert.equal(withoutProbeSetupCommits(fixed, 2), fixed, "applied once");
+});
+
+test("F-016: chain-reading probes are judged as a bound over a delta-cap period, not a depth exponent", () => {
+  const cyc = [60, 84, 108, 132, 156, 180, 204, 228];
+  const mk = (i, v) => ({ range: 5 + i, binary: { daemon: "d" }, depth: { after: 4000 + 500 * i }, checks: {}, storage: { delta: { caps: { metadata: 8 } } },
+    probes: { list_small: { ms: 4 + v / 100, input: { entries: 5 }, counters: { statements: v + 24 } } } });
+  const series = (f, n) => Array.from({ length: n }, (_, i) => mk(i, f(i)));
+  const rows = (xs) => { const g = evaluate(xs.at(-1), xs.slice(0, -1)); return ["Scaling", "Counters"].map((n) => g.checks.find((c) => c.name === n)); };
+  // the recorded periodic series (fixes/007-a1-list-small-chain-period.md): 20 points, 60 ... 228, reset
+  const periodic = rows(series((i) => cyc[i % 8], 20));
+  for (const r of periodic) assert.equal(r.result, "pass", r.value);
+  assert.match(periodic[1].value, /chain-bounded.*1×/);
+  // growth without a reset: +24 reads per range
+  const grows = rows(series((i) => 60 + 24 * i, 10));
+  assert.equal(grows[1].result, "optimize", grows[1].value);
+  // too few points to see a period
+  const few = rows(series((i) => cyc[i], 5));
+  for (const r of few) { assert.equal(r.result, "watch"); assert.match(r.value, /not judged: list_small.*of 9 points/); }
 });
