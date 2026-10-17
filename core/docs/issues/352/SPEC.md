@@ -120,8 +120,19 @@ dsh/scenarios/dsh-history/
 
 ## 3. What each range produces
 
-At each range's completion, write `~/lfs-history/metrics/range-NNN.json`, then
-append one row to `core/docs/issues/352/RANGES.md` and add to its running summary.
+At each range's completion, the runner writes three things:
+
+- `~/lfs-history/metrics/range-NNN.json`: the raw outputs, one file per attempt.
+- `core/docs/issues/352/ranges/range-NNN.md`: the range's report, one file per
+  range. `gates.mjs` generates it from the JSON, following
+  [ranges/TEMPLATE.md](ranges/TEMPLATE.md). The lead writes its §7 (findings and
+  action). A rerun adds an attempt to the same file and never replaces one.
+- One row in `core/docs/issues/352/RANGES.md`, the index:
+
+  | Range | dsh commits | Depth | Verdict | Worst speed ratio | Worst scaling slope | New stored bytes | Report |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+
+The sections below list what the report contains.
 
 ### a. Range
 
@@ -299,6 +310,45 @@ Every optimization is compared old binary vs new binary, with the scale probes o
 the same milestone snapshots. Label each latency series with its binary; never
 merge series across binaries.
 
+### Diagnosis playbook
+
+The fixer follows these steps when a range ends as optimize or stop.
+
+1. **Compare like with like.**
+   - Use the same operation kind, size class, binary and cache state.
+   - Compare distributions (p50, p95) against the baseline, never single calls.
+   - The scale probes are the clean comparison: their input never changes, so a
+     change between ranges comes from depth or tree size.
+   - For real operations, fit latency against input size, depth and tree size.
+     The depth coefficient must be about zero.
+2. **Find the phase.** Compare the daemon phase tree in the call trace between the
+   baseline and the slow range. For a commit, the phases are capture, construct,
+   merge, publish and install. For a mount, they are Branch lookup, bind and
+   attach.
+3. **Algorithm or physical cost.** Read the counters: rows read, pages touched,
+   ancestors walked, locator and pack misses, chain links decoded.
+
+   | Counter | Time | Cause |
+   | --- | --- | --- |
+   | Grows with depth | Grows | The code walks history (ancestors, chains, scans): fix the algorithm |
+   | Flat | Grows | Physical: DB size, page-cache misses, WAL, fragmentation, chain decoding: fix layout or caching |
+   | Grows with tree size | Grows | Fine only if the operation's own input grew; otherwise it touches more tree than it needs |
+
+4. **Separate history from tree size** with controls:
+   - the same probe on two milestone snapshots (same input, different depth);
+   - the squashed-history Store (same tree, no history);
+   - the one-Commit-per-git-commit Store (same history, coarser Commits).
+5. **Reproduce small and read the code.** Restore the snapshot and run only the
+   slow operation, as a diagnostic and not a measurement. Run `EXPLAIN QUERY PLAN`
+   on the slow phase's SQL, looking for full scans and missing indexes. Look for
+   loops over ancestors, Layers or chain links.
+6. **Fix and prove it.**
+   - First, write a regression test that asserts a **counter** stays flat as depth
+     grows (for example, rows read by a commit at depth 100 and at depth 10,000).
+     A counter test is deterministic and fast.
+   - Then compare old and new binaries with the probes on the same milestone
+     snapshots, and record the result in `OPTIMIZATIONS.md`.
+
 ## 7. Disk and Store
 
 - **Store profile:** Disposable / WAL / `synchronous=OFF` only. Durable stays
@@ -392,7 +442,8 @@ most chains before depth 8. Doubling its depth would change little.
 
 ## 10. Outputs in this folder
 
-- `RANGES.md`: one row per range (§3), and the gate decision for each.
+- `ranges/range-NNN.md`: one report per range (§3), following `ranges/TEMPLATE.md`.
+- `RANGES.md`: the index, one row per range, linking its report.
 - `RESULTS.md`: baselines, thresholds, the delta decision, and each phase's results.
 - `BUGS.md`: each failure, its diagnosis, its fix kind and its recovery.
 - `OPTIMIZATIONS.md`: each optimization with its old-vs-new probe table on the

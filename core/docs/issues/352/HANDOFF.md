@@ -106,13 +106,41 @@ When you need one of these, stop and say so on #352.
 - **Disk guard.** Run it before every range (SPEC.md §7). Keep the last 2
   snapshots plus milestones, and delete others with literal paths only.
 
+## Orchestration
+
+Three agents run the work.
+
+| Agent | Job | When it works |
+| --- | --- | --- |
+| **Lead** (you) | Owns the run: starts the runner, reads each range's report, decides the gate action, keeps the state files, posts on #352 | Throughout; idle while ranges pass |
+| **Builder** (your subagent) | Builds and extends the tools: plan, oracle, player, gates, probes, report, demo seed. Makes forward plan changes you ask for | Mostly P0–P1, then on demand |
+| **Fixer** (your subagent) | Diagnoses and fixes optimize and stop findings with SPEC.md's diagnosis playbook: the regression test, the fix, the old-vs-new probes, the fix kind | Whenever the runner stops |
+
+**The loop:**
+1. Start the runner (`run.mjs`) in the background. It plays ranges back to back
+   and writes each range's report. It exits only when a range ends as optimize or
+   stop, or when the phase is done. Its exit wakes you, so do not poll.
+2. On waking, read the report. Give the fixer the report and the stop reason.
+3. When the fixer reports, recover per SPEC.md §6 and start the runner again.
+
+**Rules:**
+- Continue the same builder and fixer with SendMessage, so they keep what they
+  learned. Start a fresh one, pointed at the state files, only when its context
+  is exhausted.
+- Nothing runs alongside a measured range: no build, no diagnosis, no test. The
+  fixer works only while the runner is stopped.
+- One writer at a time: the builder and the fixer never edit code concurrently.
+- State lives in files, not in context: the manifest, `RANGES.md`, `ranges/`,
+  `BUGS.md`, `OPTIMIZATIONS.md` and `RESULTS.md`. When your own context is long,
+  hand off to a fresh lead pointed at this file and those.
+
 ## Each phase
 
 1. Build what the phase needs, with tests for the tools: plan, oracle and gates
    logic are pure functions of git and metrics.
 2. Run it.
 3. At every range completion:
-   - write `range-NNN.json`;
+   - write `range-NNN.json` and the report `ranges/range-NNN.md`;
    - add the row to `RANGES.md`;
    - decide the gate.
 4. Act on the gate:
