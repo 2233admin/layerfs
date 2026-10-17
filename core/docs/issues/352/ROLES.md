@@ -19,6 +19,12 @@ each one wakes the lead when it exits, so nobody polls.
 | **Scout lane** | process (`run.mjs`, scout mode; **not built yet**) | Proving later ranges ahead and queuing counter findings while the fixer works | Producing reports, timings that count, or issue comments |
 | **Viewer** | process (P4; **not built**) | Playing range k on a fork in dsh for the owner to watch | Touching a live Store |
 
+**Non-stop rule** (PROMPT.md, owner 2026-10-18): every actor keeps working
+until the terminal pass and never asks a question. The lead decides and records;
+a subagent decides within its task and reports what it decided, with a
+recommended action for any true blocker. "Owner asks to watch" below means the
+owner's own direction, never a question the lead puts to the owner.
+
 Exactly two subagents: the builder and the fixer. Each is started once and
 continued with SendMessage; a fresh one replaces it only when its context is
 exhausted, pointed at the state files. Subagents start no subagents. The scout,

@@ -21,6 +21,9 @@ Optimize what the gates flag. Run phases P0–P5 in order.
 ask questions, do not ask for authority, and do not wait for replies. Make the
 best decision, write it down in `BUGS.md`, `RESULTS.md` or `OPTIMIZATIONS.md`,
 and continue. A stop gate is a bug cycle you run, not a reason to wait.
+PROMPT.md's **Non-stop rule** (owner, 2026-10-18) is binding on the lead and
+both subagents and overrides any wording here that seems to allow a pause or a
+question: the only ends are the terminal pass and a hard BLOCKED.
 
 ## Authority
 

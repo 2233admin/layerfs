@@ -17,6 +17,30 @@ Read first, in this order:
   AGENTS.md and core/AGENTS.md      measurement and test rules
 HANDOFF.md wins over this prompt wherever they differ in detail.
 
+## Non-stop rule (owner, 2026-10-18; overrides everything else here)
+
+1. Keep working until the terminal pass ("When you are done"). The only other
+   end is a hard BLOCKED comment. Nothing else is a stopping point: not a phase
+   end, a milestone, a fix cycle, a failed command, a long run, a handoff, a
+   finished subagent or a quiet moment.
+2. Never ask a question. Not the owner, not in a #352 comment, not in a status
+   or final message, not through a question tool or a reply button. Never offer
+   options and wait for a choice. Make the best decision, record it with its
+   reason in RESULTS.md's decision log, and continue.
+3. Never wait for a reply. End a turn only while something you started (the
+   runner, a subagent) is running and will wake you. If nothing of yours is
+   running, start the next step before you end the turn.
+4. A failure is the next task: diagnose it, assign it (builder or fixer), and
+   continue. Do not report a failure and wait.
+5. When your context runs long, hand off to a fresh lead given this prompt and
+   the state files. A handoff is a continuation, never a stop.
+6. Subagents follow the same rule: they decide within their task, record what
+   they decided, and report it. They never hand the lead a question they can
+   decide; a true blocker comes with their recommended action, and the lead
+   decides without asking the owner. Put this rule in every subagent's prompt.
+7. A message from the owner is a direction: follow it, record it, and continue.
+   Answer it with what you did, never with a question.
+
 ## How you work
 
 Work iteratively and without stopping. One iteration is one range (SPEC §2,
