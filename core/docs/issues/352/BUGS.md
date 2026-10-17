@@ -39,6 +39,13 @@
   chunk object is FULL. Is it no base found, or are files rarely chunked
   (≥ 128 KiB)? It feeds the delta decision (SPEC §8). Owner: the fixer,
   diagnosis first.
+  **Diagnosis (fixer, D5):** wiring defect. The chunk selector only takes the
+  base its caller offers (`layerfs-storage/src/encoding/delta/select.rs:311-312,
+  383-390`) and captured construction never offers one (`construct_runs` passes
+  `None`, `layerfs-content/src/file/construction/runs.rs:93,100,103,125`;
+  `stream_combined`, `file/edit/apply.rs:517`). Fix accepted: offer the old
+  file's chunk at the same position as base; no Store format change. Lands after
+  F-001, before P2's measured run.
 - **F-006 · health cannot judge overlay files left (lead, 2026-10-18).** The
   health row reads "? overlays", so a leaked Workspace overlay would go unseen.
   Owner: the builder (measure it per range, REPORT_FORMAT.md).
