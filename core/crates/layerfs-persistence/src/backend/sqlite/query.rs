@@ -74,6 +74,9 @@ pub(crate) fn history(key: &str) -> Result<&'static str, BackendError> {
         "layerstack_stack_head" => Ok(include_str!(
             "../../../sql/sqlite/queries/history/layerstack_stack_head.sql"
         )),
+        "layerstack_stack_by_name" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/layerstack_stack_by_name.sql"
+        )),
         "layerstack_stack_name_taken" => Ok(include_str!(
             "../../../sql/sqlite/queries/history/layerstack_stack_name_taken.sql"
         )),

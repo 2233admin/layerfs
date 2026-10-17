@@ -70,6 +70,25 @@ pub trait HistoryCatalog: Send + Sync {
     /// Stacks in name order.
     fn layer_stacks(&self, page: &Page) -> HistoryResult<PageResult<LayerStackRecord>>;
 
+    /// The stack named `name`, if any. A provider answers through its name
+    /// index; this default pages through the stacks in name order.
+    fn layer_stack_named(&self, name: &HistoryName) -> HistoryResult<Option<LayerStackRecord>> {
+        let mut page = Page {
+            cursor: None,
+            limit: crate::records::MAXIMUM_PAGE_RECORDS,
+        };
+        loop {
+            let found = self.layer_stacks(&page)?;
+            if let Some(stack) = found.records.into_iter().find(|s| &s.name == name) {
+                return Ok(Some(stack));
+            }
+            match found.continuation {
+                Some(cursor) => page.cursor = Some(cursor),
+                None => return Ok(None),
+            }
+        }
+    }
+
     /// One Branch by identity.
     fn branch(&self, id: BranchId) -> HistoryResult<Option<BranchRecord>>;
 

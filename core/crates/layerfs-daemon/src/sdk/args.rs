@@ -9,7 +9,7 @@ use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use layerfs_content::{ContentError, ObjectId};
 use layerfs_history::{
     error::Missing, BranchRecord, CommitId, CommitRecord, HistoryError, HistoryName, LayerId,
-    LayerRecord, LayerStackRecord, NodeId, Page, MAXIMUM_PAGE_RECORDS,
+    LayerRecord, LayerStackRecord, NodeId,
 };
 use std::sync::Arc;
 
@@ -89,29 +89,17 @@ pub(crate) fn name(text: &str) -> Result<HistoryName, SdkRefusal> {
 /// The project's stack, by name.
 pub(crate) fn project(store: &Arc<Store>, args: &SdkValue) -> Result<LayerStackRecord, SdkRefusal> {
     let wanted = text(args, "project")?;
-    let mut page = Page {
-        cursor: None,
-        limit: MAXIMUM_PAGE_RECORDS,
+    let found = match HistoryName::new(wanted) {
+        Ok(name) => store.history().layer_stack_named(&name).map_err(history)?,
+        Err(_) => None,
     };
-    loop {
-        let found = store.history().layer_stacks(&page).map_err(history)?;
-        if let Some(stack) = found
-            .records
-            .into_iter()
-            .find(|s| s.name.as_str() == wanted)
-        {
-            return Ok(stack);
-        }
-        match found.continuation {
-            Some(cursor) => page.cursor = Some(cursor),
-            None => break,
-        }
-    }
-    Err(refuse(
-        "NoSuchProject",
-        format!("project {wanted} does not exist"),
-        SdkValue::Null,
-    ))
+    found.ok_or_else(|| {
+        refuse(
+            "NoSuchProject",
+            format!("project {wanted} does not exist"),
+            SdkValue::Null,
+        )
+    })
 }
 
 /// One Branch by name, through the stack's name index.

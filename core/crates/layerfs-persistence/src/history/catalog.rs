@@ -32,6 +32,10 @@ impl HistoryCatalog for HistoryProvider {
         })
     }
 
+    fn layer_stack_named(&self, name: &HistoryName) -> HistoryResult<Option<LayerStackRecord>> {
+        self.read(|tx| layerstack::layer_stack_named(tx, name))
+    }
+
     fn branch(&self, id: BranchId) -> HistoryResult<Option<BranchRecord>> {
         self.read(|tx| branch::branch(tx, id))
     }

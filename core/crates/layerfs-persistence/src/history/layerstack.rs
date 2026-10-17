@@ -13,7 +13,7 @@ use super::params;
 use super::transaction::Transaction;
 use layerfs_content::ObjectId;
 use layerfs_history::error::{HistoryError, HistoryResult, Missing, MovedState};
-use layerfs_history::identity::{CatalogId, LayerId, LayerStackId};
+use layerfs_history::identity::{CatalogId, HistoryName, LayerId, LayerStackId};
 use layerfs_history::records::{
     AddLayerOutcome, AddLayerRequest, LayerHistoryRequest, LayerRecord, LayerStackRecord, Page,
     PageResult, StackInitialization,
@@ -23,6 +23,8 @@ use super::query::{self, Context, Cursor, Range};
 use super::rows::{cell, layer_row, many, one, sql, stack_row};
 
 const STACK_BY_ID: &str = "layerstack_stack_by_id";
+
+const STACK_BY_NAME: &str = "layerstack_stack_by_name";
 
 const STACK_FIRST_PAGE: &str = "layerstack_stack_first_page";
 
@@ -90,6 +92,14 @@ pub(crate) fn layer_stack(
     id: LayerStackId,
 ) -> HistoryResult<Option<LayerStackRecord>> {
     one(tx, STACK_BY_ID, [id.as_slice()], stack_row)
+}
+
+/// Reads one stack by its name, through the unique name index.
+pub(crate) fn layer_stack_named(
+    tx: &Transaction<'_>,
+    name: &HistoryName,
+) -> HistoryResult<Option<LayerStackRecord>> {
+    one(tx, STACK_BY_NAME, params![name.as_str()], stack_row)
 }
 
 /// Reads stacks in name order, one bounded page at a time.
