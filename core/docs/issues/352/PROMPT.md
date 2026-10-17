@@ -12,6 +12,8 @@ Read first, in this order:
   core/docs/issues/352/HANDOFF.md   your authority, orchestration and rules
   core/docs/issues/352/SPEC.md      the plan, the outputs, the gates, the fixes
   core/docs/issues/352/SCRIPTS.md   how a range's plan becomes steps
+  core/docs/issues/352/ROLES.md     who works when; scout lane; storage isolation
+  core/docs/issues/352/LESSONS.md   speed rules, bookkeeping, troubleshooting
   AGENTS.md and core/AGENTS.md      measurement and test rules
 HANDOFF.md wins over this prompt wherever they differ in detail.
 
@@ -24,9 +26,9 @@ HANDOFF.md, Authority. When a choice is open, make the best decision, write it
 down (RESULTS.md, BUGS.md or OPTIMIZATIONS.md, with the reason) and continue.
 
 Run the phases in order: P1 pilot, P2 multi-agent, P3 Sandbox share, P4
-recovery and demo, P5 full history (SPEC §9). P0 is done. Before P1's first
-range, do HANDOFF.md's "First builder task" and "Then, before the pilot's first
-range" steps.
+recovery and demo, P5 full history (SPEC §9). P0 is done and P1 is in progress:
+start from HANDOFF.md, "State at handoff" and its "Next, in order". The pre-pilot
+steps are done; do not redo them.
 
 ## Agents: you plus exactly two subagents
 

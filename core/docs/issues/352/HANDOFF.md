@@ -1,7 +1,9 @@
 # Handoff prompt — #352
 
-> **Status:** Current; the agent that runs #352 starts from [PROMPT.md](PROMPT.md),
-> which points here.
+> **Status:** Current, 2026-10-18 (second crew). The agent that runs #352 starts
+> from [PROMPT.md](PROMPT.md), which points here. Start with "State at handoff"
+> below; [ROLES.md](ROLES.md) replaces the "Orchestration" section where they
+> differ.
 
 You own LayerFS issue [#352](https://github.com/Ephemeral-AI-Lab/layerfs/issues/352)
 (dsh history replay). You work in `/Users/yifanxu/Ephemeral-AI-Lab/layerfs` on
@@ -68,8 +70,85 @@ within your authority clears ends the run early: post a "BLOCKED" comment on
 6. The content model: `cas_cdc_deltaencoding_handbook.md`;
    `core/crates/layerfs-content/src/contract/policy.rs`;
    `core/crates/layerfs-storage/src/store/policy.rs`.
+7. [ROLES.md](ROLES.md): who works when, the scout lane and storage isolation.
+8. [LESSONS.md](LESSONS.md): speed rules, lead bookkeeping, troubleshooting and
+   known traps learned in P1. Read it before the first command.
+9. [RESULTS.md](RESULTS.md) decision log, [BUGS.md](BUGS.md),
+   [OPTIMIZATIONS.md](OPTIMIZATIONS.md), [fixes/](fixes/README.md) and
+   [RANGES.md](RANGES.md): the state so far.
 
-## What is already done
+## State at handoff (2026-10-18, after range 2)
+
+The first crew stopped on the owner's instruction after range 2's optimized
+rerun was committed and commented. Nothing is running; the tree is clean.
+
+**Ranges.** Main line is run `p1-pilot-b` (volume `layerfs-issue352-p1-pilot-b`,
+`~/lfs-history/runs/p1-pilot-b/`, `state.json` `next: 3`).
+
+| Range | Latest attempt | Verdict | Binary | Note |
+| --- | --- | --- | --- | --- |
+| 000 | a1 | watch | `0ef24121` | directory share 0.53 |
+| 001 | a1 | watch | `0ef24121` | directory share 0.52 |
+| 002 | a2 | watch | `511dceed` | a1 optimize (fork rows, grep); fixed with merge ancestry, diff_commits and project lookup; a2 watches list_largest 0.16 and merge.fullscan_steps 0.324 on 2 seeded points |
+
+Each has a committed report, a RANGES.md row and a #352 comment. Ranges 0–1 of
+`p1-pilot-b` were fast-rebuilt in the new Store format (oracle-checked), so their
+measured attempts stay those of the abandoned line `p1-pilot` (old format,
+binary `0ef24121`), kept as evidence.
+
+**Binaries.** Daemon `511dceeda1b5ec7e4c65b50f4f885bc60f25d6beac1c0735c7e044c12e1e7ad0`
+at `core/target/cluster2-linux/release/layerfs-daemon`, copies of every daemon by
+id under `core/target/issue352/daemon-<id>/`; SDK addon `506b646f7d0a…`; image
+`sha256:d3773b4eac6a…`; source `0c347ad33` and later docs. Store format includes
+`binding_hint`; older Stores are refused on open.
+
+**Built and proven:** trace wiring (SqlWork, FUSE opcodes, delta outcomes);
+`run.mjs` (new, play measured/fast, fork, cleanup), `lib.mjs`, `steps.mjs`;
+snapshots per run; `inspect.mjs` ls/cat/diff/stats; same-binary gates with
+probe seeds (`~/lfs-history/metrics/probes-<daemon>.json`); per-stage tooling
+time; calibration of ranges 0–4 (`tests-000..004.json`); the `node_modules` Init
+ratio (RESULTS.md, P1).
+
+**Not built:** the scout lane, `lines.json`, read-only pnpm mounts, the
+cross-lane disk guard (ROLES.md §4–§5); `run.mjs recover` and the one-command
+dev reproduction; the tooling overhead cuts (LESSONS.md S2); the P2–P5 players;
+the viewer (P4). Unfinished viewer pieces are parked on the local, unpushed
+branch `dsh-352-viewer-wip` (`1609344d2`: seeding a dsh demo from a snapshot,
+container/volume prefixes, `assemble` waits); still missing there are
+`scenario.mjs`, the scenario calls in `lib.mjs`, the plan-backed checks and
+`view.mjs`. One limit: P1 plays on one lane, so a viewer of P1 ranges plays one
+agent at a time.
+
+**Open findings:** F-001 (fs request cap 65,519 bytes; fix before P3), F-002
+(full-scan steps, bounded, watch), F-004 (`report.mjs` rewrote recorded reports
+of earlier ranges after a gate change; the lead restored them; fix before the
+next range). Watches: directory share ~0.53, list_largest, merge.fullscan_steps.
+
+**Resources:** volumes `layerfs-issue352-p1-pilot` (abandoned line, evidence),
+`layerfs-issue352-p1-pilot-b` (main line), `layerfs-issue352-pnpm-store`; snapshots
+19 MB under `~/lfs-history/snapshots/`; ledgers under `~/lfs-history/ledger/` and
+each run folder.
+
+### Next, in order
+
+1. **Builder:** fix F-004 (a regression test: playing range k leaves earlier
+   reports byte-identical). Commit; the lead pushes.
+2. **Lead:** `node dsh/tools/history/run.mjs play --run p1-pilot-b --from 3 --to 4
+   --mode measured` in the background; commit, push, comment per range
+   (LESSONS.md §2). Range 4 is a milestone: restore its snapshot into a fresh
+   volume and run the oracle check and `PRAGMA quick_check` (SPEC §7).
+3. **Control arm:** `run.mjs new --run p1-control --phase p1 --label control
+   --policy control`, then `play --run p1-control --from 0 --to 4`; it must run on
+   the same daemon as the arm it is compared with. Decide the delta depth per
+   SPEC §8 and record it in RESULTS.md.
+4. **Close P1:** baselines and gate thresholds from same-binary points (SPEC §5),
+   wall time × 202 against the budget, growth against SPEC §7; RESULTS.md P1
+   section; phase summary on #352.
+5. **Builder, before P2:** the scout lane and its storage rules (ROLES.md §4–§5),
+   `recover`, the dev reproduction command, the overhead cuts with the pilot's
+   stage times, then P2's player. Calibrate P2's ranges just before P2.
+
+## What was done before the first crew (history)
 
 - **P0 is done.** `dsh/tools/history/` holds the git helpers and blob cache,
   `plan.mjs`, `oracle.mjs`, `gates.mjs` and `report.mjs`, with tests (in
@@ -149,6 +228,9 @@ within your authority clears ends the run early: post a "BLOCKED" comment on
   checkpoint) on the live Store or a fork, never on snapshot files in place.
 
 ## Orchestration
+
+[ROLES.md](ROLES.md) is the current, consolidated version of this section
+(actors, triggers, the scout lane, storage isolation). Where they differ, it wins.
 
 Three agents run the work.
 
