@@ -6,7 +6,7 @@
 | Kind | 1 forward-only (REBUILD.md): new chunks carry a different advisory base, and Storage's existing PREFIX records store them. Chunk identities, mapping trees and the Store format are unchanged |
 | Old Stores | open unchanged (no schema change) |
 | Old data | still read as before. Old FULL chunks are read as FULL. New PREFIX chunks use the record kind Storage already reads |
-| Compatibility test | REBUILD.md §4, run once with the batch's final daemon. See "Compatibility" below |
+| Compatibility test | **passed** with the batch's final daemon `71001f65`: range-4 fork written by `511dceed`, whole-tree proof checkpoint ok (530 files) (REBUILD.md §4; run recorded in [the F-011 record](002-a1-f011-binding-hint-migration.md#compatibility)) |
 | Playbook step | D5 (wiring defect: the selector only uses a base its caller offers) |
 | Fix kind (SPEC §6) | code path in Content's localized edit route |
 | Binaries | old daemon `ed66aa0d…` (F-001; chunk path identical to `511dceed`) → new daemon `cbfa5e7f908b3e870167192fe7ea77d1b154a1ce3cd4aba5bbfb760ee676b051`, kept in `core/target/issue352/daemon-cbfa5e7f/`. SDK addon unchanged: `3da0f665…` |
@@ -146,10 +146,10 @@ against its base. The depth cap of 8 still bounds a chain.
 
 ## Compatibility
 
-REBUILD.md §4: the batch's final daemon opens a range-4 snapshot fork written by
-`511dceed` and passes the full proof checkpoint: changed paths, blob ids and
-modes, and the whole tree against git. The run is recorded in the F-011 record,
-because the batch's final binary comes after F-011.
+REBUILD.md §4: the batch's final daemon `71001f65` (after F-011) opened a
+range-4 snapshot fork written by `511dceed` and passed the full proof
+checkpoint: 285 changed paths, 283 blob ids and the whole tree of 530 files
+matched git. The run is recorded in [the F-011 record](002-a1-f011-binding-hint-migration.md#compatibility).
 
 ## Left open
 

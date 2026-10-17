@@ -75,19 +75,18 @@ impl Handles {
             return Err(PersistenceError::BackendUnavailable);
         }
         let directory = config.path.parent().map(Path::to_path_buf);
-        Self::validated(
-            Arc::new(Session::connect(
-                &config.path,
-                writable,
-                false,
-                config.sqlite_profile,
-                config.sqlite_pack_layout,
-                config.sqlite_acquisition,
-            )?),
-            directory,
-            binding,
-            cursor_key,
-        )
+        let session = Arc::new(Session::connect(
+            &config.path,
+            writable,
+            false,
+            config.sqlite_profile,
+            config.sqlite_pack_layout,
+            config.sqlite_acquisition,
+        )?);
+        if writable {
+            session.add_binding_hints()?;
+        }
+        Self::validated(session, directory, binding, cursor_key)
     }
     fn validated(
         session: Arc<Session>,

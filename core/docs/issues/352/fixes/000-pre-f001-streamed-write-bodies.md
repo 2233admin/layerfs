@@ -6,7 +6,7 @@
 | Kind | 1 forward-only (REBUILD.md): transport only |
 | Old Stores | open unchanged (no schema change) |
 | Old data | still read as before |
-| Compatibility test | the batch's final daemon opens a range-4 snapshot fork written by `511dceed` and reads it (REBUILD.md §4; run recorded in the F-005 record). The size probe below wrote into a range-4 fork with this fix's daemon |
+| Compatibility test | **passed** with the batch's final daemon `71001f65`: range-4 fork written by `511dceed`, whole-tree proof checkpoint ok (530 files) (REBUILD.md §4; run recorded in [the F-011 record](002-a1-f011-binding-hint-migration.md#compatibility)). The size probe below wrote into a range-4 fork with this fix's daemon |
 | Playbook step | D0 (refusal by a transport limit) |
 | Fix kind (SPEC §6) | code path in the control channel's client and daemon ends; no Store format change |
 | Binaries | daemon `511dceed…` → `ed66aa0d48b35d425c4a93a654ee9c401b31b6f94c4910cb2386cffb577671a4` (kept in `core/target/issue352/daemon-ed66aa0d/`); SDK addon `506b646f…` (kept) → `3da0f6658cdc1816b3f377c828778694b5cc35167b2edef569a31a3877b4c1ed`. The intermediate addon `4e141e51` (F-009) was overwritten without a copy; it can be rebuilt from `bda03912b` |

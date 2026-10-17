@@ -6,7 +6,7 @@
 | Kind | 1 forward-only (REBUILD.md) |
 | Old Stores | open unchanged (no schema change) |
 | Old data | still read as before |
-| Compatibility test | the batch's final daemon opens a range-4 snapshot fork written by `511dceed` and reads it (REBUILD.md §4; run recorded in the F-005 record). This fix's own probe already read the range-4 fork's Commits with daemon `d897ab71` |
+| Compatibility test | **passed** with the batch's final daemon `71001f65`: range-4 fork written by `511dceed`, whole-tree proof checkpoint ok (530 files) (REBUILD.md §4; run recorded in [the F-011 record](002-a1-f011-binding-hint-migration.md#compatibility)). This fix's own probe already read the range-4 fork's Commits with daemon `d897ab71` |
 | Playbook step | D3 (per-page cost grows with page position and with file contents) |
 | Fix kind (SPEC §6) | code path, plus an optional SDK argument (no Store format change) |
 | Binaries | daemon `18ab5415…` (diff code unchanged since `511dceed`) → `d897ab71555469d9d3bc48d6ae49bbafc4f416be3489edbd4df9c53c3d88ce77` (kept in `core/target/issue352/daemon-d897ab71/`; the committed source differs from it only by rustfmt) |

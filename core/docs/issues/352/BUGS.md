@@ -99,3 +99,10 @@
   without hints: it should have been kind 2. Forward fix: open older Stores,
   create the table when missing, record hints from then on. Nothing is rebuilt.
   Owner: the fixer, after F-005.
+  **Fixed** (fixer, D0, kind 2): a writable open adds the table to a Store
+  whose recorded schema is exactly the earlier one and records the current
+  schema; trees saved before it diff by the full walk. p1-pilot's range-1
+  snapshot (`0ef24121`) was refused by `cbfa5e7f` and passes its whole-tree
+  checkpoint with `71001f65`; REBUILD.md §4 for the batch passes on a range-4
+  fork written by `511dceed`.
+  [fixes/002-a1-f011-binding-hint-migration.md](fixes/002-a1-f011-binding-hint-migration.md).

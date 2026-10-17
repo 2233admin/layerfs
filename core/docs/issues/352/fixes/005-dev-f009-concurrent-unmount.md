@@ -6,7 +6,7 @@
 | Kind | 1 forward-only (REBUILD.md) |
 | Old Stores | open unchanged (addon only) |
 | Old data | still read as before |
-| Compatibility test | the batch's final daemon opens a range-4 snapshot fork written by `511dceed` and reads it (REBUILD.md §4); see the F-005 record for the run |
+| Compatibility test | **passed** with the batch's final daemon `71001f65`: range-4 fork written by `511dceed`, whole-tree proof checkpoint ok (530 files) (REBUILD.md §4; run recorded in [the F-011 record](002-a1-f011-binding-hint-migration.md#compatibility)) |
 | Playbook step | D1 (a call outcome differs from the plan) |
 | Fix kind (SPEC §6) | code path, SDK addon only (`sdk/js/native/src/discovery.rs`); daemon and Store unchanged |
 | Binaries | SDK addon `506b646f7d0a…` (kept in `core/target/issue352/sdk-506b646f/`) → `4e141e5162c9df07fc0ca917407d1d4e6d511138e78bb865b9aa0b87bf185e6d`; daemon unchanged by this fix (`18ab5415…`) |

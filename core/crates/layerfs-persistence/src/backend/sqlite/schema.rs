@@ -126,6 +126,50 @@ impl super::connection::Session {
   })?;
         Ok(())
     }
+    /// Adds the `binding_hint` table (#352 `49499abac`) to a Store written
+    /// before it existed, then records the current schema: an additive
+    /// migration (REBUILD.md kind 2). Only a Store whose recorded schema is
+    /// exactly the earlier one, and whose live schema still matches what it
+    /// recorded, is migrated; any other Store is left for `validate` to judge.
+    /// Saved trees keep no hints, so a difference over them takes the full
+    /// walk; hints are recorded for what is saved from then on.
+    pub(crate) fn add_binding_hints(&self) -> Result<(), BackendError> {
+        self.run::<_, BackendError>(true, |tx| {
+            let present = tx.query(
+                "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='binding_hint'",
+                vec![],
+            )?;
+            if !present.is_empty() {
+                return Ok(());
+            }
+            let rows = tx.query(
+                "SELECT schema_source,schema_definition FROM history_meta WHERE id=1",
+                vec![],
+            )?;
+            let Some(row) = rows.first() else {
+                return Ok(());
+            };
+            let current = source((self.layout, self.acquisition));
+            let table = HISTORY
+                .find("CREATE TABLE binding_hint (")
+                .and_then(|start| Some((start, start + HISTORY[start..].find(";\n")? + 2)))
+                .map(|(start, end)| &HISTORY[start..end])
+                .ok_or(BackendError::Integrity)?;
+            let earlier = current.replacen(&format!("{table}\n"), "", 1);
+            if row.get::<String>(0)? != earlier
+                || row.get::<String>(1)? != definition(tx.connection, tx.work)?
+            {
+                return Ok(());
+            }
+            tx.bootstrap(table)?;
+            let definition = definition(tx.connection, tx.work)?;
+            tx.query(
+                "UPDATE history_meta SET schema_source=?1,schema_definition=?2 WHERE id=1",
+                vec![Param::Text(current), Param::Text(definition)],
+            )?;
+            Ok(())
+        })
+    }
     pub(crate) fn validate(
         &self,
         catalog_id: layerfs_history::CatalogId,
