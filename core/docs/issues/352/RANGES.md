@@ -11,3 +11,4 @@
 | 004 | 68 | 3,497 | **watch** | Speed | 4.5 MiB | [range-004](ranges/range-004.md) |
 | 005 | 65 | 4,128 | **watch** | Speed | 3.5 MiB | [range-005](ranges/range-005.md) |
 | 006 | 65 | 4,649 | **watch** | Speed | 2.9 MiB | [range-006](ranges/range-006.md) |
+| 007 | 60 | 5,186 | **optimize** | Scaling | 3.2 MiB | [range-007](ranges/range-007.md) |
