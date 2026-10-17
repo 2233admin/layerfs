@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  CHUNK, compareIds, comparePaths, diskGuard, EXIT, FS_MAX, idBatches, parseTreePage, phaseOps, route,
+  CHUNK, compareIds, comparePaths, diskGuard, EXIT, idBatches, parseTreePage, phaseOps, route,
   sandboxCommands, sandboxExpect, sqlCounters, callOf, traceLines, Tree, TREE_IDS, viaSandbox,
   addDelta, deltaSummary, deltaWork,
 } from "../steps.mjs";
@@ -33,9 +33,9 @@ test("Tree: parents to make, the folder a removal takes, the largest folder", ()
   assert.equal(t.removalTarget("a/d.txt"), "a");
 });
 
-test("viaSandbox: modes, mode changes and sizes over one request", () => {
-  assert.equal(viaSandbox({ op: "write", mode: "100644", size: FS_MAX }), false);
-  assert.equal(viaSandbox({ op: "write", mode: "100644", size: FS_MAX + 1 }), true);
+test("viaSandbox: modes and mode changes; size never routes (F-001)", () => {
+  assert.equal(viaSandbox({ op: "write", mode: "100644", size: 60_000 }), false);
+  assert.equal(viaSandbox({ op: "write", mode: "100644", size: 5 << 20 }), false);
   assert.equal(viaSandbox({ op: "write", mode: "100755", size: 1 }), true);
   assert.equal(viaSandbox({ op: "write", mode: "120000", size: 1 }), true);
   assert.equal(viaSandbox({ op: "write", mode: "100644", size: 1, modeChange: true }), true);

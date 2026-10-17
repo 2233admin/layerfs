@@ -5,8 +5,6 @@
 // are built from. Nothing here touches the SDK, Docker or the disk; lib.mjs
 // makes the calls and run.mjs plays the ranges.
 
-/** The largest file one fs request carries: an SDK request is one 65,519-byte control record (sdk/js/README.md). */
-export const FS_MAX = 60_000;
 /** Base64 characters one exec command carries when a file goes through a Sandbox. */
 export const CHUNK = 45_000;
 /** Paths per exec when a Sandbox prints git blob ids (one command stays under the record). */
@@ -100,8 +98,8 @@ export class Tree {
   }
 }
 
-/** A file an fs call cannot write: a mode other than 100644, a mode change, or more bytes than one request carries. */
-export const viaSandbox = (f) => f.op === "write" && (f.mode !== "100644" || f.modeChange || (f.size ?? 0) > FS_MAX);
+/** A file an fs call cannot write: a mode other than 100644 or a mode change. Size never routes (F-001: fs bodies stream). */
+export const viaSandbox = (f) => f.op === "write" && (f.mode !== "100644" || !!f.modeChange);
 
 /**
  * A range's plan as the phase plays it. P1 (one lane, one agent, fs only):

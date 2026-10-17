@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The headless player of the history replay (#352 SPEC §2, §3, §7; SCRIPTS.md §1):
 //   node dsh/tools/history/run.mjs new  --run <id> --phase p1 [--label measured|dev|control] [--policy default|control]
-//   node dsh/tools/history/run.mjs play --run <id> --from N --to M [--mode measured|fast] [--serialize-commits 1 (dev/control runs only)]
+//   node dsh/tools/history/run.mjs play --run <id> --from N --to M [--mode measured|fast]
 //   node dsh/tools/history/run.mjs fork --run <new id> --from-run <id> --range N [--label …]
 //   node dsh/tools/history/run.mjs cleanup --run <id>
 //   node dsh/tools/history/run.mjs phase --run <id> --phase p2
@@ -288,7 +288,7 @@ async function playRange(run, k, mode) {
   const traceFile = measured ? join(run.dir, "trace", `range-${pad(k)}.a${attempt}.jsonl`) : null;
   if (traceFile) mkdirSync(join(run.dir, "trace"), { recursive: true });
   run.traceTo(traceFile, `r${pad(k)}`);
-  const m = { ...(run.serialize ? { devAid: "serialize-commits" } : {}), range: k, attempt, run: run.manifest.run, phase: run.manifest.phase, label: run.manifest.label, mode, started: new Date().toISOString(),
+  const m = { range: k, attempt, run: run.manifest.run, phase: run.manifest.phase, label: run.manifest.label, mode, started: new Date().toISOString(),
     binary: run.manifest.binary, plan: { version: run.manifest.planVersion, checkpoint: plan.checkpoint }, policy: run.manifest.policyName };
   const before = measured ? await run.op.store.stats() : null;
   const { ops, reconcile, left } = p2 ? { ops: [], reconcile: [], left: {} } : phaseOps(plan, run.manifest.phase);
@@ -303,7 +303,7 @@ async function playRange(run, k, mode) {
     let since = performance.now();
     if (p2) {
       if (!run.state.head) throw new Error("P2 continues a run whose first range wrote the probe fixture (a P1 run, or a fork of one)");
-      ctx = await startRange(run, k, plan, measured, run.serialize);
+      ctx = await startRange(run, k, plan, measured);
       await playAgents(run, k, ctx);
       lap("playMs", since);
       since = performance.now();
@@ -490,12 +490,6 @@ async function cmdPlay(o) {
   if (run.state.dirty != null) { console.error(`run ${o.run} stopped in range ${run.state.dirty}; recover by fork from a snapshot (SPEC §6)`); return EXIT.guard; }
   if (from !== run.state.next) { console.error(`run ${o.run} stands at range ${run.state.next}, not ${from}`); return EXIT.usage; }
   if (mode === "measured") process.env.LAYERFS_CONSTRUCTION_WORKERS = "1";
-  // A development aid only: one publishing call per lane at a time, to play past
-  // concurrent same-Branch HeadMoved refusals while they are open. Never measured.
-  if (o["serialize-commits"] != null) {
-    if (run.manifest.label === "measured") { console.error("--serialize-commits is a development aid; a measured run never uses it"); return EXIT.usage; }
-    run.serialize = true;
-  }
   let code = EXIT.done;
   try {
     for (let k = from; k <= to && code === EXIT.done; k++) code = await playRange(run, k, mode);

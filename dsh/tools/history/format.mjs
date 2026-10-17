@@ -7,7 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { exponent, sameBinary } from "./gates.mjs";
-import { change } from "./findings.mjs";
+import { change, REBUILD_KINDS } from "./findings.mjs";
 import { activityTables, categoryOf, checkOverview, checkTimeLine, timeLine } from "./stats.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
@@ -224,7 +224,9 @@ export function renderFindingFormat(range, a, gate, f, rerun) {
   const d = f.diagnosis;
   lines.push("**2. Fix context**", "", table(["", ""], [
     ["Playbook step", d.step], ["Cause", d.cause ?? d.summary], ["Old design", f.design?.old], ["New design", f.design?.new],
-    ["Kind", f.fix.kind], ["Commits", `${String(f.fix.commit).split(/,\s*/).map((x) => `\`${x}\``).join(", ")}${f.fix.test ? ` · regression tests ${f.fix.test}` : ""}`], ["Recovery", f.recovery],
+    ["Kind", REBUILD_KINDS[f.fix.kind] ?? f.fix.kind], ...(REBUILD_KINDS[f.fix.kind] ? [["Old Stores", f.fix.oldStores], ["Old data", f.fix.oldData],
+      f.fix.kind < 3 ? ["Compatibility test", f.fix.compat] : ["Rebuild justification", Object.values(f.fix.justification ?? {}).join(" · ")]] : []),
+    ["Commits", `${String(f.fix.commit).split(/,\s*/).map((x) => `\`${x}\``).join(", ")}${f.fix.test ? ` · regression tests ${f.fix.test}` : ""}`], ["Recovery", f.recovery],
   ]), "", "**3. Before / after** (same snapshots, one sample each)", "",
   table(["Measure", "Before", "After", "Change", "Old binary", "New binary", "Snapshot / checkpoint", "Cache"], f.improvement.map((r) => [r.measure, `${r.before}${r.unit ? ` ${r.unit}` : ""}`, `${r.after}${r.unit ? ` ${r.unit}` : ""}`, change(r.before, r.after), `\`${r.oldBinary}\``, `\`${r.newBinary}\``, r.snapshot, r.cache])), "",
   d.exponent ? `Counter \`${d.counter}\` depth exponent ${d.exponent.before} → ${d.exponent.after}.` : "", "",

@@ -176,8 +176,7 @@ export function record(raw, rec, sink) {
     const entry = { seq, method, label: rec.label ?? null, agent: rec.agent };
     sink.log.push(entry);
     try {
-      // a dev-only aid (run.mjs --serialize-commits, never measured): one publishing call per lane at a time
-      const value = rec.lock && PUBLISHING.has(method) ? await rec.lock(() => fn(...args)) : await fn(...args);
+      const value = await fn(...args);
       Object.assign(entry, { kind: value?.kind ?? "ok", ...(value?.fastForward === false ? { newCommit: true } : {}) }, measure(method, args, value, rec.tree, size));
       return value;
     } catch (error) {
@@ -187,8 +186,6 @@ export function record(raw, rec, sink) {
   }]));
   return { raw, options: raw.options, sandboxes: raw.sandboxes, service: () => raw.service(), fs: wrap("fs"), branch: wrap("branch"), sandbox: wrap("sandbox"), project: wrap("project") };
 }
-
-const PUBLISHING = new Set(["fs.write", "fs.edit", "fs.apply", "fs.mkdir", "fs.rm", "fs.cp", "fs.mv", "sandbox.commit"]);
 
 /** Checks a call's outcome against the plan; a refusal is its code. */
 export async function expectCall(run, label, work, want) {
@@ -362,11 +359,13 @@ export async function verify(run, k, { prevHead, head, layer, prevCommit, full }
   run.label(`r${pad(k)}.verify`);
   const changes = diffTrees(run.repo, prevCommit, plan.checkpoint);
   const items = [];
-  for (let pos = 0; ;) {
-    const page = await run.lf.branch.diff_commits(prevHead, head, 1000, pos);
+  // F-010: each page resumes at the previous page's nextCursor; paths and kinds only, no line hunks
+  for (let cursor = null; ;) {
+    const page = await run.lf.branch.diff_commits(prevHead, head, 1000, 0, { ...(cursor ? { cursor } : {}), hunks: false });
     items.push(...page.items);
     if (!page.hasMore) break;
-    pos += page.items.length;
+    if (!page.nextCursor || page.nextCursor === cursor) throw new Error(`diff_commits answered hasMore without a new nextCursor (${cursor ?? "first page"})`);
+    cursor = page.nextCursor;
   }
   const paths = comparePaths(items, changes, IGNORE);
   const expected = lsTree(run.repo, plan.checkpoint).files;

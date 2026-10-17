@@ -277,6 +277,10 @@ test("STATS.md: a row per range, a cumulative row, P1 ranges derived and marked"
   assert.ok(text.includes("| 000† | `0ef24121` (line p1-pilot) | a1 | 12.0 | 12.0 |"), text);
   assert.ok(text.includes("| 2 | 35.4 |"), text);
   assert.ok(text.includes("| branch.list_commits | project |"));
+  // F8: a derived range has no byte data, so its bytes read "—" (alone) or carry ‡ (mixed), never 0
+  assert.ok(text.includes("| branch.publish | project | 1 | — | — |") || /\| branch\.publish \| [a-z]+ \| \d+ \| [\d,]+ ‡ \| [\d,]+ ‡ \|/.test(text), text);
+  const only = renderStats([{ range: 0, m: p1, ...d }]);
+  assert.ok(only.includes("| fs.write |") && /\| fs\.write \| [a-z]+ \| 5 \| — \| — \|/.test(only), only);
 });
 
 test("Scaling: diff_commits judged per entry against depth when three attempts recorded it", () => {
@@ -347,7 +351,7 @@ test("renderFormat and checkFormat: the binding shape passes; a missing part or 
 test("a finding in the binding format: pending, then every part, with vs without under two binaries", () => {
   const a1 = { ...formatMetrics(), attempt: 1, gate: gate("optimize") }, a2 = { ...formatMetrics(), attempt: 2, binary: { daemon: "7c2e9d40f1a3" }, gate: gate("pass") };
   const f = { range: 7, attempt: 1, verdict: "optimize", trigger: { check: "Scaling", value: "fit", threshold: "< 0.15" }, diagnosis: { step: "D4", summary: "a scan. more" },
-    fix: { summary: "index", kind: "code path", commit: "9a41c07e2" }, improvement: [{ measure: "p95", before: 40, after: 17, unit: "ms", oldBinary: "511dceed", newBinary: "7c2e9d40", snapshot: "r007", cache: "warm" }],
+    fix: { summary: "index", kind: 1, commit: "9a41c07e2", oldStores: "open unchanged", oldData: "still read as before", compat: "r006 fork opens: ok" }, improvement: [{ measure: "p95", before: 40, after: 17, unit: "ms", oldBinary: "511dceed", newBinary: "7c2e9d40", snapshot: "r007", cache: "warm" }],
     recovery: "fork", records: [{ title: "x", path: "fixes/007-a1-index.md" }], ledger: [{ file: "OPTIMIZATIONS.md", entry: "007.a1" }] };
   assert.deepEqual(checkFinding(f), []);
   assert.deepEqual(checkFinding(f, { full: true }), ["design.old is missing", "design.new is missing", "cost is missing"]);

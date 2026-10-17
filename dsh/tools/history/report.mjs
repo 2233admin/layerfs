@@ -2,6 +2,7 @@
 // Writes the range reports (#352 SPEC §3, ranges/TEMPLATE.md) and the index:
 //   node dsh/tools/history/report.mjs --metrics <dir> --plan <dir> --docs <core/docs/issues/352> [--range N]
 //   node dsh/tools/history/report.mjs check <NNN> [--metrics <dir>] [--docs <dir>]   (reportcheck.mjs: F1–F8)
+//   node dsh/tools/history/report.mjs records [--docs <dir>]   (every fixes/ record states its REBUILD.md §4 kind fields)
 //   node dsh/tools/history/report.mjs stats --metrics <dir> --docs <dir>   (STATS.md alone, e.g. its backfill)
 // A range whose latest attempt recorded the binding format's measurements
 // (REPORT_FORMAT.md) is written in that format (format.mjs); earlier ones keep
@@ -23,7 +24,7 @@ import { dirname, join } from "node:path";
 import { buildBaseline, evaluate, exponent, MINIMUM_POINTS, sameBinary } from "./gates.mjs";
 import { categoryOf, derivedOverview, renderOverview, renderStats } from "./stats.mjs";
 import { FINDINGS, loadIssues, renderFormat } from "./format.mjs";
-import { change, loadFindings } from "./findings.mjs";
+import { change, loadFindings, REBUILD_KINDS } from "./findings.mjs";
 import { legacyGates, parseReport, storedGate, storeGate } from "./frozen.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
@@ -110,7 +111,7 @@ export function renderFinding(range, attempt, f) {
   return [head, "", table(["", ""], [
     ["Trigger", `${f.trigger.check} · ${f.trigger.value}${f.trigger.threshold ? ` · threshold ${f.trigger.threshold}` : ""}`],
     ["Diagnosis", `${d.step} · ${d.summary}${d.counter ? ` · counter \`${d.counter}\`` : ""}${d.exponent ? `, exponent ${d.exponent.before} → ${d.exponent.after}` : ""}`],
-    ["Fix", `${f.fix.summary} · ${f.fix.kind} · commits ${String(f.fix.commit).split(/,\s*/).map((c) => `\`${c}\``).join(", ")}${f.fix.test ? ` · regression tests ${f.fix.test}` : ""}`],
+    ["Fix", `${f.fix.summary} · ${REBUILD_KINDS[f.fix.kind] ?? f.fix.kind} · commits ${String(f.fix.commit).split(/,\s*/).map((c) => `\`${c}\``).join(", ")}${f.fix.test ? ` · regression tests ${f.fix.test}` : ""}`],
     ["Recovery", f.recovery],
     ["Records", [...(f.records ?? []).map((r) => `[${r.title}](../${r.path})`), ...(f.ledger ?? []).map((l) => `[${l.file}](../${l.file}) (${l.entry})`)].join(" · ")],
   ]), "", table(FINDING_COLUMNS, f.improvement.map(improvementRow))].join("\n");
@@ -292,7 +293,7 @@ function findingComment(f, g, title) {
     `#### ${title}`, "",
     `- **Trigger:** ${f.trigger.check}: ${f.trigger.value}${f.trigger.threshold ? ` (threshold ${f.trigger.threshold})` : ""}`,
     `- **Diagnosis:** ${d.step} · ${d.summary}${d.phase ? ` · phase \`${d.phase}\`` : ""}${d.counter ? ` · counter \`${d.counter}\`` : ""}${d.exponent ? ` · depth exponent ${d.exponent.before} → ${d.exponent.after}` : ""}`,
-    `- **Fix:** ${f.fix.summary} · ${f.fix.kind} · commit \`${String(f.fix.commit).slice(0, 9)}\`${f.fix.test ? ` · regression test \`${f.fix.test}\`` : ""}`,
+    `- **Fix:** ${f.fix.summary} · ${REBUILD_KINDS[f.fix.kind] ?? f.fix.kind} · commit \`${String(f.fix.commit).slice(0, 9)}\`${f.fix.test ? ` · regression test \`${f.fix.test}\`` : ""}`,
     `- **Recovery:** ${f.recovery}`,
     `- **Now:** ${now ? `${now.name} ${now.result}: ${now.value}` : "the check no longer applies"}`, "",
     table(["Improvement", ...FINDING_COLUMNS.slice(1)], f.improvement.map(improvementRow)), "",
@@ -418,6 +419,13 @@ async function main() {
     if (result.failed.length) { console.log(`range ${pad(range)}: FAIL ${result.failed.join(" ")}`); process.exit(1); }
     console.log(`range ${pad(range)}: PASS F1–F8`);
     return;
+  }
+  if (args[0] === "records") {
+    const { checkRecords } = await import("./findings.mjs");
+    const problems = checkRecords(join(opt("--docs") ?? new URL("../../../core/docs/issues/352", import.meta.url).pathname, "fixes"));
+    for (const p of problems) console.log(p);
+    console.log(problems.length ? `fixes/: FAIL ${problems.length}` : "fixes/: PASS REBUILD.md §4");
+    process.exit(problems.length ? 1 : 0);
   }
   if (args[0] === "stats") {
     if (!opt("--metrics") || !opt("--docs")) { console.error("usage: report.mjs stats --metrics <dir> --docs <dir>"); process.exit(2); }

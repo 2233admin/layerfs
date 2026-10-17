@@ -6,7 +6,10 @@
 //     range, attempt, verdict: "optimize" | "stop",
 //     trigger: { check, value, threshold },         the gate row that tripped
 //     diagnosis: { step: "D0".."D6", summary, phase?, counter?, exponent?: { before, after } },
-//     fix: { summary, kind: "code path" | "data" | "format", commit, test? },
+//     fix: { summary, kind: 1 | 2 | 3, commit, test?,  REBUILD.md §4 (a pre-REBUILD finding keeps "code path" | "data" | "format")
+//            oldStores, oldData,                    open unchanged · open and migrate (what) · refused (why); read as before · fallback · rewritten
+//            compat?,                               kinds 1-2: the old-binary Store the new binary opened and read, and the result
+//            justification?: { kind1, kind2, cost, snapshot } },   kind 3: REBUILD.md §3 points 1-4
 //     improvement: [ { measure, before, after, unit?, oldBinary, newBinary, snapshot, cache } ],
 //                                                    old vs new binary, same snapshots (SPEC §3 F4)
 //     recovery,                                      SPEC §6 recovery
@@ -22,7 +25,30 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const STEPS = ["D0", "D1", "D2", "D3", "D4", "D5", "D6"];
+/** REBUILD.md §2: 1 forward-only, 2 additive migration, 3 incompatible. */
+export const REBUILD_KINDS = { 1: "1 forward-only", 2: "2 additive migration", 3: "3 incompatible" };
+/** The kinds of SPEC §6 before REBUILD.md, kept only by findings recorded before it (PRE_REBUILD). */
 export const FIX_KINDS = ["code path", "data", "format"];
+/** Findings recorded before REBUILD.md (2026-10-18); never extended. Their records stay as written (F2). */
+export const PRE_REBUILD = new Set(["002.a1"]);
+/** fixes/ records written before REBUILD.md, whose header has the SPEC §6 kind; never extended. */
+export const PRE_REBUILD_RECORDS = new Set(["002-a1-diff-commits-change-walk.md", "002-a1-fork-branch-count.md", "002-a1-gate-same-binary.md",
+  "002-a1-grep-tree-chain-reads.md", "002-a1-merge-ancestry.md", "002-a1-project-lookup.md"]);
+/** REBUILD.md §3: the four justifications a kind 3 fix states before any rebuild. */
+export const JUSTIFICATIONS = { kind1: "why kind 1 is wrong", kind2: "why kind 2 is impossible", cost: "the rebuild's cost", snapshot: "the newest good snapshot" };
+const blank = (v) => v == null || /^\s*(|—|-|none|n\/a|pending|tbd)\s*$/i.test(String(v));
+
+/** The REBUILD.md §4 problems of a fix's kind fields: `fix` from a finding, or the header rows of a fixes/ record. */
+export function checkRebuild({ kind, oldStores, oldData, recovery, compat, justification }) {
+  const p = [];
+  if (![1, 2, 3].includes(kind)) return ["kind is 1, 2 or 3 (REBUILD.md §2)"];
+  if (blank(oldStores)) p.push("Old Stores is missing (REBUILD.md §4)");
+  if (blank(oldData)) p.push("Old data is missing (REBUILD.md §4)");
+  if (blank(recovery)) p.push("recovery is missing");
+  if (kind < 3 && blank(compat)) p.push(`a kind ${kind} fix needs its compatibility test: a Store written by the old binary opens and reads correctly with the new one`);
+  if (kind === 3) for (const [k, what] of Object.entries(JUSTIFICATIONS)) if (blank(justification?.[k])) p.push(`a kind 3 fix needs ${what} (REBUILD.md §3)`);
+  return p;
+}
 
 /**
  * The problems of a finding record; empty when it is complete. `full`: a
@@ -38,7 +64,9 @@ export function checkFinding(f, { full = false } = {}) {
   if (!STEPS.includes(f.diagnosis?.step)) p.push(`diagnosis.step is one of ${STEPS.join(", ")}`);
   need(f.diagnosis?.summary, "diagnosis.summary");
   need(f.fix?.summary, "fix.summary"); need(f.fix?.commit, "fix.commit");
-  if (!FIX_KINDS.includes(f.fix?.kind)) p.push(`fix.kind is one of ${FIX_KINDS.join(", ")}`);
+  const id = `${String(f.range).padStart(3, "0")}.a${f.attempt}`;
+  if (PRE_REBUILD.has(id) && FIX_KINDS.includes(f.fix?.kind)) { /* recorded before REBUILD.md */ }
+  else for (const x of checkRebuild({ ...f.fix, recovery: f.recovery })) p.push(`fix.${x}`);
   if (!Array.isArray(f.improvement) || !f.improvement.length) p.push("improvement has at least one old-vs-new row");
   for (const r of f.improvement ?? []) {
     if (r.measure == null || r.before == null || r.after == null) p.push("an improvement row needs measure, before and after");
@@ -52,6 +80,38 @@ export function checkFinding(f, { full = false } = {}) {
   if (!Array.isArray(f.ledger) || !f.ledger.length) p.push("ledger names its BUGS.md or OPTIMIZATIONS.md line");
   for (const l of f.ledger ?? []) if (!["BUGS.md", "OPTIMIZATIONS.md"].includes(l?.file) || !l?.entry) p.push(`ledger ${JSON.stringify(l)} is { file: BUGS.md | OPTIMIZATIONS.md, entry }`);
   return p;
+}
+
+/** The header rows of a fixes/ record ("| Kind | … |") as a map: lowercased field -> cell text. */
+export function recordHeader(text) {
+  const rows = new Map();
+  for (const line of text.split("\n")) {
+    if (/^## /.test(line)) break;
+    const m = /^\|\s*([^|]+?)\s*\|\s*(.*?)\s*\|\s*$/.exec(line);
+    if (m && m[1] && !/^-+$/.test(m[1])) rows.set(m[1].replace(/\*/g, "").toLowerCase(), m[2]);
+  }
+  return rows;
+}
+
+/**
+ * The REBUILD.md §4 problems of one fixes/ record (`name`, its text): Kind,
+ * Old Stores, Old data, Recovery, and for kind 1-2 the compatibility test or
+ * for kind 3 the four justifications (rows "Why not kind 1", "Why not kind 2",
+ * "Rebuild cost", "Start snapshot"). Records before REBUILD.md are exempt.
+ */
+export function checkRecord(name, text) {
+  if (name === "README.md" || PRE_REBUILD_RECORDS.has(name)) return [];
+  const h = recordHeader(text), cell = (...ks) => ks.map((k) => h.get(k)).find((v) => v != null);
+  const kind = Number(/^\**\s*([123])\b/.exec(cell("kind") ?? "")?.[1]);
+  return checkRebuild({ kind, oldStores: cell("old stores"), oldData: cell("old data"), recovery: cell("recovery"),
+    compat: cell("compatibility test", "regression test for compatibility"),
+    justification: { kind1: cell("why not kind 1"), kind2: cell("why not kind 2"), cost: cell("rebuild cost"), snapshot: cell("start snapshot") } })
+    .map((x) => `fixes/${name}: ${x}`);
+}
+
+/** The problems of every record in `dir` (core/docs/issues/352/fixes). */
+export function checkRecords(dir) {
+  return readdirSync(dir).filter((f) => f.endsWith(".md")).sort().flatMap((f) => checkRecord(f, readFileSync(join(dir, f), "utf8")));
 }
 
 /** The findings of `dir` by range: range -> [finding, ...] in attempt order. */

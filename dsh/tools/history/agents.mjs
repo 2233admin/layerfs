@@ -18,8 +18,12 @@
 // pool[N-1], so two agents never unmount in one Sandbox at the same time.
 // Decision (P2 dev run, 2026-10-18): two concurrent unmounts of different
 // Workspaces in one Sandbox failed "Workspace absent" (daemon 511dceed), a
-// product finding reported to the lead; one Sandbox per agent keeps the
-// replay off it until it is fixed. The pool stays across ranges until a seal.
+// product finding (F-009, fixed in addon 3da0f665). Decision kept on
+// 2026-10-18 after the fix: dropping the pool is not free. It changes the
+// measured shape of P2 (Sandboxes per daemon, concurrent mounts per Sandbox)
+// against the dev evidence and would need its own dev run to qualify; one
+// Sandbox per agent also matches one agent per Sandbox in the target. The pool
+// stays across ranges until a seal.
 import { lsTree } from "./git.mjs";
 import {
   BLOB_IDS, countMutation, execAll, expectCall, Mismatch, placeCommands, reads, setup, writeOp,
@@ -73,7 +77,6 @@ async function playStep(a, k, s, ctx) {
   const lane = s.lane, tree = ctx.trees.get(lane), opts = ctx.p2.options(lane), label = s.id, work = ctx.work;
   a.label(label);
   a.rec.tree = tree;
-  a.rec.lock = ctx.serialize ? (fn) => { const p = (ctx.locks.get(lane) ?? Promise.resolve()).then(fn); ctx.locks.set(lane, p.catch(() => {})); return p; } : null;
   const now = () => performance.now();
   switch (s.kind) {
     case "fs": {
@@ -206,11 +209,11 @@ export function mergedTree(base, trees) {
 }
 
 /** Starts range k: the pool, the lead's Branch and one Branch per lane, forked from main (one lead step). */
-export async function startRange(run, k, plan, measured, serialize = false) {
+export async function startRange(run, k, plan, measured) {
   await pool(run, k, plan.agents.length);
   const base = lsTree(run.repo, run.state.prevCommit).files;
   const ctx = { p2: p2Plan(plan, new Set(new Tree(base).dirs.keys())), base, trees: new Map(plan.lanes.map((l) => [l.name, new Tree(base)])), held: new Map(), events: [], measured,
-    work: { fs: 0, sandbox: 0, commits: 0 }, lead: `r${pad(k)}-main`, leadSteps: [], merged: new Map(), tries: new Map(), published: new Set(), played: new Map(), serialize, locks: new Map() };
+    work: { fs: 0, sandbox: 0, commits: 0 }, lead: `r${pad(k)}-main`, leadSteps: [], merged: new Map(), tries: new Map(), published: new Set(), played: new Map() };
   run.label(`r${pad(k)}.fork`);
   await expectCall(run, `r${pad(k)} fork`, () => run.lf.branch.fork(ctx.lead, "main"), "Forked");
   for (const l of plan.lanes) await expectCall(run, `r${pad(k)} fork ${l.name}`, () => run.lf.branch.fork(l.name, "main"), "Forked");

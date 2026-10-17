@@ -243,11 +243,12 @@ calls) and `steps.mjs` (pure routing and checks, tested by
 `tests/runner.mjs`). Its header gives the commands and exit codes. Where it
 differs from the text above:
 
-- **Large and non-regular files go through a Sandbox.** One SDK request
-  carries at most 65,519 bytes, so the plan's "through fs" rule cannot hold
-  for a file over 60,000 bytes. Such files, executables, symlinks and mode
+- **Non-regular files go through a Sandbox.** Executables, symlinks and mode
   changes are written by one Sandbox step per op (base64 chunks, then one
-  script) and committed by unmount.
+  script) and committed by unmount. Large regular files go through fs: since
+  F-001 (daemon `71001f65`) an fs body streams, so size no longer routes a
+  file (before, files over 60,000 bytes went through a Sandbox because one
+  request carried at most 65,519 bytes).
 - **The seal** checkpoints the WAL with `pragma wal_checkpoint(TRUNCATE)` in
   the runtime image after every daemon of the run is gone. Closing the
   Sandboxes alone leaves the WAL non-empty.
@@ -304,7 +305,9 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
 - **One Sandbox per agent** (at least 4), created once by the lead, kept
   across ranges until a seal. Two concurrent unmounts of different Workspaces
   in one Sandbox failed "Workspace absent" on daemon `511dceed` (dev run,
-  finding reported to the lead); one Sandbox per agent keeps the replay off it.
+  F-009, fixed in addon `3da0f665`). The pool is kept after the fix (builder
+  decision, 2026-10-18): dropping it would change P2's measured shape and need
+  its own dev run, and one agent per Sandbox matches the target.
   The seal closes named Sandboxes at once and the service last.
 - **Lanes are the plan's Branch names**, forked from main by the lead at the
   range start (one lead step), with the lead's own Branch `r<k>-main`. Each
@@ -323,11 +326,24 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   to every check (git and the checks list files only).
 - **Apply and stale-apply steps put removals in the Sandbox too** (`rm -rf` of
   the removal target in the step's script).
-- **Same-Branch concurrent Commits can answer HeadMoved** (daemon `511dceed`):
-  a Commit that merged against the head it read fails at publish when another
-  agent's Commit landed meanwhile. That is an unplanned outcome (stop). Until
-  it is fixed, development runs may pass `--serialize-commits 1` (one
-  publishing call per lane at a time; refused for a measured run, recorded as
-  `devAid` in the metrics).
+- **Same-Branch concurrent Commits** answered HeadMoved on daemon `511dceed`
+  (F-008). Daemon `71001f65` merges at publish, so concurrent Commits on one
+  lane need no player aid; the development-only `--serialize-commits` aid is
+  removed, and a HeadMoved now is an unplanned outcome (stop).
 - **Not in P2:** installs and unit tests (P3); `p2Plan` reports them as left out.
+- **The proof checkpoint pages by cursor** (F-010, daemon `71001f65`):
+  `verify()` asks `diff_commits(prev, head, 1000, 0, { cursor, hunks: false })`
+  and resumes each page at the previous `nextCursor`; a page that says
+  `hasMore` without a new cursor fails the checkpoint.
+- **Fix kinds are checked** (REBUILD.md §4): `findings.mjs checkFinding`
+  requires `fix.kind` 1–3 with `oldStores`, `oldData`, `recovery`, and
+  `compat` (kinds 1–2) or `justification { kind1, kind2, cost, snapshot }`
+  (kind 3). `report.mjs check` applies the same rule to each fixes/ record a
+  finding names, and `report.mjs records` to every record (rows Kind, Old
+  Stores, Old data, Compatibility test, Recovery; kind 3: Why not kind 1, Why
+  not kind 2, Rebuild cost, Start snapshot). Finding `002.a1` and its six
+  records predate REBUILD.md and keep the SPEC §6 kind (F2).
+- **STATS.md bytes:** a derived range (†) has no byte data; a method seen only
+  in derived ranges reads "—", and a total over both carries ‡ (measured
+  ranges only).
 

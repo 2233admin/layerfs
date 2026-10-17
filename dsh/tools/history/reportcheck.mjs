@@ -19,7 +19,7 @@
 //                      (legacy attempts predate the rule and are reported as such)
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { checkFinding, loadFindings } from "./findings.mjs";
+import { checkFinding, checkRecord, loadFindings } from "./findings.mjs";
 import { atHead, cells, legacyGates, parseReport, tableAfter } from "./frozen.mjs";
 import { FINDING_COLUMNS, LEAD_END, LEAD_START, NOTE_START } from "./report.mjs";
 import { checkOverview } from "./stats.mjs";
@@ -120,6 +120,12 @@ export function checkReport({ range, metricsDir, docs }) {
       return;
     }
     for (const p of checkFinding(f, { full: binding })) fail(/improvement/.test(p) ? "F4" : /record|ledger/.test(p) ? "F5" : "F3", `finding-${id}.json: ${p}`);
+    // F5 and REBUILD.md §4: each fixes/ record the finding names states its kind fields
+    for (const r of f.records ?? []) {
+      const file = join(docs, r.path);
+      if (!existsSync(file)) fail("F5", `finding-${id}.json names ${r.path}, which does not exist`);
+      else for (const p of checkRecord(r.path.replace(/^fixes\//, ""), readFileSync(file, "utf8"))) fail("F5", p);
+    }
     if (!binding) for (const row of ["Trigger", "Diagnosis", "Fix", "Recovery", "Records"]) if (!block.includes(`| ${row} |`)) fail("F3", `Finding ${id} has no ${row} row`);
     if (!block.includes(f.trigger.check)) fail("F3", `Finding ${id} does not show its trigger`);
     if (comment != null) {

@@ -34,6 +34,9 @@ export const isRead = (method) => categoryOf(method) != null && !WRITES.has(meth
 /** A trace line's outcome: the value's kind, or the refusal's code. */
 export const outcomeOf = (line) => (line.ok === false ? line.code ?? "error" : line.kind ?? "ok");
 
+/** A bytes cell over ranges with (`measured`) and without (`derived`) byte data: "—" when none had any, "‡" when some lacked it. */
+export const byteCell = (n, measured, derived) => (!measured ? "—" : `${int(n)}${derived ? " ‡" : ""}`);
+
 /**
  * The per-method call table (SPEC §3b): n, bytes in and out, files or
  * entries touched, outcomes by kind. `lines` are the range's trace end lines
@@ -301,7 +304,13 @@ export function renderStats(ranges) {
     tot.ms += m.wall?.totalMs ?? 0; tot.callsAll += n; tot.commits += o.commits; tot.branches += o.branches.length; tot.agents += o.agents.length - 1;
     tot.hit += hit; tot.planned += planned; tot.steps += o.steps; tot.newStored += m.storage?.newStored ?? 0; tot.bytesIn += bytesIn;
     for (const c of CATEGORY_ORDER) tot.calls[c] += cat[c].calls;
-    for (const [meth, c] of Object.entries(calls)) { const x = (methods[meth] ??= { n: 0, bytesIn: 0, bytesOut: 0 }); x.n += c.n; x.bytesIn += c.bytesIn ?? 0; x.bytesOut += c.bytesOut ?? 0; }
+    // a derived range recorded no bytes: its calls count, its bytes are unknown (never 0)
+    for (const [meth, c] of Object.entries(calls)) {
+      const x = (methods[meth] ??= { n: 0, bytesIn: 0, bytesOut: 0, measured: 0, derived: 0 });
+      x.n += c.n;
+      if (r.derived) x.derived++; else { x.measured++; x.bytesIn += c.bytesIn ?? 0; x.bytesOut += c.bytesOut ?? 0; }
+    }
+    if (r.derived) tot.derived = true;
     const daemon = String(m.binary?.daemon ?? "?").slice(0, 8);
     const label = `${String(r.range).padStart(3, "0")}${r.derived ? "†" : ""}`;
     rows.push([label, `\`${daemon}\`${m.run && m.run !== "p1-pilot-b" ? ` (line ${m.run})` : ""}`, `a${m.attempt}`, sec(m.wall?.totalMs), sec(tot.ms), ...CATEGORY_ORDER.map((c) => int(cat[c].calls)), int(n), int(tot.callsAll),
@@ -314,9 +323,10 @@ export function renderStats(ranges) {
     table(["Range", "Daemon", "Attempt", "Time s", "Running s", ...CATEGORY_ORDER, "Calls", "Running calls", "Commits", "Running Commits", "Branches", "Agents", "Conflicts hit / planned", "Steps", "Bytes written", "New stored", "Running stored"], rows), "",
     "## Cumulative", "",
     table(["Ranges", "Time s", ...CATEGORY_ORDER, "Calls", "Commits", "Branches", "Agents (sum per range)", "Conflicts hit / planned", "Steps", "Bytes written (since the Overview)", "New stored"],
-      [[String(ranges.length), sec(tot.ms), ...CATEGORY_ORDER.map((c) => int(tot.calls[c])), int(tot.callsAll), int(tot.commits), int(tot.branches), int(tot.agents), `${tot.hit} / ${tot.planned}`, int(tot.steps), int(tot.bytesIn), int(tot.newStored)]]), "",
+      [[String(ranges.length), sec(tot.ms), ...CATEGORY_ORDER.map((c) => int(tot.calls[c])), int(tot.callsAll), int(tot.commits), int(tot.branches), int(tot.agents), `${tot.hit} / ${tot.planned}`, int(tot.steps), byteCell(tot.bytesIn, !tot.derived || ranges.some((r) => !r.derived), tot.derived), int(tot.newStored)]]), "",
     "## Conflicts per range", "",
     table(["Range", ...CONFLICT_KINDS.map(([, t]) => t), "Unplanned"], kindRows), "",
     "## SDK calls per method (running total)", "",
-    table(["Method", "Category", "Calls", "Bytes in", "Bytes out"], Object.entries(methods).sort(([a], [b]) => (a < b ? -1 : 1)).map(([meth, x]) => [meth, categoryOf(meth) ?? "unassigned", int(x.n), int(x.bytesIn), int(x.bytesOut)])), ""].join("\n");
+    table(["Method", "Category", "Calls", "Bytes in", "Bytes out"], Object.entries(methods).sort(([a], [b]) => (a < b ? -1 : 1)).map(([meth, x]) => [meth, categoryOf(meth) ?? "unassigned", int(x.n), byteCell(x.bytesIn, x.measured, x.derived), byteCell(x.bytesOut, x.measured, x.derived)])),
+    "", "— no byte data: every range of the row is derived (†). ‡ bytes of the measured ranges only; the derived ranges' bytes are unknown.", ""].join("\n");
 }

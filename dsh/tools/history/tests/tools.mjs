@@ -12,7 +12,7 @@ import { parseIds, ROLES, storeFigures, trend } from "../inspect.mjs";
 import { chooseRun, compareResults, packageOf, parseVitestJson, selectTests, vitestCommand } from "../unit-tests.mjs";
 import { dockerArgs, FETCH, INSTALL, noInstall, parseProbe } from "../calibrate-tests.mjs";
 import { evaluate } from "../gates.mjs";
-import { change, checkFinding, loadFindings } from "../findings.mjs";
+import { change, checkFinding, checkRebuild, checkRecord, checkRecords, loadFindings } from "../findings.mjs";
 import { renderOptimization } from "../report.mjs";
 
 const tests = [];
@@ -221,12 +221,31 @@ const finding = () => ({
   range: 12, attempt: 1, verdict: "optimize",
   trigger: { check: "Range growth", value: "140.0 MiB, 4.52× the median", threshold: "≤ 3× median, ≤ 2 GiB" },
   diagnosis: { step: "D5", summary: "each install rewrote every node_modules directory leaf", counter: "directory_leaf_writes", exponent: { before: 0.94, after: 0.04 } },
-  fix: { summary: "write a directory leaf only when its entries change", kind: "code path", commit: "abcdef1234567", test: "layerfs-project directory_leaf_reuse" },
+  fix: { summary: "write a directory leaf only when its entries change", kind: 1, commit: "abcdef1234567", test: "layerfs-project directory_leaf_reuse",
+    oldStores: "open unchanged", oldData: "still read as before", compat: "range-11 fork written by aaa opens and reads with bbb: proof ok" },
   improvement: [{ measure: "new stored bytes, range 12", before: 140, after: 33, unit: "MiB", oldBinary: "aaa", newBinary: "bbb", snapshot: "range-011", cache: "fresh daemon" }],
   recovery: "forked the range-11 snapshot and reran range 12 measured",
   record: "OPTIMIZATIONS.md#range-012-directory-leaves",
   records: [{ title: "directory leaves", path: "fixes/012-a1-directory-leaves.md" }],
   ledger: [{ file: "OPTIMIZATIONS.md", entry: "012.a1" }],
+});
+
+test("REBUILD.md §4: kind fields, the compatibility test for kinds 1-2, the four justifications for kind 3", () => {
+  const ok = { kind: 2, oldStores: "open and migrate (adds t)", oldData: "read through a fallback", recovery: "migrate newest snapshot", compat: "r004 fork opens: ok" };
+  assert.deepEqual(checkRebuild(ok), []);
+  assert.ok(checkRebuild({ ...ok, compat: "pending" }).some((p) => /compatibility test/.test(p)));
+  assert.ok(checkRebuild({ ...ok, oldData: "—" }).some((p) => /Old data/.test(p)));
+  const three = { ...ok, kind: 3, compat: null, justification: { kind1: "old rows read wrong", kind2: "no fallback is correct", cost: "ranges 0-4, 3 min, 2 GiB" } };
+  assert.deepEqual(checkRebuild(three), ["a kind 3 fix needs the newest good snapshot (REBUILD.md §3)"]);
+  assert.deepEqual(checkRebuild({ ...three, justification: { ...three.justification, snapshot: "r003" } }), []);
+  const record = (rows) => `# x\n\n| | |\n| --- | --- |\n${rows.map(([k, v]) => `| ${k} | ${v} |`).join("\n")}\n\n## Old design\n| Kind | 1 |\n`;
+  const rows = [["Kind", "**2, additive migration** (REBUILD.md)"], ["Old Stores", "open and migrate"], ["Old data", "read through a fallback"], ["Compatibility test", "passed on r004"], ["Recovery", "migrate newest snapshot"]];
+  assert.deepEqual(checkRecord("009-a1-x.md", record(rows)), []);
+  assert.deepEqual(checkRecord("009-a1-x.md", record(rows.filter(([k]) => k !== "Compatibility test"))).length, 1);
+  assert.deepEqual(checkRecord("009-a1-x.md", record([["Kind", "code path"], ...rows.slice(1)])), ["fixes/009-a1-x.md: kind is 1, 2 or 3 (REBUILD.md §2)"]);
+  assert.deepEqual(checkRecord("002-a1-merge-ancestry.md", record([["Kind", "code path"]])), [], "records before REBUILD.md are exempt");
+  // every committed fixer record validates
+  assert.deepEqual(checkRecords(new URL("../../../../core/docs/issues/352/fixes", import.meta.url).pathname), []);
 });
 
 test("a finding record is checked, loaded by range and attempt, and its change is signed", () => {
@@ -242,6 +261,8 @@ test("a finding record is checked, loaded by range and attempt, and its change i
   writeFileSync(join(metrics, "finding-012.a1.json"), JSON.stringify(finding()));
   assert.deepEqual(loadFindings(metrics).get(12).map((f) => f.attempt), [1, 2]);
   assert.equal(loadFindings(join(dir, "nowhere")).size, 0);
+  assert.equal(checkFinding({ ...finding(), fix: { ...finding().fix, kind: "code path" } }).join(), "fix.kind is 1, 2 or 3 (REBUILD.md §2)", "only PRE_REBUILD findings keep the SPEC §6 kind");
+  assert.deepEqual(checkFinding({ ...finding(), range: 2, records: [{ title: "x", path: "fixes/002-a1-x.md" }], fix: { ...finding().fix, kind: "format", oldStores: null, compat: null } }), []);
   assert.deepEqual([change(140, 33), change(100, 120), change(5, 5), change(0, 3)], ["−76%", "+20%", "±0%", "—"]);
 });
 
@@ -254,7 +275,7 @@ test("the comment's optimization part: none, pending, then trigger, diagnosis, f
   const pending = renderOptimization({ plan, attempts: [{ attempt: 1 }], gates: [tripped] });
   assert.ok(pending.includes("Optimization needed") && pending.includes("**Trigger:** Range growth: 140.0 MiB") && pending.includes("pending") && pending.includes("finding-012.a1.json"));
   const done = renderOptimization({ plan, attempts: [{ attempt: 1 }, { attempt: 2 }], gates: [tripped, pass], findings: [finding()] });
-  for (const part of ["Optimization (from attempt 1)", "D5 · each install", "depth exponent 0.94 → 0.04", "code path · commit `abcdef123`", "**Now:** Range growth pass", "| new stored bytes, range 12 | 140 MiB | 33 MiB | −76% |", "OPTIMIZATIONS.md#"]) assert.ok(done.includes(part), part);
+  for (const part of ["Optimization (from attempt 1)", "D5 · each install", "depth exponent 0.94 → 0.04", "1 forward-only · commit `abcdef123`", "**Now:** Range growth pass", "| new stored bytes, range 12 | 140 MiB | 33 MiB | −76% |", "OPTIMIZATIONS.md#"]) assert.ok(done.includes(part), part);
 });
 
 let failed = 0;

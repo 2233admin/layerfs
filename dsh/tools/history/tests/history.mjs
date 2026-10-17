@@ -357,7 +357,7 @@ test("F2: legacy attempts render from git HEAD's report, never re-evaluated", ()
 const findingRecord = () => ({
   range: 0, attempt: 1, verdict: "optimize", trigger: { check: "Counters", value: "0.7", threshold: "< 0.05" },
   diagnosis: { step: "D4", summary: "a cause", counter: "fork.rows", exponent: { before: 0.7, after: 0 } },
-  fix: { summary: "a fix", kind: "code path", commit: "abc, def", test: "t.rs" },
+  fix: { summary: "a fix", kind: 1, commit: "abc, def", test: "t.rs", oldStores: "open unchanged", oldData: "still read as before", compat: "r000 fork opens: ok" },
   improvement: [{ measure: "fork rows", before: 30, after: 7, unit: "rows", oldBinary: "old", newBinary: "new", snapshot: "range-000", cache: "fresh daemon" }],
   recovery: "fork and rerun", records: [{ title: "fork", path: "fixes/000-a1-fork.md" }], ledger: [{ file: "OPTIMIZATIONS.md", entry: "000.a1" }],
 });
@@ -374,7 +374,7 @@ test("F3–F5: the Finding block, the lead's note kept, and report check", () =>
   // the lead writes a note; the fixer writes the finding and its records
   writeFileSync(join(f.docs, "ranges", "range-000.md"), md.replace("- (none yet)", "- watching fork rows"));
   writeFileSync(join(f.metricsDir, "finding-000.a1.json"), JSON.stringify(findingRecord()));
-  writeFileSync(join(f.docs, "fixes", "000-a1-fork.md"), "# fix\n");
+  writeFileSync(join(f.docs, "fixes", "000-a1-fork.md"), "# fix\n\n| | |\n| --- | --- |\n| Kind | 1 forward-only |\n| Old Stores | open unchanged |\n| Old data | still read as before |\n| Compatibility test | passed |\n| Recovery | fork |\n");
   writeFileSync(join(f.docs, "OPTIMIZATIONS.md"), "# o\n");
   reportRange({ ...f, range: 0 });
   md = readFileSync(join(f.docs, "ranges", "range-000.md"), "utf8");
