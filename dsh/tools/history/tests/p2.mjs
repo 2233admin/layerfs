@@ -11,6 +11,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { aggregate, evaluate } from "../gates.mjs";
+import { checkFinding } from "../findings.mjs";
+import { checkFormat, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
+import { parseReport } from "../frozen.mjs";
+import { leadNote } from "../report.mjs";
 import { atHead } from "../frozen.mjs";
 import { laneChanges, mergedTree } from "../agents.mjs";
 import { measure, record } from "../lib.mjs";
@@ -288,6 +292,72 @@ test("atHead: a folder outside git is null, quietly", () => {
   mkdirSync(join(dir, "outside"));
   writeFileSync(file, "x");
   assert.equal(atHead(file), null);
+});
+
+test("openIssues: open BUGS.md findings with owner and next step; fixed ones left out", () => {
+  const text = ["## Open findings", "", "- **F-001 · fs request size cap.** One request. Owner of the fix: the fixer, before P3.",
+    "- **F-002 · full scans (lead).** Read them.", "- **F-002, fixer's reading.** Bounded.", "- **F-003 · diff walks (fixer).** **Fixed** in `abc`.",
+    "- **F-006 · overlays (lead, 2026-10-18).** The row reads ?.", "  Owner: the builder (measure it per range)."].join("\n");
+  assert.deepEqual(openIssues(text), [
+    { id: "F-001", title: "fs request size cap", owner: "the fixer", next: "before P3" },
+    { id: "F-002", title: "full scans", owner: "lead", next: "see BUGS.md" },
+    { id: "F-006", title: "overlays", owner: "the builder", next: "measure it per range" },
+  ]);
+});
+
+test("movers: the three largest changes against the previous range, signed", () => {
+  const prev = { wall: { totalMs: 10_000 }, key: { ops: { "fs.write": { n: 9, p95: 10 } } }, storage: { newStored: 2 ** 20, newMetadata: 2 ** 20 }, probes: { stat: { ms: 4 } } };
+  const m = { wall: { totalMs: 12_000 }, key: { ops: { "fs.write": { n: 9, p95: 5 } } }, storage: { newStored: 2 ** 20, newMetadata: 3 * 2 ** 20 }, probes: { stat: { ms: 4.1 } } };
+  assert.deepEqual(movers(m, prev).map((x) => [x.name, Math.round(x.pct * 100)]), [["metadata added", 200], ["fs.write p95", -50], ["range time", 20]]);
+  assert.deepEqual(movers(m, null), []);
+});
+
+const formatMetrics = () => {
+  const o = buildOverview(overviewInput()), calls = callTable(lines, log);
+  return { ...metricsOf(o, calls), phase: "p2", run: "dev", plan: { version: 2 }, depth: { before: 100, after: 103 },
+    binary: { daemon: "511dceeda1b5ec7e", image: "sha256:d3773b4eac6a" }, startedFrom: { kind: "live", range: 6 },
+    checks: { tree: { ok: true, files: 12, full: false }, history: { ok: true }, steps: { matched: 20, total: 20 }, conflicts: { planned: 2, hit: 2, unplanned: 0 }, tests: { equal: 0, run: 0 } },
+    version: { bytes: 1000, files: 9, dirs: 3, symlinks: 1, largestFile: { path: "a", bytes: 400 }, largestDir: { path: ".", entries: 5 }, tracked: { files: 9, bytes: 1000 }, nodeModules: { files: 0, bytes: 0 }, build: { files: 0, bytes: 0 } },
+    storeDisk: { allocated: 4000, walAllocated: 1000, sealed: false }, storage: { stored: 800, canonical: 1600, metadata: 900, newStored: 300, newMetadata: 100, changedBytes: 150, directoryShare: 0.33, delta: { atCap: 0.03, byBudget: 0.2, depths: { wholeFile: [1, 3], chunk: [2], metadata: [1, 1] } } },
+    key: { ops: { "fs.write": { n: 3, p50: 9, p95: 12, statements: 40 } }, commitPerFileMs: 1.5, oneShotP50: 70, oneShots: 4, slowest: [{ op: "fs.write", ms: 12, size: { kind: "bytes", n: 9 } }] },
+    health: { workspacesOpen: 0, overlaysLeft: 0, daemonRssMb: 300, openFiles: 90, sandboxes: "4 of 4" }, execs: { total: 3, js: 1, shell: 2, nonZero: 0, installs: 0, tests: 0 },
+    dsh: { first: "2026-07-01", last: "2026-07-02", mainline: 5, side: 20, areas: [{ name: "packages/core", share: 0.6 }, { name: "docs", share: 0.4 }], changedBytes: 150 },
+    budget: { diskProjected: 40, diskBudget: 100, wallProjectedMs: 3.6e6, wallBudgetMs: 24_240_000 }, probes: {}, ops: [] };
+};
+const gate = (verdict) => ({ verdict, reason: "x", binary: "511dceeda1b5ec7e", started: "t", checks: [{ name: "Correctness", value: "ok", threshold: "all", result: "pass" }, { name: "Scaling", value: "fit", threshold: "< 0.15", result: verdict === "optimize" ? "optimize" : "pass" }] });
+const summary = { bashCalls: 13, lanes: 2, agents: 3, lfsCommits: 3, workspaces: 4, oneShotShare: 1, reads: 0, reconcile: 1 };
+
+test("renderFormat and checkFormat: the binding shape passes; a missing part or a wrong amplification fails", () => {
+  const m = formatMetrics();
+  const issues = [{ id: "F-005", title: "chunks", owner: "the fixer", next: "diagnose" }];
+  const text = renderFormat({ plan: { ...plan, dsh: { first: "a".repeat(40), commits: 25 }, checkpoint: "b".repeat(40), milestone: false }, summary, attempts: [m], gates: [gate("pass")], issues });
+  assert.ok(text.startsWith("# Range 007 · **pass** · attempt 1"), text.slice(0, 80));
+  assert.ok(text.includes("| **Space amplification** | — | 5.00× |"), "5,000 B on disk over 1,000 B");
+  assert.ok(text.includes(NONE_LINE) && text.includes("| F-005 | chunks | the fixer | diagnose |"));
+  assert.deepEqual(checkFormat(text, m, issues), []);
+  assert.ok(checkFormat(text.replace("| **Space amplification** | — | 5.00× |", "| **Space amplification** | — | 0.50× |"), m, issues).some((p) => /amplification/.test(p)));
+  assert.ok(checkFormat(text, m, [...issues, { id: "F-009" }]).some((p) => /F-009/.test(p)));
+  assert.ok(checkFormat(text.replace("\n## 4. Speed", "\n## 4. Pace"), m, issues).some((p) => /4\. Speed/.test(p)));
+  assert.ok(checkFormat(text.replace("**Moved most:**", "**Moved:**"), m, issues).some((p) => /Moved most/.test(p)));
+  const parsed = parseReport(text);
+  assert.deepEqual([parsed.latest, parsed.checks.length], [1, 2]);
+  assert.equal(leadNote(text.replace("- (none yet)", "- watch metadata")).trim(), "- watch metadata");
+});
+
+test("a finding in the binding format: pending, then every part, with vs without under two binaries", () => {
+  const a1 = { ...formatMetrics(), attempt: 1, gate: gate("optimize") }, a2 = { ...formatMetrics(), attempt: 2, binary: { daemon: "7c2e9d40f1a3" }, gate: gate("pass") };
+  const f = { range: 7, attempt: 1, verdict: "optimize", trigger: { check: "Scaling", value: "fit", threshold: "< 0.15" }, diagnosis: { step: "D4", summary: "a scan. more" },
+    fix: { summary: "index", kind: "code path", commit: "9a41c07e2" }, improvement: [{ measure: "p95", before: 40, after: 17, unit: "ms", oldBinary: "511dceed", newBinary: "7c2e9d40", snapshot: "r007", cache: "warm" }],
+    recovery: "fork", records: [{ title: "x", path: "fixes/007-a1-index.md" }], ledger: [{ file: "OPTIMIZATIONS.md", entry: "007.a1" }] };
+  assert.deepEqual(checkFinding(f), []);
+  assert.deepEqual(checkFinding(f, { full: true }), ["design.old is missing", "design.new is missing", "cost is missing"]);
+  const pending = renderFindingFormat(7, a1, a1.gate, null, null);
+  assert.ok(pending.includes("Diagnosis pending: `finding-007.a1.json`") && pending.includes("**1. Trigger**"));
+  const full = renderFindingFormat(7, a1, a1.gate, { ...f, design: { old: "scan", new: "index" }, cost: "+1 index write" }, a2);
+  for (const part of ["**2. Fix context**", "| Old design | scan |", "**4. With vs without", "`511dceeda1b5`", "`7c2e9d40f1a3`", "**5. Cost of the fix:** +1 index write", "](../fixes/007-a1-index.md)"]) assert.ok(full.includes(part), part);
+  const text = renderFormat({ plan: { ...plan, dsh: { first: "a".repeat(40), commits: 25 }, checkpoint: "b".repeat(40) }, summary, attempts: [a1, a2], gates: [a1.gate, a2.gate], findings: [{ ...f, design: { old: "scan", new: "index" }, cost: "+1" }] });
+  assert.deepEqual(checkFormat(text, a2, []), []);
+  assert.ok(checkFormat(text.replace("`7c2e9d40f1a3` |", "`511dceeda1b5` |"), a2, []).some((p) => /same binary/.test(p)));
 });
 
 let failed = 0;

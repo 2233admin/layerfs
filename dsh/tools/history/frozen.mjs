@@ -28,8 +28,9 @@ export function tableAfter(text, heading) {
 /** A report's recorded attempts (attempt -> row) and the check rows of its latest attempt. */
 export function parseReport(text) {
   const attempts = new Map();
-  for (const [n, binary, started, verdict, reason] of tableAfter(text, "## Attempts") ?? []) attempts.set(Number(n), { binary, started, verdict, reason });
-  const checks = (tableAfter(text, "## 1. Checks") ?? []).map(([name, value, threshold, result]) => ({ name, value, threshold, result }));
+  // the binding format (format.mjs) keeps them in its appendix: F. Attempts, A. Checks
+  for (const [n, binary, started, verdict, reason] of tableAfter(text, "## Attempts") ?? tableAfter(text, "### F. Attempts") ?? []) attempts.set(Number(n), { binary, started, verdict, reason });
+  const checks = (tableAfter(text, "## 1. Checks") ?? tableAfter(text, "### A. Checks") ?? []).map(([name, value, threshold, result]) => ({ name, value, threshold, result }));
   const latest = attempts.size ? Math.max(...attempts.keys()) : null;
   return { attempts, checks, latest };
 }

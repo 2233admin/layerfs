@@ -147,3 +147,32 @@ the appendix exist in order; §5 is the one-line "none" form or has every findin
 part (1–6) or "Diagnosis pending"; every open finding touching the range is
 listed; with-vs-without columns name different binaries; space amplification
 equals Store on disk ÷ latest version within rounding.
+
+## 8. As built (builder, 2026-10-18)
+
+`dsh/tools/history/format.mjs` renders this format and holds §7's checks
+(`checkFormat`, run by `report.mjs check` under F1); `run.mjs` records the
+measurements. Where a number cannot come from the named source yet:
+
+- **Latest version** is LayerFS's own walk of the published tree (one exec in a
+  one-shot Workspace every range, `lstat` only, the probe fixture left out).
+  Its tracked part is git's (the tree was just proved equal); `node_modules` is
+  every path under a `node_modules` folder; build is the rest.
+- **Store on disk** is the sealed file's allocation at snapshots; at other
+  ranges it is the live file plus its WAL, marked `live`.
+- **What's inside:** totals and average sizes come from the sealed file at
+  snapshots (`— (at snapshots)` otherwise). Directories and inodes are one
+  pooled metadata role in the trace, so their Added sits on the Directories
+  row. No trace counter counts dedupe hits; Reused on whole files is derived
+  (files constructed − unchanged − new whole-file objects) and labelled so.
+- **Open issues** are every open BUGS.md finding (`- **F-NNN · title …**`,
+  without **Fixed**/**Closed**); owner and next step come from its "Owner:
+  who, next step." sentence.
+- **With vs without** is generated from the tripped attempt's and the rerun's
+  metrics; the fixer's finding adds `design: { old, new }` and `cost`
+  (findings.mjs), required for findings reported in this format.
+- **Stage times** (appendix E): play includes the runner's prepare (binary and
+  disk checks, the Sandbox pool); verify includes the latest version's walk;
+  seal + snapshot includes the sealed file's figures; report includes the
+  metrics and health reads.
+

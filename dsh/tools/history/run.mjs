@@ -43,11 +43,12 @@ import { aggregate } from "./gates.mjs";
 import { PLAN_VERSION } from "./plan.mjs";
 import {
   binaries, closure, consolidate, HISTORY, Mismatch, probeFixture, probes, readTrace, REPO, Run,
-  step, teardown, verify, writeJson,
+  sandboxHealth, step, teardown, verify, versionStats, writeJson,
 } from "./lib.mjs";
 import { addDelta, deltaSummary, diskGuard, EXIT, nextPhase, pad, PHASES, phaseOps, Tree } from "./steps.mjs";
 import { consolidateLanes, playAgents, pool, startRange } from "./agents.mjs";
 import { buildOverview, callTable } from "./stats.mjs";
+import { area } from "./plan-range.mjs";
 
 const here = new URL(".", import.meta.url).pathname;
 const IMAGE = "sha256:d3773b4eac6a7a644887b17e36956cd1553786d47103f0170a3bb2b0ff6988de";
@@ -89,6 +90,86 @@ export function wallProjection(attempts, phase, own, ranges) {
 function readAttempts(dir) {
   if (!existsSync(dir)) return [];
   return readdirSync(dir).filter((f) => /^range-\d{3}\.a\d+\.json$/.test(f)).map((f) => JSON.parse(readFileSync(join(dir, f), "utf8")));
+}
+
+/** The Store file's size and allocation (bytes) and its WAL's, in the run's volume, from a short container. */
+function statDisk(run, extra = "") {
+  const py = `import os,json,sqlite3
+def st(p):
+  try:
+    s=os.stat(p); return [s.st_size, s.st_blocks*512]
+  except FileNotFoundError: return [0,0]
+m=st('/v/global/store.sqlite'); w=st('/v/global/store.sqlite-wal')
+out={'disk':{'size':m[0],'allocated':m[1],'wal':w[0],'walAllocated':w[1]}}
+${extra}
+print(json.dumps(out))`;
+  return JSON.parse(docker(["run", "--rm", "--network", "none", "-v", `${run.manifest.volume}:/v:ro`, "--entrypoint", "python3", run.manifest.env.LAYERFS_IMAGE, "-c", py]));
+}
+/** A live Store's size and allocation (its WAL not checkpointed). */
+const liveDisk = (run) => statDisk(run).disk;
+/**
+ * The sealed Store's allocation and its figures (inspect.mjs storeFigures'
+ * queries, read-only on the sealed file): pages, objects by role and size
+ * class, packs, bytes per table and index.
+ */
+function sealedFacts(run) {
+  return statDisk(run, `c=sqlite3.connect('file:/v/global/store.sqlite?mode=ro&immutable=1', uri=True)
+q=lambda s: c.execute(s).fetchall()
+f={'pageSize':q('pragma page_size')[0][0],'pages':q('pragma page_count')[0][0],'freePages':q('pragma freelist_count')[0][0],
+ 'commits':q('select count(*) from "commit"')[0][0],'branches':q('select count(*) from branch')[0][0],'layers':q('select count(*) from layer')[0][0],
+ 'objects':[{'role':r,'n':n,'canonical':b} for r,n,b in q('select role, count(*), sum(canonical_length) from object_location group by role order by role')],
+ 'packs':[{'domain':d,'n':n,'bytes':b} for d,n,b in q('select domain, count(*), sum(length) from pack group by domain')]}
+try: f['tables']=[{'name':a,'pages':b,'bytes':d,'unused':e} for a,b,d,e in q('select name, count(*), sum(pgsize), sum(unused) from dbstat group by name order by sum(pgsize) desc')]
+except Exception: f['tables']=None
+out['figures']=f`);
+}
+
+/** The range's dsh facts for the headline: commit dates, side commits, the areas changed most by bytes. */
+export function dshFacts(repo, plan, changes, sizes) {
+  const date = (id) => { try { return execFileSync("git", ["--git-dir", repo, "show", "-s", "--format=%cs", id], { encoding: "utf8" }).trim(); } catch { return null; } };
+  const areas = new Map();
+  let total = 0;
+  for (const c of changes) { const n = sizes.get(c.blob) ?? 0, a = area(c.path); areas.set(a, (areas.get(a) ?? 0) + n); total += n; }
+  return { first: date(plan.dsh.first), last: date(plan.checkpoint), commits: plan.dsh.commits, mainline: plan.dsh.mainline, side: plan.dsh.commits - plan.dsh.mainline,
+    areas: [...areas].sort((a, b) => b[1] - a[1]).map(([name, bytes]) => ({ name, bytes, share: total ? +(bytes / total).toFixed(3) : 0 })).slice(0, 8), changedBytes: total };
+}
+
+/** Exec commands by kind (SPEC §3b): JS (node, npm, pnpm, npx, yarn, vitest) or shell, and non-zero exits. */
+export function execFacts(lines) {
+  const ex = lines.filter((l) => l.method === "sandbox.exec");
+  const js = (c) => /^\s*(node|npm|pnpm|npx|yarn|vitest|corepack)\b/.test(String(c ?? ""));
+  return { total: ex.length, js: ex.filter((l) => js(l.args?.command)).length, shell: ex.filter((l) => !js(l.args?.command)).length,
+    nonZero: ex.filter((l) => l.ok && l.exitCode != null && l.exitCode !== 0).length, refused: ex.filter((l) => !l.ok).length,
+    installs: ex.filter((l) => /pnpm (install|i)\b/.test(String(l.args?.command ?? ""))).length, tests: ex.filter((l) => /vitest/.test(String(l.args?.command ?? ""))).length };
+}
+
+const q = (xs, p) => { const v = [...xs].sort((a, b) => a - b); return v.length ? v[Math.min(v.length - 1, Math.floor((v.length - 1) * p))] : null; };
+/**
+ * The Speed section's key operations (REPORT_FORMAT.md §3.4) over all their
+ * calls: p50, p95, SQL statements p50, the dominant size class; the cost of a
+ * Sandbox Commit per changed file; the one-shot Workspace total (mount start
+ * to unmount end, Workspaces held across steps left out); the slowest calls.
+ */
+export function keyOps(calls, lines, log) {
+  const key = {};
+  for (const op of ["fs.write", "fs.read", "fs.list", "sandbox.commit", "sandbox.mount", "branch.merge", "sandbox.exec", "branch.diff_commits"]) {
+    const cs = calls.filter((c) => c.method === op);
+    if (!cs.length) continue;
+    const classes = new Map();
+    for (const c of cs) { const k = c.size ? `${c.size.kind}:${c.size.n}` : "—"; classes.set(k, (classes.get(k) ?? 0) + 1); }
+    key[op] = { n: cs.length, p50: q(cs.map((c) => c.ms), 0.5), p95: q(cs.map((c) => c.ms), 0.95), statements: q(cs.filter((c) => c.sql).map((c) => c.sql.statements), 0.5) };
+  }
+  const commits = calls.filter((c) => c.method === "sandbox.commit" && c.size?.n > 0);
+  const files = commits.reduce((n, c) => n + c.size.n, 0);
+  const held = new Set(log.filter((e) => /hold-mount|stale-mount/.test(e.label ?? "")).map((e) => e.seq));
+  const open = new Map(), totals = [];
+  for (const l of lines) {
+    const id = `${l.args?.sandbox}\u0000${l.method === "sandbox.mount" ? l.path : l.args?.path}`;
+    if (l.method === "sandbox.mount" && l.ok && !held.has(l.seq)) open.set(id, Date.parse(l.start));
+    if (l.method === "sandbox.unmount" && open.has(id)) { totals.push(Date.parse(l.start) + l.ms - open.get(id)); open.delete(id); }
+  }
+  const slowest = [...calls].sort((a, b) => b.ms - a.ms).slice(0, 3).map((c) => ({ op: c.method, ms: c.ms, size: c.size ?? null }));
+  return { ops: key, commitPerFileMs: files ? +(commits.reduce((n, c) => n + c.ms, 0) / files).toFixed(2) : null, oneShotP50: q(totals, 0.5), oneShots: totals.length, slowest };
 }
 
 /** The next attempt number of range k in `metrics`. */
@@ -214,7 +295,8 @@ async function playRange(run, k, mode) {
   let branch = `r${pad(k)}-lane`;
   let ctx = p2 ? null : { ops, reconcile, branch, tree: new Tree(lsTree(run.repo, run.state.prevCommit).files), work: { fs: 0, sandbox: 0, commits: 0 }, measured };
   const depthBefore = run.state.depth.commits;
-  let failure = null, published = null, proof = null, tests = null, probeOut = {};
+  let failure = null, published = null, proof = null, tests = null, probeOut = {}, versionOut = null;
+  const startedFrom = Object.keys(run.state.heads ?? {}).length || !run.state.forkedFrom ? { kind: "live", range: k - 1 } : { kind: "fork", range: run.state.forkedFrom.range, run: run.state.forkedFrom.run };
   run.tally.calls = 0;
   run.sink.log.length = 0;
   try {
@@ -256,6 +338,8 @@ async function playRange(run, k, mode) {
     if (!proof.ok) failure = `the checkpoint differs from git: ${JSON.stringify({ paths: proof.paths, ids: proof.ids, tree: proof.tree && { missing: proof.tree.missing.slice(0, 5), extra: proof.tree.extra.slice(0, 5), content: proof.tree.content.slice(0, 5), mode: proof.tree.mode.slice(0, 5) } }).slice(0, 1500)}`;
     if (!failure && phase.tests && measured) { since = performance.now(); tests = await closure(run, k, "tests", { layer: published.publishedLayer.id }); lap("testsMs", since); }
     if (!failure && phase.probes && measured) { since = performance.now(); probeOut = await probes(run, k, { branch, tree: ctx.tree }); lap("probesMs", since); }
+    // the latest version as LayerFS shows it (REPORT_FORMAT.md §4), every range
+    if (!failure && measured) { since = performance.now(); versionOut = await versionStats(run, k, published.publishedLayer.id); lap("versionMs", since); }
     m.snapshotDue = snapshotDue;
   } catch (error) {
     if (!(error instanceof Mismatch)) console.error(error.stack ?? error);
@@ -303,7 +387,19 @@ async function playRange(run, k, mode) {
   m.inputs = { tree: { files: oracle.files, bytes: oracle.bytes } };
   m.probes = Object.fromEntries(Object.entries(probeOut).map(([name, p]) => [name, { ms: p.ms, ...(p.error ? { error: p.error } : {}), counters: t.probe[name] ?? {} }]));
   const open = snap?.sandboxes?.reduce((n, s) => n + (s.workspaces?.length ?? 0), 0) ?? null;
-  m.health = { workspacesOpen: open, overlaysLeft: null };
+  const hl = await sandboxHealth(run);
+  m.health = { workspacesOpen: open, overlaysLeft: hl?.overlaysLeft ?? null, daemonRssMb: hl?.daemonRssMb ?? null, openFiles: hl?.openFiles ?? null, sandboxes: hl ? `${hl.sandboxes} of ${hl.of}` : null };
+  m.startedFrom = startedFrom;
+  // the latest version: LayerFS's walk, split by git's tracked figures (the tree matched git) and node_modules
+  if (versionOut) {
+    const v = versionOut, nm = v.nm, tracked = { files: oracle.files, bytes: oracle.bytes };
+    m.version = { bytes: v.bytes, files: v.files, dirs: v.dirs, symlinks: v.symlinks, largestFile: v.largestFile, largestDir: v.largestDir,
+      tracked, nodeModules: { files: nm.files, bytes: nm.bytes }, build: { files: Math.max(0, v.files - nm.files - tracked.files), bytes: Math.max(0, v.bytes - nm.bytes - tracked.bytes) } };
+  }
+  m.dsh = dshFacts(run.repo, plan, changes, sizes);
+  m.execs = execFacts(t.all);
+  m.construction = t.construction;
+  m.key = keyOps(t.calls, t.all, run.sink.log);
   const mounts = run.sink.log.filter((e) => e.method === "sandbox.mount");
   const heldIds = new Set(p2 ? [...ctx.p2.held.keys()].filter((id) => /mount/.test(plan.steps.find((s) => s.id === id)?.kind ?? "")) : []);
   const held = mounts.filter((e) => heldIds.has(e.label)).length;
@@ -322,6 +418,8 @@ async function playRange(run, k, mode) {
     lanesPlayed: p2 ? plan.lanes.map((l) => ({ name: l.name, agents: l.agents, steps: l.agents.reduce((n, a) => n + (ctx.steps.get(a) ?? 0), 0) })) : [{ name: branch, agents: ["a01"], steps: ops.length }],
     runningBefore: run.state.depth.commits, phase: run.manifest.phase });
   if (!p2) m.overview.planned = { branches: plan.lanes.length + 1, agents: plan.agents.length };
+  const made = run.sink.log.filter((e) => (e.method === "branch.fork" && e.kind === "Forked") || (e.method === "branch.merge" && e.kind === "Merged")).length;
+  m.history = { commits: m.depth.after, layers: run.state.depth.layers + 1, branches: run.state.depth.branches + made };
   const pathsOk = proof?.paths?.ok, idsOk = proof?.ids?.ok;
   m.checks = {
     tree: proof ? { ok: proof.ok, files: proof.tree?.files ?? proof.paths.git, missing: [...proof.paths.missing, ...proof.ids.missing, ...(proof.tree?.missing ?? [])], extra: [...proof.paths.extra, ...(proof.tree?.extra ?? [])],
@@ -340,12 +438,18 @@ async function playRange(run, k, mode) {
       const sealed = await seal(run);
       wall.sealMs = sealed.sealMs;
       since = performance.now();
+      const sf = sealedFacts(run);
+      m.storeDisk = { ...sf.disk, sealed: true };
+      m.figures = sf.figures;
+      lap("figuresMs", since);
+      since = performance.now();
       m.snapshot = snapshot(run, k, { run: run.manifest.run, dsh: plan.checkpoint, tree: plan.tree, head, layer, depth: m.depth.after, daemon: run.manifest.binary.daemon,
         sdk: run.manifest.binary.sdk, planVersion: run.manifest.planVersion, policy: run.manifest.policy ?? "default", pageSize: 4096, ...sealed,
         state: { next: k + 1, layer, head, prevCommit: plan.checkpoint, depth: { ...run.state.depth, commits: m.depth.after }, deltaTotal } });
       lap("snapshotMs", since);
     } catch (error) { failure = `snapshot: ${error.message}`; m.failure = failure; m.checks.history.ok = false; }
   }
+  if (!m.storeDisk && !failure) { since = performance.now(); m.storeDisk = { ...liveDisk(run), sealed: false }; lap("diskMs", since); }
   m.wall = { kind: "tooling", totalMs: Math.round(performance.now() - t0), ...wall };
   const budget = loadBudget();
   if (budget) Object.assign(m.budget, { wallBudgetMs: budget.wallBudgetMs, ...wallProjection(readAttempts(outputs.metrics), m.phase, { range: k, totalMs: m.wall.totalMs }, budget.ranges) });

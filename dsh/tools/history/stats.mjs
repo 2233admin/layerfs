@@ -87,12 +87,14 @@ export function outcomesCell(category, row) {
 /**
  * The time line's stages (REPORT_OVERVIEW.md §2), in ms, summing to the
  * total: play holds the runner's prepare (binary and disk checks, the
- * Sandbox pool); report holds the metrics and the bookkeeping between laps.
+ * Sandbox pool); verify holds the latest version's walk; seal + snapshot the
+ * sealed Store's figures; report holds the metrics (health, the live Store's
+ * allocation) and the bookkeeping between laps.
  */
 export function stageSplit(wall) {
   if (!wall?.totalMs) return null;
   const g = (k) => wall[k] ?? 0;
-  const st = { play: g("prepareMs") + g("playMs"), consolidate: g("consolidateMs"), verify: g("verifyMs"), probes: g("probesMs"), tests: g("testsMs"), "seal + snapshot": g("sealMs") + g("snapshotMs") };
+  const st = { play: g("prepareMs") + g("playMs"), consolidate: g("consolidateMs"), verify: g("verifyMs") + g("versionMs"), probes: g("probesMs"), tests: g("testsMs"), "seal + snapshot": g("sealMs") + g("figuresMs") + g("snapshotMs") };
   const named = Object.values(st).reduce((n, x) => n + x, 0);
   st.report = Math.max(0, wall.totalMs - named);
   return st;
@@ -194,10 +196,18 @@ export function renderOverview({ range, verdict, m }) {
   const hit = o.conflicts.reduce((n, c) => n + c.hit, 0), planned = o.conflicts.reduce((n, c) => n + c.planned, 0);
   const lanes = o.branches.length, agents = o.agents.length - 1;
   const pad3 = String(range).padStart(3, "0");
-  const out = [`## Overview · Range ${pad3} · **${verdict}** · attempt ${m.attempt} · daemon \`${String(m.binary?.daemon ?? "?").slice(0, 12)}\``, "",
+  return [`## Overview · Range ${pad3} · **${verdict}** · attempt ${m.attempt} · daemon \`${String(m.binary?.daemon ?? "?").slice(0, 12)}\``, "",
     timeLine(m.wall),
     `**${int(callTotal)} calls** · **${int(o.commits)} Commits** (running ${int(o.running)}) · **${bracket(lanes, o.planned?.branches)} Branches** · **${bracket(agents, o.planned?.agents)} agents + lead** · conflicts **${hit} / ${planned}** hit`, "",
-    "**Calls by category**", "",
+    activityTables(m)].join("\n");
+}
+
+/** The four Activity tables (REPORT_OVERVIEW.md §2): calls by category, Branches, conflicts, agents. */
+export function activityTables(m) {
+  const o = m.overview, cat = categoryRows(m.calls);
+  const callTotal = Object.values(cat.rows).reduce((n, r) => n + r.calls, 0);
+  const hit = o.conflicts.reduce((n, c) => n + c.hit, 0);
+  const out = ["**Calls by category**", "",
     table(["Category", "Calls", "Writes", "Reads", "Outcomes"], [
       ...CATEGORY_ORDER.map((c) => [c, int(cat.rows[c].calls), int(cat.rows[c].writes), int(cat.rows[c].reads), outcomesCell(c, cat.rows[c])]),
       ["**Total**", `**${int(callTotal)}**`, `**${int(CATEGORY_ORDER.reduce((n, c) => n + cat.rows[c].writes, 0))}**`, `**${int(CATEGORY_ORDER.reduce((n, c) => n + cat.rows[c].reads, 0))}**`, cat.unassigned.length ? `unassigned: ${cat.unassigned.join(", ")}` : ""],
@@ -218,15 +228,15 @@ export function renderOverview({ range, verdict, m }) {
  * The F1 sums of an Overview (REPORT_OVERVIEW.md §3) against the attempt's
  * metrics; returns the problems.
  */
-export function checkOverview(text, m) {
+export function checkOverview(text, m, { heading = "## Overview", first = true, time = true } = {}) {
   const problems = [];
-  const at = text.indexOf("\n## Overview");
-  if (at < 0) return ["the Overview is missing"];
-  if (text.slice(0, at).includes("\n## ") || text.slice(0, at).includes("\n| ")) problems.push("the Overview is not the first section");
+  const at = text.indexOf(`\n${heading}`);
+  if (at < 0) return [`${heading.replace(/^#+ /, "the ")} is missing`];
+  if (first && (text.slice(0, at).includes("\n## ") || text.slice(0, at).includes("\n| "))) problems.push("the Overview is not the first section");
   const end = text.indexOf("\n## ", at + 1);
   const body = text.slice(at, end < 0 ? undefined : end);
   let from = 0;
-  for (const h of ["**Time", "calls**", "**Calls by category**", "**Branches**", "**Conflicts**", "**Agents**"]) {
+  for (const h of [...(time ? ["**Time"] : []), "calls**", "**Calls by category**", "**Branches**", "**Conflicts**", "**Agents**"]) {
     const i = body.indexOf(h, from);
     if (i < 0) problems.push(`the Overview lacks ${h} (or it is out of order)`); else from = i;
   }
@@ -250,6 +260,13 @@ export function checkOverview(text, m) {
   const conflicts = rows("**Conflicts**");
   for (const [, title] of CONFLICT_KINDS) if (!conflicts.some((r) => r[0] === title)) problems.push(`Conflicts lacks the ${title} row`);
   if (!conflicts.some((r) => r[0] === "**Unplanned**")) problems.push("Conflicts lacks the Unplanned row");
+  if (time) problems.push(...checkTimeLine(body));
+  return problems;
+}
+
+/** The time line's stages sum to its total within 0.1 s (REPORT_OVERVIEW.md §3). */
+export function checkTimeLine(body) {
+  const problems = [];
   const time = /\*\*Time ([\d.]+) s\*\* \(tooling\): (.*)/.exec(body);
   if (!time) problems.push("the time line is missing or not labeled tooling");
   else {

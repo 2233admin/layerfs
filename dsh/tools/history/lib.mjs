@@ -151,7 +151,9 @@ export function measure(method, args, value, tree, size) {
       break;
     }
     case "sandbox.exec":
-      out.bytesIn = byteLength(args[2]); out.bytesOut = byteLength(value?.stdout) + byteLength(value?.stderr); break;
+      out.bytesIn = byteLength(args[2]); out.bytesOut = byteLength(value?.stdout) + byteLength(value?.stderr);
+      if (Number.isInteger(value?.exitCode)) out.exit = value.exitCode;
+      break;
     default:
       if (READ_INPUT[method]) {
         out.bytesOut = jsonBytes(value); out.files = value ? 1 : 0;
@@ -403,6 +405,45 @@ export async function closure(run, k, what, { layer }) {
   }
 }
 
+// The latest version as LayerFS shows it (REPORT_FORMAT.md §4): every file,
+// folder and symlink under the Workspace (the probe fixture left out), their
+// raw bytes, the node_modules share, the largest file and the folder with the
+// most entries. lstat only: no file is read. One JSON line.
+export const VERSION_STATS = `const fs=require("fs"),P=require("path");const o={files:0,dirs:0,symlinks:0,bytes:0,nm:{files:0,dirs:0,symlinks:0,bytes:0},largestFile:{path:null,bytes:-1},largestDir:{path:".",entries:-1}};const walk=(d,nm)=>{const es=fs.readdirSync(d,{withFileTypes:true});if(es.length>o.largestDir.entries)o.largestDir={path:d,entries:es.length};for(const e of es){const p=d==="."?e.name:d+"/"+e.name;if(p===".lfs-probe")continue;const inNm=nm||e.name==="node_modules";const s=fs.lstatSync(p);const t=inNm?o.nm:null;if(s.isSymbolicLink()){o.symlinks++;o.bytes+=s.size;if(t){t.symlinks++;t.bytes+=s.size}}else if(s.isDirectory()){o.dirs++;if(t)t.dirs++;walk(p,inNm)}else{o.files++;o.bytes+=s.size;if(t){t.files++;t.bytes+=s.size}if(s.size>o.largestFile.bytes)o.largestFile={path:p,bytes:s.size}}}};walk(".",false);process.stdout.write(JSON.stringify(o)+"\\n")`;
+
+/** The latest version's figures (VERSION_STATS) of `layer`, read in a one-shot Workspace on a fork of it. */
+export async function versionStats(run, k, layer) {
+  const sb = await setup(run), branch = `ver-r${pad(k)}`, label = `r${pad(k)}.version`;
+  run.label(label);
+  await expectCall(run, `${label} fork`, () => run.lf.branch.fork(branch, layer), "Forked");
+  const ws = await expectCall(run, `${label} mount`, () => run.lf.sandbox.mount(sb, branch));
+  try {
+    const r = await run.lf.sandbox.exec(sb, ws, `node -e ${quote(VERSION_STATS)}`);
+    if (r.exitCode !== 0) throw new Mismatch(`${label} exited ${r.exitCode}: ${String(r.stderr ?? "").slice(0, 300)}`);
+    return JSON.parse(String(r.stdout).trim().split("\n").at(-1));
+  } finally {
+    await run.lf.sandbox.unmount(sb, ws, true);
+  }
+}
+
+/**
+ * Health of every Sandbox of the run (SPEC §5, F-006): overlay files left in
+ * each daemon's overlay folder (numbered `<n>.sqlite`; the template
+ * `overlay.sqlite` is not one), the daemons' resident memory and open files,
+ * summed. One `docker exec` per Sandbox, at once.
+ */
+export async function sandboxHealth(run) {
+  const { execFile } = await import("node:child_process");
+  const one = (container) => new Promise((resolve) => execFile("docker", ["exec", container, "sh", "-c",
+    "n=$(ls /layerfs-local/overlay 2>/dev/null | grep -cE '^[0-9]+\\.sqlite$'); r=$(awk '/VmRSS/{print $2}' /proc/1/status); f=$(ls /proc/1/fd | wc -l); echo $n $r $f"],
+  { encoding: "utf8" }, (error, out) => resolve(error ? null : out.trim().split(/\s+/).map(Number))));
+  const ids = [...(run.lf?.sandboxes ?? [])];
+  const got = await Promise.all(ids.map((id) => run.container(id)).filter(Boolean).map(one));
+  const ok = got.filter(Boolean);
+  if (!ok.length) return null;
+  return { sandboxes: ok.length, of: ids.length, overlaysLeft: ok.reduce((n, x) => n + x[0], 0), daemonRssMb: +(ok.reduce((n, x) => n + x[1], 0) / 1024).toFixed(1), openFiles: ok.reduce((n, x) => n + x[2], 0) };
+}
+
 /** Closes every Sandbox the client opened (the range's and the service), recording each. */
 export async function teardown(run) {
   if (!run.lf) return [];
@@ -495,7 +536,10 @@ export function readTrace(file, log = null) {
     for (const [key, n] of Object.entries(c)) probe[name][key] = (probe[name][key] || 0) + n;
   }
   const delta = deltaWork(lines.filter((x) => !String(x.step ?? "").startsWith("probe:")));
-  return { calls, probe, delta, lines: lines.length, all: lines };
+  // construction work of the replay's own Saves (probes left out): files built, unchanged, symlinks
+  const construction = {};
+  for (const l of lines.filter((x) => !isProbe(x))) for (const d of l.daemon ?? []) for (const [key, n] of Object.entries(d.construction ?? {})) construction[key] = (construction[key] ?? 0) + n;
+  return { calls, probe, delta, construction, lines: lines.length, all: lines };
 }
 
 export { PHASES, phaseOps, Tree };

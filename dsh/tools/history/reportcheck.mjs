@@ -23,6 +23,7 @@ import { checkFinding, loadFindings } from "./findings.mjs";
 import { atHead, cells, legacyGates, parseReport, tableAfter } from "./frozen.mjs";
 import { FINDING_COLUMNS, LEAD_END, LEAD_START, NOTE_START } from "./report.mjs";
 import { checkOverview } from "./stats.mjs";
+import { checkFormat, FINDINGS, loadIssues } from "./format.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
 const HEADINGS = (k) => [`# Range ${pad(k)}`, "## Attempts", "## 1. Checks", "## 2. Work", "## 3. Operation latency", "## 4. Scale probes", "## 5. Storage", "## 6. Trends", LEAD_START, NOTE_START, LEAD_END];
@@ -42,11 +43,11 @@ function section(text, heading) {
   return body.join("\n");
 }
 
-/** The Finding blocks of §7: "NNN.aK" -> block text. */
-function findingBlocks(text) {
-  const seven = section(text, LEAD_START) ?? "", out = new Map();
+/** The Finding blocks of §7 (the binding format: §5): "NNN.aK" -> block text. */
+function findingBlocks(text, heading = LEAD_START) {
+  const seven = section(text, heading) ?? "", out = new Map();
   for (const part of seven.split("\n### ").slice(1)) {
-    const m = /^Finding (\d{3}\.a\d+)\n/.exec(part);
+    const m = /^Finding (\d{3}\.a\d+)\b/.exec(part);
     if (m) out.set(m[1], part);
   }
   return out;
@@ -69,9 +70,13 @@ export function checkReport({ range, metricsDir, docs }) {
   const recorded = attempts.map((m) => m.gate ?? legacy.get(m.attempt) ?? null);
   const findings = loadFindings(metricsDir).get(range) ?? [];
 
-  // F1: the headings in order, each section with content
+  // F1: the headings in order, each section with content; the binding format
+  // (REPORT_FORMAT.md) for an attempt that recorded its measurements
+  const last = attempts.at(-1);
+  const binding = !!(last?.version && last?.overview && last?.calls);
+  if (binding) for (const p of checkFormat(text, last, loadIssues(docs))) fail("F1", p);
   let from = 0;
-  for (const h of HEADINGS(range)) {
+  for (const h of binding ? [] : HEADINGS(range)) {
     const lines = text.split("\n"), at = lines.findIndex((l, i) => i >= from && (l === h || l.startsWith(`${h} (`)));
     if (at < 0) { fail("F1", `missing or out of order: ${h}`); continue; }
     from = at + 1;
@@ -79,8 +84,7 @@ export function checkReport({ range, metricsDir, docs }) {
   }
 
   // F1, the Overview: required, and its sums checked, when the latest attempt recorded its data
-  const last = attempts.at(-1);
-  if (last?.overview && last?.calls) for (const p of checkOverview(text, last)) fail("F1", `Overview: ${p}`);
+  if (!binding && last?.overview && last?.calls) for (const p of checkOverview(text, last)) fail("F1", `Overview: ${p}`);
   else if (text.includes("\n## Overview")) notes.push("note F1: an Overview without recorded data in the latest attempt");
 
   // F2: rows equal the recorded results; earlier reports unchanged
@@ -104,7 +108,7 @@ export function checkReport({ range, metricsDir, docs }) {
   }
 
   // F3, F4, F5: Finding blocks
-  const blocks = findingBlocks(text);
+  const blocks = findingBlocks(text, binding ? FINDINGS : LEAD_START);
   const comment = existsSync(join(metricsDir, `comment-${pad(range)}.md`)) ? readFileSync(join(metricsDir, `comment-${pad(range)}.md`), "utf8") : null;
   attempts.forEach((m, i) => {
     const v = recorded[i]?.verdict;
@@ -115,8 +119,8 @@ export function checkReport({ range, metricsDir, docs }) {
       if (!block.includes("Diagnosis pending") || !block.includes(`finding-${id}.json`)) fail("F3", `Finding ${id}: no finding record, and the block does not say Diagnosis pending with its file`);
       return;
     }
-    for (const p of checkFinding(f)) fail(/improvement/.test(p) ? "F4" : /record|ledger/.test(p) ? "F5" : "F3", `finding-${id}.json: ${p}`);
-    for (const row of ["Trigger", "Diagnosis", "Fix", "Recovery", "Records"]) if (!block.includes(`| ${row} |`)) fail("F3", `Finding ${id} has no ${row} row`);
+    for (const p of checkFinding(f, { full: binding })) fail(/improvement/.test(p) ? "F4" : /record|ledger/.test(p) ? "F5" : "F3", `finding-${id}.json: ${p}`);
+    if (!binding) for (const row of ["Trigger", "Diagnosis", "Fix", "Recovery", "Records"]) if (!block.includes(`| ${row} |`)) fail("F3", `Finding ${id} has no ${row} row`);
     if (!block.includes(f.trigger.check)) fail("F3", `Finding ${id} does not show its trigger`);
     if (comment != null) {
       if (!comment.includes(f.trigger.check)) fail("F3", `comment-${pad(range)}.md lacks finding ${id}'s trigger`);
@@ -154,8 +158,8 @@ export function checkReport({ range, metricsDir, docs }) {
 
   // F7: labels
   const header = text.slice(0, text.indexOf("\n## "));
-  if (!/\| Wall time[^|]*tooling/.test(header) || !/tooling:|\| Wall time[^|]*\| — \|/.test(header)) fail("F7", "the header's wall time is not labeled tooling");
-  for (const h of ["## 3. Operation latency", "## 4. Scale probes"]) if (!/daemon `[0-9a-f]+`/.test(section(text, h) ?? "")) fail("F7", `${h} does not name its binary`);
+  if (binding) { /* the binding format's labels are checkFormat's (F1) */ } else if (!/\| Wall time[^|]*tooling/.test(header) || !/tooling:|\| Wall time[^|]*\| — \|/.test(header)) fail("F7", "the header's wall time is not labeled tooling");
+  for (const h of binding ? [] : ["## 3. Operation latency", "## 4. Scale probes"]) if (!/daemon `[0-9a-f]+`/.test(section(text, h) ?? "")) fail("F7", `${h} does not name its binary`);
   for (const c of report.checks) if (/seed/.test(c.value) && !/seeded/.test(c.value)) fail("F7", `check ${c.name} uses seeded points without saying so`);
 
   // F8: no silent pass (stored results; legacy attempts predate the rule)

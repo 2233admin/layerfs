@@ -13,6 +13,9 @@
 //     records: [ { title, path: "fixes/NNN-aK-<slug>.md" } ],   one per cause (F5)
 //     ledger: [ { file: "OPTIMIZATIONS.md" | "BUGS.md", entry } ],   its BUGS / OPTIMIZATIONS line
 //     record?                                        free-text pointer, kept from older records
+//     design: { old, new }                           one line each (REPORT_FORMAT.md §3.5, findings of the binding format)
+//     cost                                           what got slower or bigger, stated even when small
+//   The attempt-vs-rerun table is generated from the two attempts' metrics (format.mjs withWithout).
 //   }
 // Paths in records and ledger are relative to core/docs/issues/352/.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -21,8 +24,12 @@ import { join } from "node:path";
 export const STEPS = ["D0", "D1", "D2", "D3", "D4", "D5", "D6"];
 export const FIX_KINDS = ["code path", "data", "format"];
 
-/** The problems of a finding record; empty when it is complete. */
-export function checkFinding(f) {
+/**
+ * The problems of a finding record; empty when it is complete. `full`: a
+ * finding of an attempt reported in the binding format (REPORT_FORMAT.md),
+ * which also needs the old and new design lines and the cost of the fix.
+ */
+export function checkFinding(f, { full = false } = {}) {
   const p = [];
   const need = (v, what) => { if (v == null || v === "") p.push(`${what} is missing`); };
   need(f.range, "range"); need(f.attempt, "attempt");
@@ -38,6 +45,7 @@ export function checkFinding(f) {
     for (const k of ["oldBinary", "newBinary", "snapshot", "cache"]) if (r[k] == null || r[k] === "") p.push(`improvement "${r.measure}" needs ${k}`);
   }
   need(f.recovery, "recovery");
+  if (full) { need(f.design?.old, "design.old"); need(f.design?.new, "design.new"); need(f.cost, "cost"); }
   const prefix = `fixes/${String(f.range).padStart(3, "0")}-a${f.attempt}-`;
   if (!Array.isArray(f.records) || !f.records.length) p.push("records lists the fixes/ record of each cause");
   for (const r of f.records ?? []) if (!r?.title || !/^fixes\/\d{3}-a\d+-[a-z0-9-]+\.md$/.test(r?.path ?? "") || !r.path.startsWith(prefix)) p.push(`record ${JSON.stringify(r)} is { title, path: "${prefix}<slug>.md" }`);

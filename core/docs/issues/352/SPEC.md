@@ -339,9 +339,16 @@ At each range's completion, the runner writes three things:
 
 - `~/lfs-history/metrics/range-NNN.json`: the raw outputs, one file per attempt.
 - `core/docs/issues/352/ranges/range-NNN.md`: the range's report, one file per
-  range. `gates.mjs` generates it from the JSON, following
-  [ranges/TEMPLATE.md](ranges/TEMPLATE.md). The lead writes its §7 (findings and
-  action). A rerun adds an attempt to the same file and never replaces one.
+  range. `report.mjs` generates it from the JSON in the binding format of
+  [REPORT_FORMAT.md](REPORT_FORMAT.md) (owner, 2026-10-18; `format.mjs`, checked
+  by `report.mjs check`), whose Activity tables are
+  [REPORT_OVERVIEW.md](REPORT_OVERVIEW.md)'s. Reports committed before it
+  (ranges 000–004) keep the shape of [ranges/TEMPLATE.md](ranges/TEMPLATE.md)
+  (F2). The lead writes the Lead's note. A rerun adds an attempt to the same
+  file and never replaces one.
+- `core/docs/issues/352/STATS.md`: running totals across ranges
+  (REPORT_OVERVIEW.md §4), rewritten by `report.mjs` with every range; ranges
+  000–004 derived from their metrics (`report.mjs stats` writes it alone).
 - One row in `core/docs/issues/352/RANGES.md`, the index:
 
   | Range | dsh commits | Depth | Verdict | Worst speed ratio | Worst scaling slope | New stored bytes | Report |
