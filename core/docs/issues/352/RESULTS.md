@@ -23,6 +23,8 @@
 | 2026-10-18 | P1 baseline: `metrics/baseline.json`, built by report.mjs from ranges 2–4 on daemon `511dceed` (ranges 0–1 were measured on `0ef24121`, so never mixed in); thresholds stay gates.mjs `THRESHOLDS` as recorded in SPEC §5 | SPEC §5: same-binary points only |
 | 2026-10-18 | Wall budget: 120 s per range, 24,240 s (6.7 h) for 202 ranges; projection = the current phase's mean range wall × 202; gates.mjs's bands (watch ≤ 1×, act 1.5×) apply | P1 measured 22.2–23.3 s per fs-only range; P2–P5 add agents, Sandboxes, installs and up to 60 s of tests, so ~5× headroom. Over budget means re-plan range size or the test cap (SPEC §2, 10) |
 | 2026-10-18 | Phase windows: P2 ranges 5–14, P3 ranges 15–29, P4 ranges 30–50 (milestone 50: kill and resume, fast rebuild, demo seed), P5 ranges 51–201 with every feature, then the controls | The plan has no phase boundaries beyond the pilot; each phase gets ~10–20 ranges to prove its features before the next adds more, and P5 plays the rest |
+| 2026-10-18 | Scope of the delta comparison (owner question, relayed): latency is compared only where both arms ran measured on daemon `511dceed`, ranges 2–4 (p1-pilot-b's ranges 0–1 were fast-rebuilt without timing; their measured attempts are on `0ef24121`); storage figures (stored bytes, cap and budget shares) may compare across 0–4. The decision above already used exactly this scope | Mixed binaries are never one series (AGENTS.md §3) |
+| 2026-10-18 | Owner direction: complete range statistics before P2 (per-method call table, real size classes, ×baseline/slopes/SQL work/FUSE columns, mutation split, Played/Planned, STATS.md running totals, diff_commits judged per changed entry). Assigned to the builder as Task 4; committed reports 000–004 are not regenerated (F2) | SPEC §3b/§3c ask for most of it; the reports must say what was played |
 | 2026-10-18 | Control-arm reports stay in `~/lfs-history/runs/p1-control/` and get no #352 checkpoint comment; the comparison is posted in the P1 summary | They are a control, not checkpoints of the main line (SPEC §3 counts one comment per main-line attempt) |
 
 ## P1 · Pilot
@@ -81,7 +83,7 @@ history over 202 ranges against SPEC §7's ~3 GiB: within 2×, no re-plan.
 | `fs.diff_files` p95, ranges 2/3/4 | 7.44 / 7.08 / 7.63 ms | 8.04 / 6.91 / 7.34 ms | 0.93 / 1.02 / 1.04× |
 | `sandbox.commit` p95, ranges 2/3/4 | 14.46 / 13.76 / 16.52 ms | 13.94 / 13.00 / 14.75 ms | 1.04 / 1.06 / 1.12× |
 
-One sample per range and arm, both on daemon `511dceed`, cache state as the
+One sample per range and arm. Latency rows: ranges 2–4 only, where both arms ran measured on daemon `511dceed`; storage rows may span 0–4, cache state as the
 runner leaves it (warm daemon, same for both arms). Decision: keep the new
 depths (decision log).
 
