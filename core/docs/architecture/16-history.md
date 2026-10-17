@@ -24,6 +24,21 @@
 > `is_ancestor` walk Commit parents (or the base Layer), second parents, Layer
 > parents and each Layer's source Commit, bounded by `MAXIMUM_LINEAGE_ROWS`.
 
+> **#352 lookups, ancestry and binding hints, 2026-10-18:** `branch_named(stack,
+> name)` and `layer_stack_named(name)` read one row through the existing unique
+> name indexes (the SDK no longer pages through every Branch or stack;
+> `layer_stack_named` has a paging default for other providers). `merge_base`
+> and `is_ancestor` stop at Layers: a stack's Layers form one chain, so a node's
+> ancestry is its Commits reached without passing a Layer plus the ancestry of
+> the newest Layer it reaches; work follows the Commits since those Layers and
+> the Layers between them, not the history's length (`ancestry.rs`, commit
+> `3f127ee3e`). Schema addition: `binding_hint(child, parent, name)` (STRICT,
+> WITHOUT ROWID, primary key on all three) holds the name bindings saved trees
+> contain, recorded by `record_bindings` and read by `bindings_of(child)`; rows
+> are hints that a reader checks against its own tree, never facts of one
+> tree, and are never deleted. A Store without the table fails the schema
+> check; there is no migration.
+
 > **Current #328 update, 2026-10-15 (product `ce41af000`):** messages replace
 > agent/call attribution. UTF-8 messages are at most 4096 bytes, permit newline/tab
 > and participate in `layerfs/commit/v3` identity. Time, statistics and LWW details

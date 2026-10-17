@@ -138,11 +138,20 @@ pub fn init_observed(
         .child("history.finish_tree_save")
         .run(|_| save.finish().map_err(storage))?;
     progress.tick()?;
+    let reader = store.reader().map_err(storage)?;
     let logical = layerfs_content::filesystem::statistics::logical_size(
-        &store.reader().map_err(storage)?,
+        &reader,
         layerfs_content::filesystem::FilesystemRootId(root),
     )
     .map_err(ProjectError::Content)?;
+    timer.child("history.record_bindings").run(|_| {
+        super::hints::record_new_bindings(
+            &reader,
+            catalog,
+            None,
+            layerfs_content::filesystem::FilesystemRootId(root),
+        )
+    })?;
     let stack = timer.child("history.initialize_layerstack").run(|_| {
         catalog
             .initialize_layerstack(&StackInitialization {

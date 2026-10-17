@@ -12,9 +12,15 @@ use super::reads::REPLY_BUDGET;
 use super::snapshot::{self, answer, existing, kind_name, Kind, Snap};
 use crate::store::{Store, StorePorts};
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
-use layerfs_content::compare::{line_diff, ChangeKind, DiffLine, EntryFacts, LineOp, PathChange};
+use layerfs_content::compare::{
+    line_diff, BindingHints, ChangeKind, ChangeWalk, DiffLine, EntryFacts, LineOp, PathChange,
+};
+use layerfs_content::filesystem::path::PathName;
 use layerfs_content::object::inode_leaf::InodeKind;
+use layerfs_content::{ContentError, ContentResult};
 use layerfs_history::LayerStackRecord;
+use layerfs_history::{HistoryCatalog, HistoryError};
+use std::cell::RefCell;
 use std::sync::Arc;
 
 /// Budget one listed change costs besides its path and lines.
@@ -169,9 +175,35 @@ fn change(
     ])))
 }
 
+/// The History catalog's recorded bindings, as Content's hint port; a
+/// catalog failure is kept to answer with its own cause.
+struct CatalogHints<'a> {
+    catalog: &'a dyn HistoryCatalog,
+    failure: RefCell<Option<HistoryError>>,
+}
+
+impl BindingHints for CatalogHints<'_> {
+    fn bindings_of(&self, child: u64) -> ContentResult<Vec<(u64, PathName)>> {
+        match self.catalog.bindings_of(child) {
+            Ok(rows) => Ok(rows
+                .into_iter()
+                .filter_map(|row| Some((row.parent, PathName::from_bytes(&row.name).ok()?)))
+                .collect()),
+            Err(error) => {
+                *self.failure.borrow_mut() = Some(error);
+                Err(ContentError::ProviderFailure {
+                    what: "binding hints",
+                })
+            }
+        }
+    }
+}
+
 /// The listed changes from `left` to `right` after the cursor, within the
-/// reply budget, and the cursor to resume from.
+/// reply budget, and the cursor to resume from. Content's change walk reads
+/// what changed; without recorded bindings it is the full walk of both trees.
 fn changes(
+    store: &Arc<Store>,
     reader: &StorePorts,
     left: &Snap,
     right: &Snap,
@@ -181,74 +213,63 @@ fn changes(
     if left.root == right.root {
         return Ok((Vec::new(), SdkValue::Null));
     }
-    let mut l = super::window::Walker::new(reader, left, "/")?;
-    let mut r = super::window::Walker::new(reader, right, "/")?;
-    let (mut a, mut b) = (l.next()?, r.next()?);
+    let hints = CatalogHints {
+        catalog: store.history(),
+        failure: RefCell::new(None),
+    };
+    let planned = ChangeWalk::plan(reader, &hints, &left.tree, &right.tree);
+    if let Some(error) = hints.failure.take() {
+        return Err(args::history(error));
+    }
+    let mut walk = match planned.map_err(args::content)? {
+        Some(walk) => walk,
+        None => ChangeWalk::full(reader, &left.tree, &right.tree).map_err(args::content)?,
+    };
+    emit(reader, &mut walk, limit, pos)
+}
+
+/// Lists the differing pairs after `pos`, at most `limit` and within budget.
+fn emit(
+    reader: &StorePorts,
+    walk: &mut ChangeWalk<'_>,
+    limit: usize,
+    pos: u64,
+) -> Result<(Vec<SdkValue>, SdkValue), SdkRefusal> {
     let (mut items, mut seen, mut budget, mut more) = (Vec::new(), 0u64, REPLY_BUDGET, false);
-    while a.is_some() || b.is_some() {
-        let order = match (&a, &b) {
-            (Some((x, _)), Some((y, _))) => x.split('/').cmp(y.split('/')),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            _ => std::cmp::Ordering::Greater,
-        };
-        let (path, before, after) = match order {
-            std::cmp::Ordering::Less => {
-                let (p, e) = a.take().expect("left");
-                a = l.next()?;
-                (p, Some(e), None)
-            }
-            std::cmp::Ordering::Greater => {
-                let (p, e) = b.take().expect("right");
-                b = r.next()?;
-                (p, None, Some(e))
-            }
-            std::cmp::Ordering::Equal => {
-                let (p, x) = a.take().expect("left");
-                let (_, y) = b.take().expect("right");
-                a = l.next()?;
-                b = r.next()?;
-                (p, Some(x), Some(y))
-            }
-        };
-        if before == after {
-            continue;
-        }
-        if let (Some(x), Some(y)) = (before, after) {
+    while let Some(pair) = walk.next_pair().map_err(args::content)? {
+        let (path, before, after) = &pair;
+        let children_only = matches!((before, after), (Some(x), Some(y))
             if x.serial == y.serial
                 && x.value.kind == InodeKind::Directory
                 && y.value.kind == InodeKind::Directory
-                && x.value.metadata_root == y.value.metadata_root
-            {
-                continue;
+                && x.value.metadata_root == y.value.metadata_root);
+        if before != after && !children_only {
+            if seen < pos {
+                seen += 1;
+            } else {
+                let cost = path.len() + ITEM_COST;
+                if items.len() == limit || cost > budget {
+                    more = true;
+                    break;
+                }
+                budget -= cost;
+                let kind = match (before, after) {
+                    (None, _) => ChangeKind::Added,
+                    (_, None) => ChangeKind::Removed,
+                    _ => ChangeKind::Modified,
+                };
+                let listed = PathChange {
+                    path: path.clone(),
+                    kind,
+                    left: *before,
+                    right: *after,
+                };
+                if let Some(item) = change(reader, &listed, &mut budget)? {
+                    items.push(item);
+                }
             }
         }
-        if seen < pos {
-            seen += 1;
-            continue;
-        }
-        let cost = path.len() + ITEM_COST;
-        if items.len() == limit || cost > budget {
-            more = true;
-            break;
-        }
-        budget -= cost;
-        let kind = match (before, after) {
-            (None, _) => ChangeKind::Added,
-            (_, None) => ChangeKind::Removed,
-            _ => ChangeKind::Modified,
-        };
-        if let Some(item) = change(
-            reader,
-            &PathChange {
-                path,
-                kind,
-                left: before,
-                right: after,
-            },
-            &mut budget,
-        )? {
-            items.push(item);
-        }
+        walk.enter(&pair).map_err(args::content)?;
     }
     let next = args::next_page(pos, items.len(), more);
     Ok((items, next))
@@ -266,13 +287,14 @@ fn both(
 }
 
 fn listed(
+    store: &Arc<Store>,
     reader: &StorePorts,
     from: &Snap,
     to: &Snap,
     args: &SdkValue,
     sides: [SdkValue; 2],
 ) -> Answer {
-    let (items, next) = changes(reader, from, to, args)?;
+    let (items, next) = changes(store, reader, from, to, args)?;
     let [from, to] = sides;
     answer(vec![
         ("kind", SdkValue::text("ok")),
@@ -296,7 +318,7 @@ pub(crate) fn diff_commits(store: &Arc<Store>, args: &SdkValue) -> Answer {
             ("root", SdkValue::text(args::hex(snap.root.as_bytes()))),
         ])
     };
-    listed(&reader, &from, &to, args, [side(&from), side(&to)])
+    listed(store, &reader, &from, &to, args, [side(&from), side(&to)])
 }
 
 /// `branch.diff_branches({ from, to })`: two Branches or main.
@@ -317,5 +339,5 @@ pub(crate) fn diff_branches(store: &Arc<Store>, args: &SdkValue) -> Answer {
         side(&from, text(args, "from")?),
         side(&to, text(args, "to")?),
     ];
-    listed(&reader, &from, &to, args, sides)
+    listed(store, &reader, &from, &to, args, sides)
 }

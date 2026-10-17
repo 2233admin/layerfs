@@ -73,6 +73,7 @@ pub(crate) fn check(
     )?;
     let actual: Vec<String> = rows.iter().map(|r| r.get(0)).collect::<Result<_, _>>()?;
     let mut expected = vec![
+        "binding_hint",
         "branch",
         "commit",
         "content_signature",

@@ -20,6 +20,12 @@ pub(crate) fn history(key: &str) -> Result<&'static str, BackendError> {
         "allocation_scope_by_id" => Ok(include_str!(
             "../../../sql/sqlite/queries/history/allocation_scope_by_id.sql"
         )),
+        "hint_insert_binding" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/hint_insert_binding.sql"
+        )),
+        "hint_bindings_of" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/hint_bindings_of.sql"
+        )),
         "branch_branch_by_id" => Ok(include_str!(
             "../../../sql/sqlite/queries/history/branch_branch_by_id.sql"
         )),

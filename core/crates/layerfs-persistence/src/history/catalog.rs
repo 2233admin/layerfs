@@ -1,5 +1,7 @@
 //! shared backend history catalog contract delegation.
-use super::{allocation, ancestry, branch, commit, layerstack, merge, provider::HistoryProvider};
+use super::{
+    allocation, ancestry, branch, commit, hints, layerstack, merge, provider::HistoryProvider,
+};
 use layerfs_history::*;
 impl HistoryCatalog for HistoryProvider {
     fn statistics(&self) -> HistoryResult<StoreStatistics> {
@@ -7,6 +9,12 @@ impl HistoryCatalog for HistoryProvider {
     }
     fn record_init(&self, totals: &InitStatistics) -> HistoryResult<()> {
         HistoryProvider::record_init(self, totals)
+    }
+    fn record_bindings(&self, rows: &[BindingHint]) -> HistoryResult<()> {
+        self.write(|tx| hints::record(tx, rows))
+    }
+    fn bindings_of(&self, child: u64) -> HistoryResult<Vec<BindingHint>> {
+        self.read(|tx| hints::of(tx, child))
     }
     fn catalog_id(&self) -> CatalogId {
         self.catalog_id

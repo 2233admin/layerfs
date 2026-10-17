@@ -5,6 +5,7 @@ mod bindings;
 mod branch;
 mod catalog;
 mod commit;
+mod hints;
 mod layerstack;
 mod merge;
 mod provider;

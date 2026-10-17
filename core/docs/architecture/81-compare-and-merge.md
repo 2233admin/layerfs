@@ -23,6 +23,33 @@ itself.
 | `root_changes` | path-level Added/Removed/Modified with both sides' facts | the above, plus the subtree under a rebound directory |
 | `line_diff`, `match_lines` | the simulator's line difference | LCS table bounded by `MAXIMUM_DIFF_CELLS`; beyond it the common prefix and suffix are kept and the middle is one block |
 
+| `inode_differences` | serials whose stored value differs, reference counts included | one inode-table difference (#352) |
+| `new_bindings` | `(child, parent, name)` bindings one root holds that another lacks | the inode difference, then each changed directory's binding difference or new directory's listing (#352) |
+
+**Change walk, #352 (2026-10-18).** `branch.diff_commits` and
+`branch.diff_branches` no longer walk both whole trees. Content's
+[`compare/changes.rs`](../../crates/layerfs-content/src/compare/changes.rs)
+`ChangeWalk` yields both roots' paths in component order with both sides'
+entries and descends only through `enter`. `ChangeWalk::plan` takes the changed
+serials from `inode_differences` and their paths from the caller's
+`BindingHints` port, each hint checked against the tree it is used for, up to
+the root; it enters a directory only when its listing changed, a changed inode
+lies below it, or its identity differs between the sides, and in a directory
+kept on both sides visits only the changed names and those paths. Work follows
+the changed entries times their path depth. `ChangeWalk::full` lists both trees
+completely. A stale or missing hint cannot change the answer: an inode with
+fewer checked bindings than its reference count, or more than
+`MAXIMUM_CHANGED` (65,536) changed inodes, makes `plan` answer `None`, and the
+caller uses the full walk. The daemon's `sdk/compare.rs` keeps only the SDK
+adapter: arguments, reply budget and paging, and the History catalog behind
+`BindingHints` (`HistoryCatalog::bindings_of`, the Store's `binding_hint`
+table). The answer, order and paging equal the earlier full walk (oracle test
+`history_diff_oracle`). Every saved tree's bindings are recorded where it is
+produced: host Init records its whole tree, and a daemon Commit or an SDK merge
+records the bindings its root adds over the history root it was built on
+(`new_bindings`), in write transactions of at most 4,096 rows. Merge's own
+`locate` is unchanged.
+
 Text is a regular file of at most `MAXIMUM_TEXT_BYTES` (1 MiB) that is valid
 UTF-8 with no NUL byte. Lines are the `\n`-separated pieces, as the simulator
 splits them.

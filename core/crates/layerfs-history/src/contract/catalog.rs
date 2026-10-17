@@ -151,6 +151,20 @@ pub trait HistoryCatalog: Send + Sync {
         Err(crate::HistoryError::Unsupported("Init statistics"))
     }
 
+    /// Records name bindings saved trees hold, so a reader can find an
+    /// inode's paths without walking a tree. A recorded row stays; recording
+    /// it again is not an error. A provider that keeps none accepts and drops
+    /// them, and its readers walk instead.
+    fn record_bindings(&self, _rows: &[crate::records::BindingHint]) -> HistoryResult<()> {
+        Ok(())
+    }
+
+    /// Every recorded binding of inode `child`, from any saved tree: hints the
+    /// caller checks against its own tree. Empty when none are kept.
+    fn bindings_of(&self, _child: u64) -> HistoryResult<Vec<crate::records::BindingHint>> {
+        Ok(Vec::new())
+    }
+
     /// Creates the genesis Layer and the stack atomically.
     fn initialize_layerstack(
         &self,

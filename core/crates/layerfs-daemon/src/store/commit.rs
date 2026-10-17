@@ -205,6 +205,15 @@ impl BoundWorkspace {
                         provider: None,
                     })
                 })?;
+                phase(timing, "bindings", || {
+                    let reader = storage.reader().map_err(CommitError::Storage)?;
+                    super::hints::record_new_bindings(
+                        &reader,
+                        &*self.store.history,
+                        Some(FilesystemRootId(current.effective_root)),
+                        root,
+                    )
+                })?;
                 Ok((root, candidate, current, moved, logical))
             })();
             retained.storage = Some(super::producer::since(storage.diagnostics(), before));

@@ -10,7 +10,7 @@ use super::args::{
     self, branch_node, commit_value, hex, history, invalid, layer_value, node_text, refuse, root,
     short, text, Answer,
 };
-use crate::store::Store;
+use crate::store::{CommitError, Store};
 use layerfs_bridge::control::SdkValue;
 use layerfs_content::{
     filesystem::FilesystemRootId,
@@ -397,6 +397,13 @@ pub(crate) fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
         known,
     )
     .map_err(args::content)?;
+    crate::store::record_new_bindings(&reader, catalog, Some(input.ours), merged.root).map_err(
+        |error| match error {
+            CommitError::History(error) => history(error),
+            CommitError::Content { error, .. } => args::content(error),
+            error => args::failed(format!("{error:?}")),
+        },
+    )?;
     let base = match (left_side, right_side, rn) {
         (MergeSide::Main, _, _) => match ln {
             NodeId::Layer(layer) => layer,

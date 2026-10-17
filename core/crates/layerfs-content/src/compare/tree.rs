@@ -116,6 +116,65 @@ pub fn inode_changes(
     )
 }
 
+/// Every inode whose stored value differs between two roots, reference counts
+/// included, in serial order. An absent left side is an empty table.
+pub fn inode_differences(
+    reader: &dyn AuthenticatedObjects,
+    left: Option<&TreeTable>,
+    right: &TreeTable,
+    work: &mut DifferenceWork,
+    mut visit: impl FnMut(u64, Option<&InodeValue>, Option<&InodeValue>) -> ContentResult<()>,
+) -> ContentResult<()> {
+    difference::<CompactInodes>(
+        reader,
+        left.map(|tree| tree.table.root),
+        Some(right.table.root),
+        work,
+        |serial, before, after| visit(*serial, before, after),
+    )
+}
+
+/// Every name binding `right` holds that `left` does not, as `(child, parent,
+/// name)`: the new bindings of each directory whose listing changed, and every
+/// binding of a directory `left` lacks. Work follows the change; with no
+/// `left`, it is every binding of `right`.
+pub fn new_bindings(
+    reader: &dyn AuthenticatedObjects,
+    left: Option<&TreeTable>,
+    right: &TreeTable,
+    mut visit: impl FnMut(u64, u64, &PathName) -> ContentResult<()>,
+) -> ContentResult<()> {
+    let mut work = DifferenceWork::default();
+    let mut directories = Vec::new();
+    let listing = |value: Option<&InodeValue>| {
+        value
+            .filter(|value| value.kind == InodeKind::Directory)
+            .map(|value| value.content_root)
+    };
+    inode_differences(reader, left, right, &mut work, |serial, before, after| {
+        if let Some(now) = listing(after) {
+            let was = listing(before);
+            if was != Some(now) {
+                directories.push((serial, was, now));
+            }
+        }
+        Ok(())
+    })?;
+    for (parent, was, now) in directories {
+        match was {
+            Some(was) => {
+                binding_changes(reader, Some(was), Some(now), &mut work, |name, _, child| {
+                    child.map_or(Ok(()), |child| visit(child, parent, name))
+                })?
+            }
+            None => list_directory(reader, now, |name, child| {
+                visit(child, parent, name).map(|()| true)
+            })?,
+        }
+    }
+    Ok(())
+}
+
 /// Every name whose binding differs between two directory contents.
 pub fn binding_changes(
     reader: &dyn AuthenticatedObjects,

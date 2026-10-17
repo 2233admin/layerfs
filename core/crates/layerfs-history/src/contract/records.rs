@@ -585,6 +585,19 @@ pub struct StoreStatistics {
     pub init: Option<InitStatistics>,
 }
 
+/// One name binding a saved tree holds: `name` in directory `parent` names
+/// inode `child`. A recorded binding is a hint, not a fact of any one tree:
+/// a reader checks it against the tree it asks about before using it.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct BindingHint {
+    /// The bound inode's serial.
+    pub child: u64,
+    /// The binding directory's serial.
+    pub parent: u64,
+    /// The bound name's bytes.
+    pub name: Vec<u8>,
+}
+
 /// One Init's import counts and the Store totals it left, recorded once at seal.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct InitStatistics {

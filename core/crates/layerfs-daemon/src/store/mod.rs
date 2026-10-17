@@ -4,6 +4,7 @@ mod captured;
 mod commit;
 mod commit_merge;
 mod commit_types;
+mod hints;
 mod open;
 mod operation;
 mod ports;
@@ -16,6 +17,7 @@ mod statistics;
 mod types;
 pub(crate) use bind::checked_base;
 pub use commit_merge::{Stale, StaleError};
+pub(crate) use hints::record_new_bindings;
 
 pub use commit_types::{
     CapturedConstruction, CommitError, CommitFailure, CommitOptions, CommitPhase, CommitSuccess,
