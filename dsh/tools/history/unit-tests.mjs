@@ -75,7 +75,7 @@ export function chooseRun(native, tier) {
   const run = [], skipped = [];
   let total = 0;
   for (const r of [...native].sort((a, b) => a.ms - b.ms || (a.path < b.path ? -1 : 1))) {
-    if (r.status !== "pass") skipped.push({ path: r.path, reason: `native ${r.status}` });
+    if (r.status !== "pass") skipped.push({ path: r.path, reason: r.reason ?? `native ${r.status}` });
     else if (run.length >= cap.files || total + r.ms > cap.ms) skipped.push({ path: r.path, reason: "over the cap" });
     else { run.push(r.path); total += r.ms; }
   }

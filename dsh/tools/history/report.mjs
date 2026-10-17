@@ -138,7 +138,7 @@ export function renderComment({ plan, summary, attempts, gates, findings = [] })
     failing.length ? table(["Check", "Value", "Result"], failing.map((x) => [x.name, x.value, x.result])) : `All ${g.checks.length} checks pass.`, "",
     `**Work:** ${fmt(w.bashCalls ?? summary?.bashCalls)} bash calls · ${fmt(w.lfsCommits ?? summary?.lfsCommits)} LayerFS Commits · conflicts ${c.conflicts ? `${c.conflicts.hit}/${c.conflicts.planned}` : "—"} · unit tests ${c.tests ? `${c.tests.equal}/${c.tests.run} equal to native` : "—"}`,
     `**Slowest p95:** ${slow.length ? slow.map((r) => `${r.op}${r.sizeClass && r.sizeClass !== "—" ? ` (${r.sizeClass})` : ""} ${fmt(r.p95)} ms`).join(" · ") : "—"}`,
-    `**Storage:** +${bytes(s.newStored)} stored (total ${bytes(s.stored)}) · dedupe ${s.canonical ? fmt(s.logical / s.canonical) : "—"} · compression ${s.stored ? fmt(s.canonical / s.stored) : "—"} · snapshot ${m.snapshot ? `+${bytes(m.snapshot.newBytes)} in ${fmt(m.snapshot.copyMs)} ms` : "none"}`, "",
+    `**Storage:** +${bytes(s.newStored)} stored (total ${bytes(s.stored == null ? null : s.stored + (s.metadata ?? 0))}) · dedupe ${s.canonical ? fmt(s.logical / s.canonical) : "—"} · compression ${s.stored ? fmt(s.canonical / s.stored) : "—"} · snapshot ${m.snapshot ? `+${bytes(m.snapshot.newBytes)} in ${fmt(m.snapshot.copyMs)} ms` : "none"}`, "",
     renderOptimization({ plan, attempts, gates, findings }), "",
     `**Next:** ${next}`, "",
     `Report: [range-${pad(plan.range)}.md](${REPORTS}/range-${pad(plan.range)}.md)`, "",

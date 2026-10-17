@@ -235,3 +235,32 @@ lead only waits where the plan has a barrier.
 - `check-scenario.mjs`: plan-backed mode and the fs and read methods.
 - `check-demo.mjs`: a final-tree check by oracle and git blob id.
 - Seeding a demo from a Store snapshot (SPEC §2, P4).
+
+## 12. As built for P1 (2026-10-18)
+
+The headless player is `dsh/tools/history/run.mjs` over `lib.mjs` (SDK
+calls) and `steps.mjs` (pure routing and checks, tested by
+`tests/runner.mjs`). Its header gives the commands and exit codes. Where it
+differs from the text above:
+
+- **Large and non-regular files go through a Sandbox.** One SDK request
+  carries at most 65,519 bytes, so the plan's "through fs" rule cannot hold
+  for a file over 60,000 bytes. Such files, executables, symlinks and mode
+  changes are written by one Sandbox step per op (base64 chunks, then one
+  script) and committed by unmount.
+- **The seal** checkpoints the WAL with `pragma wal_checkpoint(TRUNCATE)` in
+  the runtime image after every daemon of the run is gone. Closing the
+  Sandboxes alone leaves the WAL non-empty.
+- **The checkpoint's base is a Commit.** diff_commits takes saved Commits
+  only, so range 0 compares against the probe fixture's Commit, and each
+  later range against the previous range's head. Metadata-only items (a
+  timestamp that changed while the bytes came back) are checked by blob id.
+- **Range 0 is a yarn project** with no pnpm lock; its calibration marks
+  every test file skipped with that reason. Offline pnpm installs need the
+  metadata cache on the store volume (`--cache-dir /pnpm-store/.cache`).
+- **Calibration is per phase.** A phase with tests refuses a range whose
+  tests-NNN.json is missing (exit 5). P1 has no tests.
+- **Probe branches accumulate.** The SDK has no branch removal, so each
+  range adds its lane, check and probe branches (about seven). Counters that
+  grow with the branch count (fork `returned_rows`) climb with depth for
+  that reason; read such a verdict with the branch count beside it.

@@ -21,7 +21,8 @@ if (!id || !source || !work || !project || !reader) {
   console.error("usage: LAYERFS_READER=<checkout> restore-store.mjs <id> <folder with global/> <work dir> <project>");
   process.exit(2);
 }
-const IMAGE = "sha256:091f785ba7d5d036dfa350e8fd69ee1fcd2d8320c3706841c8c95e6411eee9d2";
+// RESTORE_IMAGE and RESTORE_VOLUME override the #347 defaults (#352 names its volumes layerfs-issue352-*)
+const IMAGE = process.env.RESTORE_IMAGE || "sha256:091f785ba7d5d036dfa350e8fd69ee1fcd2d8320c3706841c8c95e6411eee9d2";
 const RECORD = resolve(new URL("../../core/target/debug/examples/restore_record", import.meta.url).pathname);
 const root = resolve(work, id), home = join(root, "home"), vol = join(root, "vol", "global");
 if (existsSync(root)) throw new Error(`${root} exists; restore into a new folder`);
@@ -31,7 +32,8 @@ for (const file of readdirSync(join(source, "global"))) {
   if (/^store\.sqlite(-wal|-shm)?$/.test(file)) copyFileSync(join(source, "global", file), join(vol, file));
 }
 
-const sql = (query) => execFileSync("sqlite3", [`file:${join(vol, "store.sqlite")}?mode=ro`, query], { encoding: "utf8" }).trim();
+// immutable: the copy is in WAL mode, and a read-only open would need to make its -shm
+const sql = (query) => execFileSync("sqlite3", [`file:${join(vol, "store.sqlite")}?mode=ro&immutable=1`, query], { encoding: "utf8" }).trim();
 const binding = sql("select hex(binding_key) from history_meta");
 const stack = sql("select hex(layer_stack_id) from layer_stack");
 const branch = sql("select hex(branch_id) from branch where name='main'");
@@ -39,7 +41,7 @@ const genesis = sql("select hex(root_id) from layer where parent_layer_id is nul
 // the record says the Store is installed, so its sealed file is never read
 execFileSync(RECORD, [home, project, binding, stack, branch, genesis, "1", "3.51.0", "3.51.0"], { stdio: ["ignore", "ignore", "inherit"] });
 
-const volume = `lfs347-src-${id}`;
+const volume = process.env.RESTORE_VOLUME || `lfs347-src-${id}`;
 execFileSync("docker", ["volume", "create", volume], { stdio: "ignore" });
 execFileSync("docker", ["run", "--rm", "-v", `${volume}:/v`, "-v", `${join(root, "vol")}:/src:ro`, "--entrypoint", "sh", IMAGE, "-c", "cp -R /src/. /v/ && chown -R 0:0 /v && chmod 755 /v && chmod 700 /v/global && chmod 600 /v/global/*"], { stdio: "inherit" });
 

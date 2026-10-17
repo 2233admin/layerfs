@@ -148,6 +148,13 @@ async function main() {
   }
   if (!flags.store) usage();
   const { store, lf, operator } = await open(flags.store);
+  try { await command(cmd, flags, args, ref, usage, store, lf, operator); } finally {
+    // the service Sandbox the reads started is closed again
+    for (const id of [...lf.sandboxes]) await lf.sandbox.close(id).catch((e) => console.error(`close ${id}: ${e.message}`));
+  }
+}
+
+async function command(cmd, flags, args, ref, usage, store, lf, operator) {
   if (cmd === "ls") {
     for (const item of await listAll(lf, ref(args[0] ?? "main"), args[1] ?? "/")) console.log(`${item.type.padEnd(7)} ${item.path}`);
   } else if (cmd === "cat") {
@@ -168,7 +175,8 @@ async function main() {
     }
   } else if (cmd === "stats") {
     // a fork made by restore-store.mjs keeps its file beside the home: <work>/<id>/{home,vol/global}
-    const file = join(dirname(store.env.LAYERFS_HOME), "vol", "global", "store.sqlite");
+    // run.mjs fork names its rebuilt file in store.json
+    const file = store.file ?? join(dirname(store.env.LAYERFS_HOME), "vol", "global", "store.sqlite");
     const out = { sdk: await operator.store.stats(), sql: existsSync(file) ? storeFigures(file) : null };
     if (!out.sql) console.error(`no fork file at ${file}: SQL figures need a fork (open), never the live Store`);
     if (flags.save) {

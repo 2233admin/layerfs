@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { blockify, due, manifestOf, manifestPath, orphans, pageSizeOf, rebuild, verify } from "../snapshot.mjs";
 import { parseIds, ROLES, storeFigures, trend } from "../inspect.mjs";
 import { chooseRun, compareResults, packageOf, parseVitestJson, selectTests, vitestCommand } from "../unit-tests.mjs";
-import { dockerArgs, INSTALL, parseProbe } from "../calibrate-tests.mjs";
+import { dockerArgs, FETCH, INSTALL, noInstall, parseProbe } from "../calibrate-tests.mjs";
 import { evaluate } from "../gates.mjs";
 import { change, checkFinding, loadFindings } from "../findings.mjs";
 import { renderOptimization } from "../report.mjs";
@@ -171,6 +171,14 @@ test("calibration runs offline in the runtime image", () => {
   assert.deepEqual(a.slice(0, 4), ["run", "--rm", "--network", "none"]);
   assert.ok(a.includes("pnpm:/pnpm-store") && a.at(-1).includes("--offline"));
   assert.deepEqual(parseProbe('{"path":"a","status":"pass","ms":3}\nwarning\n'), [{ path: "a", status: "pass", ms: 3 }]);
+  // pnpm 11's offline install reads registry metadata from the cache, so both share it on the store volume
+  for (const c of [INSTALL, FETCH]) assert.ok(c.includes("--store-dir /pnpm-store --cache-dir /pnpm-store/.cache"), c);
+  const tree = join(dir, "tree");
+  mkdirSync(tree, { recursive: true });
+  assert.match(noInstall(tree), /no pnpm-lock\.yaml/, "a yarn checkpoint installs nothing");
+  writeFileSync(join(tree, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+  assert.equal(noInstall(tree), null);
+  assert.deepEqual(chooseRun([{ path: "a", status: "skipped", reason: "no install", ms: 0 }], "range").skipped, [{ path: "a", reason: "no install" }]);
 });
 
 test("growth and snapshot-time gates", () => {

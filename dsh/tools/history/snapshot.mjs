@@ -2,7 +2,7 @@
 // Block-incremental Store snapshots (#352 SPEC §7):
 //   node dsh/tools/history/snapshot.mjs take --range N --volume V --image I --dir <snapshots> [--facts <json>]
 //   node dsh/tools/history/snapshot.mjs verify --range N --dir <snapshots>
-//   node dsh/tools/history/snapshot.mjs fork --range N --dir <snapshots> --work <dir> --project <name>
+//   node dsh/tools/history/snapshot.mjs fork --range N --dir <snapshots> --work <dir> --project <name> [--volume <name>]
 //   node dsh/tools/history/snapshot.mjs orphans --dir <snapshots>
 // A snapshot is the global Store's SQLite file at a checkpoint, kept as
 // range-NNN.json (a manifest of block hashes) over <snapshots>/blocks/, which
@@ -150,16 +150,19 @@ function take({ range, volume, image, dir, facts }) {
   return manifest;
 }
 
-function fork({ range, dir, work, project }) {
+function fork({ range, dir, work, project, volume }) {
   const manifest = JSON.parse(readFileSync(manifestPath(dir, range), "utf8"));
   const id = `r${pad(range)}-${Date.now().toString(36)}`, source = join(resolve(work), `${id}-src`);
   if (existsSync(source)) throw new Error(`${source} exists`);
   rebuild(manifest, join(dir, "blocks"), join(source, "global", "store.sqlite"));
   const repo = resolve(here, "../../..");
-  const printed = execFileSync("node", [join(here, "..", "restore-store.mjs"), id, source, resolve(work), project], { encoding: "utf8", env: { ...process.env, LAYERFS_READER: process.env.LAYERFS_READER ?? repo }, stdio: ["ignore", "pipe", "inherit"] });
+  const env = { ...process.env, LAYERFS_READER: process.env.LAYERFS_READER ?? repo, ...(manifest.image ? { RESTORE_IMAGE: manifest.image } : {}), ...(volume ? { RESTORE_VOLUME: volume } : {}) };
+  const printed = execFileSync("node", [join(here, "..", "restore-store.mjs"), id, source, resolve(work), project], { encoding: "utf8", env, stdio: ["ignore", "pipe", "inherit"] });
   const store = JSON.parse(printed);
   // the snapshot's own runtime image, not restore-store's default
   if (manifest.image) store.env.LAYERFS_IMAGE = manifest.image;
+  // its containers are named after its volume, as the run's are
+  if (volume) store.env.LAYERFS_CONTAINER_PREFIX = `${volume}-`;
   return { ...store, range, fork: id, source };
 }
 
@@ -177,7 +180,7 @@ function main() {
     console.log(JSON.stringify(r));
     if (!r.ok) process.exit(1);
   } else if (cmd === "fork" && range !== null && dir && opt("--work") && opt("--project")) {
-    console.log(JSON.stringify(fork({ range, dir, work: opt("--work"), project: opt("--project") }), null, 2));
+    console.log(JSON.stringify(fork({ range, dir, work: opt("--work"), project: opt("--project"), volume: opt("--volume") }), null, 2));
   } else if (cmd === "orphans" && dir) {
     for (const path of orphans(dir)) console.log(path);
   } else {
