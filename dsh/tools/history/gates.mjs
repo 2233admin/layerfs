@@ -138,6 +138,9 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   const insufficient = (n) => `insufficient same-binary points: ${n} of ${MINIMUM_POINTS} (daemon ${short})`;
   const rows = [];
   const add = (name, value, threshold, result) => rows.push({ name, value, threshold, result });
+  // SPEC §3 F8: a check that cannot be judged says so and is at least watch;
+  // one whose event did not happen in the range says "not applicable" and passes.
+  const unjudged = (name, why, threshold) => add(name, `not judged: ${why}`, threshold, "watch");
   const c = m.checks || {};
   const correct = c.tree?.ok && c.history?.ok && c.steps?.matched === c.steps?.total
     && c.conflicts?.hit === c.conflicts?.planned && !c.conflicts?.unplanned && c.ignored?.ok !== false
@@ -167,8 +170,8 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
       }).concat(worstRow.ratio);
       const v = worstRow.ratio > t.speed.act ? (rising(series) ? "optimize" : "watch") : worstRow.ratio > t.speed.watch ? "watch" : "pass";
       add("Speed", `${worstRow.op} ${worstRow.sizeClass}: ${worstRow.ratio}× baseline (${worstRow.slowPhase ?? "no phase"})`, `≤ ${t.speed.watch}×`, v);
-    } else add("Speed", "no comparable operation", `≤ ${t.speed.watch}×`, "pass");
-  } else add("Speed", "baseline not set (pilot)", "—", "pass");
+    } else unjudged("Speed", "no operation comparable to the baseline", `≤ ${t.speed.watch}×`);
+  } else unjudged("Speed", "baseline not set (pilot)", `≤ ${t.speed.watch}×`);
   // Scaling: probes must stay flat with depth; counters are judged more strictly.
   // Seeded probe points fill the ranges no same-binary attempt covers.
   const covered = new Set([...history.map((x) => x.range), m.range]);
@@ -190,31 +193,43 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
     : { name: null, e: null, result: "pass" };
   const scale = top(probeFits, t.depthExponent), counter = top(counterFits, t.counterExponent);
   const fit = (f, what) => (fitted < MINIMUM_POINTS ? { value: insufficient(fitted), result: "watch" }
-    : { value: f.name ? `${f.name}: depth exponent ${f.e ?? "n/a"}${seeded.length ? ` (${seeded.length} seeded probe point${seeded.length > 1 ? "s" : ""})` : ""}` : `no ${what}`, result: f.result });
+    : !f.name ? { value: `not judged: no ${what}`, result: "watch" }
+    : f.e == null ? { value: `not judged: ${f.name}: no depth exponent (points without depth or value)`, result: "watch" }
+    : { value: `${f.name}: depth exponent ${f.e}${seeded.length ? ` (${seeded.length} seeded probe point${seeded.length > 1 ? "s" : ""})` : ""}`, result: f.result });
   const sv = fit(scale, "probes"), cv = fit(counter, "counters");
   add("Scaling", sv.value, `< ${t.depthExponent.watch}`, sv.result);
   add("Counters", cv.value, `< ${t.counterExponent.watch}`, cv.result);
   const s = m.storage || {};
-  add("Directory share", s.directoryShare ?? "n/a", `< ${t.directoryShare.watch}`, band(s.directoryShare, t.directoryShare));
-  add("Reinstall growth", s.reinstallGrowth ?? "n/a", `≤ ${t.reinstallGrowth.watch}×`, band(s.reinstallGrowth, t.reinstallGrowth));
+  if (s.directoryShare == null) unjudged("Directory share", "no new bytes measured", `< ${t.directoryShare.watch}`);
+  else add("Directory share", s.directoryShare, `< ${t.directoryShare.watch}`, band(s.directoryShare, t.directoryShare));
+  if (s.reinstallGrowth == null) add("Reinstall growth", "not applicable: no node_modules reinstall in this range", `≤ ${t.reinstallGrowth.watch}×`, "pass");
+  else add("Reinstall growth", s.reinstallGrowth, `≤ ${t.reinstallGrowth.watch}×`, band(s.reinstallGrowth, t.reinstallGrowth));
   const measured = [...history, m];
   const eff = measured.map((x) => (x.storage?.changedBytes ? x.storage.newStored / x.storage.changedBytes : null));
   const cap = s.delta?.atCap;
-  add("Delta at cap", cap == null ? "n/a" : `${cap} (budget ${s.delta?.byBudget ?? "n/a"})`, `< ${t.deltaAtCap.watch}`,
+  if (cap == null) unjudged("Delta at cap", "no delta outcomes traced", `< ${t.deltaAtCap.watch}`);
+  else add("Delta at cap", `${cap} (budget ${s.delta?.byBudget ?? "no refusals"})`, `< ${t.deltaAtCap.watch}`,
     cap > t.deltaAtCap.act && rising(eff) ? "optimize" : cap > t.deltaAtCap.watch ? "watch" : "pass");
   // Growth: a range that stores far more than the ranges before it (SPEC §5)
   const earlier = history.map((x) => x.storage?.newStored).filter((v) => v != null);
   const median = earlier.length >= t.growth.history ? quantile(earlier, 0.5) : null;
   const ratio = median && s.newStored != null ? +(s.newStored / median).toFixed(2) : null;
-  add("Range growth", s.newStored == null ? "n/a" : `${(s.newStored / 2 ** 20).toFixed(1)} MiB${ratio != null ? `, ${ratio}× the median` : ""}`, `≤ ${t.growth.median}× median, ≤ 2 GiB`,
-    s.newStored != null && (s.newStored > t.growth.bytes || (ratio != null && ratio > t.growth.median)) ? "optimize" : "pass");
+  if (s.newStored == null) unjudged("Range growth", "no stored bytes measured", `≤ ${t.growth.median}× median, ≤ 2 GiB`);
+  else {
+    const over = s.newStored > t.growth.bytes || (ratio != null && ratio > t.growth.median);
+    add("Range growth", `${(s.newStored / 2 ** 20).toFixed(1)} MiB${ratio != null ? `, ${ratio}× the median` : `; median not judged: ${earlier.length} of ${t.growth.history} earlier ranges`}`,
+      `≤ ${t.growth.median}× median, ≤ 2 GiB`, over ? "optimize" : ratio == null ? "watch" : "pass");
+  }
   // Snapshot time per new byte must not grow with the Store's size (SPEC §5, §7)
   const snaps = measured.filter((x) => x.snapshot?.copyMs != null && x.snapshot?.size).map((x) => [x.snapshot.size, ((x.snapshot.sealMs ?? 0) + x.snapshot.copyMs) / Math.max(x.snapshot.newBytes, 1 << 20)]);
   const snapE = exponent(snaps);
-  add("Snapshot time", m.snapshot ? `${m.snapshot.copyMs} ms for ${(m.snapshot.newBytes / 2 ** 20).toFixed(1)} MiB new; size exponent ${snapE ?? "n/a"}` : "no snapshot",
-    `< ${t.depthExponent.watch}`, band(snapE, t.depthExponent));
+  if (!m.snapshot) add("Snapshot time", "not applicable: no snapshot this range", `< ${t.depthExponent.watch}`, "pass");
+  else add("Snapshot time", `${m.snapshot.copyMs} ms for ${(m.snapshot.newBytes / 2 ** 20).toFixed(1)} MiB new; size exponent ${snapE ?? `not judged (${snaps.length} snapshots)`}`,
+    `< ${t.depthExponent.watch}`, snapE == null ? "watch" : band(snapE, t.depthExponent));
   const b = m.budget || {};
-  add("Disk projection", b.diskBudget ? +(b.diskProjected / b.diskBudget).toFixed(2) : "n/a", `< ${t.disk.watch}`, b.diskBudget ? band(b.diskProjected / b.diskBudget, t.disk, "stop") : "pass");
-  add("Wall projection", b.wallBudgetMs ? +(b.wallProjectedMs / b.wallBudgetMs).toFixed(2) : "n/a", `≤ ${t.wall.watch}`, b.wallBudgetMs ? band(b.wallProjectedMs / b.wallBudgetMs, t.wall, "stop") : "pass");
+  if (b.diskBudget) add("Disk projection", +(b.diskProjected / b.diskBudget).toFixed(2), `< ${t.disk.watch}`, band(b.diskProjected / b.diskBudget, t.disk, "stop"));
+  else unjudged("Disk projection", "no disk budget recorded", `< ${t.disk.watch}`);
+  if (b.wallBudgetMs) add("Wall projection", +(b.wallProjectedMs / b.wallBudgetMs).toFixed(2), `≤ ${t.wall.watch}`, band(b.wallProjectedMs / b.wallBudgetMs, t.wall, "stop"));
+  else unjudged("Wall projection", "no wall budget recorded", `≤ ${t.wall.watch}`);
   return { verdict: worst(rows.map((r) => r.result)), checks: rows };
 }

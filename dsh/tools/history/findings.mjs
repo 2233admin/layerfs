@@ -7,9 +7,14 @@
 //     trigger: { check, value, threshold },         the gate row that tripped
 //     diagnosis: { step: "D0".."D6", summary, phase?, counter?, exponent?: { before, after } },
 //     fix: { summary, kind: "code path" | "data" | "format", commit, test? },
-//     improvement: [ { measure, before, after, unit? } ],   old vs new binary, same snapshots
-//     recovery, record                               SPEC §6 recovery; BUGS.md / OPTIMIZATIONS.md entry
+//     improvement: [ { measure, before, after, unit?, oldBinary, newBinary, snapshot, cache } ],
+//                                                    old vs new binary, same snapshots (SPEC §3 F4)
+//     recovery,                                      SPEC §6 recovery
+//     records: [ { title, path: "fixes/NNN-aK-<slug>.md" } ],   one per cause (F5)
+//     ledger: [ { file: "OPTIMIZATIONS.md" | "BUGS.md", entry } ],   its BUGS / OPTIMIZATIONS line
+//     record?                                        free-text pointer, kept from older records
 //   }
+// Paths in records and ledger are relative to core/docs/issues/352/.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -28,8 +33,16 @@ export function checkFinding(f) {
   need(f.fix?.summary, "fix.summary"); need(f.fix?.commit, "fix.commit");
   if (!FIX_KINDS.includes(f.fix?.kind)) p.push(`fix.kind is one of ${FIX_KINDS.join(", ")}`);
   if (!Array.isArray(f.improvement) || !f.improvement.length) p.push("improvement has at least one old-vs-new row");
-  for (const r of f.improvement ?? []) if (r.measure == null || r.before == null || r.after == null) p.push("an improvement row needs measure, before and after");
-  need(f.recovery, "recovery"); need(f.record, "record");
+  for (const r of f.improvement ?? []) {
+    if (r.measure == null || r.before == null || r.after == null) p.push("an improvement row needs measure, before and after");
+    for (const k of ["oldBinary", "newBinary", "snapshot", "cache"]) if (r[k] == null || r[k] === "") p.push(`improvement "${r.measure}" needs ${k}`);
+  }
+  need(f.recovery, "recovery");
+  const prefix = `fixes/${String(f.range).padStart(3, "0")}-a${f.attempt}-`;
+  if (!Array.isArray(f.records) || !f.records.length) p.push("records lists the fixes/ record of each cause");
+  for (const r of f.records ?? []) if (!r?.title || !/^fixes\/\d{3}-a\d+-[a-z0-9-]+\.md$/.test(r?.path ?? "") || !r.path.startsWith(prefix)) p.push(`record ${JSON.stringify(r)} is { title, path: "${prefix}<slug>.md" }`);
+  if (!Array.isArray(f.ledger) || !f.ledger.length) p.push("ledger names its BUGS.md or OPTIMIZATIONS.md line");
+  for (const l of f.ledger ?? []) if (!["BUGS.md", "OPTIMIZATIONS.md"].includes(l?.file) || !l?.entry) p.push(`ledger ${JSON.stringify(l)} is { file: BUGS.md | OPTIMIZATIONS.md, entry }`);
   return p;
 }
 

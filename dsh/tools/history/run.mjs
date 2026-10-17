@@ -274,12 +274,13 @@ async function playRange(run, k, mode) {
   if (failure) { run.state.dirty = k; run.save(); }
   else { run.state.deltaTotal = deltaTotal; advance(run, k, plan, head, layer, ctx, m.wall.totalMs, m); }
   since = performance.now();
-  const r = spawnSync("node", [join(here, "report.mjs"), "--metrics", outputs.metrics, "--plan", run.planDir, "--docs", outputs.docs, "--oracle", run.manifest.oracle], { encoding: "utf8" });
+  // Only range k's report (SPEC §3 F2): it stores this attempt's gate result in its metrics file.
+  const r = spawnSync("node", [join(here, "report.mjs"), "--metrics", outputs.metrics, "--plan", run.planDir, "--docs", outputs.docs, "--oracle", run.manifest.oracle, "--range", String(k)], { encoding: "utf8" });
   // The report's own time is known only after it ran: added to the metrics
-  // file (the report shown reads it from the next range's run on).
-  m.wall.reportMs = Math.round(performance.now() - since);
-  m.wall.totalMs = Math.round(performance.now() - t0);
-  writeJson(file, m);
+  // file as report.mjs left it (with the stored gate result).
+  const stored = JSON.parse(readFileSync(file, "utf8"));
+  stored.wall = { ...m.wall, reportMs: Math.round(performance.now() - since), totalMs: Math.round(performance.now() - t0) };
+  writeJson(file, stored);
   process.stdout.write(r.stdout); process.stderr.write(r.stderr);
   console.log(`range ${k} attempt ${attempt}: ${failure ? `STOP ${failure}` : "checkpoint ok"}; metrics ${file}`);
   if (failure) return EXIT.stop;

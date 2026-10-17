@@ -222,9 +222,11 @@ const finding = () => ({
   trigger: { check: "Range growth", value: "140.0 MiB, 4.52× the median", threshold: "≤ 3× median, ≤ 2 GiB" },
   diagnosis: { step: "D5", summary: "each install rewrote every node_modules directory leaf", counter: "directory_leaf_writes", exponent: { before: 0.94, after: 0.04 } },
   fix: { summary: "write a directory leaf only when its entries change", kind: "code path", commit: "abcdef1234567", test: "layerfs-project directory_leaf_reuse" },
-  improvement: [{ measure: "new stored bytes, range 12", before: 140, after: 33, unit: "MiB" }],
+  improvement: [{ measure: "new stored bytes, range 12", before: 140, after: 33, unit: "MiB", oldBinary: "aaa", newBinary: "bbb", snapshot: "range-011", cache: "fresh daemon" }],
   recovery: "forked the range-11 snapshot and reran range 12 measured",
   record: "OPTIMIZATIONS.md#range-012-directory-leaves",
+  records: [{ title: "directory leaves", path: "fixes/012-a1-directory-leaves.md" }],
+  ledger: [{ file: "OPTIMIZATIONS.md", entry: "012.a1" }],
 });
 
 test("a finding record is checked, loaded by range and attempt, and its change is signed", () => {
@@ -232,6 +234,8 @@ test("a finding record is checked, loaded by range and attempt, and its change i
   const bad = { ...finding(), diagnosis: { step: "D9" }, fix: { kind: "guess" }, improvement: [] };
   const problems = checkFinding(bad).join("; ");
   for (const p of ["diagnosis.step", "diagnosis.summary", "fix.summary", "fix.commit", "fix.kind", "improvement"]) assert.ok(problems.includes(p), p);
+  const unlinked = checkFinding({ ...finding(), records: [{ title: "x", path: "fixes/013-a1-x.md" }], ledger: [], improvement: [{ measure: "m", before: 1, after: 2 }] }).join("; ");
+  for (const p of ["needs oldBinary", "needs cache", "fixes/012-a1-<slug>.md", "ledger names"]) assert.ok(unlinked.includes(p), p);
   const metrics = join(dir, "metrics");
   mkdirSync(metrics);
   writeFileSync(join(metrics, "finding-012.a2.json"), JSON.stringify({ ...finding(), attempt: 2 }));

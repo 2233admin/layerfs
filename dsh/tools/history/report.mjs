@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 // Writes the range reports (#352 SPEC §3, ranges/TEMPLATE.md) and the index:
-//   node dsh/tools/history/report.mjs --metrics <dir> --plan <dir> --docs <core/docs/issues/352>
+//   node dsh/tools/history/report.mjs --metrics <dir> --plan <dir> --docs <core/docs/issues/352> [--range N]
+//   node dsh/tools/history/report.mjs check <NNN> [--metrics <dir>] [--docs <dir>]   (reportcheck.mjs: F1–F8)
 // <metrics>/range-NNN.aK.json is attempt K of range NNN (the runner writes it).
-// Each range gets ranges/range-NNN.md with every attempt; the lead's §7 text
-// in an existing report is kept. The pilot's ranges 0-4 set baseline.json.
+// Only range N's report (default: the latest range) is written, with every
+// attempt (SPEC §3 F2): an attempt's gate result is stored in its metrics file
+// the first time it is reported and rendered from there ever after; attempts
+// recorded before that rule render from git HEAD's report (frozen.mjs). §7
+// holds one generated Finding block per optimize or stop attempt (findings.mjs)
+// and the lead's note, which is kept verbatim. The pilot's ranges 0-4 set baseline.json.
 // Exit code: 0 pass or watch, 3 optimize, 4 stop (of the latest range), so the
 // runner knows when to stop and wake the lead.
 // It also writes <metrics>/comment-NNN.md for the latest range: the issue
@@ -13,13 +18,17 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { dirname, join } from "node:path";
 import { buildBaseline, evaluate, MINIMUM_POINTS } from "./gates.mjs";
 import { change, loadFindings } from "./findings.mjs";
+import { legacyGates, parseReport, storedGate, storeGate } from "./frozen.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
 const fmt = (v) => (v == null ? "—" : typeof v === "number" ? (Number.isInteger(v) ? v.toLocaleString("en-US") : v.toFixed(2)) : String(v));
 const bytes = (n) => (n == null ? "—" : n >= 1 << 30 ? `${(n / 2 ** 30).toFixed(2)} GiB` : n >= 1 << 20 ? `${(n / 2 ** 20).toFixed(1)} MiB` : `${(n / 1024).toFixed(1)} KiB`);
 const table = (head, rows) => [`| ${head.join(" | ")} |`, `| ${head.map(() => "---").join(" | ")} |`, ...rows.map((r) => `| ${r.map(fmt).join(" | ")} |`)].join("\n");
 export const LEAD_START = "## 7. Findings and action";
-const LEAD_END = "## 8. Evidence";
+export const LEAD_END = "## 8. Evidence";
+export const NOTE_START = "### Lead's note";
+export const FINDING_COLUMNS = ["Measure", "Before", "After", "Change", "Old binary", "New binary", "Snapshot / checkpoint", "Cache"];
+const NONE_YET = "- (none yet)";
 
 /** Attempts by range: range -> [metrics, ...] in attempt order. */
 export function loadAttempts(dir) {
@@ -76,7 +85,58 @@ export function deltaLine(d) {
   return `${fmt(d.share)} of ${d.objects} stored objects are deltas · at cap ${fmt(d.atCap)} (${d.atCapObjects}) · refused bases: budget ${d.refusedByBudget}, cap ${d.refusedByCap} (budget share ${fmt(d.byBudget)}) · depths whole-file [${hist(d.depths.wholeFile)}] chunk [${hist(d.depths.chunk)}] metadata [${hist(d.depths.metadata)}] (caps ${d.caps.wholeFile}/${d.caps.chunk}/${d.caps.metadata})`;
 }
 
-export function renderRange({ plan, summary, attempts, gates, lead }) {
+/** A finding's value with its unit. */
+const withUnit = (v, unit) => `${fmt(v)}${unit ? ` ${unit}` : ""}`;
+
+/** One improvement row of F4's before/after table. */
+const improvementRow = (r) => [r.measure, withUnit(r.before, r.unit), withUnit(r.after, r.unit), change(r.before, r.after),
+  `\`${r.oldBinary}\``, `\`${r.newBinary}\``, r.snapshot, r.cache];
+
+/**
+ * The Finding block of attempt K (SPEC §3 F3–F5, TEMPLATE.md §7), from its
+ * finding record; until the record exists, "Diagnosis pending" naming it.
+ * Links are relative to ranges/.
+ */
+export function renderFinding(range, attempt, f) {
+  const head = `### Finding ${pad(range)}.a${attempt}`, file = `finding-${pad(range)}.a${attempt}.json`;
+  if (!f) return [head, "", `Diagnosis pending: \`${file}\`.`].join("\n");
+  const d = f.diagnosis;
+  return [head, "", table(["", ""], [
+    ["Trigger", `${f.trigger.check} · ${f.trigger.value}${f.trigger.threshold ? ` · threshold ${f.trigger.threshold}` : ""}`],
+    ["Diagnosis", `${d.step} · ${d.summary}${d.counter ? ` · counter \`${d.counter}\`` : ""}${d.exponent ? `, exponent ${d.exponent.before} → ${d.exponent.after}` : ""}`],
+    ["Fix", `${f.fix.summary} · ${f.fix.kind} · commits ${String(f.fix.commit).split(/,\s*/).map((c) => `\`${c}\``).join(", ")}${f.fix.test ? ` · regression tests ${f.fix.test}` : ""}`],
+    ["Recovery", f.recovery],
+    ["Records", [...(f.records ?? []).map((r) => `[${r.title}](../${r.path})`), ...(f.ledger ?? []).map((l) => `[${l.file}](../${l.file}) (${l.entry})`)].join(" · ")],
+  ]), "", table(FINDING_COLUMNS, f.improvement.map(improvementRow))].join("\n");
+}
+
+/**
+ * The lead's note of an existing report, kept verbatim. A report from before
+ * the Finding blocks has the lead's text as all of §7: it becomes the note,
+ * less the improvement table the Finding block now generates.
+ */
+export function leadNote(old) {
+  if (!old || !old.includes(LEAD_START)) return null;
+  const end = old.indexOf(`\n${LEAD_END}`);
+  if (old.includes(`\n${NOTE_START}`)) {
+    const at = old.indexOf(`\n${NOTE_START}`);
+    const body = old.slice(old.indexOf("\n", at + 1) + 1, end);
+    return body.trim() === NONE_YET ? null : body;
+  }
+  const at = old.indexOf(LEAD_START);
+  const body = old.slice(old.indexOf("\n", at) + 1, end);
+  const kept = [];
+  let skipping = false;
+  for (const line of body.split("\n")) {
+    if (line.startsWith("| Improvement |")) skipping = true;
+    if (skipping && !line.startsWith("|")) skipping = false;
+    if (!skipping) kept.push(line);
+  }
+  const text = kept.join("\n").replace(/\n{3,}/g, "\n\n");
+  return text.trim() === NONE_YET ? null : text;
+}
+
+export function renderRange({ plan, summary, attempts, gates, lead, findings = [] }) {
   const m = attempts.at(-1), g = gates.at(-1);
   const w = m.work || {}, s = m.storage || {};
   const out = [];
@@ -91,8 +151,7 @@ export function renderRange({ plan, summary, attempts, gates, lead }) {
     ["Wall time (tooling, not operation latency)", stageLine(m.wall)],
   ]), "");
   out.push("## Attempts", "", table(["#", "Binary", "Started", "Result", "Reason"], attempts.map((a, i) => [
-    a.attempt, a.binary?.daemon ?? "?", a.started ?? "—", gates[i].verdict,
-    gates[i].checks.filter((c) => c.result !== "pass").map((c) => `${c.name}: ${c.value}`).join("; ") || "all checks pass",
+    String(a.attempt), gates[i].binary, gates[i].started, gates[i].verdict, gates[i].reason,
   ])), "");
   out.push("## 1. Checks", "", table(["Check", "Value", "Threshold", "Result"], g.checks.map((c) => [c.name, c.value, c.threshold, c.result])), "");
   out.push("## 2. Work", "", table(["Count", "Planned", "Observed"], [
@@ -107,10 +166,11 @@ export function renderRange({ plan, summary, attempts, gates, lead }) {
   ]), "");
   out.push(table(["Agent", "Steps", "Commits"], Object.entries(summary.perAgent).map(([a, v]) => [a, v.steps, v.commits])), "");
   out.push(table(["Branch", "Commits"], Object.entries(summary.perLane)), "");
-  out.push("## 3. Operation latency", "", (m.ops || []).length
+  const binary = `Binary: daemon \`${(m.binary?.daemon ?? "?").slice(0, 12)}\` (attempt ${m.attempt}).`;
+  out.push("## 3. Operation latency", "", binary, "", (m.ops || []).length
     ? table(["Operation", "Size class", "n", "p50", "p95", "p99", "max", "Slowest phase"], m.ops.map((r) => [r.op, r.sizeClass, r.n, r.p50, r.p95, r.p99, r.max, r.slowPhase]))
     : "No operations recorded.", "");
-  out.push("## 4. Scale probes", "", Object.keys(m.probes || {}).length
+  out.push("## 4. Scale probes", "", binary, "", Object.keys(m.probes || {}).length
     ? table(["Probe", "ms", "Counters"], Object.entries(m.probes).map(([k, p]) => [k, p.ms, Object.entries(p.counters || {}).map(([c, n]) => `${c} ${n}`).join(", ")]))
     : "No probes recorded.", "");
   out.push("## 5. Storage", "", table(["Measure", "Value"], [
@@ -126,8 +186,13 @@ export function renderRange({ plan, summary, attempts, gates, lead }) {
     ["New stored bytes this range", bytes(s.newStored)],
   ]), "");
   out.push("## 6. Trends", "", m.trends?.length ? m.trends.map((t) => `- ${t}`).join("\n") : "Written by the runner from the last 3 ranges.", "");
-  out.push(lead ?? `${LEAD_START} (written by the lead)\n\n- (none yet)\n`);
-  out.push(`${LEAD_END}`, "", ...attempts.map((a) => `- \`~/lfs-history/metrics/range-${pad(a.range)}.a${a.attempt}.json\``), "");
+  out.push(LEAD_START, "");
+  for (const [i, a] of attempts.entries()) {
+    if (gates[i].verdict === "optimize" || gates[i].verdict === "stop") out.push(renderFinding(plan.range, a.attempt, findings.find((f) => f.attempt === a.attempt)), "");
+  }
+  out.push(`${NOTE_START} (written by the lead)`, "", lead?.trim() ? lead.trim() : NONE_YET, "", "");
+  out.push(`${LEAD_END}`, "", ...attempts.map((a) => `- \`~/lfs-history/metrics/range-${pad(a.range)}.a${a.attempt}.json\``),
+    ...findings.map((f) => `- \`~/lfs-history/metrics/finding-${pad(f.range)}.a${f.attempt}.json\``), "");
   return out.join("\n");
 }
 
@@ -145,23 +210,29 @@ export function renderOptimization({ plan, attempts, gates, findings = [] }) {
   const tripped = g.checks.filter((x) => x.result === "optimize" || x.result === "stop");
   if (tripped.length) {
     const own = findings.find((f) => f.attempt === m.attempt);
+    if (own) return findingComment(own, g, `${own.verdict === "stop" ? "Bug" : "Optimization"} (attempt ${own.attempt})`);
     const lines = [`#### ${g.verdict === "stop" ? "Bug" : "Optimization"} needed`, ""];
     for (const x of tripped) lines.push(`- **Trigger:** ${x.name}: ${x.value} (threshold ${x.threshold})`);
-    lines.push(own ? `- **Diagnosis:** ${own.diagnosis.step} · ${own.diagnosis.summary}` : `- **Diagnosis:** pending; the fixer records it in \`finding-${pad(plan.range)}.a${m.attempt}.json\`.`);
+    lines.push(`- **Diagnosis:** pending; the fixer records it in \`finding-${pad(plan.range)}.a${m.attempt}.json\`.`);
     return lines.join("\n");
   }
   const f = findings.filter((x) => x.attempt < m.attempt).at(-1);
   if (!f) return "**Optimization:** none.";
+  return findingComment(f, g, `${f.verdict === "stop" ? "Bug fixed" : "Optimization"} (from attempt ${f.attempt})`);
+}
+
+/** A finding in the issue comment, from the same record as the report's Finding block. */
+function findingComment(f, g, title) {
   const d = f.diagnosis, now = g.checks.find((x) => x.name === f.trigger.check);
   return [
-    `#### ${f.verdict === "stop" ? "Bug fixed" : "Optimization"} (from attempt ${f.attempt})`, "",
+    `#### ${title}`, "",
     `- **Trigger:** ${f.trigger.check}: ${f.trigger.value}${f.trigger.threshold ? ` (threshold ${f.trigger.threshold})` : ""}`,
     `- **Diagnosis:** ${d.step} · ${d.summary}${d.phase ? ` · phase \`${d.phase}\`` : ""}${d.counter ? ` · counter \`${d.counter}\`` : ""}${d.exponent ? ` · depth exponent ${d.exponent.before} → ${d.exponent.after}` : ""}`,
     `- **Fix:** ${f.fix.summary} · ${f.fix.kind} · commit \`${String(f.fix.commit).slice(0, 9)}\`${f.fix.test ? ` · regression test \`${f.fix.test}\`` : ""}`,
     `- **Recovery:** ${f.recovery}`,
     `- **Now:** ${now ? `${now.name} ${now.result}: ${now.value}` : "the check no longer applies"}`, "",
-    table(["Improvement", "Before", "After", "Change"], f.improvement.map((r) => [r.measure, `${fmt(r.before)}${r.unit ? ` ${r.unit}` : ""}`, `${fmt(r.after)}${r.unit ? ` ${r.unit}` : ""}`, change(r.before, r.after)])), "",
-    `Record: ${f.record}`,
+    table(["Improvement", ...FINDING_COLUMNS.slice(1)], f.improvement.map(improvementRow)), "",
+    `Record: ${f.record ?? [...(f.records ?? []).map((r) => r.path), ...(f.ledger ?? []).map((l) => `${l.file} (${l.entry})`)].join(", ")}`,
   ].join("\n");
 }
 
@@ -199,15 +270,19 @@ export function renderIndex(rows) {
       pad(r.range), r.dshCommits, r.depth, `**${r.verdict}**`, r.worst, bytes(r.newStored), `[range-${pad(r.range)}](ranges/range-${pad(r.range)}.md)`])), ""].join("\n");
 }
 
-function main() {
-  const args = process.argv.slice(2);
-  const opt = (n) => { const i = args.indexOf(n); return i < 0 ? null : args[i + 1]; };
-  const metricsDir = opt("--metrics"), planDir = opt("--plan"), docs = opt("--docs");
-  const oracleDir = opt("--oracle") ?? join(dirname(planDir ?? "."), "oracle");
-  if (!metricsDir || !planDir || !docs) { console.error("usage: report.mjs --metrics <dir> --plan <dir> --docs <dir>"); process.exit(2); }
+/**
+ * Writes range `range`'s report and comment and the index (SPEC §3 F2): no
+ * other range's report is touched. Attempts with a stored gate result render
+ * from it; legacy attempts from git HEAD's report; any other attempt is
+ * evaluated now, once, and its result stored in its metrics file.
+ * @returns {{ verdict: string, file: string, comment: string }}
+ */
+export function reportRange({ metricsDir, planDir, docs, oracleDir, range }) {
   const summaries = new Map(JSON.parse(readFileSync(join(planDir, "plan.json"), "utf8")).ranges.map((r) => [r.range, r]));
   const attempts = loadAttempts(metricsDir), findings = loadFindings(metricsDir);
-  const last = [...attempts.values()].map((xs) => xs.at(-1));
+  const xs = attempts.get(range);
+  if (!xs) throw new Error(`no attempt of range ${range} in ${metricsDir}`);
+  const last = [...attempts.values()].map((ys) => ys.at(-1));
   const pilot = last.filter((m) => m.range < 5);
   // The baseline is the complete pilot's ranges measured with its newest daemon (never a mix).
   const pilotDaemon = pilot.at(-1)?.binary?.daemon;
@@ -218,26 +293,62 @@ function main() {
   const seeds = loadSeeds(metricsDir).map((p) => withInputs(p, oracleDir));
   if (baseline && !existsSync(baselineFile)) writeFileSync(baselineFile, JSON.stringify(baseline, null, 1));
   mkdirSync(join(docs, "ranges"), { recursive: true });
+  const reportFile = (k) => join(docs, "ranges", `range-${pad(k)}.md`);
+  const file = reportFile(range), legacy = legacyGates(file);
+  const history = last.filter((m) => m.range < range).map((m) => withInputs(m, oracleDir));
+  const gates = xs.map((m) => {
+    if (m.gate) return m.gate;
+    if (legacy.has(m.attempt)) return legacy.get(m.attempt);
+    const gate = storedGate(m, evaluate(m, history, range < 5 ? null : baseline, undefined, seeds));
+    storeGate(join(metricsDir, `range-${pad(range)}.a${m.attempt}.json`), gate);
+    return gate;
+  });
+  const old = existsSync(file) ? readFileSync(file, "utf8") : "";
+  const plan = JSON.parse(readFileSync(join(planDir, `range-${pad(range)}.json`), "utf8"));
+  const own = findings.get(range) ?? [];
+  writeFileSync(file, renderRange({ plan, summary: summaries.get(range), attempts: xs, gates, lead: leadNote(old), findings: own }));
+  const comment = join(metricsDir, `comment-${pad(range)}.md`);
+  writeFileSync(comment, renderComment({ plan, summary: summaries.get(range), attempts: xs, gates, findings: own }));
+  // the index: every range's latest recorded outcome, read, never re-evaluated
   const rows = [];
-  let verdict = "pass", comment = null;
-  for (const [range, xs] of attempts) {
-    const history = last.filter((m) => m.range < range).map((m) => withInputs(m, oracleDir));
-    const gates = xs.map((m) => evaluate(m, history, range < 5 ? null : baseline, undefined, seeds));
-    const file = join(docs, "ranges", `range-${pad(range)}.md`);
-    const old = existsSync(file) ? readFileSync(file, "utf8") : "";
-    const lead = old.includes(LEAD_START) ? old.slice(old.indexOf(LEAD_START), old.indexOf(LEAD_END)) : null;
-    const plan = JSON.parse(readFileSync(join(planDir, `range-${pad(range)}.json`), "utf8"));
-    writeFileSync(file, renderRange({ plan, summary: summaries.get(range), attempts: xs, gates, lead }));
-    const g = gates.at(-1), m = xs.at(-1);
-    rows.push({ range, dshCommits: plan.dsh.commits, depth: m.depth?.after ?? "—", verdict: g.verdict,
-      worst: g.checks.find((c) => c.result === g.verdict && c.result !== "pass")?.name ?? "—", newStored: m.storage?.newStored });
-    verdict = g.verdict;
-    comment = { range, text: renderComment({ plan, summary: summaries.get(range), attempts: xs, gates, findings: findings.get(range) ?? [] }) };
+  for (const [k, ys] of attempts) {
+    const m = ys.at(-1);
+    let g = k === range ? gates.at(-1) : m.gate;
+    if (!g && existsSync(reportFile(k))) {
+      const r = parseReport(readFileSync(reportFile(k), "utf8"));
+      const row = r.attempts.get(r.latest);
+      g = row ? { verdict: row.verdict, checks: r.checks } : null;
+    }
+    if (!g) continue;
+    const p = JSON.parse(readFileSync(join(planDir, `range-${pad(k)}.json`), "utf8"));
+    rows.push({ range: k, dshCommits: p.dsh.commits, depth: m.depth?.after ?? "—", verdict: g.verdict,
+      worst: (g.checks ?? []).find((c) => c.result === g.verdict && c.result !== "pass")?.name ?? "—", newStored: m.storage?.newStored });
   }
-  if (comment) writeFileSync(join(metricsDir, `comment-${pad(comment.range)}.md`), comment.text);
   writeFileSync(join(docs, "RANGES.md"), renderIndex(rows));
-  console.log(`${rows.length} range reports; latest verdict: ${verdict}${comment ? `; issue comment ${join(metricsDir, `comment-${pad(comment.range)}.md`)}` : ""}`);
-  process.exit({ pass: 0, watch: 0, optimize: 3, stop: 4 }[verdict]);
+  return { verdict: gates.at(-1).verdict, file, comment };
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const opt = (n) => { const i = args.indexOf(n); return i < 0 ? null : args[i + 1]; };
+  if (args[0] === "check") {
+    const { checkReport } = await import("./reportcheck.mjs");
+    const range = Number(args[1]);
+    if (!Number.isInteger(range)) { console.error("usage: report.mjs check <NNN> [--metrics <dir>] [--docs <dir>]"); process.exit(2); }
+    const result = checkReport({ range, metricsDir: opt("--metrics") ?? join(process.env.HOME, "lfs-history", "metrics"),
+      docs: opt("--docs") ?? new URL("../../../core/docs/issues/352", import.meta.url).pathname });
+    for (const line of result.lines) console.log(line);
+    if (result.failed.length) { console.log(`range ${pad(range)}: FAIL ${result.failed.join(" ")}`); process.exit(1); }
+    console.log(`range ${pad(range)}: PASS F1–F8`);
+    return;
+  }
+  const metricsDir = opt("--metrics"), planDir = opt("--plan"), docs = opt("--docs");
+  const oracleDir = opt("--oracle") ?? join(dirname(planDir ?? "."), "oracle");
+  if (!metricsDir || !planDir || !docs) { console.error("usage: report.mjs --metrics <dir> --plan <dir> --docs <dir> [--range N]"); process.exit(2); }
+  const range = opt("--range") != null ? Number(opt("--range")) : Math.max(...loadAttempts(metricsDir).keys());
+  const r = reportRange({ metricsDir, planDir, docs, oracleDir, range });
+  console.log(`range ${pad(range)} report ${r.file}; verdict: ${r.verdict}; issue comment ${r.comment}`);
+  process.exit({ pass: 0, watch: 0, optimize: 3, stop: 4 }[r.verdict]);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main();

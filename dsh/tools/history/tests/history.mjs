@@ -2,7 +2,7 @@
 //   node dsh/tools/history/tests/history.mjs
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BlobCache, blobId, diffTrees, git, lsTree, readCommits, topoPositions, unquote } from "../git.mjs";
@@ -11,7 +11,9 @@ import { area, dirCounts, finishes, planRange, replayPlan, rng, stateDiff } from
 import { apply, summarize } from "../plan.mjs";
 import { compareTree, expectations } from "../oracle.mjs";
 import { aggregate, buildBaseline, evaluate, exponent, rising, sizeClass } from "../gates.mjs";
-import { renderComment, renderIndex, renderRange, LEAD_START } from "../report.mjs";
+import { leadNote, renderComment, renderFinding, renderIndex, renderRange, reportRange, LEAD_START } from "../report.mjs";
+import { storedGate } from "../frozen.mjs";
+import { checkReport } from "../reportcheck.mjs";
 
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
@@ -273,8 +275,8 @@ test("aggregate groups calls by operation and size class", () => {
 test("the report keeps the lead's section and the index links each range", () => {
   const { plan } = planAll()[0];
   const m = metrics(0);
-  const gates = [evaluate(m)];
-  const lead = `${LEAD_START} (written by the lead)\n\n- found something\n\n`;
+  const gates = [storedGate(m, evaluate(m))];
+  const lead = "- found something\n";
   const md = renderRange({ plan, summary: summarize(plan), attempts: [m], gates, lead });
   for (const h of ["## Attempts", "## 1. Checks", "## 2. Work", "## 3. Operation latency", "## 4. Scale probes", "## 5. Storage", "## 6. Trends", "## 8. Evidence"]) assert.ok(md.includes(h), h);
   assert.ok(md.includes("- found something"));
@@ -292,6 +294,105 @@ test("the issue comment has a fixed shape and names what happens next", () => {
   const bad = { ...m, checks: { ...m.checks, tests: { equal: 3, run: 4 } } };
   const stop = renderComment({ plan, summary: summarize(plan), attempts: [bad], gates: [evaluate(bad)] });
   assert.ok(stop.includes("**stop**") && stop.includes("| Correctness |") && stop.includes("bug cycle"));
+});
+
+test("F8: a check that cannot be judged says so and is at least watch", () => {
+  const g = evaluate(metrics(0, { storage: { newStored: 100 }, budget: {} }));
+  const silent = g.checks.filter((c) => c.result === "pass" && /n\/a|not set|insufficient|not judged/.test(String(c.value)) && !String(c.value).startsWith("not applicable"));
+  assert.deepEqual(silent, []);
+  for (const name of ["Speed", "Directory share", "Delta at cap", "Disk projection", "Wall projection"]) {
+    const row = g.checks.find((c) => c.name === name);
+    assert.ok(row.result === "watch" && row.value.startsWith("not judged"), `${name}: ${JSON.stringify(row)}`);
+  }
+  assert.equal(g.checks.find((c) => c.name === "Reinstall growth").value, "not applicable: no node_modules reinstall in this range");
+});
+
+/** A report folder in a git repository of its own, with plan files for `plans`. */
+function reportFixture(name, plans) {
+  const root = join(dir, name), docs = join(root, "docs"), metricsDir = join(root, "metrics"), planDir = join(root, "plan");
+  for (const d of [join(docs, "ranges"), join(docs, "fixes"), metricsDir, planDir]) mkdirSync(d, { recursive: true });
+  writeFileSync(join(planDir, "plan.json"), JSON.stringify({ ranges: plans.map((x) => ({ range: x.plan.range, ...summarize(x.plan) })) }));
+  for (const x of plans) writeFileSync(join(planDir, `range-${String(x.plan.range).padStart(3, "0")}.json`), JSON.stringify(x.plan));
+  const g = (...a) => execFileSync("git", ["-C", root, ...a], { encoding: "utf8", env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
+  g("init", "-q");
+  return { root, docs, metricsDir, planDir, oracleDir: join(root, "oracle"), commit: () => { g("add", "-A"); g("commit", "-qm", "c"); } };
+}
+const write = (file, m) => writeFileSync(file, JSON.stringify(m, null, 1));
+
+test("F2: a report stores each attempt's gate result once and writes only its own range", () => {
+  const plans = planAll().slice(0, 2), f = reportFixture("f2", plans);
+  write(join(f.metricsDir, "range-000.a1.json"), { ...metrics(0), binary: { daemon: "aa" }, started: "t0" });
+  reportRange({ ...f, range: 0 });
+  const stored = JSON.parse(readFileSync(join(f.metricsDir, "range-000.a1.json"), "utf8")).gate;
+  assert.equal(stored.source, "stored");
+  f.commit();
+  const first = readFileSync(join(f.docs, "ranges", "range-000.md"), "utf8");
+  write(join(f.metricsDir, "range-001.a1.json"), { ...metrics(1), binary: { daemon: "aa" }, started: "t1" });
+  reportRange({ ...f, range: 1 });
+  assert.equal(readFileSync(join(f.docs, "ranges", "range-000.md"), "utf8"), first, "an earlier report stays byte-identical");
+  // a later regeneration renders the stored result, never a new evaluation
+  const m0 = JSON.parse(readFileSync(join(f.metricsDir, "range-000.a1.json"), "utf8"));
+  m0.gate.reason = "recorded reason"; write(join(f.metricsDir, "range-000.a1.json"), m0);
+  reportRange({ ...f, range: 0 });
+  assert.ok(readFileSync(join(f.docs, "ranges", "range-000.md"), "utf8").includes("| recorded reason |"));
+  assert.ok(readFileSync(join(f.docs, "RANGES.md"), "utf8").includes("[range-001]"));
+});
+
+test("F2: legacy attempts render from git HEAD's report, never re-evaluated", () => {
+  const plans = planAll().slice(0, 1), f = reportFixture("legacy", plans);
+  write(join(f.metricsDir, "range-000.a1.json"), { ...metrics(0), binary: { daemon: "bb" }, started: "t0" });
+  const { plan } = plans[0];
+  const recorded = { verdict: "watch", reason: "as recorded then", binary: "bb", started: "t0", source: "x",
+    checks: [{ name: "Correctness", value: "as recorded", threshold: "all", result: "pass" }, { name: "Speed", value: "old row", threshold: "—", result: "watch" }] };
+  writeFileSync(join(f.docs, "ranges", "range-000.md"), renderRange({ plan, summary: summarize(plan), attempts: [metrics(0)], gates: [recorded], lead: "- a note\n" }));
+  f.commit();
+  reportRange({ ...f, range: 0 });
+  const md = readFileSync(join(f.docs, "ranges", "range-000.md"), "utf8");
+  assert.ok(md.includes("| 1 | bb | t0 | watch | as recorded then |") && md.includes("| Speed | old row | — | watch |") && md.includes("- a note"));
+  assert.equal(JSON.parse(readFileSync(join(f.metricsDir, "range-000.a1.json"), "utf8")).gate, undefined, "a legacy attempt gets no new result");
+});
+
+const findingRecord = () => ({
+  range: 0, attempt: 1, verdict: "optimize", trigger: { check: "Counters", value: "0.7", threshold: "< 0.05" },
+  diagnosis: { step: "D4", summary: "a cause", counter: "fork.rows", exponent: { before: 0.7, after: 0 } },
+  fix: { summary: "a fix", kind: "code path", commit: "abc, def", test: "t.rs" },
+  improvement: [{ measure: "fork rows", before: 30, after: 7, unit: "rows", oldBinary: "old", newBinary: "new", snapshot: "range-000", cache: "fresh daemon" }],
+  recovery: "fork and rerun", records: [{ title: "fork", path: "fixes/000-a1-fork.md" }], ledger: [{ file: "OPTIMIZATIONS.md", entry: "000.a1" }],
+});
+
+test("F3–F5: the Finding block, the lead's note kept, and report check", () => {
+  const plans = planAll().slice(0, 1), f = reportFixture("findings", plans);
+  const bad = { ...metrics(0, { checks: { ...metrics(0).checks, tree: { ok: true }, steps: { matched: 10, total: 10 } }, health: { ...metrics(0).health, daemonRssMb: 200 } }), binary: { daemon: "cc" }, started: "t0" };
+  write(join(f.metricsDir, "range-000.a1.json"), { ...bad, gate: { verdict: "optimize", reason: "Counters: 0.7", binary: "cc", started: "t0", source: "stored", checks: [{ name: "Counters", value: "fork.rows: depth exponent 0.7", threshold: "< 0.05", result: "optimize" }] } });
+  reportRange({ ...f, range: 0 });
+  let md = readFileSync(join(f.docs, "ranges", "range-000.md"), "utf8");
+  assert.ok(md.includes("### Finding 000.a1\n\nDiagnosis pending: `finding-000.a1.json`."));
+  let r = checkReport({ range: 0, metricsDir: f.metricsDir, docs: f.docs });
+  assert.ok(r.failed.includes("F6") && !r.failed.includes("F3"), r.lines.join("\n"));
+  // the lead writes a note; the fixer writes the finding and its records
+  writeFileSync(join(f.docs, "ranges", "range-000.md"), md.replace("- (none yet)", "- watching fork rows"));
+  writeFileSync(join(f.metricsDir, "finding-000.a1.json"), JSON.stringify(findingRecord()));
+  writeFileSync(join(f.docs, "fixes", "000-a1-fork.md"), "# fix\n");
+  writeFileSync(join(f.docs, "OPTIMIZATIONS.md"), "# o\n");
+  reportRange({ ...f, range: 0 });
+  md = readFileSync(join(f.docs, "ranges", "range-000.md"), "utf8");
+  assert.ok(md.includes("- watching fork rows"), "the lead's note is kept verbatim");
+  assert.ok(md.includes("| fork rows | 30 rows | 7 rows | −77% | `old` | `new` | range-000 | fresh daemon |"));
+  assert.ok(md.includes("[fork](../fixes/000-a1-fork.md)") && md.includes("[OPTIMIZATIONS.md](../OPTIMIZATIONS.md)"));
+  r = checkReport({ range: 0, metricsDir: f.metricsDir, docs: f.docs });
+  assert.deepEqual(r.failed, [], r.lines.join("\n"));
+  assert.ok(readFileSync(join(f.metricsDir, "comment-000.md"), "utf8").includes("| Improvement | Before | After | Change | Old binary | New binary | Snapshot / checkpoint | Cache |"));
+  // a broken link and a missing column are named
+  writeFileSync(join(f.docs, "ranges", "range-000.md"), md.replace("../fixes/000-a1-fork.md", "../fixes/none.md").replace("| Cache |", "|"));
+  r = checkReport({ range: 0, metricsDir: f.metricsDir, docs: f.docs });
+  assert.ok(r.failed.includes("F4") && r.failed.includes("F5"), r.lines.join("\n"));
+});
+
+test("a report from before the Finding blocks keeps its §7 text as the lead's note, less the improvement table", () => {
+  const old = `x\n${LEAD_START} (written by the lead)\n\n### Attempt 1\n\n- trigger\n\n| Improvement | Before | After | Change |\n| --- | --- | --- | --- |\n| a | 1 | 2 | +1 |\n\nRecord: r\n\n## 8. Evidence\n`;
+  assert.equal(leadNote(old).trim(), "### Attempt 1\n\n- trigger\n\nRecord: r");
+  assert.equal(leadNote(`${LEAD_START} (written by the lead)\n\n- (none yet)\n\n## 8. Evidence\n`), null);
+  assert.ok(renderFinding(3, 2, null).includes("Diagnosis pending: `finding-003.a2.json`."));
 });
 
 let failed = 0;

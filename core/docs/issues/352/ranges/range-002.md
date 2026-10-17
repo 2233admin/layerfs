@@ -10,7 +10,7 @@
 | LayerFS depth | 1,114 → 1,533 Commits |
 | Binary | daemon `511dceeda1b5ec7e4c65b50f4f885bc60f25d6beac1c0735c7e044c12e1e7ad0`, SDK `506b646f7d0a119a862abe1e593b8a989bb8be91d22890f71e42f5e6e0d19d2d`, image `sha256:d3773b4eac6a7a644887b17e36956cd1553786d47103f0170a3bb2b0ff6988de`, plan v2 |
 | Snapshot | 6.1 MiB new of 6.1 MiB; seal 2,878 ms, copy 219 ms |
-| Wall time (tooling, not operation latency) | 13.62 s tooling: prepare 0.42 · play 7.34 · consolidate 0.21 · verify 1.80 (diff_commits + full compareTree) · probes 0.33 · metrics 0.07 · seal 2.88 · snapshot copy 0.27 |
+| Wall time (tooling, not operation latency) | 13.69 s tooling: prepare 0.42 · play 7.34 · consolidate 0.21 · verify 1.80 (diff_commits + full compareTree) · probes 0.33 · metrics 0.07 · seal 2.88 · snapshot copy 0.27 · report 0.07 |
 
 ## Attempts
 
@@ -68,6 +68,8 @@
 
 ## 3. Operation latency
 
+Binary: daemon `511dceeda1b5` (attempt 2).
+
 | Operation | Size class | n | p50 | p95 | p99 | max | Slowest phase |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | branch.diff_commits | — | 6 | 193.35 | 222.39 | 222.39 | 234.12 | sdk.read |
@@ -91,6 +93,8 @@
 | sandbox.unmount | — | 9 | 5.60 | 7.12 | 7.12 | 7.16 | — |
 
 ## 4. Scale probes
+
+Binary: daemon `511dceeda1b5` (attempt 2).
 
 | Probe | ms | Counters |
 | --- | --- | --- |
@@ -129,7 +133,38 @@
 
 Written by the runner from the last 3 ranges.
 
-## 7. Findings and action (written by the lead)
+## 7. Findings and action
+
+### Finding 002.a1
+
+|  |  |
+| --- | --- |
+| Trigger | Counters: fork.returned_rows depth exponent; Scaling: grep_tree depth exponent · 0.768; 0.73 · threshold < 0.05; < 0.15 |
+| Diagnosis | D4 · Three causes. (1) Every Branch name was resolved by paging through all Branches (args::branch), ~7 more per range: fork rows grew with the replay. (2) merge_base / is_ancestor walked the whole history through Layer source Commits (merge statements exponent 0.737, and a Capacity refusal at 4,096 nodes within a few ranges). (3) grep_tree: D2 per tree byte is flat (-0.003; same-tree squashed Init 5,913 vs 16,833 statements = delta chains, capped); the depth fit charged tree growth. Grep also re-read each root for its size and per 16 KiB window. (4) F-003, scheduled with this finding: diff_commits merged complete listings of both trees (vm_steps depth exponent 0.592 with one changed file); the format had no parent links, so equal directory ids do not imply equal subtrees. (5) args::project paged through every stack per SDK call. · counter `fork.returned_rows`, exponent 0.622 → 0 |
+| Fix | Branch lookup by the name index (one row); ancestry and merge base stop at Layers, bounded by work since the newest Layers reached (oracle-equal); grep opens each file once and sizes from metadata; gate fits grep_tree per tree byte (SPEC §4). diff_commits walks only the changed entries: Content ChangeWalk locates changed inodes through a new binding_hint table (Store format, checked against each tree, full walk otherwise) recorded by Init, Commit and merge; project lookup by the name index; gates fit and baseline only same-daemon points, with seeded probe points. · format · commits `e65ce83f0`, `3f127ee3e`, `92e94d2ef`, `025a3676e`, `bcb52a1f4`, `49499abac`, `0c347ad33` · regression tests core/crates/layerfs-daemon/tests/sdk_branch_count.rs; sdk_history_depth.rs; history_ancestry_oracle.rs; sdk_grep_reads.rs; dsh/tools/history/tests/history.mjs; sdk_project_count.rs; sdk_diff_size.rs; history_diff_oracle.rs |
+| Recovery | Store format change (binding_hint): fast rebuild of ranges 0-1 from the plan into run p1-pilot-b (label measured, daemon 511dceeda1b5...7ad0, sdk 506b646f...9d2d, source 0c347ad33; oracle verify 678 and 622 calls, both ok), then range 2 measured, then ranges 3-4. Superseded: Fork snapshot range-001 of p1-pilot into run p1-pilot-a2 (run.mjs fork, label measured) and rerun range 2 measured as attempt 2 on daemon b9c332b79bc5...58bfc, then continue to range 4. |
+| Records | [Branch lookup read every Branch](../fixes/002-a1-fork-branch-count.md) · [Merge base and ancestry walked the whole history](../fixes/002-a1-merge-ancestry.md) · [Grep re-read each root; gate fit per tree byte](../fixes/002-a1-grep-tree-chain-reads.md) · [diff_commits walked both whole trees](../fixes/002-a1-diff-commits-change-walk.md) · [Project lookup paged through every stack](../fixes/002-a1-project-lookup.md) · [Gates fitted points from different daemons](../fixes/002-a1-gate-same-binary.md) · [OPTIMIZATIONS.md](../OPTIMIZATIONS.md) (002.a1 rows) |
+
+| Measure | Before | After | Change | Old binary | New binary | Snapshot / checkpoint | Cache |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| fork returned rows, range-002 snapshot | 30 rows | 7 rows | −77% | `0ef24121723a…4c404` | `b9c332b79bc5…58bfc` | range-002 snapshot | fresh daemon (new service container on a just-restored Store file) |
+| fork returned_rows depth exponent (probes r0-r2) | 0.62 | 0 | −100% | `0ef24121723a…4c404` | `b9c332b79bc5…58bfc` | range-000, -001, -002 snapshots | fresh daemon (new service container on a just-restored Store file) |
+| list_commits returned rows, range-002 snapshot | 72 rows | 50 rows | −31% | `0ef24121723a…4c404` | `b9c332b79bc5…58bfc` | range-002 snapshot | fresh daemon (new service container on a just-restored Store file) |
+| merge probe statements, range-002 snapshot | 5,792 statements | 1,176 statements | −80% | `0ef24121723a…4c404` | `b9c332b79bc5…58bfc` | range-002 snapshot | fresh daemon (new service container on a just-restored Store file) |
+| merge statements depth exponent (probes r0-r2) | 0.70 | 0.01 | −99% | `0ef24121723a…4c404` | `b9c332b79bc5…58bfc` | range-000, -001, -002 snapshots | fresh daemon (new service container on a just-restored Store file) |
+| branch.merge call ms, range-002 snapshot | 23.40 ms | 11.90 ms | −49% | `0ef24121723a…4c404` | `b9c332b79bc5…58bfc` | range-002 snapshot | fresh daemon (new service container on a just-restored Store file) |
+| grep_tree statements, range-002 snapshot | 16,773 statements | 12,033 statements | −28% | `0ef24121723a…4c404` | `b9c332b79bc5…58bfc` | range-002 snapshot | fresh daemon (new service container on a just-restored Store file) |
+| grep_tree ms, range-002 snapshot | 152.69 ms | 107.08 ms | −30% | `0ef24121723a…4c404` | `b9c332b79bc5…58bfc` | range-002 snapshot | fresh daemon (new service container on a just-restored Store file) |
+| grep_tree statements per tree byte depth exponent | -0.00 | -0.05 | +1467% | `0ef24121723a…4c404` | `b9c332b79bc5…58bfc` | range-000, -001, -002 snapshots | fresh daemon (new service container on a just-restored Store file) |
+| diff_commits statements, range-002 checkpoint (old b9c332b7 snapshot vs new 511dceed rebuild) | 8,213 statements | 518 statements | −94% | `b9c332b79bc5…58bfc` | `511dceeda1b5…7ad0` | range-002 checkpoint (old: p1-pilot snapshot; new: p1-pilot-b rebuild) | fresh daemon (new service container on a just-restored Store file) |
+| diff_commits vm_steps, range-002 checkpoint | 317,220 steps | 19,394 steps | −94% | `b9c332b79bc5…58bfc` | `511dceeda1b5…7ad0` | range-002 checkpoint (old: p1-pilot snapshot; new: p1-pilot-b rebuild) | fresh daemon (new service container on a just-restored Store file) |
+| diff_commits ms, range-002 checkpoint | 95.30 ms | 11.20 ms | −88% | `b9c332b79bc5…58bfc` | `511dceeda1b5…7ad0` | range-002 checkpoint (old: p1-pilot snapshot; new: p1-pilot-b rebuild) | fresh daemon (new service container on a just-restored Store file) |
+| diff_commits vm_steps depth exponent (probes r0-r2) | 0.59 | 0.08 | −87% | `b9c332b79bc5…58bfc` | `511dceeda1b5…7ad0` | range-000, -001, -002 checkpoints (old: p1-pilot; new: p1-pilot-b) | fresh daemon (new service container on a just-restored Store file) |
+| oneshot_commit statements, range-002 checkpoint (cost: bindings phase) | 265 statements | 325 statements | +23% | `b9c332b79bc5…58bfc` | `511dceeda1b5…7ad0` | range-002 checkpoint (old: p1-pilot snapshot; new: p1-pilot-b rebuild) | fresh daemon (new service container on a just-restored Store file) |
+| Store file after range 2 (binding_hint 20,480 B) | 6,434,816 bytes | 6,438,912 bytes | ±0% | `b9c332b79bc5…58bfc` | `511dceeda1b5…7ad0` | after range 2 (old: p1-pilot snapshot; new: p1-pilot-b) | n/a (file size) |
+| fs.stat rows with 600 projects (sdk_project_count) | 621 rows | 10 rows | −98% | `b9c332b79bc5…58bfc` | `511dceeda1b5…7ad0` | test Store (sdk_project_count, 600 projects) | warm test fixture |
+
+### Lead's note (written by the lead)
 
 ### Attempt 1 → attempt 2: finding 002.a1
 
@@ -138,25 +173,6 @@ Written by the runner from the last 3 ranges.
 - **Fix:** Branch lookup by the name index (one row); ancestry and merge base stop at Layers, bounded by work since the newest Layers reached (oracle-equal); grep opens each file once and sizes from metadata; gate fits grep_tree per tree byte (SPEC §4). diff_commits walks only the changed entries: Content ChangeWalk locates changed inodes through a new binding_hint table (Store format, checked against each tree, full walk otherwise) recorded by Init, Commit and merge; project lookup by the name index; gates fit and baseline only same-daemon points, with seeded probe points. · format · commit `e65ce83f0` · regression test `core/crates/layerfs-daemon/tests/sdk_branch_count.rs; sdk_history_depth.rs; history_ancestry_oracle.rs; sdk_grep_reads.rs; dsh/tools/history/tests/history.mjs; sdk_project_count.rs; sdk_diff_size.rs; history_diff_oracle.rs`
 - **Recovery:** Store format change (binding_hint): fast rebuild of ranges 0-1 from the plan into run p1-pilot-b (label measured, daemon 511dceeda1b5...7ad0, sdk 506b646f...9d2d, source 0c347ad33; oracle verify 678 and 622 calls, both ok), then range 2 measured, then ranges 3-4. Superseded: Fork snapshot range-001 of p1-pilot into run p1-pilot-a2 (run.mjs fork, label measured) and rerun range 2 measured as attempt 2 on daemon b9c332b79bc5...58bfc, then continue to range 4.
 - **Now:** the check no longer applies
-
-| Improvement | Before | After | Change |
-| --- | --- | --- | --- |
-| fork returned rows, range-002 snapshot | 30 rows | 7 rows | −77% |
-| fork returned_rows depth exponent (probes r0-r2) | 0.62 | 0 | −100% |
-| list_commits returned rows, range-002 snapshot | 72 rows | 50 rows | −31% |
-| merge probe statements, range-002 snapshot | 5,792 statements | 1,176 statements | −80% |
-| merge statements depth exponent (probes r0-r2) | 0.70 | 0.01 | −99% |
-| branch.merge call ms, range-002 snapshot | 23.40 ms | 11.90 ms | −49% |
-| grep_tree statements, range-002 snapshot | 16,773 statements | 12,033 statements | −28% |
-| grep_tree ms, range-002 snapshot | 152.69 ms | 107.08 ms | −30% |
-| grep_tree statements per tree byte depth exponent | -0.00 | -0.05 | +1467% |
-| diff_commits statements, range-002 checkpoint (old b9c332b7 snapshot vs new 511dceed rebuild) | 8,213 statements | 518 statements | −94% |
-| diff_commits vm_steps, range-002 checkpoint | 317,220 steps | 19,394 steps | −94% |
-| diff_commits ms, range-002 checkpoint | 95.30 ms | 11.20 ms | −88% |
-| diff_commits vm_steps depth exponent (probes r0-r2) | 0.59 | 0.08 | −87% |
-| oneshot_commit statements, range-002 checkpoint (cost: bindings phase) | 265 statements | 325 statements | +23% |
-| Store file after range 2 (binding_hint 20,480 B) | 6,434,816 bytes | 6,438,912 bytes | ±0% |
-| fs.stat rows with 600 projects (sdk_project_count) | 621 rows | 10 rows | −98% |
 
 Record: core/docs/issues/352/OPTIMIZATIONS.md (002.a1 rows) -> fixes/002-a1-fork-branch-count.md, fixes/002-a1-merge-ancestry.md, fixes/002-a1-grep-tree-chain-reads.md; fixes/002-a1-diff-commits-change-walk.md, fixes/002-a1-project-lookup.md, fixes/002-a1-gate-same-binary.md
 
@@ -184,3 +200,4 @@ reports during this rerun; the lead restored them.
 
 - `~/lfs-history/metrics/range-002.a1.json`
 - `~/lfs-history/metrics/range-002.a2.json`
+- `~/lfs-history/metrics/finding-002.a1.json`
