@@ -234,7 +234,8 @@ writeFileSync(join(folder, "lib.mjs"), "export const go = () => {};\n");
 const withLib = (extra, run) => compileScenario({ type: "layerfs-mock-scenario", version: 2, title: "t", lib: "lib.mjs", ...extra, agents: { root: [{ bash: { description: "d", run } }] } }, { name: "t", folder });
 assert.equal(withLib({}, [["go", "a\"b", { run: 1 }]]).agents.root[0].call.args.command.split("\n")[2], 'await t.go("a\\"b", {"run":1});');
 assert.throws(() => withLib({}, [["go()"]]), /is \[name, \.\.\.args\] with name an export of lib/);
-assert.throws(() => withLib({ speed: 3 }, [["go"]]), /speed: is one of 1, 2, 4/);
+assert.throws(() => withLib({ speed: 3 }, [["go"]]), /speed: is one of 1, 2, 4, 0/);
+assert.equal(withLib({ speed: 0 }, [["go"]]).speed, 0, "a scenario may start at Max");
 
 // the adapter: a stub base class stands in for dsh's LlmAdapter
 const adapter = createAdapter(class {}, scenarios, { typingMs: 0, intro: "What does this demo show?" });

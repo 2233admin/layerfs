@@ -44,8 +44,10 @@ When you need one of these, stop and say so on #352.
 2. [SPEC.md](SPEC.md): the plan, the per-range outputs, the scaling rules, the
    gates, the fix rules, disk, and the delta depth. It is the plan. Improve it
    where the work shows it is wrong, in the same commit as the change.
-3. `dsh/README.md`: "Mock model and demos", "The demo workspace" and "Develop".
-4. What you build on:
+3. [SCRIPTS.md](SCRIPTS.md): how a range's plan becomes steps, a dsh scenario
+   (lead and subagents) and the headless runner, through one step library.
+4. `dsh/README.md`: "Mock model and demos", "The demo workspace" and "Develop".
+5. What you build on:
    - `dsh/tools/run-scenario.mjs`, `dsh/scenarios/shared/replay.mjs`,
      `dsh/tools/import-run.mjs`;
    - `dsh/tools/check-scenario.mjs`, `dsh/tools/check-demo.mjs`,
@@ -54,7 +56,7 @@ When you need one of these, stop and say so on #352.
    - `sdk/js/README.md` for the method table, the operator (`store.stats`,
      `store.commits`, `files.stats`) and the call trace (`LAYERFS_TRACE`, with
      daemon phase timings and storage counters).
-5. The content model: `cas_cdc_deltaencoding_handbook.md`;
+6. The content model: `cas_cdc_deltaencoding_handbook.md`;
    `core/crates/layerfs-content/src/contract/policy.rs`;
    `core/crates/layerfs-storage/src/store/policy.rs`.
 

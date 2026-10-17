@@ -173,6 +173,16 @@ Design decisions the build settled:
   inside a range come from the blob cache, a long-lived `git cat-file --batch`
   process with an LRU, because a checkout holds only the checkpoint.
 
+### Script generation
+
+[SCRIPTS.md](SCRIPTS.md) is the guideline for turning a range's plan into steps.
+It covers:
+- the scenario format;
+- the main agent and subagents;
+- how the plan's barriers become the lead's turns, using Crew's `turns.mjs`;
+- the shared step library both players call;
+- naming, `expect`, the seed, and validation.
+
 ### Maximum speed, always
 
 Iteration never waits on purpose. Every second goes to LayerFS work, the commands

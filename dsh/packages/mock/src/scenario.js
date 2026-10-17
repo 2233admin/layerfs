@@ -8,8 +8,9 @@
 //   { type: "layerfs-mock-scenario", version: 2, title, blurb?, fixture?,
 //     order?, speed?, live?, image?, seed?, lib?, agents: { root: Step[], <child>: Step[], … } }
 // `order` places the demo in lists (lower first; unordered ones last, by name);
-// `speed` is how fast the mock plays the demo at first (1, 2 or 4): it divides
-// the pauses and typing; the client changes it while a run plays (pace.js).
+// `speed` is how fast the mock plays the demo at first (pace.js SPEEDS: 1, 2,
+// 4, or 0 for Max, which leaves pauses and typing out): it divides the pauses
+// and typing; the client changes it while a run plays (pace.js).
 // A replayed run (issue #347) sets `live: true` (it runs on real LayerFS only,
 // never the simulator), the runtime `image` digest its Sandboxes run, and
 // `seed`, a seed.json under the scenario folder holding the folder its
@@ -34,13 +35,13 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { SPEEDS } from "./pace.js";
 
 const TYPE = "layerfs-mock-scenario";
 const DELIMITER = "JS";
 const NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const REF = /^@([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)$/;
 const CALL = /^[A-Za-z_$][\w$]*$/;
-const SPEEDS = [1, 2, 4];
 const IMAGE = /^sha256:[0-9a-f]{64}$/;
 
 /** The preset's tools: argument names, and which arguments are agent or job ids. */
