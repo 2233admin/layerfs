@@ -15,3 +15,12 @@
 - **F-002 · full-scan steps on hot paths (lead, not yet a gate finding).** Dev runs
   show reader `fullscan_steps` of 58 at mount bind, 242 at a one-shot Commit and
   668 at a merge. To be read against depth in the pilot (playbook D4).
+- **F-002, fixer's reading (002.a1).** The 242/668 at Commit and merge are each
+  Save's read of the content-signature ring (`metadata_signatures.rs`, a scan and
+  sort of at most 8,193 ring rows; 273 now). Bounded by the ring, not by depth;
+  the 58 at mount bind is flat (schema checks). Left as is; the merge part is in
+  [fixes/002-a1-merge-ancestry.md](fixes/002-a1-merge-ancestry.md).
+- **F-003 · diff_commits walks both whole trees (fixer, 002.a1, not yet a gate
+  finding).** `compare.rs` `changes()` reads both trees; probes give VM-step
+  exponent 0.59 against depth with one changed file. A change-proportional diff
+  needs per-directory change information the format lacks (SPEC §6 format kind).
