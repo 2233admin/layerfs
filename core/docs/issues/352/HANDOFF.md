@@ -192,10 +192,21 @@ reaches it (SPEC.md §6). The fixer's playbook (D0–D6) depends on them.
    - write `range-NNN.json` and the report `ranges/range-NNN.md`;
    - add the row to `RANGES.md`;
    - decide the gate;
-   - post the range's issue comment on #352: `report.mjs` writes it to
-     `~/lfs-history/metrics/comment-NNN.md` in a fixed format (SPEC.md §3), and
-     the lead posts it with `gh issue comment 352 --body-file <it>`. Every
-     range gets one, whatever its verdict; a rerun posts another for its attempt.
+   - commit and push the checkpoint, then comment (in this order, because the
+     comment links the pushed report):
+     1. commit `ranges/range-NNN.md` and `RANGES.md`, plus `BUGS.md` or
+        `OPTIMIZATIONS.md` when a finding was recorded, as
+        `docs(#352): range NNN <verdict>` with the Production LOC line and the
+        trailer; push;
+     2. post `~/lfs-history/metrics/comment-NNN.md` (`report.mjs` writes it in
+        SPEC.md §3's fixed format) with `gh issue comment 352 --body-file <it>`.
+     Every range gets one commit and one comment, whatever its verdict; a rerun
+     adds a commit and a comment for its attempt.
+   - When the runner stops on optimize or stop, the comment says so with the
+     trigger and "diagnosis pending". The fixer writes
+     `~/lfs-history/metrics/finding-NNN.aK.json` (`findings.mjs`; `checkFinding`
+     must return no problems). The rerun's comment then carries the trigger,
+     diagnosis, fix, recovery and the old-vs-new improvement table.
 4. Act on the gate:
    - **Stop:** run the bug cycle.
    - **Optimize:** fix it, then compare old and new binaries with the probes on

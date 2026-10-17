@@ -332,10 +332,26 @@ At each range's completion, the runner writes three things:
   **Work:** bash calls · LayerFS Commits · conflicts hit/planned · unit tests equal/run
   **Slowest p95:** the three slowest operations by p95
   **Storage:** +new stored (total) · dedupe · compression · snapshot +new bytes in ms
+  **Optimization:** none. | or: trigger, diagnosis (pending until the fixer's
+  finding), fix, recovery, the check's value now, and an improvement table
+  (measure | before | after | change), from finding-NNN.aK.json (findings.mjs)
   **Next:** continue, or why the runner stopped and who acts
 
   Report: link to ranges/range-NNN.md
   ```
+
+  The lead commits and pushes the report before posting, so the link works
+  (HANDOFF).
+
+**At the end of the history** (202 ranges), the replay leaves:
+- 202 proof checkpoints, each a section of its range report;
+- 202 range reports in `ranges/` and 202 rows in `RANGES.md`;
+- one #352 comment and one commit per attempt: 202 plus one more for each
+  rerun;
+- the snapshots §7 takes: the pilot's 5, the milestones, one before each
+  optimize fix, and those `due` asks for;
+- one finding record, and one entry in `BUGS.md` or `OPTIMIZATIONS.md`, per
+  optimize or stop.
 
 The sections below list what the report contains.
 
@@ -689,7 +705,13 @@ The largest share decides which step below to follow.
 
 #### Recording a finding
 
-Each finding goes to `BUGS.md` or `OPTIMIZATIONS.md` with:
+The fixer writes `~/lfs-history/metrics/finding-NNN.aK.json` for attempt K that
+tripped the gate (`dsh/tools/history/findings.mjs` has the format and
+`checkFinding`): the trigger, the diagnosis (playbook step, summary, phase,
+counter and its depth exponent before and after), the fix (summary, kind,
+commit, regression test), the improvement rows (measure, before, after, on the
+same snapshots), the recovery and the record. The rerun's issue comment shows
+it (§3). Each finding also goes to `BUGS.md` or `OPTIMIZATIONS.md` with:
 - its playbook step (D0–D6);
 - the counter that shows it, with its exponent before and after;
 - the fix commit;

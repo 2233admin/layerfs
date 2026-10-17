@@ -12,6 +12,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildBaseline, evaluate } from "./gates.mjs";
+import { change, loadFindings } from "./findings.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
 const fmt = (v) => (v == null ? "—" : typeof v === "number" ? (Number.isInteger(v) ? v.toLocaleString("en-US") : v.toFixed(2)) : String(v));
@@ -88,11 +89,43 @@ export function renderRange({ plan, summary, attempts, gates, lead }) {
 const REPORTS = "https://github.com/Ephemeral-AI-Lab/layerfs/blob/dsh-history-replay/core/docs/issues/352/ranges";
 
 /**
+ * The optimization part of a range's comment (SPEC §3): "none" when no
+ * attempt of the range tripped a gate; for an attempt that just did, its
+ * trigger and the diagnosis still pending; for a rerun, the finding of the
+ * attempt before it (findings.mjs): trigger, diagnosis, fix, the old-vs-new
+ * improvement, and what the tripped check reads now.
+ */
+export function renderOptimization({ plan, attempts, gates, findings = [] }) {
+  const m = attempts.at(-1), g = gates.at(-1);
+  const tripped = g.checks.filter((x) => x.result === "optimize" || x.result === "stop");
+  if (tripped.length) {
+    const own = findings.find((f) => f.attempt === m.attempt);
+    const lines = [`#### ${g.verdict === "stop" ? "Bug" : "Optimization"} needed`, ""];
+    for (const x of tripped) lines.push(`- **Trigger:** ${x.name}: ${x.value} (threshold ${x.threshold})`);
+    lines.push(own ? `- **Diagnosis:** ${own.diagnosis.step} · ${own.diagnosis.summary}` : `- **Diagnosis:** pending; the fixer records it in \`finding-${pad(plan.range)}.a${m.attempt}.json\`.`);
+    return lines.join("\n");
+  }
+  const f = findings.filter((x) => x.attempt < m.attempt).at(-1);
+  if (!f) return "**Optimization:** none.";
+  const d = f.diagnosis, now = g.checks.find((x) => x.name === f.trigger.check);
+  return [
+    `#### ${f.verdict === "stop" ? "Bug fixed" : "Optimization"} (from attempt ${f.attempt})`, "",
+    `- **Trigger:** ${f.trigger.check}: ${f.trigger.value}${f.trigger.threshold ? ` (threshold ${f.trigger.threshold})` : ""}`,
+    `- **Diagnosis:** ${d.step} · ${d.summary}${d.phase ? ` · phase \`${d.phase}\`` : ""}${d.counter ? ` · counter \`${d.counter}\`` : ""}${d.exponent ? ` · depth exponent ${d.exponent.before} → ${d.exponent.after}` : ""}`,
+    `- **Fix:** ${f.fix.summary} · ${f.fix.kind} · commit \`${String(f.fix.commit).slice(0, 9)}\`${f.fix.test ? ` · regression test \`${f.fix.test}\`` : ""}`,
+    `- **Recovery:** ${f.recovery}`,
+    `- **Now:** ${now ? `${now.name} ${now.result}: ${now.value}` : "the check no longer applies"}`, "",
+    table(["Improvement", "Before", "After", "Change"], f.improvement.map((r) => [r.measure, `${fmt(r.before)}${r.unit ? ` ${r.unit}` : ""}`, `${fmt(r.after)}${r.unit ? ` ${r.unit}` : ""}`, change(r.before, r.after)])), "",
+    `Record: ${f.record}`,
+  ].join("\n");
+}
+
+/**
  * The #352 issue comment for a range's latest attempt, in a fixed format:
  * headline, the checks that did not pass, work, latency (the three slowest
- * operations by p95), storage, and what happens next.
+ * operations by p95), storage, the optimization part, and what happens next.
  */
-export function renderComment({ plan, summary, attempts, gates }) {
+export function renderComment({ plan, summary, attempts, gates, findings = [] }) {
   const m = attempts.at(-1), g = gates.at(-1), c = m.checks || {}, s = m.storage || {}, w = m.work || {};
   const next = { pass: "Continues with the next range.", watch: "Continues; the watch items get probes at the next milestone.",
     optimize: "The runner stopped: the fixer diagnoses and fixes, then the run resumes from the snapshot (SPEC §6).",
@@ -104,8 +137,9 @@ export function renderComment({ plan, summary, attempts, gates }) {
     `dsh \`${plan.dsh.first.slice(0, 9)}\`..\`${plan.checkpoint.slice(0, 9)}\` (${plan.dsh.commits} commits) · depth ${fmt(m.depth?.before)} → ${fmt(m.depth?.after)} · daemon \`${m.binary?.daemon ?? "?"}\` · wall ${m.wall ? `${fmt(m.wall.totalMs / 1000)} s` : "—"}`, "",
     failing.length ? table(["Check", "Value", "Result"], failing.map((x) => [x.name, x.value, x.result])) : `All ${g.checks.length} checks pass.`, "",
     `**Work:** ${fmt(w.bashCalls ?? summary?.bashCalls)} bash calls · ${fmt(w.lfsCommits ?? summary?.lfsCommits)} LayerFS Commits · conflicts ${c.conflicts ? `${c.conflicts.hit}/${c.conflicts.planned}` : "—"} · unit tests ${c.tests ? `${c.tests.equal}/${c.tests.run} equal to native` : "—"}`,
-    `**Slowest p95:** ${slow.length ? slow.map((r) => `${r.op} ${r.sizeClass} ${fmt(r.p95)} ms`).join(" · ") : "—"}`,
+    `**Slowest p95:** ${slow.length ? slow.map((r) => `${r.op}${r.sizeClass && r.sizeClass !== "—" ? ` (${r.sizeClass})` : ""} ${fmt(r.p95)} ms`).join(" · ") : "—"}`,
     `**Storage:** +${bytes(s.newStored)} stored (total ${bytes(s.stored)}) · dedupe ${s.canonical ? fmt(s.logical / s.canonical) : "—"} · compression ${s.stored ? fmt(s.canonical / s.stored) : "—"} · snapshot ${m.snapshot ? `+${bytes(m.snapshot.newBytes)} in ${fmt(m.snapshot.copyMs)} ms` : "none"}`, "",
+    renderOptimization({ plan, attempts, gates, findings }), "",
     `**Next:** ${next}`, "",
     `Report: [range-${pad(plan.range)}.md](${REPORTS}/range-${pad(plan.range)}.md)`, "",
   ].join("\n");
@@ -124,7 +158,7 @@ function main() {
   const metricsDir = opt("--metrics"), planDir = opt("--plan"), docs = opt("--docs");
   if (!metricsDir || !planDir || !docs) { console.error("usage: report.mjs --metrics <dir> --plan <dir> --docs <dir>"); process.exit(2); }
   const summaries = new Map(JSON.parse(readFileSync(join(planDir, "plan.json"), "utf8")).ranges.map((r) => [r.range, r]));
-  const attempts = loadAttempts(metricsDir);
+  const attempts = loadAttempts(metricsDir), findings = loadFindings(metricsDir);
   const last = [...attempts.values()].map((xs) => xs.at(-1));
   const pilot = last.filter((m) => m.range < 5);
   const baselineFile = join(metricsDir, "baseline.json");
@@ -145,7 +179,7 @@ function main() {
     rows.push({ range, dshCommits: plan.dsh.commits, depth: m.depth?.after ?? "—", verdict: g.verdict,
       worst: g.checks.find((c) => c.result === g.verdict && c.result !== "pass")?.name ?? "—", newStored: m.storage?.newStored });
     verdict = g.verdict;
-    comment = { range, text: renderComment({ plan, summary: summaries.get(range), attempts: xs, gates }) };
+    comment = { range, text: renderComment({ plan, summary: summaries.get(range), attempts: xs, gates, findings: findings.get(range) ?? [] }) };
   }
   if (comment) writeFileSync(join(metricsDir, `comment-${pad(comment.range)}.md`), comment.text);
   writeFileSync(join(docs, "RANGES.md"), renderIndex(rows));

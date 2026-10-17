@@ -12,6 +12,8 @@ import { parseIds, ROLES, storeFigures, trend } from "../inspect.mjs";
 import { chooseRun, compareResults, packageOf, parseVitestJson, selectTests, vitestCommand } from "../unit-tests.mjs";
 import { dockerArgs, INSTALL, parseProbe } from "../calibrate-tests.mjs";
 import { evaluate } from "../gates.mjs";
+import { change, checkFinding, loadFindings } from "../findings.mjs";
+import { renderOptimization } from "../report.mjs";
 
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
@@ -185,6 +187,43 @@ test("growth and snapshot-time gates", () => {
   const snapRow = (ms) => { const all = snapped(ms); return evaluate(all.at(-1), all.slice(0, -1)).checks.find((c) => c.name === "Snapshot time").result; };
   assert.equal(snapRow(() => 400), "pass");
   assert.equal(snapRow((g) => 400 * g), "optimize");
+});
+
+/** A complete finding for range 12's attempt 1. */
+const finding = () => ({
+  range: 12, attempt: 1, verdict: "optimize",
+  trigger: { check: "Range growth", value: "140.0 MiB, 4.52× the median", threshold: "≤ 3× median, ≤ 2 GiB" },
+  diagnosis: { step: "D5", summary: "each install rewrote every node_modules directory leaf", counter: "directory_leaf_writes", exponent: { before: 0.94, after: 0.04 } },
+  fix: { summary: "write a directory leaf only when its entries change", kind: "code path", commit: "abcdef1234567", test: "layerfs-project directory_leaf_reuse" },
+  improvement: [{ measure: "new stored bytes, range 12", before: 140, after: 33, unit: "MiB" }],
+  recovery: "forked the range-11 snapshot and reran range 12 measured",
+  record: "OPTIMIZATIONS.md#range-012-directory-leaves",
+});
+
+test("a finding record is checked, loaded by range and attempt, and its change is signed", () => {
+  assert.deepEqual(checkFinding(finding()), []);
+  const bad = { ...finding(), diagnosis: { step: "D9" }, fix: { kind: "guess" }, improvement: [] };
+  const problems = checkFinding(bad).join("; ");
+  for (const p of ["diagnosis.step", "diagnosis.summary", "fix.summary", "fix.commit", "fix.kind", "improvement"]) assert.ok(problems.includes(p), p);
+  const metrics = join(dir, "metrics");
+  mkdirSync(metrics);
+  writeFileSync(join(metrics, "finding-012.a2.json"), JSON.stringify({ ...finding(), attempt: 2 }));
+  writeFileSync(join(metrics, "finding-012.a1.json"), JSON.stringify(finding()));
+  assert.deepEqual(loadFindings(metrics).get(12).map((f) => f.attempt), [1, 2]);
+  assert.equal(loadFindings(join(dir, "nowhere")).size, 0);
+  assert.deepEqual([change(140, 33), change(100, 120), change(5, 5), change(0, 3)], ["−76%", "+20%", "±0%", "—"]);
+});
+
+test("the comment's optimization part: none, pending, then trigger, diagnosis, fix and improvement", () => {
+  const plan = { range: 12 };
+  const gate = (verdict, checks) => ({ verdict, checks });
+  const pass = gate("pass", [{ name: "Range growth", value: "33.0 MiB, 1.06× the median", threshold: "≤ 3×", result: "pass" }]);
+  const tripped = gate("optimize", [{ name: "Range growth", value: "140.0 MiB, 4.52× the median", threshold: "≤ 3×", result: "optimize" }]);
+  assert.equal(renderOptimization({ plan, attempts: [{ attempt: 1 }], gates: [pass] }), "**Optimization:** none.");
+  const pending = renderOptimization({ plan, attempts: [{ attempt: 1 }], gates: [tripped] });
+  assert.ok(pending.includes("Optimization needed") && pending.includes("**Trigger:** Range growth: 140.0 MiB") && pending.includes("pending") && pending.includes("finding-012.a1.json"));
+  const done = renderOptimization({ plan, attempts: [{ attempt: 1 }, { attempt: 2 }], gates: [tripped, pass], findings: [finding()] });
+  for (const part of ["Optimization (from attempt 1)", "D5 · each install", "depth exponent 0.94 → 0.04", "code path · commit `abcdef123`", "**Now:** Range growth pass", "| new stored bytes, range 12 | 140 MiB | 33 MiB | −76% |", "OPTIMIZATIONS.md#"]) assert.ok(done.includes(part), part);
 });
 
 let failed = 0;
