@@ -1,10 +1,11 @@
 // The demo strip above the composer, in the demo workspace's Sessions only:
 // how far the run got (the mock model's steps of every agent, and the root
-// agent's phase), Sim or Live, and Play, which replays the demo in a new
-// Session (demo.ts). Other Sessions render nothing.
+// agent's phase), the run speed (how fast the mock plays it, mock/src/pace.js;
+// it applies to a run under way too), Sim or Live, and Play, which replays the
+// demo in a new Session (demo.ts). Other Sessions render nothing.
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Button, IconPlayOutlineRegular, IconRefreshOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
-import { demoApi, playDemo, type Demo, type DemoInfo, type DemoMode, type DemoServices, type PlayStep } from './demo.ts'
+import { demoApi, playDemo, SPEEDS, speedLabel, type Demo, type DemoInfo, type DemoMode, type DemoServices, type PlayStep } from './demo.ts'
 import { useDemoSessionLock } from './lockdown.ts'
 import { ProgressBar, jobFraction, jobText, useClock } from './Progress.tsx'
 
@@ -96,12 +97,20 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
     <button type="button" aria-pressed={mode === value} onClick={() => { setMode(value); saveMode(value) }}
       style={{ border: 0, padding: '2px 10px', font: 'inherit', fontSize: 12, cursor: 'pointer', color: 'inherit', background: mode === value ? 'color-mix(in srgb, currentColor 14%, transparent)' : 'transparent' }}>{label}</button>
   )
+  const pace = (value: number) => (
+    <button type="button" key={value} aria-pressed={demo.speed === value} onClick={() => { demoApi.setSpeed(demo.id, value as typeof SPEEDS[number]).then(setDemo, (e: Error) => setError(e.message)) }}
+      title={value ? (value > 1 ? `The demo's pauses and typing ÷ ${value}` : "The demo's own pauses and typing") + '; commands take their own time' : 'No pauses or typing; commands take their own time'}
+      style={{ border: 0, padding: '2px 8px', font: 'inherit', fontSize: 12, cursor: 'pointer', color: 'inherit', background: demo.speed === value ? 'color-mix(in srgb, currentColor 14%, transparent)' : 'transparent' }}>{speedLabel(value)}</button>
+  )
   return (
     <div style={{ display: 'grid', gap: 6, margin: '0 0 6px', padding: '8px 12px', borderRadius: 10, border: '1px solid color-mix(in srgb, currentColor 12%, transparent)' }}>
       <ProgressBar fraction={fraction} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: error || halted || run?.state === 'stopped' ? 'var(--dsh-color-fg-danger, #d14343)' : 'var(--dsh-color-fg-muted, inherit)' }}
           title={error ?? line}>{error ?? line}</span>
+        <span role="group" aria-label="Run speed" style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid color-mix(in srgb, currentColor 18%, transparent)' }}>
+          {SPEEDS.map(pace)}
+        </span>
         <span role="group" aria-label="LayerFS" style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid color-mix(in srgb, currentColor 18%, transparent)' }}>
           {demo.live ? null : choice('sim', 'Sim')}{choice('live', 'Live')}
         </span>

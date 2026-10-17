@@ -1,8 +1,8 @@
 // The LayerFS tab: the root session's SDK calls, replayed into the shared
 // view (@dsh-layerfs/view), as the design preview draws a trace. It follows
 // the Host's /layerfs/session route while it is shown, and plays each call
-// at its own time, a moment behind the run (playback.ts). A demo's Session
-// also gets the demo's speed button: how fast the mock runs it.
+// at its own time, a moment behind the run (playback.ts). A demo's speed is
+// set on its demo strip (DemoStrip.tsx), not here.
 import { useEffect, useRef, useState } from 'react'
 import FM from '../../../../../sdk_sim/simulation_engine/files.js'
 import M from '../../../../../sdk_sim/simulation_engine/model.js'
@@ -13,7 +13,6 @@ import { AVATARS } from './avatars.ts'
 import { Setup } from './Setup.tsx'
 import type { Directories } from './InitDialog.tsx'
 import { Playback, type Step } from './playback.ts'
-import { demoApi, SPEEDS, speedLabel, type Speed } from './demo.ts'
 import { treeLoader, type TreeCache } from './replay.ts'
 import { MESSAGE } from './ui.ts'
 import { useHiddenComposer } from './composer.ts'
@@ -89,25 +88,7 @@ function Board({ sessionId, view, error }: { sessionId: string, view: SessionVie
     })
     const unfollow = followTheme(root)
     board.current.rerender = () => { clearTimeout(soon); soon = setTimeout(() => board.current?.W && board.current.render(), 40) }
-    let closed = false
-    // a demo's Session: its run speed, before Follow (1× 2× 4× Max), set on the mock
-    demoApi.info().then((info) => {
-      const demo = info?.demos.find((d) => d.sessionId === sessionId)
-      if (!demo || closed) return
-      const button = document.createElement('button')
-      button.className = 'ib'
-      const label = (speed: number) => {
-        button.textContent = speedLabel(speed)
-        button.title = `Run speed ${speedLabel(speed)}: ${speed ? (speed > 1 ? `the demo's pauses and typing ÷ ${speed}` : "the demo's own pauses and typing") : 'no pauses or typing'}; commands take their own time · click for ${speedLabel(next(speed))}`
-        button.dataset.speed = String(speed)
-      }
-      const next = (speed: number) => SPEEDS[(SPEEDS.indexOf(speed as Speed) + 1) % SPEEDS.length]
-      label(demo.speed)
-      button.onclick = () => { demoApi.setSpeed(demo.id, next(Number(button.dataset.speed))).then((d) => label(d.speed)).catch(() => { /* the speed stays */ }) }
-      root.querySelector('[data-follow]')?.before(button)
-    }).catch(() => { /* not the demo workspace */ })
     return () => {
-      closed = true
       clearTimeout(soon)
       play.current?.playback.stop()
       play.current = null
