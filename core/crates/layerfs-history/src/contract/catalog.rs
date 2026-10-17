@@ -111,8 +111,11 @@ pub trait HistoryCatalog: Send + Sync {
     /// The newest common ancestor of two history nodes, through Commit parents
     /// (including second parents), base Layers, Layer parents and the Commit
     /// each Layer was published from. Absent when the two share no ancestor.
-    /// Each side's walk is bounded by [`crate::records::MAXIMUM_LINEAGE_ROWS`];
-    /// exhausting it is `Capacity`, never a guessed base.
+    /// A stack's Layers form one chain, so walks stop at Layers: the work
+    /// follows the Commits made since the Layers the two sides reach, not the
+    /// history's length. Each walk is bounded by
+    /// [`crate::records::MAXIMUM_LINEAGE_ROWS`]; exhausting it is `Capacity`,
+    /// never a guessed base.
     fn merge_base(&self, left: NodeId, right: NodeId) -> HistoryResult<Option<NodeId>>;
 
     /// True when `ancestor` equals `descendant` or is reachable from it over
