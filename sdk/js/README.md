@@ -55,6 +55,11 @@ await worker.fs.read("feature", "/README.md");
 Create agent Sandboxes sequentially: creation/discovery changes share a project
 ownership lock and a concurrent attempt can return `Busy` before an effect.
 After creation, independent agents use separate Sandboxes and may work concurrently.
+Concurrent calls to one Sandbox from one process use separate control
+connections, up to six (a Sandbox admits eight), so a read does not wait behind
+another call's Commit; each call's exchanges stay on one connection and are sent
+once. The binding sets `UV_THREADPOOL_SIZE` to 64 when the process has not set
+it, because every call, a long `exec` included, holds a Node worker thread.
 Keep each agent's operations sequential. The default automatic service is shared
 through discovery and has a bounded connection budget; it is not one private
 daemon per client. Selecting existing agent Sandboxes distributes control work
@@ -277,6 +282,7 @@ without a trace line.
 | `method` | The binding method, for example `fs.read`, `sandbox.commit`, `operator.store.stats`. |
 | `args` | Short summary: text arguments (paths, refs, names, Sandbox id, command, message) cut to 200 characters; numbers and flags; `content`, `bytes`, `oldText` and `newText` as `<name>Bytes` byte counts; `apply` changes as `changes` (count) and `changeBytes`. Never file contents; `project`, `home` and `deploy` are left out. |
 | `start`, `ms` | Wall-clock start (ISO 8601) and elapsed wall milliseconds measured in the calling process, including the native queue and the daemon round trip. |
+| `queue` | The part of `ms` the call spent waiting before its own work, in milliseconds: `thread`, the wait for a native worker thread (the call's time outside its run in the binding), `connection`, the wait for a free control connection of its Sandbox, and their sum `ms`. Present on every line of a call that reached the binding. |
 | `ok` | `true` for a value; `false` with `code` and `message` for a refusal. |
 | `phase` | `end` on the line written when the call returns; `start` on the optional line written before it (see below). |
 | `branch`, `base`, `head`, `sandbox`, `path`, `baseLayer`, `process`, `exitCode` | Result ids, on a successful end line only. `branch.fork`: the new `branch`, its `base` Layer and its `head` (`null` when forked from main). `branch.merge`: the new `branch` and its `head`. `sandbox.create` (and the client's `sandbox.service`): the `sandbox` id. `sandbox.mount`: the `sandbox`, the Workspace `path`, its `branch`, its `base` Commit (`null` on a Branch with no Commit) and `baseLayer`. `operator.process.start`: the `process` id. A foreground `sandbox.exec`: its `exitCode`; its output is never traced. |

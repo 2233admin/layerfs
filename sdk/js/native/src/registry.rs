@@ -3,12 +3,12 @@
 //! removed there can be initialized again without a restart.
 //!
 //! A Sandbox is one container and its daemon. Its runtime runs commands
-//! directly; its control owner answers one request at a time, so concurrent
-//! Workspaces in one Sandbox share it in turn. The Sandbox runtime owner (this
+//! directly; its control connections (`pool`) each carry one exchange at a
+//! time, and concurrent calls take separate connections. The Sandbox runtime owner (this
 //! binding) also keeps the background processes it started; the daemon holds
 //! no process record.
 use crate::job::refused;
-use layerfs_api::{internal::Control, MountedWorkspace};
+use layerfs_api::MountedWorkspace;
 use layerfs_bridge::control::{SdkRefusal, SdkValue, WorkspaceToken};
 use layerfs_bridge::provision::StoreManifest;
 use layerfs_sandbox::{backend::docker::Sandbox, CommandIdentity};
@@ -45,7 +45,7 @@ pub(crate) struct SandboxState {
     pub(crate) directory: std::path::PathBuf,
     pub(crate) runtime: Sandbox,
     pub(crate) identity: CommandIdentity,
-    pub(crate) control: Mutex<Control>,
+    pub(crate) controls: crate::pool::Controls,
     pub(crate) mounts: Mutex<BTreeMap<String, Mount>>,
     pub(crate) processes: Mutex<BTreeMap<String, Process>>,
 }

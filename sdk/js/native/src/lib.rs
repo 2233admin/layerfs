@@ -4,6 +4,7 @@ mod discovery;
 mod dispatch;
 mod exec;
 mod job;
+mod pool;
 mod project;
 mod registry;
 mod sandbox;

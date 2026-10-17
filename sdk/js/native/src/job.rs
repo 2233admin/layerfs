@@ -45,13 +45,28 @@ impl Job {
     }
 }
 
+/// What a traced call spent in the binding: its whole run on the worker and
+/// its wait for a control connection, in microseconds.
+pub struct Client {
+    run: u128,
+    waited: u128,
+}
+
 impl Task for Job {
-    type Output = (Outcome, Vec<SdkValue>);
+    type Output = (Outcome, Vec<SdkValue>, Option<Client>);
     type JsValue = JsUnknown;
 
     fn compute(&mut self) -> napi::Result<Self::Output> {
+        let started = std::time::Instant::now();
         match self.work.take() {
-            Some(work) => Ok(crate::trace::run(self.scope, work)),
+            Some(work) => {
+                let (outcome, telemetry) = crate::trace::run(self.scope, work);
+                let client = self.scope.map(|_| Client {
+                    run: started.elapsed().as_micros(),
+                    waited: crate::trace::take_waited().as_micros(),
+                });
+                Ok((outcome, telemetry, client))
+            }
             None => Err(napi::Error::from_reason("operation already ran")),
         }
     }
@@ -59,7 +74,7 @@ impl Task for Job {
     fn resolve(
         &mut self,
         env: Env,
-        (output, telemetry): Self::Output,
+        (output, telemetry, client): Self::Output,
     ) -> napi::Result<Self::JsValue> {
         let mut answer = match output {
             Ok(value) => vec![("value".to_owned(), value)],
@@ -75,6 +90,13 @@ impl Task for Job {
         // Only a traced call has telemetry; an untraced answer is unchanged.
         if !telemetry.is_empty() {
             answer.push(("telemetry".to_owned(), SdkValue::List(telemetry)));
+        }
+        if let Some(client) = client {
+            let us = |v: u128| SdkValue::Int(i64::try_from(v).unwrap_or(i64::MAX));
+            answer.push((
+                "client".to_owned(),
+                SdkValue::map([("runUs", us(client.run)), ("connectionWaitUs", us(client.waited))]),
+            ));
         }
         to_js(&env, &SdkValue::Map(answer))
     }

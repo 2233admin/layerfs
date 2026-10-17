@@ -61,9 +61,9 @@ fn sdk(op: &str, args: SdkValue) -> Outcome {
         other => other,
     };
     let answer = if op.starts_with("operator.") {
-        layerfs_api::operator::call(&mut *crate::trace::control(&state.control)?, op, args)
+        layerfs_api::operator::call(&mut *crate::trace::control(&state.controls)?, op, args)
     } else {
-        layerfs_api::call(&mut *crate::trace::control(&state.control)?, op, args)
+        layerfs_api::call(&mut *crate::trace::control(&state.controls)?, op, args)
     };
     answer.map_err(|error| match error {
         layerfs_api::SdkError::Refused(refusal) => refusal,

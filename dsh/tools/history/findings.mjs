@@ -97,11 +97,19 @@ export function recordHeader(text) {
  * The REBUILD.md §4 problems of one fixes/ record (`name`, its text): Kind,
  * Old Stores, Old data, Recovery, and for kind 1-2 the compatibility test or
  * for kind 3 the four justifications (rows "Why not kind 1", "Why not kind 2",
- * "Rebuild cost", "Start snapshot"). Records before REBUILD.md are exempt.
+ * "Rebuild cost", "Start snapshot"). Records before REBUILD.md are exempt. A
+ * cause closed without a product change has Kind "none: <why>" and a Recovery.
  */
 export function checkRecord(name, text) {
   if (name === "README.md" || PRE_REBUILD_RECORDS.has(name)) return [];
   const h = recordHeader(text), cell = (...ks) => ks.map((k) => h.get(k)).find((v) => v != null);
+  // A cause closed without a product change (README.md): "none: <why>", with its recovery.
+  if (/^\**\s*none\b/i.test(cell("kind") ?? "")) {
+    const p = [];
+    if (!/^\**\s*none\**\s*:\s*\S/i.test(cell("kind"))) p.push("a kind none record says why after \"none:\"");
+    if (blank(cell("recovery"))) p.push("recovery is missing");
+    return p.map((x) => `fixes/${name}: ${x}`);
+  }
   const kind = Number(/^\**\s*([123])\b/.exec(cell("kind") ?? "")?.[1]);
   return checkRebuild({ kind, oldStores: cell("old stores"), oldData: cell("old data"), recovery: cell("recovery"),
     compat: cell("compatibility test", "regression test for compatibility"),

@@ -151,4 +151,6 @@
 - **F-017 · fs calls of all agents serialize on one Sandbox control
   connection (product, 007.a1 S1, 2026-10-18).** `registry.rs`
   `control: Mutex<Control>`; reads queue behind Commits (range 7: 1 ms work,
-  19 ms p50 client). Owner: the fixer, now.
+  19 ms p50 client). Owner: the fixer, now. **Fixed** (SDK addon `5baa0f5d`,
+  kind 1): a bounded pool of up to 6 connections per Sandbox, queue wait in the
+  trace; [fixes/007-a1-f017-control-connections.md](fixes/007-a1-f017-control-connections.md).

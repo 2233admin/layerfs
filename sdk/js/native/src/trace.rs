@@ -2,12 +2,12 @@
 //! makes travels as a traced observation under the call's scope, and the
 //! telemetry of the replies is collected for its trace line. An untraced call
 //! sends exactly what it did before. Telemetry never changes a result.
-use crate::registry::lock;
+use crate::pool::{Controls, Lease};
 use layerfs_api::internal::{self, Control};
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use std::cell::{Cell, RefCell};
 use std::ops::{Deref, DerefMut};
-use std::sync::{Mutex, MutexGuard};
+use std::time::Duration;
 
 /// Most telemetry values one call keeps; later ones are dropped.
 const TELEMETRY: usize = 64;
@@ -15,6 +15,13 @@ const TELEMETRY: usize = 64;
 thread_local! {
     static SCOPE: Cell<Option<[u8; 32]>> = const { Cell::new(None) };
     static COLLECTED: RefCell<Vec<SdkValue>> = const { RefCell::new(Vec::new()) };
+    /// Time this thread's call waited for a free control connection.
+    static WAITED: Cell<Duration> = const { Cell::new(Duration::ZERO) };
+}
+
+/// The connection wait of the call this thread runs, and resets it.
+pub(crate) fn take_waited() -> Duration {
+    WAITED.replace(Duration::ZERO)
 }
 
 /// Takes the trace scope a call's `observe` argument names out of its
@@ -43,19 +50,22 @@ pub(crate) fn run<T>(scope: Option<[u8; 32]>, work: impl FnOnce() -> T) -> (T, V
     }
     let _reset = Reset;
     COLLECTED.with_borrow_mut(Vec::clear);
+    WAITED.set(Duration::ZERO);
     SCOPE.set(scope);
     let value = work();
     (value, COLLECTED.with_borrow_mut(std::mem::take))
 }
 
-/// A Sandbox's control owner, traced while this thread is.
-pub(crate) struct Traced<'a>(MutexGuard<'a, Control>);
+/// A Sandbox's control connection, traced while this thread is.
+pub(crate) struct Traced<'a>(Lease<'a>);
 
-/// Locks a control owner for one call's exchanges.
-pub(crate) fn control(mutex: &Mutex<Control>) -> Result<Traced<'_>, SdkRefusal> {
-    let mut guard = lock(mutex)?;
-    internal::trace(&mut guard, SCOPE.get());
-    Ok(Traced(guard))
+/// Lends a control connection for one call's exchanges; the wait for it is
+/// the call's queue time.
+pub(crate) fn control(controls: &Controls) -> Result<Traced<'_>, SdkRefusal> {
+    let (mut lease, waited) = controls.lend()?;
+    WAITED.set(WAITED.get() + waited);
+    internal::trace(&mut lease, SCOPE.get());
+    Ok(Traced(lease))
 }
 impl Drop for Traced<'_> {
     fn drop(&mut self) {

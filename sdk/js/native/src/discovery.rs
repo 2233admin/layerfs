@@ -4,12 +4,11 @@ use crate::{
     registry::{self, Mount, Process, Project, SandboxState},
 };
 use layerfs_api::{
-    internal::{workspace, Control},
+    internal::workspace,
     BoundWorkspace, MountedWorkspace,
 };
 use layerfs_bridge::{
-    control::{DaemonPhase, HelloRequest, Reply, Request, SdkRefusal, SdkValue},
-    duplex::initiate_observed,
+    control::{Reply, SdkRefusal, SdkValue},
     provision::StoreManifest,
 };
 use layerfs_persistence::{SealedStore, SqlitePersistenceProfile};
@@ -375,37 +374,20 @@ pub(crate) fn reopen(args: &SdkValue) -> Result<Arc<SandboxState>> {
         },
     )
     .map_err(failed)?;
-    let endpoint = runtime.endpoint().map_err(failed)?;
-    let stream =
-        std::net::TcpStream::connect_timeout(&endpoint, Duration::from_secs(10)).map_err(failed)?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(10)))
-        .map_err(failed)?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(10)))
-        .map_err(failed)?;
-    let connection = initiate_observed(stream, &bytes(&value, "secret")?, bytes(&value, "peer")?)
-        .result
-        .map_err(failed)?;
-    connection.clear_io_waits().map_err(failed)?;
-    let mut control = Control::new(connection);
-    match control
-        .call(Request::Hello(HelloRequest {
-            expected_instance: Some(bytes(&value, "instance")?),
-            wait_for_store: false,
-        }))
-        .map_err(failed)?
-    {
-        Reply::Hello(status) if status.phase == DaemonPhase::ControlReady => {}
-        _ => return Err(refused("StaleSandbox", "saved daemon is not ControlReady")),
-    }
+    let dial = crate::pool::Dial {
+        endpoint: runtime.endpoint().map_err(failed)?,
+        secret: bytes(&value, "secret")?,
+        peer: bytes(&value, "peer")?,
+        instance: bytes(&value, "instance")?,
+    };
+    let control = dial.open()?;
     let state = Arc::new(SandboxState {
         id: id.to_owned(),
         project: project.to_owned(),
         directory,
         runtime,
         identity: CommandIdentity { uid: 501, gid: 20 },
-        control: Mutex::new(control),
+        controls: crate::pool::Controls::new(control, dial),
         mounts: Default::default(),
         processes: Default::default(),
     });
@@ -420,7 +402,9 @@ pub(crate) fn refresh(state: &SandboxState) -> Result<()> {
         let item = item.map_err(failed)?;
         let name = item.file_name().to_string_lossy().into_owned();
         if name.starts_with("mount-") && name.ends_with(".record") {
-            let value = load(&item.path())?;
+            let Some(value) = present(&item.path())? else {
+                continue;
+            };
             let path = registry::text(&value, "path")?;
             let token = layerfs_bridge::control::WorkspaceToken {
                 workspace: layerfs_history::WorkspaceId::from_slice(&bytes::<32>(
@@ -432,7 +416,7 @@ pub(crate) fn refresh(state: &SandboxState) -> Result<()> {
                     .get_int("namespace")
                     .ok_or_else(|| refused("InvalidInput", "namespace"))?,
             };
-            let status = match workspace(&mut *crate::trace::control(&state.control)?).status(token)
+            let status = match workspace(&mut *crate::trace::control(&state.controls)?).status(token)
             {
                 Ok(status) => status,
                 // Unmounted by the daemon; its owner removes the record next.
@@ -460,7 +444,9 @@ pub(crate) fn refresh(state: &SandboxState) -> Result<()> {
                 },
             );
         } else if name.starts_with("process-") && name.ends_with(".record") {
-            let v = load(&item.path())?;
+            let Some(v) = present(&item.path())? else {
+                continue;
+            };
             processes.insert(
                 registry::text(&v, "id")?.to_owned(),
                 Process {
@@ -479,6 +465,15 @@ pub(crate) fn refresh(state: &SandboxState) -> Result<()> {
     *registry::lock(&state.mounts)? = mounts;
     *registry::lock(&state.processes)? = processes;
     Ok(())
+}
+/// A listed record, or `None` when its owner removed it after the listing:
+/// concurrent calls of this process unmount and refresh at once (#352 F-017).
+fn present(path: &Path) -> Result<Option<SdkValue>> {
+    match load(path) {
+        Ok(value) => Ok(Some(value)),
+        Err(_) if !path.exists() => Ok(None),
+        Err(refusal) => Err(refusal),
+    }
 }
 fn absent(failure: &layerfs_api::OperationFailure) -> bool {
     matches!(&failure.cause, layerfs_api::OperationCause::Remote(refusal)

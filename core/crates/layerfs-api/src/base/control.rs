@@ -74,6 +74,11 @@ impl Control {
     pub(crate) fn take_telemetry(&mut self) -> Vec<SdkValue> {
         std::mem::take(&mut self.telemetry)
     }
+    /// True once an exchange on this connection failed: it is quarantined,
+    /// and every later call on it is refused before sending.
+    pub fn is_failed(&self) -> bool {
+        self.failed
+    }
     /// Sends once and awaits the original reply once. Typed remote refusals are
     /// replies; failed delivery retains an unknown, never replays the command.
     pub fn call(&mut self, request: Request) -> Result<Reply, Box<ControlFailure>> {

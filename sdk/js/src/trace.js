@@ -125,17 +125,28 @@ export async function traced(options, method, args, send) {
     write(file, { ...line, ms: elapsed(began), ok: false, code: error?.code ?? null, message: error?.message ?? String(error) });
     throw error;
   }
-  const { telemetry, ...plain } = answer;
+  const { telemetry, client, ...plain } = answer;
   const ms = elapsed(began);
+  // Queue time, never hidden in the call's work (#352 F-017): the wait for a
+  // worker thread (the call's time outside its run in the binding) and the
+  // wait for a free control connection of its Sandbox.
+  const queue = client ? queued(ms, client) : null;
   try {
     const result = plain.refused
       ? { ok: false, code: plain.refused.code, message: plain.refused.message }
       : { ok: true, ...committed(method, plain.value), ...results(method, args, plain.value) };
-    write(file, { ...line, ms, ...result, ...(telemetry ? { daemon: telemetry.map(daemon) } : {}) });
+    write(file, { ...line, ms, ...(queue ? { queue } : {}), ...result, ...(telemetry ? { daemon: telemetry.map(daemon) } : {}) });
   } catch {
     write(file, { ...line, ms, ok: !plain.refused });
   }
   return plain;
+}
+
+function queued(ms, { runUs, connectionWaitUs }) {
+  const round = (v) => Math.round(v * 1000) / 1000;
+  const thread = round(Math.max(0, ms - runUs / 1000));
+  const connection = round(connectionWaitUs / 1000);
+  return { ms: round(thread + connection), thread, connection };
 }
 
 const elapsed = (began) => Math.round((performance.now() - began) * 1000) / 1000;

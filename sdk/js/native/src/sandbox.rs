@@ -22,7 +22,7 @@ use layerfs_bridge::daemon_setup::{DaemonLimits, DaemonSetup};
 use layerfs_history::{CommitHistoryRequest, WorkspaceId};
 use layerfs_sandbox::backend::docker::{CreatePhase, Docker, SandboxRequest};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 /// Port the daemon listens on inside its container.
@@ -39,6 +39,10 @@ fn operation(failure: Box<OperationFailure>) -> SdkRefusal {
     values::refusal(&failure).unwrap_or_else(|| failed(failure))
 }
 
+/// Control connections a Sandbox's daemon admits: [`crate::pool::CONNECTIONS`]
+/// for this process and the rest for others (#352 F-017).
+pub(crate) const DAEMON_CONNECTIONS: u16 = 8;
+
 fn setup(private: [u8; 32], peer: [u8; 32]) -> DaemonSetup {
     DaemonSetup {
         listen: format!("0.0.0.0:{PORT}"),
@@ -50,7 +54,7 @@ fn setup(private: [u8; 32], peer: [u8; 32]) -> DaemonSetup {
         command_uid: 501,
         command_gid: 20,
         limits: DaemonLimits {
-            connections: 4,
+            connections: DAEMON_CONNECTIONS,
             handshake_ms: 2000,
             cache_bytes: 65536,
             namespaces: 16,
@@ -224,13 +228,19 @@ fn create_claimed(
     let container = owner.runtime.identity().to_string();
     let instance = owner.startup.instance;
     let (runtime, control, identity) = split(owner);
+    let dial = crate::pool::Dial {
+        endpoint: runtime.endpoint().map_err(failed)?,
+        secret: controller.private,
+        peer: daemon.public,
+        instance,
+    };
     let state = Arc::new(SandboxState {
         id: id.to_owned(),
         project: name.to_owned(),
         directory: saved_directory.to_owned(),
         runtime,
         identity,
-        control: Mutex::new(control),
+        controls: crate::pool::Controls::new(control, dial),
         mounts: Default::default(),
         processes: Default::default(),
     });
@@ -401,7 +411,7 @@ pub(crate) fn mount(args: &SdkValue) -> Outcome {
     let branch = text(args, "branch")?;
     let id = WorkspaceId::from_authority(random()?).map_err(failed)?;
     let mounted = {
-        let mut control = crate::trace::control(&state.control)?;
+        let mut control = crate::trace::control(&state.controls)?;
         workspace(&mut control).mount_branch(&state.project, branch, id)
     };
     let mounted = mounted.map_err(|error| match error {
@@ -429,7 +439,7 @@ pub(crate) fn mount(args: &SdkValue) -> Outcome {
 pub(crate) fn status(args: &SdkValue) -> Outcome {
     let state = sandbox(args)?;
     let token = state.token(text(args, "path")?)?;
-    let mut control = crate::trace::control(&state.control)?;
+    let mut control = crate::trace::control(&state.controls)?;
     let status = workspace(&mut control).status(token).map_err(operation)?;
     let head = commits(
         &mut control,
@@ -457,7 +467,7 @@ pub(crate) fn status(args: &SdkValue) -> Outcome {
 pub(crate) fn commit(args: &SdkValue) -> Outcome {
     let state = sandbox(args)?;
     let token = state.token(text(args, "path")?)?;
-    let reply = workspace(&mut *crate::trace::control(&state.control)?)
+    let reply = workspace(&mut *crate::trace::control(&state.controls)?)
         .commit_with(CommitControl {
             token,
             force: args.get_bool("force"),
@@ -491,7 +501,7 @@ pub(crate) fn unmount(args: &SdkValue) -> Outcome {
             )]),
         });
     }
-    let answer = workspace(&mut *crate::trace::control(&state.control)?)
+    let answer = workspace(&mut *crate::trace::control(&state.controls)?)
         .unmount_checked(token, args.get_bool("discard"))
         .map_err(operation)?;
     let value = values::unmounted(&answer)?;
