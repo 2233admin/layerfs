@@ -5,7 +5,7 @@
 //! and descends below a path only through [`ChangeWalk::enter`], so a caller
 //! filters and pages the pairs it is handed.
 //!
-//! [`ChangeWalk::full`] lists both trees completely. [`ChangeWalk::plan`] reads
+//! [`ChangeWalk::full`] lists both trees completely. [`Plan::make`] reads
 //! only what changed: the inodes whose stored values differ come from the
 //! page-skipping difference of the two inode tables, and each one's paths from
 //! the caller's [`BindingHints`], every hint checked against the tree it is used
@@ -19,7 +19,7 @@
 //! A stale or absent hint cannot change the answer: a hint is used only when the
 //! tree binds that name to that inode. When an inode has fewer checked bindings
 //! than its reference count, or more than [`MAXIMUM_CHANGED`] inodes changed,
-//! [`ChangeWalk::plan`] answers `None` and the caller uses [`ChangeWalk::full`].
+//! [`Plan::make`] answers `None` and the caller uses [`ChangeWalk::full`].
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
 use super::sorted::DifferenceWork;
@@ -31,7 +31,7 @@ use crate::filesystem::sorted::DirectoryRoot;
 use crate::object::inode_leaf::{InodeKind, InodeValue};
 use crate::object::{AuthenticatedObjects, ObjectId};
 
-/// Changed inodes beyond which [`ChangeWalk::plan`] leaves the answer to the
+/// Changed inodes beyond which [`Plan::make`] leaves the answer to the
 /// full walk.
 pub const MAXIMUM_CHANGED: usize = 65_536;
 
@@ -74,36 +74,34 @@ struct Frame {
     listings: Option<[Option<Listing>; 2]>,
 }
 
+/// The changed entries of two roots: per side, each directory serial on a
+/// path to a changed inode and the names on those paths. A plan depends only
+/// on the two immutable roots, so one plan serves every page of their
+/// difference. Its size follows the changed inodes and their ancestors, at
+/// most [`MAXIMUM_CHANGED`] inodes.
+#[derive(Debug, Default)]
+pub struct Plan {
+    dirty: [HashMap<u64, BTreeSet<PathName>>; 2],
+}
+
 /// A path-ordered walk over two roots.
 pub struct ChangeWalk<'a> {
     reader: &'a dyn AuthenticatedObjects,
     sides: [&'a TreeTable; 2],
-    /// Lists every directory instead of the changed names.
-    full: bool,
-    /// Per side: directory serial -> names on a path to a changed inode.
-    dirty: [HashMap<u64, BTreeSet<PathName>>; 2],
+    /// The changed entries; `None` lists every directory instead.
+    plan: Option<&'a Plan>,
     stack: Vec<Frame>,
 }
 
-impl<'a> ChangeWalk<'a> {
-    /// The walk of both whole trees.
-    pub fn full(
-        reader: &'a dyn AuthenticatedObjects,
-        left: &'a TreeTable,
-        right: &'a TreeTable,
-    ) -> ContentResult<Self> {
-        let mut walk = Self::new(reader, left, right, true);
-        walk.start()?;
-        Ok(walk)
-    }
-
-    /// The walk of the changed entries, or `None` when an inode's bindings
-    /// are not all recorded or more than [`MAXIMUM_CHANGED`] inodes changed.
-    pub fn plan(
-        reader: &'a dyn AuthenticatedObjects,
+impl Plan {
+    /// The changed entries of `left` to `right`, or `None` when an inode's
+    /// bindings are not all recorded or more than [`MAXIMUM_CHANGED`] inodes
+    /// changed.
+    pub fn make(
+        reader: &dyn AuthenticatedObjects,
         hints: &dyn BindingHints,
-        left: &'a TreeTable,
-        right: &'a TreeTable,
+        left: &TreeTable,
+        right: &TreeTable,
     ) -> ContentResult<Option<Self>> {
         let mut changed: BTreeMap<u64, [Option<InodeValue>; 2]> = BTreeMap::new();
         let mut large = false;
@@ -125,80 +123,62 @@ impl<'a> ChangeWalk<'a> {
             return Ok(None);
         }
         differed?;
-        let mut walk = Self::new(reader, left, right, false);
-        let mut recorded = HashMap::new();
-        for side in 0..2 {
+        let mut plan = Self::default();
+        let mut locator = Locator {
+            reader,
+            hints,
+            recorded: HashMap::new(),
+        };
+        for (side, tree) in [left, right].into_iter().enumerate() {
             let mut marked = HashSet::new();
             for (serial, values) in &changed {
                 let Some(value) = values[side] else { continue };
                 let need = value.namespace_ref_count.max(1);
-                if !walk.locate(hints, &mut recorded, &mut marked, side, *serial, need)? {
+                let dirty = &mut plan.dirty[side];
+                if !locator.locate(tree, dirty, &mut marked, *serial, need)? {
                     return Ok(None);
                 }
             }
         }
-        walk.start()?;
-        Ok(Some(walk))
+        Ok(Some(plan))
     }
+}
 
-    fn new(
-        reader: &'a dyn AuthenticatedObjects,
-        left: &'a TreeTable,
-        right: &'a TreeTable,
-        full: bool,
-    ) -> Self {
-        Self {
-            reader,
-            sides: [left, right],
-            full,
-            dirty: [HashMap::new(), HashMap::new()],
-            stack: Vec::new(),
-        }
-    }
+/// Climbs recorded bindings from changed inodes to the root, each binding
+/// checked against the tree; one child's recorded bindings are asked once.
+struct Locator<'r> {
+    reader: &'r dyn AuthenticatedObjects,
+    hints: &'r dyn BindingHints,
+    recorded: HashMap<u64, Vec<(u64, PathName)>>,
+}
 
-    /// Enters the two root directories; the roots themselves are not yielded.
-    fn start(&mut self) -> ContentResult<()> {
-        let root = |tree: &TreeTable| -> ContentResult<Option<EntryFacts>> {
-            let serial = tree.root_serial();
-            Ok(tree
-                .value(self.reader, serial)?
-                .map(|value| EntryFacts { serial, value }))
-        };
-        let pair = ("/".to_owned(), root(self.sides[0])?, root(self.sides[1])?);
-        self.enter(&pair)
-    }
-
-    /// Marks the paths of `serial` on `side` up to the root; false when fewer
-    /// than `need` of its bindings check against the tree.
+impl Locator<'_> {
+    /// Marks the paths of `serial` in `tree` up to the root into `dirty`;
+    /// false when fewer than `need` of its bindings check against the tree.
     fn locate(
         &mut self,
-        hints: &dyn BindingHints,
-        recorded: &mut HashMap<u64, Vec<(u64, PathName)>>,
+        tree: &TreeTable,
+        dirty: &mut HashMap<u64, BTreeSet<PathName>>,
         marked: &mut HashSet<u64>,
-        side: usize,
         serial: u64,
         need: u64,
     ) -> ContentResult<bool> {
-        let tree = self.sides[side];
         let mut todo = vec![(serial, need)];
         while let Some((child, need)) = todo.pop() {
             if child == tree.root_serial() || !marked.insert(child) {
                 continue;
             }
-            let bindings = match recorded.entry(child) {
+            let bindings = match self.recorded.entry(child) {
                 std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
                 std::collections::hash_map::Entry::Vacant(entry) => {
-                    entry.insert(hints.bindings_of(child)?)
+                    entry.insert(self.hints.bindings_of(child)?)
                 }
             };
             let mut found = 0;
             for (parent, name) in bindings.iter() {
                 if tree.lookup(self.reader, *parent, name)? == Some(child) {
                     found += 1;
-                    self.dirty[side]
-                        .entry(*parent)
-                        .or_default()
-                        .insert(name.clone());
+                    dirty.entry(*parent).or_default().insert(name.clone());
                     todo.push((*parent, 1));
                 }
             }
@@ -207,6 +187,60 @@ impl<'a> ChangeWalk<'a> {
             }
         }
         Ok(true)
+    }
+}
+
+impl<'a> ChangeWalk<'a> {
+    /// The walk of both whole trees.
+    pub fn full(
+        reader: &'a dyn AuthenticatedObjects,
+        left: &'a TreeTable,
+        right: &'a TreeTable,
+    ) -> ContentResult<Self> {
+        let mut walk = Self::new(reader, left, right, None);
+        walk.start(None)?;
+        Ok(walk)
+    }
+
+    /// The walk of the changed entries `plan` holds. A resumed walk names the
+    /// first component of its resume path as `from`, and the root visits only
+    /// the names at or after it.
+    pub fn planned(
+        reader: &'a dyn AuthenticatedObjects,
+        left: &'a TreeTable,
+        right: &'a TreeTable,
+        plan: &'a Plan,
+        from: Option<&PathName>,
+    ) -> ContentResult<Self> {
+        let mut walk = Self::new(reader, left, right, Some(plan));
+        walk.start(from)?;
+        Ok(walk)
+    }
+
+    fn new(
+        reader: &'a dyn AuthenticatedObjects,
+        left: &'a TreeTable,
+        right: &'a TreeTable,
+        plan: Option<&'a Plan>,
+    ) -> Self {
+        Self {
+            reader,
+            sides: [left, right],
+            plan,
+            stack: Vec::new(),
+        }
+    }
+
+    /// Enters the two root directories; the roots themselves are not yielded.
+    fn start(&mut self, from: Option<&PathName>) -> ContentResult<()> {
+        let root = |tree: &TreeTable| -> ContentResult<Option<EntryFacts>> {
+            let serial = tree.root_serial();
+            Ok(tree
+                .value(self.reader, serial)?
+                .map(|value| EntryFacts { serial, value }))
+        };
+        let pair = ("/".to_owned(), root(self.sides[0])?, root(self.sides[1])?);
+        self.enter_from(&pair, from)
     }
 
     /// Both sides' entries of the bound `names`, values read in one batch per side.
@@ -299,16 +333,27 @@ impl<'a> ChangeWalk<'a> {
     }
 
     /// Descends below `pair`, the pair just yielded, where it can differ.
-    pub fn enter(&mut self, (path, left, right): &Pair) -> ContentResult<()> {
+    pub fn enter(&mut self, pair: &Pair) -> ContentResult<()> {
+        self.enter_from(pair, None)
+    }
+
+    /// [`Self::enter`] for a resumed walk: of a planned directory, only the
+    /// names at or after `from` are visited, so a later page does not read the
+    /// entries earlier pages listed.
+    pub fn enter_from(
+        &mut self,
+        (path, left, right): &Pair,
+        from: Option<&PathName>,
+    ) -> ContentResult<()> {
         let directory = |entry: &Option<EntryFacts>| {
             entry.filter(|entry| entry.value.kind == InodeKind::Directory)
         };
         let frame = match (directory(left), directory(right)) {
             (None, None) => return Ok(()),
-            (Some(l), Some(r)) if l.serial == r.serial && !self.full => {
+            (Some(l), Some(r)) if l.serial == r.serial && self.plan.is_some() => {
                 let mut names = BTreeSet::new();
-                for side in 0..2 {
-                    if let Some(dirty) = self.dirty[side].get(&l.serial) {
+                for dirty in self.plan.iter().flat_map(|plan| &plan.dirty) {
+                    if let Some(dirty) = dirty.get(&l.serial) {
                         names.extend(dirty.iter().cloned());
                     }
                 }
@@ -323,6 +368,9 @@ impl<'a> ChangeWalk<'a> {
                             Ok(())
                         },
                     )?;
+                }
+                if let Some(from) = from {
+                    names.retain(|name| name >= from);
                 }
                 if names.is_empty() {
                     return Ok(());

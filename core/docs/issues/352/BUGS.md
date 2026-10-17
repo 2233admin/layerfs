@@ -121,3 +121,10 @@
   builder makes the gate measure per checkpoint (all pages) per changed entry,
   keeping the one-file probe as the depth control. Not normalised by tree files:
   the per-entry tree-size growth is itself a §4 violation and is fixed in F-012.
+  **Fixed** (fixer, D3, kind 1): the daemon keeps the 4 latest plans by root
+  pair, so a later page reuses its difference's plan, and a bounded per-call
+  object memo stops lookups re-reading B-tree upper pages. p1-rebase
+  checkpoints, statements per entry 69 / 74 / 90 / 118 / 120 → 5.7 / 6.3 / 7.3 /
+  6.6 / 8.0 (ranges 0–4); range 3 733 → 42 ms. Same 103 changes in a 400- and a
+  30,100-file tree: 477 and 549 statements. Daemon `361bb09e`;
+  [fixes/002-rebase-f012-diff-plan-memo.md](fixes/002-rebase-f012-diff-plan-memo.md).

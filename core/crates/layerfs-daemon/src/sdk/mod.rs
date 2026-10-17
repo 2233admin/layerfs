@@ -8,6 +8,7 @@ pub(crate) use body::Bodies;
 mod blame;
 pub(crate) mod branch;
 mod compare;
+mod plans;
 pub(crate) mod files;
 mod reads;
 pub(crate) mod snapshot;

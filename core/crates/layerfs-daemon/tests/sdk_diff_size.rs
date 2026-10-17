@@ -97,11 +97,14 @@ fn diff_commits_is_independent_of_tree_size_and_history_depth() {
     // statements and rows also pay to decode those objects' metadata delta
     // chains, capped at 8 but at a position that depends on each tree's page
     // layout and Commit count; they are printed, not compared.
+    // #352 F-012: the comparison's memo reads each B-tree page once, so the
+    // count is now the pages themselves (36 -> 10), and a tree one level
+    // taller reads one more. Equal within that one level.
     let first = observed[0].2;
     for (dirs, depth, work) in &observed {
-        assert_eq!(
-            (work.object_batches, work.object_ids),
-            (first.object_batches, first.object_ids),
+        assert!(
+            work.object_ids.abs_diff(first.object_ids) <= 1
+                && work.object_batches.abs_diff(first.object_batches) <= 1,
             "diff_commits of one file reads objects by tree size or depth ({dirs} directories, {depth} Commits): {observed:?}"
         );
     }

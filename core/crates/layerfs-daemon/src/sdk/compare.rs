@@ -13,7 +13,8 @@ use super::snapshot::{self, answer, existing, kind_name, Kind, Snap};
 use crate::store::{Store, StorePorts};
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use layerfs_content::compare::{
-    line_diff, BindingHints, ChangeKind, ChangeWalk, DiffLine, EntryFacts, LineOp, PathChange,
+    line_diff, BindingHints, ChangeKind, ChangeWalk, DiffLine, EntryFacts, LineOp, Memo,
+    PathChange, Plan,
 };
 use layerfs_content::filesystem::path::PathName;
 use layerfs_content::object::inode_leaf::InodeKind;
@@ -267,15 +268,51 @@ fn changes(
         catalog: store.history(),
         failure: RefCell::new(None),
     };
-    let planned = ChangeWalk::plan(reader, &hints, &left.tree, &right.tree);
-    if let Some(error) = hints.failure.take() {
-        return Err(args::history(error));
-    }
-    let mut walk = match planned.map_err(args::content)? {
-        Some(walk) => walk,
-        None => ChangeWalk::full(reader, &left.tree, &right.tree).map_err(args::content)?,
+    // One memo for the page: lookups share the B-trees' upper pages.
+    let memo = Memo::new(reader);
+    let key = (left.root, right.root);
+    let plan = match super::plans::find(key) {
+        Some(plan) => Some(plan),
+        None => {
+            let made = Plan::make(&memo, &hints, &left.tree, &right.tree);
+            if let Some(error) = hints.failure.take() {
+                return Err(args::history(error));
+            }
+            made.map_err(args::content)?.map(|plan| {
+                let plan = Arc::new(plan);
+                super::plans::keep(key, plan.clone());
+                plan
+            })
+        }
     };
+    let first = match &request.cursor {
+        Some(cursor) => component(cursor, "/")?,
+        None => None,
+    };
+    let mut walk = match &plan {
+        Some(plan) => ChangeWalk::planned(&memo, &left.tree, &right.tree, plan, first.as_ref()),
+        None => ChangeWalk::full(&memo, &left.tree, &right.tree),
+    }
+    .map_err(args::content)?;
     emit(reader, &mut walk, &request)
+}
+
+/// The component of `cursor` right below directory `path`, when `cursor`
+/// lies below it.
+fn component(cursor: &str, path: &str) -> Result<Option<PathName>, SdkRefusal> {
+    let rest = if path == "/" {
+        cursor.strip_prefix('/')
+    } else {
+        cursor
+            .strip_prefix(path)
+            .and_then(|rest| rest.strip_prefix('/'))
+    };
+    match rest.and_then(|rest| rest.split('/').next()) {
+        Some(name) if !name.is_empty() => PathName::new(name)
+            .map(Some)
+            .map_err(|_| invalid("cursor must be a path or null")),
+        _ => Ok(None),
+    }
 }
 
 /// Lists the differing pairs after the offset or cursor, at most `limit` and
@@ -300,7 +337,9 @@ fn emit(
                         .strip_prefix(path.as_str())
                         .is_some_and(|rest| rest.starts_with('/'));
                 if on_path {
-                    walk.enter(&pair).map_err(args::content)?;
+                    let from = component(cursor, path)?;
+                    walk.enter_from(&pair, from.as_ref())
+                        .map_err(args::content)?;
                 }
                 continue;
             }
