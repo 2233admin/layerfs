@@ -112,3 +112,11 @@
   `p1-rebase` and `p1-control-b`; 0.61 and 0.42 with ranges 3 and 4); the
   one-file probe is flat (~11 ms, vm_steps 18–21k). Owner: the fixer, counter
   diagnosis before P2.
+  **Diagnosis (fixer, D2/D3):** not depth. Replayed at depth 3,497, each
+  checkpoint's counters equal the original's at depths 571–2,611 (range 1
+  17,532 → 17,646 statements, range 3 27,462 → 27,624). Two causes: every page
+  rebuilds the whole checkpoint's plan (range 3: 3 pages × ~26k statements), and
+  statements per entry track tree files (~0.25 × files), which grows with depth
+  in this replay. Actions: the fixer carries the plan in the cursor (kind 1); the
+  builder makes the gate measure per checkpoint (all pages) and normalise the
+  counter by tree files, keeping the one-file probe as the depth control.
