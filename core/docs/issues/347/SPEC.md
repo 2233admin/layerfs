@@ -47,7 +47,7 @@ successful Live run (see [Gates](#gates)). #347 closes when all three have close
 | --- | --- | --- | --- |
 | Shop | `issue334/phase-c/` in release `issue334-diagnostic-evidence-20261016` | `volume-exports/` in the same release | 19 MB download |
 | Depot | `~/.codex/issue337-evidence/builder2-raw.tar`: `receipts/steps.jsonl`, `receipts/trace.jsonl`; scripts in `builder2-environment.tar` | `builder2-final/restored` (75 Commits, 7 Layers) | Every command exited 0 |
-| Crew | `core/docs/issues/340/tables/b2-r3-final-analysis-r1/primary-final-r1/b2-r3-steps.csv`, archives in `~/.codex/issue340-evidence/` | `b2-r3-store` | Exclude the zero-contribution startup |
+| Crew | the per-agent SDK traces (`run/trace/*.jsonl`) and call records (`run/agents/<agent>/out/calls/`) in `~/.codex/issue340-evidence/b2-r3-run-sharded/` (parts 0, 1, 3 and 69); `b2-r3-steps.csv` is the same 2,796 calls | `b2-r3-store` | Exclude the zero-contribution startup (I2b's unused Sandbox) |
 
 The converter reads a restored copy of each stopped Store from its own disposable
 LayerFS home, never the evidence originals. The recorded Stores predate the
@@ -136,13 +136,44 @@ Each field of a kept step comes from the record:
   depending on wall time (cargo's last-use times); a `Committed` there must
   change no tracked file, which `replay.mjs` checks before going on and the
   order check checks again (`final.json` `extras` places such Commits).
+- **Races (Crew).** Some recorded exits came from tests in the builders' own
+  application that pass or fail by chance. Each was run 12 or more times in
+  its replayed Workspace and came out both ways or matched a computed chance
+  (BUGS rows 25, 29–35 and 37–39): rank exhaustion (random ids, until W2-0061's fix),
+  signed credentials (a tampered ending still verifies about once in 1,024,
+  until P1c-008's), deleted relation activity (random ids, until W1b-105's),
+  the planning browser test (Selenium waits and re-rendered elements; never
+  fixed), the hierarchy browser test (an asynchronous focus, until W1c-038's
+  fix), the shell browser test (re-rendered elements, until lead-301's) and
+  the search browser test (a timeout under load, from I1-139: the record
+  passes it 33 times and fails it once). `RACES` in `import/crew.mjs` names those tests and the steps between
+  which each raced; a recorded command in which one ran before its fix (35 of the
+  304) may exit 0 or 1 unless the record's other failures decide its exit, and
+  `replay.mjs` stops if a run of it fails a test that the record ran and
+  passed and that is not racing (a racing test that passes may let a chained
+  command run that the record never reached; its tests have no recorded
+  outcome). The people browser proof (P1b-0118 failed, P1b-0123
+  passed) is not a node test: those two steps may exit either way, and a
+  failure must be one of its two Selenium errors raised in
+  `people-browser.py`. The tests run in temporary folders, so either outcome
+  leaves the Workspaces alike, and the final tree is compared anyway. This is
+  a decision recorded on #350; no other outcome is relaxed.
 - **Agent.** Shop and Depot: the builder plays as `root`. Crew: lead → `root`;
   `P1…P1f` → `people`; `W1*` → `work-a`; `W2*` → `work-b`; `I1*` → `insight-a`;
   `I2*` → `insight-b`. The observer (`main`) is dropped.
-- **Order.** Steps keep their recorded start order within an agent. Crew: the lead
-  wakes a role with `send_message` at its first recorded step. A step that merges,
-  publishes or forks from a Branch that another role wrote waits (`reply until`)
-  for that role's last earlier recorded write to it.
+- **Order.** Steps keep their recorded start order within an agent. Crew
+  (`tools/import/turns.mjs`): two steps of different agents that touch the same
+  Branch, at least one writing it (a write, a Commit, a merge or fork into it, a
+  publish into main), keep their recorded order: a write waits for the last
+  write and the reads since, a read (a mount, a merge, fork or publish from it)
+  for the last write. A Sandbox the lead created for a role (the lead created
+  every worker's, one at a time) comes after that role's earlier steps and
+  before its next. A role's steps are cut into turns only where such a
+  dependency enters or leaves; the lead starts each turn (`subagent`, then
+  `send_message`) and waits for turns (`reply until`) in recorded order, so the
+  roles otherwise run at the same time. A wait whose roles have all finished
+  already is skipped by the mock (saying it would end the lead's turn with
+  nothing left to wake it).
 - **Pause.** `clamp(gap × k, 400, 3000)` ms, where `gap` is the time since the
   agent's previous kept step ended. `k` is chosen so that the pauses sum to the
   demo's target thinking time: Shop 1 min, Depot 4 min, Crew 8 min. The commands'

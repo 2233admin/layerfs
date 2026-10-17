@@ -53,9 +53,23 @@ export function nextReply(scenario, agent, messages) {
 
   const children = new Map(), contact = new Map(), jobs = new Map();
   let attempts = 0, retrying = false, replyAt = -1;
+  // the children of `until` that have not settled since the agent last
+  // contacted them, counting the messages before `before`
+  const unsettled = (until, before) => until.filter((child) => {
+    const id = children.get(child), since = contact.get(child) ?? -1;
+    return !id || !settled.some((s) => s.id === id && s.k > since && s.k < before);
+  });
+  // a wait whose children all settled already is not said: saying it would end
+  // the turn, and no notice would come to wake the agent again
+  const skipWait = (before) => {
+    const step = steps[index];
+    if (step?.kind === "reply" && step.until.length && !retrying && !unsettled(step.until, before).length) { index++; return true; }
+    return false;
+  };
   for (const [k, m] of messages.entries()) {
     if (m.role !== "assistant") continue;
     const calls = (m.content ?? []).filter((b) => b.type === "tool-call");
+    if (calls.length) skipWait(k);
     if (!calls.length) {
       if (steps[index]?.kind === "reply") { index++; replyAt = k; retrying = false; }
       continue;
@@ -87,16 +101,14 @@ export function nextReply(scenario, agent, messages) {
     index++, attempts = 0, retrying = false;
   }
 
+  skipWait(messages.length);
   const step = steps[index];
   if (!step) return reply({ kind: "text", text: "Done.", delay: 0 });
   // the first step of a later turn waits until the agent is woken
   const previous = steps[index - 1];
   if (previous?.kind === "reply" && !retrying) {
     if (previous.until.length) {
-      const waiting = previous.until.filter((child) => {
-        const id = children.get(child), since = contact.get(child) ?? -1;
-        return !id || !settled.some((s) => s.id === id && s.k > since);
-      });
+      const waiting = unsettled(previous.until, messages.length);
       if (waiting.length) return reply({ kind: "text", text: `Still waiting for ${waiting.join(" and ")}.`, delay: 0 });
     } else if (!messages.slice(replyAt + 1).some((m) => m.role === "user" && !settledId(m))) {
       return reply({ kind: "text", text: "Waiting for a message.", delay: 0 });

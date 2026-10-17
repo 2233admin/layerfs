@@ -9,7 +9,9 @@
 // Each call's outcome must be the recorded one (`expect`; "a|b" allows
 // either), and each command's exit code the recorded one. A Commit the record
 // has as UpToDate may come back Committed only if it changes no tracked file
-// (a tool's own cache, such as cargo's last-use times, is all it holds). The first call that
+// (a tool's own cache, such as cargo's last-use times, is all it holds). A
+// command whose recorded failures were only tests that fail by chance (`flaky`)
+// may exit 0 or as recorded, and a failure must be the recorded one. The first call that
 // differs ends the step with exit code 1, which stops the demo there: a run
 // is never patched up. Nothing waits or retries; order between agents comes
 // from the scenario's own waits.
@@ -37,7 +39,13 @@ class Mismatch extends Error {}
 const outcome = (value) => (value?.kind ?? "ok");
 // create and mount answer only the Sandbox's name or the Workspace's path, and only when Ready or Mounted
 const ANSWERED = { "sandbox.create": "Ready", "sandbox.mount": "Mounted" };
-const allowed = (expect, got) => expect.slice(expect.indexOf(":") + 1).split("|").includes(got);
+// alternatives share what comes before the last ":" ahead of the first "|"
+// ("sandbox.exec:exit:1|0" allows exit:1 and exit:0), as check-demo reads them
+const allowed = (expect, got) => {
+  const bar = expect.indexOf("|"), head = bar < 0 ? expect.indexOf(":") + 1 : expect.lastIndexOf(":", bar) + 1;
+  const prefix = expect.slice(expect.indexOf(":") + 1, head);
+  return expect.slice(head).split("|").some((kind) => prefix + kind === got);
+};
 /** Runs one SDK call and checks its outcome against the record. */
 async function expectCall(call, method, work) {
   let value, got;
@@ -49,6 +57,7 @@ async function expectCall(call, method, work) {
   const want = call.expect;
   if (want && !(want.startsWith(`${method}:`) && allowed(want, got))) {
     if (value?.refused) console.log(`✕ ${value.refused.message}`);
+    else if (method === "sandbox.exec") console.log(tail(`${value.stdout ?? ""}${value.stderr ?? ""}`));
     throw new Mismatch(`${method} answered ${got}; the record has ${want.slice(method.length + 1)}`);
   }
   return value;
@@ -57,7 +66,7 @@ async function expectCall(call, method, work) {
 const tail = (text, lines = 12) => String(text ?? "").trimEnd().split("\n").slice(-lines).join("\n");
 const short = (id) => String(id ?? "").slice(0, 12);
 
-/** A recorded ref ("main", "orders#2", "L3": main's fourth Layer) as this run's id. */
+/** A recorded ref ("main", "orders#2", "L3": main's fourth Layer, or a Branch by name) as this run's id. */
 async function resolveRef(lf, ref) {
   if (ref === "main" || ref == null) return ref ?? undefined;
   const layer = /^L([0-9]+)$/.exec(ref);
@@ -72,7 +81,7 @@ async function resolveRef(lf, ref) {
     return l.id;
   }
   const [, branch, index] = /^(.+)#([0-9]+)$/.exec(ref) ?? [];
-  if (!branch) throw new Mismatch(`cannot name ${ref} in this run`);
+  if (!branch) return ref; // a Branch by name: its head now
   const items = [];
   for (let pos = 0; ;) { const page = await lf.branch.list_commits(branch, 1000, pos); items.push(...page.items); if (!page.hasMore) break; pos += page.items.length; }
   const b = (await lf.project.list_branches(1000, 0)).items.find((x) => x.name === branch);
@@ -119,17 +128,20 @@ export async function step(scenario, number) {
           break;
         }
         case "create": {
-          const name = `${project}-${agent}`.slice(0, 63).replace(/[^a-z0-9]+$/, "");
+          // `for`: the lead creates a worker's Sandbox, which the worker then uses and closes
+          const owner = call.for ?? agent;
+          const name = `${project}-${owner}`.slice(0, 63).replace(/[^a-z0-9]+$/, "");
           const id = await expectCall(call, "sandbox.create", () => lf.sandbox.create(name, project, process.env.DSH_LAYERFS_IMAGE));
-          keep(boxKey, id);
-          lf = new LayerFS(project, { sandbox: id });
-          console.log(`● Sandbox ${name}`);
+          keep(`sandbox-${owner}`, id);
+          if (owner === agent) lf = new LayerFS(project, { sandbox: id });
+          console.log(`● Sandbox ${name}${owner === agent ? "" : ` for ${owner}`}`);
           break;
         }
         case "close": {
           const id = note(boxKey);
           if (!id) throw new Mismatch("the agent has no Sandbox to close");
-          await expectCall(call, "sandbox.close", () => lf.sandbox.close(id));
+          const r = await expectCall(call, "sandbox.close", () => lf.sandbox.close(id));
+          if (r?.refused) { console.log(`✓ close refused ${r.refused.code}, as recorded`); break; }
           keep(boxKey, null);
           console.log(`✓ closed ${id}`);
           break;
@@ -138,6 +150,7 @@ export async function step(scenario, number) {
           const id = note(boxKey);
           if (!id) throw new Mismatch("the agent has no Sandbox to mount in");
           const r = await expectCall(call, "sandbox.mount", () => lf.sandbox.mount(id, call.branch));
+          if (r?.refused) { console.log(`✓ mount ${call.branch} refused ${r.refused.code}, as recorded`); break; }
           const path = r;
           workspaces[call.ws] = { sandbox: id, path, branch: call.branch };
           keep(wsKey, workspaces);
@@ -150,6 +163,20 @@ export async function step(scenario, number) {
           const out = tail(`${r.stdout ?? ""}${r.stderr ?? ""}`);
           if (out) console.log(out);
           console.log(`[exit ${r.exitCode}] (recorded exit ${call.exit})`);
+          if (call.flaky && r.exitCode !== 0) {
+            // the record failed only by a race its next step fixed: a failure must be that one
+            const text = `${r.stdout ?? ""}${r.stderr ?? ""}`;
+            const failed = [...text.matchAll(/^not ok \d+ - (.*)$/gm)].map((m) => m[1].trim());
+            // a racing test that passed may let a chained command run that the
+            // record never reached; a test the record ran and passed must pass
+            const same = call.flaky.tests
+              ? failed.length > 0 && failed.every((t) => call.flaky.tests.includes(t) || !(call.flaky.passed ?? []).includes(t))
+              : !failed.length && text.includes(`${call.flaky.where}", line`) && call.flaky.errors.some((e) => text.includes(`${e}:`));
+            if (!same) throw new Mismatch(`it failed otherwise than the record (${failed.length ? `tests ${failed.filter((t) => !call.flaky.tests?.includes(t)).join(", ") || failed.join(", ")}` : "no test named"})`);
+            const unrecorded = call.flaky.tests ? failed.filter((t) => !call.flaky.tests.includes(t)) : [];
+            if (unrecorded.length) console.log(`  (failed tests the record never reached: ${unrecorded.join(", ")})`);
+          }
+          if (call.flaky) console.log(`  (the recorded exit came from a race only: ${call.flaky.tests?.join(", ") ?? `${call.flaky.errors.join(" or ")} in ${call.flaky.where}`}; this run exited ${r.exitCode})`);
           break;
         }
         case "commit": {

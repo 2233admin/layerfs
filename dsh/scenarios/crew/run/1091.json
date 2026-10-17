@@ -1,0 +1,31 @@
+{
+ "step": "I1b-058 I-10: explicit generated Python cache removal",
+ "agent": "insight-a",
+ "kind": "write",
+ "branch": "insight.5",
+ "writes": {
+  "/packages/web/test/__pycache__": null
+ },
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 33,
+ "expect": [
+  "fs.apply:Committed"
+ ],
+ "calls": [
+  {
+   "op": "write",
+   "branch": "insight.5",
+   "message": "I1b 058 I-10: remove inspected generated search-browser py_compile cache after source proof",
+   "changes": [
+    {
+     "op": "rm",
+     "path": "/packages/web/test/__pycache__"
+    }
+   ],
+   "commit": "1267942825507b2816acc5344e7f4a5f4952641789c5e996708dabfd0c134cf554",
+   "expect": "fs.apply:Committed"
+  }
+ ]
+}

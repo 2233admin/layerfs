@@ -14,7 +14,7 @@ import { Progress } from "../src/progress.js";
 import { compileScenario, loadScenarios, ScenarioError } from "../src/scenario.js";
 
 const scenarios = loadScenarios(fileURLToPath(new URL("../../../scenarios/", import.meta.url)));
-assert.deepEqual([...scenarios.keys()], ["tour", "parallel", "conflicts", "merge", "sandbox", "agents", "shop", "depot"]);
+assert.deepEqual([...scenarios.keys()], ["tour", "parallel", "conflicts", "merge", "sandbox", "agents", "shop", "depot", "crew"]);
 assert.equal(scenarios.get("shop").live, true, "a replayed run plays only on Live LayerFS");
 assert.equal(scenarios.get("agents").speed, 2, "5 agents plays at 2× as the original did");
 assert.equal(scenarios.get("tour").speed, 1);
@@ -39,7 +39,7 @@ function play(scenario, { busyOnce = null, progress = null } = {}) {
     return agent;
   };
   const root = start("root", "Run the demo.", null);
-  for (let requests = 0; requests < 2000; requests++) {
+  for (let requests = 0; requests < 10000; requests++) {
     const agent = [...agents.values()].find((a) => a.awake);
     if (!agent) break;
     assert.equal(agentOf(scenario, agent.messages), agent.name, `${scenario.name}: ${agent.name}'s conversation is recognised`);
@@ -151,6 +151,26 @@ for (const [name, scenario] of scenarios) {
   assert.equal(nextReply(s, "root", root).text, "Still waiting for footer.", "footer's earlier notice does not count after the message");
 }
 
+// a wait whose children all settled already is not said (no notice would wake the root after it)
+{
+  const s = scenarios.get("parallel");
+  const root = [textMessage("user", "Run the demo.", { kind: "user" })];
+  const step = (reply, result) => {
+    const callId = `c${++n}`;
+    root.push({ role: "assistant", id: `m${++n}`, source: { kind: "model" }, content: [{ type: "tool-call", id: callId, name: reply.calls[0].name, arguments: "{}" }] });
+    root.push({ role: "tool", id: `m${++n}`, toolCallId: callId, source: { kind: "tool", callId }, content: [{ type: "text", text: result }] });
+  };
+  const H = "33333333-3333-4333-8333-333333333333", F = "44444444-4444-4444-8444-444444444444";
+  step(nextReply(s, "root", root), `started subagent ${H}`);
+  root.push(textMessage("user", `Background subagent ${H} finished and will do no further work unless you send it more.`, { kind: "subagent-settled" }));
+  step(nextReply(s, "root", root), `started subagent ${F}`);
+  root.push(textMessage("user", `Background subagent ${F} finished and will do no further work unless you send it more.`, { kind: "subagent-settled" }));
+  const publish = nextReply(s, "root", root);
+  assert.match(publish.calls[0].args.command, /branch\.publish\("header"\)/, "the satisfied wait is skipped");
+  step(publish, "publish header → Added");
+  assert.equal(nextReply(s, "root", root).calls[0].name, "send_message", "the walk skips the wait at the same place");
+}
+
 // a child's later turn starts only with a message from its parent
 {
   const s = scenarios.get("agents");
@@ -232,7 +252,7 @@ assert.match(out.find((c) => c.type === "block-end").block.text, /^Conflicts: [\
 assert.equal(out.at(-1).reason.kind, "stop");
 out = await chunks({ model: "nope", messages: [], tools });
 assert.equal(out.at(-1).reason.failure.code, "MOCK_NO_SCENARIO");
-assert.deepEqual((await adapter.listModels("layerfs-mock")).map((x) => x.name), ["LayerFS mock · Tour", "LayerFS mock · Parallel Branches", "LayerFS mock · Conflicts", "LayerFS mock · Commit & merge", "LayerFS mock · One Sandbox, two Workspaces", "LayerFS mock · 5 agents", "LayerFS mock · Shop", "LayerFS mock · Depot"]);
+assert.deepEqual((await adapter.listModels("layerfs-mock")).map((x) => x.name), ["LayerFS mock · Tour", "LayerFS mock · Parallel Branches", "LayerFS mock · Conflicts", "LayerFS mock · Commit & merge", "LayerFS mock · One Sandbox, two Workspaces", "LayerFS mock · 5 agents", "LayerFS mock · Shop", "LayerFS mock · Depot", "LayerFS mock · Crew"]);
 const aborted = new AbortController(); aborted.abort();
 out = await chunks({ model: "tour", messages: [textMessage("user", "Run the demo.", { kind: "user" })], tools, signal: aborted.signal });
 assert.equal(out.at(-1).reason.kind, "aborted");

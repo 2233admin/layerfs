@@ -11,13 +11,14 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { variesOf } from "./checks/gates.mjs";
+import { assemble } from "./import/turns.mjs";
 import { historyOf } from "./checks/history.mjs";
 import { readAll, trackedChanges, trackedHashes, trackedTree } from "./checks/tree.mjs";
 
 const FORMATS = {
   shop: { read: async (i) => (await import("./import/shop.mjs")).readShop(i), title: "Shop", order: 7, blurb: "a builder agent's recorded run of a small web shop, from skeleton to admin page, over six milestones", target: 60, inputs: ["trace", "builder", "seed"] },
   depot: { read: async (i) => (await import("./import/depot.mjs")).readDepot(i), title: "Depot", order: 8, blurb: "a builder agent's recorded run of a Rust inventory service and its browser client", target: 240, inputs: ["receipts", "seed"] },
-  crew: { read: async (i) => (await import("./import/crew.mjs")).readCrew(i), title: "Crew", order: 9, blurb: "a lead and its crew of agents building one application together, on Branches of their own", target: 480, inputs: ["steps", "archives", "seed"] },
+  crew: { read: async (i) => (await import("./import/crew.mjs")).readCrew(i), title: "Crew", order: 9, blurb: "a lead and its crew of agents building one application together, on Branches of their own", target: 480, inputs: ["traces", "agents", "seed"] },
 };
 const IMAGE = "sha256:091f785ba7d5d036dfa350e8fd69ee1fcd2d8320c3706841c8c95e6411eee9d2";
 const WRITES = new Set(["fs.apply", "fs.write", "fs.edit", "fs.mkdir", "fs.rm", "fs.cp", "fs.mv"]);
@@ -48,7 +49,7 @@ const kindOf = (call) => (call.ok === false ? call.code : call.kind ?? "ok");
 try {
   const record = await kind.read(inputs);
   const history = await historyOf(lf, operator);
-  const commits = new Map();
+  const commits = new Map(), branchNames = new Set(Object.keys(history.branches));
   for (const branch of await lfAll((s, p) => lf.project.list_branches(s, p))) {
     if (branch.name === "main") continue;
     for (const c of await lfAll((s, p) => lf.branch.list_commits(branch.name, s, p))) commits.set(c.id, c);
@@ -56,13 +57,14 @@ try {
 
   // the agents' own Sandboxes: those a Workspace was mounted in
   const agentBoxes = new Set();
-  for (const step of record.steps) for (const c of step.calls) if (c.method === "sandbox.mount") agentBoxes.add(c.args.sandbox);
+  const boxOwner = new Map(); // which agent mounted in each Sandbox
+  for (const step of record.steps) for (const c of step.calls) if (c.method === "sandbox.mount") { agentBoxes.add(c.args.sandbox); boxOwner.set(c.args.sandbox, step.agent); }
   // each mount's Workspace path: a Sandbox numbers its Workspaces in mount order
   const mountPaths = new Map();
   for (const box of agentBoxes) {
     const all = record.steps.flatMap((s) => s.calls).filter((c) => c.args.sandbox === box);
-    const paths = [...new Set(all.map((c) => c.args.path).filter(Boolean))].sort((a, b) => num(a) - num(b));
-    const mounts = all.filter((c) => c.method === "sandbox.mount");
+    const paths = [...new Set(all.filter((c) => WORKSPACE.has(c.method) && c.method !== "sandbox.mount").map((c) => c.args.path).filter(Boolean))].sort((a, b) => num(a) - num(b));
+    const mounts = all.filter((c) => c.method === "sandbox.mount" && c.ok !== false); // a refused mount has no Workspace
     if (paths.length !== mounts.length) fail(`Sandbox ${box}: ${mounts.length} mounts but ${paths.length} Workspace paths`);
     mounts.forEach((m, i) => mountPaths.set(m, paths[i]));
   }
@@ -82,17 +84,23 @@ try {
         calls.push({ op: "write", branch: call.args.branch, message: call.args.message ?? null, changes, commit: call.commit, expect: `fs.apply:${kindOf(call)}` });
       } else if (HISTORY.has(m)) {
         const a = call.args;
-        if (m === "branch.fork") calls.push({ op: "fork", name: a.name, from: refOf(a.from ?? "main", history.ids), expect: `${m}:${kindOf(call)}` });
+        if (m === "branch.fork") calls.push({ op: "fork", name: a.name, from: refOf(a.from ?? "main", history.ids, branchNames), expect: `${m}:${kindOf(call)}` });
         if (m === "branch.merge") calls.push({ op: "merge", a: a.branch, b: a.with, name: a.name, message: a.message ?? null, expect: `${m}:${kindOf(call)}` });
-        if (m === "branch.publish") calls.push({ op: "publish", branch: a.branch, commit: a.commit ? refOf(a.commit, history.ids) : null, expect: `${m}:${kindOf(call)}` });
+        if (m === "branch.publish") calls.push({ op: "publish", branch: a.branch, commit: a.commit ? refOf(a.commit, history.ids, branchNames) : null, expect: `${m}:${kindOf(call)}` });
       } else if (LIFE.has(m)) {
-        if (m === "sandbox.close" && !agentBoxes.has(call.args.sandbox)) continue; // the service Sandbox; each call closes its own
-        calls.push({ op: m === "sandbox.create" ? "create" : "close", expect: `${m}:${kindOf(call)}` });
+        if (m === "sandbox.close" && !agentBoxes.has(call.args.sandbox)) continue; // the service Sandbox, or one nobody used; each call closes its own
+        if (m === "sandbox.create" && call.created && !agentBoxes.has(call.created)) { notes.push(`${step.label}: a Sandbox no agent mounted in; its create is dropped`); continue; }
+        // the lead created a worker's Sandbox (Crew): the create stays the lead's and the Sandbox is the worker's
+        const owner = m === "sandbox.create" && call.created ? boxOwner.get(call.created) : null;
+        calls.push({ op: m === "sandbox.create" ? "create" : "close", ...(owner && owner !== step.agent ? { for: owner } : {}), expect: `${m}:${kindOf(call)}` });
       } else if (WORKSPACE.has(m)) {
-        const ws = m === "sandbox.mount" ? mountPaths.get(call) : call.args.path;
+        const recorded = m === "sandbox.mount" ? mountPaths.get(call) : call.args.path;
+        // a role played by several recorded agents (Crew) keeps each one's Workspaces apart
+        const ws = step.origin ? `${step.origin}:${recorded}` : recorded;
         if (m === "sandbox.mount") { wsBranch.set(`${call.args.sandbox} ${ws}`, call.args.branch); calls.push({ op: "mount", branch: call.args.branch, ws, expect: `${m}:${kindOf(call)}` }); }
         if (m === "sandbox.unmount") calls.push({ op: "unmount", ws, discard: call.args.discard === true, expect: `${m}:${kindOf(call)}` });
         if (m === "sandbox.exec") calls.push(execOf(step, call, ws, notes));
+
         if (m === "sandbox.commit") {
           let expect = `${m}:${kindOf(call)}`;
           if (call.ok && call.kind === "Committed" && call.commit && await generatedOnly(call.commit, commits, treeOf)) {
@@ -112,25 +120,32 @@ try {
         }
       }
       // reads, sandbox.service, status and operator calls are dropped
+      if (calls.length && calls.at(-1).at === undefined) Object.defineProperty(calls.at(-1), "at", { value: call.start, enumerable: false });
     }
     const end = Math.max(...step.calls.map((c) => c.start + c.ms));
     if (!calls.length) continue;
     const start = Math.min(...step.calls.map((c) => c.start));
     const gap = Math.max(0, start - (lastEnd.get(step.agent) ?? start));
     lastEnd.set(step.agent, end);
-    kept.push({ step, calls, gap, ms: Math.round(end - start) });
+    kept.push({ step, calls, gap, ms: Math.round(end - start), start });
   }
 
   // Every replayed Store call goes through its agent's own Sandbox: the service
   // Sandbox is shared with the Host's reads, whose discovery lock would refuse
   // one of them as Busy depending on timing. So an agent's recorded create
   // that comes after its first Store call moves to just before that call.
-  for (const agent of new Set(kept.map((s) => s.step.agent))) {
-    const mine = kept.filter((s) => s.step.agent === agent);
+  const who = (s) => s.step.origin ?? s.step.agent; // each recorded agent has its own Sandbox
+  for (const agent of new Set(kept.map(who))) {
+    const mine = kept.filter((s) => who(s) === agent);
     const at = (pred) => { for (const s of mine) { const i = s.calls.findIndex(pred); if (i >= 0) return { s, i }; } return null; };
     const first = at((c) => ["fork", "merge", "publish", "write"].includes(c.op)), create = at((c) => c.op === "create");
     if (!first) continue;
-    if (!create) fail(`${agent} makes Store calls but never creates a Sandbox`);
+    if (!create) {
+      // a Sandbox another agent created for this one: that create comes first (turns.mjs orders it)
+      const role = mine[0].step.agent;
+      if (kept.some((x) => kept.indexOf(x) < kept.indexOf(first.s) && x.calls.some((c) => c.op === "create" && c.for === role))) continue;
+      fail(`${agent} makes Store calls but never creates a Sandbox`);
+    }
     if (kept.indexOf(create.s) < kept.indexOf(first.s) || (create.s === first.s && create.i < first.i)) continue;
     const [call] = create.s.calls.splice(create.i, 1);
     first.s.calls.splice(first.s.calls.indexOf(first.s.calls[first.i]), 0, call);
@@ -140,7 +155,7 @@ try {
   for (const s of kept) {
     const close = s.calls.findIndex((c) => c.op === "close");
     const after = kept.slice(kept.indexOf(s)).flatMap((x) => (x === s ? x.calls.slice(close + 1) : x.calls)).filter((c) => s.step.agent && ["fork", "merge", "publish", "write"].includes(c.op));
-    if (close >= 0 && after.length && kept.some((x) => x.step.agent === s.step.agent && x.calls.includes(after[0]))) fail(`${s.step.agent} makes Store calls after closing its Sandbox`);
+    if (close >= 0 && after.length && kept.some((x) => who(x) === who(s) && x.calls.includes(after[0]))) fail(`${who(s)} makes Store calls after closing its Sandbox`);
   }
 
   // pauses: clamp(gap × k, 400, 3000), k chosen so they sum to the target thinking time
@@ -151,9 +166,9 @@ try {
 
   if (existsSync(out)) rmSync(out, { recursive: true });
   mkdirSync(join(out, "run"), { recursive: true });
-  const root = [];
+  const stepsOf = [];
   kept.forEach((s, i) => {
-    const n = String(i + 1).padStart(3, "0");
+    const n = String(i + 1).padStart(Math.max(3, String(kept.length).length), "0");
     const execs = s.calls.filter((c) => c.op === "exec"), writes = s.calls.filter((c) => c.op === "write");
     const file = {
       step: s.step.label, agent: s.step.agent,
@@ -165,12 +180,12 @@ try {
     };
     writeFileSync(join(out, "run", `${n}.json`), JSON.stringify(file, null, 1) + "\n");
     const inner = execs.reduce((t, c) => t + (innerTimeout(c.command) ?? 110), 0);
-    root.push({ pause: pause(hi, s.gap) });
-    root.push({
+    stepsOf.push([{ pause: pause(hi, s.gap) }, {
       bash: { description: s.step.label, run: [["step", id, n]], ...(inner ? { timeoutMs: (inner + 60) * 1000 } : {}) },
-      expect: file.expect, phase: phaseOf(s.step.label),
-    });
+      expect: file.expect, ...(s.step.agent === "root" ? { phase: phaseOf(s.step.label) } : {}),
+    }]);
   });
+  const agents = kept.every((s) => s.step.agent === "root") ? { root: stepsOf.flat() } : assemble(kept, (i) => stepsOf[i]);
 
   // the recorded history without the dropped Commits; an optional one may be missing
   const recorded = { branches: {}, layers: history.layers };
@@ -202,7 +217,7 @@ try {
     type: "layerfs-mock-scenario", version: 2, title: kind.title, order: kind.order, speed: 1,
     blurb: record.blurb ?? `Replays ${kind.blurb}. Every recorded write is applied and every recorded command runs again in a Workspace.`,
     live: true, image: IMAGE, seed: "seed.json", lib: "../shared/replay.mjs",
-    agents: { root, ...(record.agents ?? {}) },
+    agents,
   };
   writeFileSync(join(out, "scenario.json"), JSON.stringify(scenario, null, 1) + "\n");
   for (const note of notes) console.log(note);
@@ -217,7 +232,8 @@ async function lfAll(read) {
 }
 function num(path) { return Number(String(path).split("/").pop()); }
 function short(cid) { return String(cid).slice(0, 12); }
-function refOf(ref, ids) { return ref === "main" ? "main" : ids.get(ref) ?? fail(`unknown ref ${ref}`); }
+/** A recorded fork or publish source: main, a Branch by name (its head then), or a Commit or Layer id by its place. */
+function refOf(ref, ids, branches) { return ref === "main" || branches.has(ref) ? ref : ids.get(ref) ?? fail(`unknown ref ${ref}`); }
 function phaseOf(label) { return label.replace(/^[0-9]+[-\s]*/, "").replace(/[-:].*$/, "").trim() || null; }
 function innerTimeout(command) { const m = /\btimeout\s+(?:-[a-zA-Z]+\s+\S+\s+)*([0-9]+)/.exec(command ?? ""); return m ? Number(m[1]) : null; }
 
@@ -235,7 +251,9 @@ function execOf(step, call, ws, notes) {
   const exit = /^exit:(-?[0-9]+)$/.exec(call.kind ?? "")?.[1];
   if (call.ok === false || exit === undefined) fail(`${step.label}: exec ended ${kindOf(call)}`);
   const lines = String(call.output ?? "").trimEnd().split("\n").slice(-OUTPUT_LINES).join("\n");
-  return { op: "exec", ws, command: replaced, message: call.args.message ?? null, exit: Number(exit), output: Buffer.from(lines).subarray(-OUTPUT_BYTES).toString(), ms: Math.round(call.ms), expect: `sandbox.exec:exit:${exit}` };
+  // a recorded exit that came from a race (import/crew.mjs) may come out either way
+  const flaky = call.flaky ? { flaky: call.flaky } : {};
+  return { op: "exec", ws, command: replaced, message: call.args.message ?? null, exit: Number(exit), output: Buffer.from(lines).subarray(-OUTPUT_BYTES).toString(), ms: Math.round(call.ms), expect: `sandbox.exec:exit:${exit}${flaky.flaky ? (exit === "0" ? "|1" : "|0") : ""}`, ...flaky };
 }
 
 /** A write Commit's tracked changes, from the Store: what its fs.apply replays. */
