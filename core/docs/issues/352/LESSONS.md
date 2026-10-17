@@ -86,6 +86,8 @@ verify ~1 s); a fix took 50–65 min of fixer time; the first builder tasks took
 | SDK service Sandbox left open | It holds the run's volume in use | Close every Sandbox a script starts; containers are named `layerfs-issue352-<run>-<n>` |
 | `report.mjs` rewrites earlier reports (F-004) | After a gate change, `play` regenerated `range-000.md`/`range-001.md` with new check rows | Before committing, `git diff` every report other than the range just played; restore any change (`git checkout -- <path>`); never commit a rewritten recorded outcome |
 | Range 0 | A yarn project: no offline install, all 27 test candidates skipped | Expected; tests start at range 1 |
+| Evidence of an unaccepted result cleaned up (F-017, 2026-10-18) | The fixer ran `run.mjs cleanup` on the old-vs-new diag runs before the lead accepted the result. The traces needed to attribute a p95 regression were gone, and the analysis cost a second pair of plays | Never clean up evidence of a result that has not been accepted: keep the diag run folders (traces, metrics, CPU samples) until the lead accepts, then clean up |
+| A traced call reads SQL counters (F-018) | Before daemon `c25119ac`, reading a session's counters queued for the writer's admission, so every traced call waited for any Commit holding the publication lane. The replay always traces, so its latencies carried this wait | Fixed: counters are read under the state lock alone. Per-call SQL counters are still process-wide deltas: under concurrency they include other calls' work |
 
 ### Diagnosis shortcuts (SPEC §6)
 

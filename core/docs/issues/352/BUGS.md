@@ -154,3 +154,11 @@
   19 ms p50 client). Owner: the fixer, now. **Fixed** (SDK addon `5baa0f5d`,
   kind 1): a bounded pool of up to 6 connections per Sandbox, queue wait in the
   trace; [fixes/007-a1-f017-control-connections.md](fixes/007-a1-f017-control-connections.md).
+- **F-018 · SDK reads queue behind a Commit's publication lane (product,
+  007.a1 F-017 tail, 2026-10-18).** History lookups (project, Branch, Commit,
+  Layer) ran on the writer session, and traced calls read SQL counters
+  through the writer's admission. Both waited for any Commit holding the lane,
+  merges included; past 2 s a read failed `Busy`. **Fixed** (daemon
+  `c25119ac`, kind 1): lookups use the control reader's read-only session, and
+  counters are read under the state lock alone;
+  [fixes/007-a1-f018-reads-behind-publication-lane.md](fixes/007-a1-f018-reads-behind-publication-lane.md).

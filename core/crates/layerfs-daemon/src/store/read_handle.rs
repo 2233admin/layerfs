@@ -130,6 +130,13 @@ impl ReadSession {
                 .map_err(PortError::History)
         })
     }
+    /// One lookup in this reader's read-only history.
+    pub fn published<T>(
+        &self,
+        lookup: impl FnOnce(&dyn HistoryCatalog) -> layerfs_history::HistoryResult<T>,
+    ) -> Result<T, Arc<PortError>> {
+        self.attempt(|handle, _| lookup(handle.history.as_ref()).map_err(PortError::History))
+    }
     pub fn close(&self) -> Result<(), Arc<PortError>> {
         let mut state = self.lock()?;
         if let Some(cause) = self.failure.get() {

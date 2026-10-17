@@ -104,6 +104,19 @@ impl Store {
     pub fn history(&self) -> &dyn HistoryCatalog {
         self.history.as_ref()
     }
+    /// One lookup in published history, through the control reader's
+    /// read-only session, so it never queues behind a Commit holding the
+    /// publication lane (#352 F-018). It sees what is published when it runs,
+    /// and the reader's admission, stop and failure custody apply to it.
+    pub fn published<T>(
+        &self,
+        lookup: impl FnOnce(&dyn HistoryCatalog) -> layerfs_history::HistoryResult<T>,
+    ) -> Result<T, Arc<PortError>> {
+        self.readers
+            .session(None)
+            .map_err(|error| Arc::new(PortError::ReadAdmission(error)))?
+            .published(lookup)
+    }
     /// Adds one finished Save's selection counts to the daemon's totals.
     pub(crate) fn note_save(&self, saved: &WriteOutcome) {
         if let Ok(mut saves) = self.saves.lock() {

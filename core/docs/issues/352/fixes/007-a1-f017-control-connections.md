@@ -121,15 +121,17 @@ Storage is unchanged.
 - `discovery::refresh` asks Status for every mount record on every call.
   This is O(mounts) per call; with the pool these exchanges run in parallel
   but are still paid.
-- **Tail attribution not done (lead, 2026-10-18).** The lead did not accept
-  the p95 rise without attribution. The two range-8 dev traces were deleted
-  by `run.mjs cleanup` before the request arrived. The lead also ruled out
-  reruns. Numbers kept from the deleted traces:
-  - Span 15.5 → 14.9 s.
-  - Daemon `commit` p50 4.5 → 6.5 ms, p95 85.5 → 123.9 ms.
-  - Commit `begin` p50 0.8 → 0.9 ms, p95 25.7 → 69.2 ms.
-  - Slowest new reads, `fs.read` 110 ms and `fs.grep` 116 ms: reader
-    transaction 1.1 and 2.6 ms, client queue 0.2–0.3 ms.
-
-  Writer busy time and the in-daemon split were not computed. Attributing
-  them needs one range-8 play per addon on fresh range-7 forks.
+- **Tail attributed (lead-approved diag plays, 2026-10-18).** The p95 rise
+  was reads waiting inside the daemon for a Commit's held publication lane.
+  Two causes: Branch, Commit and Layer lookups ran on the writer session, and
+  traced calls read the writer's SQL counters through its admission. CPU was
+  not saturated: VM busy at most 50% of 8 CPUs. The Commit tail is queueing
+  at the single writer plus merges inside the lane, which F-017's concurrency
+  makes more frequent (53 → 132 merges). Fixed as F-018
+  ([record](007-a1-f018-reads-behind-publication-lane.md)): `fs.read` p95
+  96 → 9.7 ms.
+- **Evidence was cleaned up before acceptance.** The first pair of range-8
+  diag runs was removed with `run.mjs cleanup` before the lead accepted the
+  result, so attribution needed a second, approved pair of plays. The lesson
+  is in LESSONS.md (Known traps): evidence of an unaccepted result is never
+  cleaned up.

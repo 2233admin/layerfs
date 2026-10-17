@@ -4,7 +4,7 @@
 //! is the stack's line of Layers. Commits and Layers travel as the hex of
 //! their identity. Every refusal has a stable code the JavaScript SDK maps to
 //! a typed error.
-use crate::store::Store;
+use crate::store::{PortError, Store};
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use layerfs_content::{ContentError, ObjectId};
 use layerfs_history::{
@@ -69,6 +69,14 @@ pub(crate) fn content(error: ContentError) -> SdkRefusal {
     refuse(code, error.to_string(), SdkValue::Null)
 }
 
+/// A failed published-history lookup: its history error, else the reader's.
+fn published(error: Arc<PortError>) -> SdkRefusal {
+    match error.as_ref() {
+        PortError::History(error) => history(error.clone()),
+        other => refuse("Unknown", other.to_string(), SdkValue::Null),
+    }
+}
+
 /// Any other failure as a refusal with its own description.
 pub(crate) fn failed(error: impl std::fmt::Display) -> SdkRefusal {
     refuse("Failed", error.to_string(), SdkValue::Null)
@@ -90,7 +98,9 @@ pub(crate) fn name(text: &str) -> Result<HistoryName, SdkRefusal> {
 pub(crate) fn project(store: &Arc<Store>, args: &SdkValue) -> Result<LayerStackRecord, SdkRefusal> {
     let wanted = text(args, "project")?;
     let found = match HistoryName::new(wanted) {
-        Ok(name) => store.history().layer_stack_named(&name).map_err(history)?,
+        Ok(name) => store
+            .published(|h| h.layer_stack_named(&name))
+            .map_err(published)?,
         Err(_) => None,
     };
     found.ok_or_else(|| {
@@ -110,9 +120,8 @@ pub(crate) fn branch(
 ) -> Result<BranchRecord, SdkRefusal> {
     let found = match HistoryName::new(wanted) {
         Ok(name) if wanted != super::branch::MAIN => store
-            .history()
-            .branch_named(stack.id, &name)
-            .map_err(history)?,
+            .published(|h| h.branch_named(stack.id, &name))
+            .map_err(published)?,
         _ => None,
     };
     found.ok_or_else(|| {
@@ -133,24 +142,30 @@ pub(crate) fn branch_node(branch: &BranchRecord) -> NodeId {
 
 /// One Commit.
 pub(crate) fn commit(store: &Arc<Store>, id: CommitId) -> Result<CommitRecord, SdkRefusal> {
-    store.history().commit(id).map_err(history)?.ok_or_else(|| {
-        refuse(
-            "NoSuchCommit",
-            format!("Commit {id} does not exist"),
-            SdkValue::Null,
-        )
-    })
+    store
+        .published(|h| h.commit(id))
+        .map_err(published)?
+        .ok_or_else(|| {
+            refuse(
+                "NoSuchCommit",
+                format!("Commit {id} does not exist"),
+                SdkValue::Null,
+            )
+        })
 }
 
 /// One Layer.
 pub(crate) fn layer(store: &Arc<Store>, id: LayerId) -> Result<LayerRecord, SdkRefusal> {
-    store.history().layer(id).map_err(history)?.ok_or_else(|| {
-        refuse(
-            "NotFound",
-            format!("Layer {id} does not exist"),
-            SdkValue::Null,
-        )
-    })
+    store
+        .published(|h| h.layer(id))
+        .map_err(published)?
+        .ok_or_else(|| {
+            refuse(
+                "NotFound",
+                format!("Layer {id} does not exist"),
+                SdkValue::Null,
+            )
+        })
 }
 
 /// The root a node records.

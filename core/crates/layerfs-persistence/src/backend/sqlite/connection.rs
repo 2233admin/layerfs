@@ -264,9 +264,9 @@ impl Session {
         self.layout.version() + self.acquisition.version_offset()
     }
     pub(crate) fn diagnostics(&self) -> Result<SqlWork, BackendError> {
-        let _turn = self
-            .admission
-            .enter(std::time::Instant::now() + super::admission::WINDOW)?;
+        // Counters are read under the state lock alone: a held publication
+        // lane owns the admission between its transactions, and a reader of
+        // counters runs no SQL, so it must not queue behind it (#352 F-018).
         let s = self.state.lock().map_err(|_| BackendError::Unknown)?;
         let w = *s.work.borrow();
         Ok(w)
