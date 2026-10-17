@@ -69,6 +69,15 @@ impl Service {
     /// frontier and constructs it with the captured namespace producer on
     /// this caller's thread; retained original custody refuses it first.
     pub fn execute_control(&self, request: &Request) -> Result<Success, Failure> {
+        self.execute_control_with(request, &mut crate::sdk::Bodies::none())
+    }
+    /// [`Service::execute_control`] for a call whose write bodies follow its
+    /// record on the connection (see `sdk::body`).
+    pub(crate) fn execute_control_with(
+        &self,
+        request: &Request,
+        bodies: &mut crate::sdk::Bodies<'_>,
+    ) -> Result<Success, Failure> {
         match request {
             Request::Observed { .. } => Err(Failure::Rejected(
                 ControlCode::Invalid,
@@ -78,10 +87,12 @@ impl Service {
             Request::Sdk(call) if call.method.starts_with("operator.") => {
                 Ok(Success::reply(crate::operator::dispatch(self, call)))
             }
-            Request::Sdk(call) => Ok(Success::reply(match crate::sdk::dispatch(self, call) {
-                Ok(value) => Reply::Sdk(value),
-                Err(refusal) => Reply::SdkRefused(refusal),
-            })),
+            Request::Sdk(call) => Ok(Success::reply(
+                match crate::sdk::dispatch(self, call, bodies) {
+                    Ok(value) => Reply::Sdk(value),
+                    Err(refusal) => Reply::SdkRefused(refusal),
+                },
+            )),
             Request::Hello(_) => Err(Failure::Rejected(
                 ControlCode::Invalid,
                 "daemon Hello requires application startup owner",

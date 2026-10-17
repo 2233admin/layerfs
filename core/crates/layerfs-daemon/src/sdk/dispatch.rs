@@ -4,7 +4,11 @@ use crate::control::Service;
 use layerfs_bridge::control::{SdkCall, SdkRefusal, SdkValue};
 
 /// Runs one SDK call once.
-pub(crate) fn dispatch(service: &Service, call: &SdkCall) -> Result<SdkValue, SdkRefusal> {
+pub(crate) fn dispatch(
+    service: &Service,
+    call: &SdkCall,
+    bodies: &mut super::Bodies<'_>,
+) -> Result<SdkValue, SdkRefusal> {
     let store = &service.store;
     let args = &call.args;
     if let Some(value) = args.get("message") {
@@ -32,13 +36,13 @@ pub(crate) fn dispatch(service: &Service, call: &SdkCall) -> Result<SdkValue, Sd
         "fs.glob" => reads::glob(store, args),
         "fs.diff_files" => compare::diff_files(store, args),
         "fs.blame" => blame::blame(store, args),
-        "fs.write" => files::single(service, "write", args),
-        "fs.edit" => files::single(service, "edit", args),
-        "fs.mkdir" => files::single(service, "mkdir", args),
-        "fs.rm" => files::single(service, "rm", args),
-        "fs.cp" => files::single(service, "cp", args),
-        "fs.mv" => files::single(service, "mv", args),
-        "fs.apply" => files::apply(service, args),
+        "fs.write" => files::single(service, "write", args, bodies),
+        "fs.edit" => files::single(service, "edit", args, bodies),
+        "fs.mkdir" => files::single(service, "mkdir", args, bodies),
+        "fs.rm" => files::single(service, "rm", args, bodies),
+        "fs.cp" => files::single(service, "cp", args, bodies),
+        "fs.mv" => files::single(service, "mv", args, bodies),
+        "fs.apply" => files::apply(service, args, bodies),
         other => Err(args::refuse(
             "UnknownMethod",
             format!("the daemon has no SDK method {other}"),

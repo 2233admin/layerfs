@@ -67,9 +67,12 @@ fn oversized_call_is_too_large(observed: bool) {
         SdkValue::map([(
             "changes",
             SdkValue::List(vec![SdkValue::map([
-                ("op", SdkValue::text("write")),
+                // A write body is streamed after the record (#352 F-001); an
+                // edit's text still travels inside it.
+                ("op", SdkValue::text("edit")),
                 ("path", SdkValue::text("/source.js")),
-                ("content", SdkValue::text("界".repeat(24_000))),
+                ("oldText", SdkValue::text("界".repeat(24_000))),
+                ("newText", SdkValue::text("x")),
             ])]),
         )]),
     )

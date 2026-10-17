@@ -144,7 +144,49 @@ impl<'a> Mutation<'a> {
         Ok(())
     }
     pub(crate) fn write(&mut self, path: &str, bytes: &[u8]) -> Result<()> {
-        let serial = match self.optional(path)? {
+        let (serial, same) = self.target(path, bytes.len() as u64)?;
+        if same && self.read(serial, 0, bytes.len() as u32)? == bytes {
+            return Ok(());
+        }
+        self.write_at(serial, 0, bytes)?;
+        self.truncate(serial, bytes.len() as u64)
+    }
+    /// Writes a body streamed after the call, `length` bytes, a received record
+    /// at a time. Over a file of the same length only the records that differ
+    /// are written, so an equal body changes nothing.
+    pub(crate) fn write_streamed(
+        &mut self,
+        path: &str,
+        length: u64,
+        bodies: &mut super::Bodies<'_>,
+    ) -> Result<()> {
+        let (serial, same) = self.target(path, length)?;
+        let mut changed = !same;
+        bodies.take(length, |offset, record| {
+            if same && self.read(serial, offset, record.len() as u32)? == record {
+                return Ok(());
+            }
+            changed = true;
+            self.write_at(serial, offset, record)
+        })?;
+        if changed {
+            self.truncate(serial, length)?;
+        }
+        Ok(())
+    }
+    fn truncate(&mut self, serial: u64, size: u64) -> Result<()> {
+        self.apply(Operation::SetAttributes {
+            serial,
+            mode: None,
+            mtime: None,
+            size: Some(size),
+        })?;
+        Ok(())
+    }
+    /// The regular file a write of `length` bytes goes to, created when absent,
+    /// and whether it already has that length.
+    fn target(&mut self, path: &str, length: u64) -> Result<(u64, bool)> {
+        Ok(match self.optional(path)? {
             Some(stat) => {
                 if stat.kind != layerfs_content::object::inode_leaf::InodeKind::RegularFile {
                     return Err(args::refuse(
@@ -153,32 +195,21 @@ impl<'a> Mutation<'a> {
                         SdkValue::Null,
                     ));
                 }
-                if stat.logical_len == bytes.len() as u64
-                    && self.read(stat.serial, 0, bytes.len() as u32)? == bytes
-                {
-                    return Ok(());
-                }
-                stat.serial
+                (stat.serial, stat.logical_len == length)
             }
             None => {
                 let (parent, name) = self.parent(path)?;
-                self.apply(Operation::Create {
-                    parent,
-                    name,
-                    mode: 0o644,
-                })?
-                .ok_or_else(|| args::failed("created inode"))?
-                .serial
+                let serial = self
+                    .apply(Operation::Create {
+                        parent,
+                        name,
+                        mode: 0o644,
+                    })?
+                    .ok_or_else(|| args::failed("created inode"))?
+                    .serial;
+                (serial, false)
             }
-        };
-        self.write_at(serial, 0, bytes)?;
-        self.apply(Operation::SetAttributes {
-            serial,
-            mode: None,
-            mtime: None,
-            size: Some(bytes.len() as u64),
-        })?;
-        Ok(())
+        })
     }
     pub(crate) fn mkdir(&mut self, path: &str) -> Result<()> {
         let mut at = String::new();

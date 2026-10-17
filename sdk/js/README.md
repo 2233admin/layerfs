@@ -156,13 +156,15 @@ publication merges with it once: different paths are `Committed`; a path both
 changed is refused as `Conflict` (`detail.conflicts`, `detail.head`) with nothing
 committed. Nothing is resent or merged again.
 
-One SDK request must fit a 65,519-byte encoded control record, including its
-paths, metadata and tracing fields. Before-send size admission returns `TooLarge`
-with null detail; no change index exists because no change was attempted.
-Content bytes alone cannot predict the encoded size. Inspect the retained input
-before choosing a smaller call or an ordinary Sandbox step for a larger atomic
-change. Calls are never split or replayed automatically. This call bound does
-not limit file, namespace or Workspace size.
+A write's file body (`write` content or bytes above 4 KiB, in `fs.write` and
+`fs.apply`) is not encoded into the request: it is streamed after it, in order,
+and the daemon writes it a record at a time, so no file size is capped and
+daemon memory does not grow with it. The rest of one SDK request (paths, edit
+texts, metadata and tracing fields) must fit a 65,519-byte encoded control
+record. Before-send size admission returns `TooLarge` with null detail; no change
+index exists because no change was attempted. Inspect the retained input before
+choosing a smaller call or an ordinary Sandbox step. Calls are never split or
+replayed automatically.
 
 Pages have `items` and `hasMore`; advance by `pagePos + items.length`.
 `diff_commits` and `diff_branches` also answer `nextCursor`, the last path the

@@ -31,12 +31,22 @@ pub(crate) fn exchange(
     control: &mut Control,
     request: Request,
 ) -> Result<Reply, Box<OperationFailure>> {
-    let reply = control.call(request.clone()).map_err(|cause| {
-        Box::new(OperationFailure {
-            request: request.clone(),
-            cause: OperationCause::Exchange(cause),
-        })
-    })?;
+    exchange_with(control, request, &[])
+}
+/// [`exchange`] with streamed request bodies (see [`Control::call_with`]).
+pub(crate) fn exchange_with(
+    control: &mut Control,
+    request: Request,
+    bodies: &[Vec<u8>],
+) -> Result<Reply, Box<OperationFailure>> {
+    let reply = control
+        .call_with(request.clone(), bodies)
+        .map_err(|cause| {
+            Box::new(OperationFailure {
+                request: request.clone(),
+                cause: OperationCause::Exchange(cause),
+            })
+        })?;
     match reply {
         Reply::Refused(cause) => Err(Box::new(OperationFailure {
             request,

@@ -12,6 +12,11 @@
   `fs.write` cannot write a file over ~64 KiB. AGENTS.md rules out transport frames
   as a total-file cap. Workaround in the plan: those files go through a Sandbox
   `apply` step. Owner of the fix: the fixer, before P3's 9 : 1 split is measured.
+  **Fixed** (fixer, D0, kind 1): write bodies stream after the call record and
+  are written a record at a time (`layerfs-api` `base/stream.rs`, daemon
+  `sdk/body.rs`); 64 MiB `fs.write` round-trips in ~1 s, daemon peak +14 MiB.
+  Daemon `ed66aa0d`, addon `3da0f665`. The planner can drop its size clause.
+  [fixes/000-pre-f001-streamed-write-bodies.md](fixes/000-pre-f001-streamed-write-bodies.md).
 - **F-002 · full-scan steps on hot paths (lead, not yet a gate finding).** Dev runs
   show reader `fullscan_steps` of 58 at mount bind, 242 at a one-shot Commit and
   668 at a merge. To be read against depth in the pilot (playbook D4).

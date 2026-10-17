@@ -181,12 +181,25 @@ impl Application {
                     }
                 }
                 InitialRecord::Control(call) => {
+                    // A write's bodies follow its record; whatever the call
+                    // leaves unread is dropped before the answer.
+                    let mut bodies = crate::sdk::Bodies::of(&call.request, &mut connection.receive);
                     let (outcome, diagnostic_error, telemetry) =
                         if matches!(call.request, Request::Observed { .. }) {
-                            self.observed_control(&call, slot)
+                            self.observed_control(&call, slot, &mut bodies)
                         } else {
-                            (self.control(&call, slot), None, None)
+                            (self.control(&call, slot, &mut bodies), None, None)
                         };
+                    if let Err(cause) = bodies.finish() {
+                        return Err(ConnectionFailure {
+                            slot,
+                            received: None,
+                            original: None,
+                            cause: ApplicationError::Channel(cause),
+                            fence_error: None,
+                            diagnostic_error,
+                        });
+                    }
                     let session_end =
                         matches!(call.request, Request::EndSession) && outcome.is_ok();
                     let reserved_refusal = slot == usize::from(self.setup.limits.connections)
@@ -276,13 +289,15 @@ impl Application {
         &self,
         call: &Call,
         slot: usize,
+        bodies: &mut crate::sdk::Bodies<'_>,
     ) -> Result<crate::control::Success, crate::control::Failure> {
-        self.control_operation(&call.request, slot)
+        self.control_operation(&call.request, slot, bodies)
     }
     pub(super) fn control_operation(
         &self,
         request: &Request,
         slot: usize,
+        bodies: &mut crate::sdk::Bodies<'_>,
     ) -> Result<crate::control::Success, crate::control::Failure> {
         use crate::control::{Failure, Success};
         use layerfs_bridge::control::{ControlCode, DaemonPhase};
@@ -307,7 +322,7 @@ impl Application {
         let phase = state.startup.phase;
         drop(state);
         match service {
-            Some(service) => service.execute_control(request),
+            Some(service) => service.execute_control_with(request, bodies),
             None if phase == DaemonPhase::Retained => Err(Failure::Rejected(
                 ControlCode::Unknown,
                 "original Store startup custody retained",

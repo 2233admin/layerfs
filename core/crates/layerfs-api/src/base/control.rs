@@ -77,6 +77,18 @@ impl Control {
     /// Sends once and awaits the original reply once. Typed remote refusals are
     /// replies; failed delivery retains an unknown, never replays the command.
     pub fn call(&mut self, request: Request) -> Result<Reply, Box<ControlFailure>> {
+        self.call_with(request, &[])
+    }
+    /// As [`Control::call`], with `bodies` sent after the request record, each
+    /// in records of at most one channel plaintext, before the one reply is
+    /// awaited. The request names their lengths; the daemon reads exactly
+    /// those bytes, a record at a time. A failure while sending them is a
+    /// failed attempted send: the request may have taken effect.
+    pub(crate) fn call_with(
+        &mut self,
+        request: Request,
+        bodies: &[Vec<u8>],
+    ) -> Result<Reply, Box<ControlFailure>> {
         let request = match (self.traced, request) {
             (Some(scope), request)
                 if !matches!(
@@ -118,6 +130,14 @@ impl Control {
                 .send
                 .send(&record)
                 .map_err(ControlCause::Channel)?;
+            for body in bodies {
+                for record in body.chunks(layerfs_bridge::duplex::MAX_PLAINTEXT_BYTES) {
+                    self.connection
+                        .send
+                        .send(record)
+                        .map_err(ControlCause::Channel)?;
+                }
+            }
             phase = ControlPhase::Receive;
             let answer = Answer::decode(
                 self.connection

@@ -3,6 +3,8 @@
 //!
 //! Entry module: declarations and the method table.
 pub(crate) mod args;
+mod body;
+pub(crate) use body::Bodies;
 mod blame;
 pub(crate) mod branch;
 mod compare;

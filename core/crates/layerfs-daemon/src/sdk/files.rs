@@ -25,21 +25,31 @@ pub(crate) fn path(value: &str) -> Result<String, layerfs_bridge::control::SdkRe
     }
     Ok(value.to_owned())
 }
-pub(crate) fn single(service: &Service, kind: &str, args: &SdkValue) -> Answer {
+pub(crate) fn single(
+    service: &Service,
+    kind: &str,
+    args: &SdkValue,
+    bodies: &mut super::Bodies<'_>,
+) -> Answer {
     let mut fields = match args.clone() {
         SdkValue::Map(v) => v,
         _ => Vec::new(),
     };
     fields.push(("op".into(), SdkValue::text(kind)));
-    commit(service, args, &[SdkValue::Map(fields)])
+    commit(service, args, &[SdkValue::Map(fields)], bodies)
 }
-pub(crate) fn apply(service: &Service, args: &SdkValue) -> Answer {
+pub(crate) fn apply(service: &Service, args: &SdkValue, bodies: &mut super::Bodies<'_>) -> Answer {
     let Some(SdkValue::List(changes)) = args.get("changes") else {
         return Err(args::invalid("apply requires a changes array"));
     };
-    commit(service, args, changes)
+    commit(service, args, changes, bodies)
 }
-fn commit(service: &Service, args: &SdkValue, changes: &[SdkValue]) -> Answer {
+fn commit(
+    service: &Service,
+    args: &SdkValue,
+    changes: &[SdkValue],
+    bodies: &mut super::Bodies<'_>,
+) -> Answer {
     let store = &service.store;
     let stack = args::project(store, args)?;
     let branch_name = text(args, "branch")?;
@@ -74,9 +84,16 @@ fn commit(service: &Service, args: &SdkValue, changes: &[SdkValue]) -> Answer {
             let p = |key| path(text(change, key)?);
             match kind {
                 "write" => {
-                    let bytes = match (change.get("content"), change.get("bytes")) {
-                        (Some(SdkValue::Text(s)), _) => s.as_bytes(),
-                        (_, Some(SdkValue::Bytes(b))) => b.as_slice(),
+                    let bytes = match (
+                        change.get("content"),
+                        change.get("bytes"),
+                        change.get("streamed"),
+                    ) {
+                        (Some(SdkValue::Text(s)), None, None) => s.as_bytes(),
+                        (None, Some(SdkValue::Bytes(b)), None) => b.as_slice(),
+                        (None, None, Some(SdkValue::Int(n))) if *n > 0 => {
+                            return mutation.write_streamed(&p("path")?, *n as u64, bodies)
+                        }
                         _ => return Err(args::invalid("write content must be text or bytes")),
                     };
                     mutation.write(&p("path")?, bytes)

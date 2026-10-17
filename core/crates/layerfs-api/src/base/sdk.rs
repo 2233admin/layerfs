@@ -3,7 +3,7 @@
 //! Every non-Workspace JavaScript method is one daemon call: its arguments
 //! and result are plain values, and a refusal carries a stable code.
 use crate::{
-    base::failure::exchange,
+    base::failure::exchange_with,
     internal::{Control, ControlCause, ControlPhase},
     OperationCause, OperationFailure,
 };
@@ -71,11 +71,12 @@ pub fn call(control: &mut Control, method: &str, args: SdkValue) -> SdkResult {
 }
 
 pub(crate) fn exchange_call(control: &mut Control, method: &str, args: SdkValue) -> SdkResult {
+    let (args, bodies) = super::stream::split(method, args);
     let request = Request::Sdk(SdkCall {
         method: method.to_owned(),
         args,
     });
-    match exchange(control, request.clone())? {
+    match exchange_with(control, request.clone(), &bodies)? {
         Reply::Sdk(value) => Ok(value),
         Reply::SdkRefused(refusal) => Err(SdkError::Refused(refusal)),
         reply => Err(SdkError::Operation(OperationFailure::unexpected(
