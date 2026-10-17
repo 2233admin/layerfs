@@ -71,7 +71,7 @@ checks it:
 
 | Scenario agent | Plan | Role |
 | --- | --- | --- |
-| `root` | the lead | Creates the window's Sandboxes; starts and wakes agents; consolidates each range (merges, reconcile, publish); runs closure (install, tests); closes Sandboxes |
+| `root` | the lead | Creates the window's Sandboxes; starts and wakes agents; consolidates each range (merges, reconcile, publish); runs closure (install, build, unit tests); closes Sandboxes |
 | `a01` … `a10` | the plan's agents | Run their own steps, turn by turn |
 
 - **Names.** An agent's `description` is its name (`a03`). The plan numbers
@@ -87,7 +87,7 @@ checks it:
 ## 5. Steps
 
 One plan step is one bash step, except the lead's consolidation (one bash step
-per merge, reconcile, publish, install and test tier).
+per merge, reconcile, publish, install, build and unit-test run).
 
 ```json
 {
@@ -118,7 +118,7 @@ per merge, reconcile, publish, install and test tier).
 | lead: merge | `branch.merge` lane into main | `branch.merge:Merged` (a race: `branch.merge:Merged\|Conflict`) |
 | lead: reconcile | `fs.write` / `fs.rm` on the lead's Branch | per file |
 | lead: publish | `branch.publish` | `branch.publish:Added` |
-| lead: install, tests | one-shot Workspace each; exec exit 0 | `commit:Committed` / `UpToDate` |
+| lead: install, build, unit tests | one-shot Workspace each; exec exit 0, and each test file's result equal to its native one (SPEC §2, Tests) | `commit:Committed` / `UpToDate` |
 
 Write each entry in full as `method:Kind`, using the names the existing
 scenarios use (`sandbox.mount:Mounted`, `sandbox.commit:Committed|UpToDate`,
@@ -134,7 +134,7 @@ Its exports are the calls a bash step's `run` may name:
 | `setup(window)` | The lead creates the window's 4–8 Sandboxes one at a time and records their ids |
 | `step(range, id)` | Runs one plan step: content from the blob cache (fs) or inlined into the exec command (Sandbox), every call's outcome checked against the plan, exit 1 at the first difference |
 | `consolidate(range, op)` | One consolidation entry: a merge, the reconcile, a publish |
-| `closure(range, what)` | Install or the test tier, in a one-shot Workspace |
+| `closure(range, what)` | Install, the build of changed packages, or the range's unit tests (`vitest run <files>`, the plan's list), in a one-shot Workspace |
 | `verify(range)` | The checkpoint check: one exec of a node script printing each tracked file's git blob id and mode, compared with `compareTree` |
 | `teardown(window)` | Closes the Sandboxes |
 

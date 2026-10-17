@@ -59,14 +59,50 @@ these rules:
 | Files | Made | Rule |
 | --- | --- | --- |
 | `node_modules` | In a Sandbox at range 1 and at each range that changes `package.json` or `pnpm-lock.yaml` (197 ranges) | Install on top of the existing tree (`pnpm install --offline --frozen-lockfile`). A clean install (`rm -rf node_modules` first) only at the milestones |
-| `lib/`, `dist/` | The range's `quick` tests build the packages it changed | Every range |
-| `apps/desktop/.desktop-build` | The `full` tests | Milestones only |
+| `lib/`, `dist/` | Each range builds the packages it changed (`tsc -b`), before its unit tests | Every range |
+| `apps/desktop/.desktop-build` | Never: the Electron build needs downloads and a desktop toolchain | Not made |
 | Caches | `tsbuildinfo` and Vite caches, made by the builds above | Kept, as a real project keeps them. The pnpm store stays on its own Docker volume outside LayerFS (Speed-ups, 4) |
 
 The oracle cannot take ignored files from git. Their expected state:
 - `node_modules`: for each lockfile hash, the tree the first install made (each
   file's git blob id and mode), recorded once and then compared;
 - build outputs: they exist and the tests pass.
+
+### Tests: cheap unit tests only
+
+The replay runs tests to give exec over FUSE real work, not to test dsh. So only
+cheap, self-contained unit tests run. Never:
+- dsh's own test entry points: `pnpm test` (it compiles the native addon first),
+  `check:*`, `test:e2e`, `test:web*`, `test:gui`, `test:bench*`, `test:snapshot`,
+  `test:expected`, desktop packaging;
+- anything that needs a browser or a GUI: Selenium, Playwright, Puppeteer,
+  WebdriverIO, vitest browser mode, Electron (`apps/desktop`);
+- anything that needs the environment: the native addon (`native/`), the network
+  or real model providers, Docker, SSH, Windows, a real shell sandbox, snapshot
+  recording.
+
+**Selection** is static: the planner writes each range's list into the plan.
+1. **Candidates:** the `*.spec.ts` and `*.test.ts` files under the `tests/` folders
+   of the packages the range changed. Milestones take every package's.
+2. **Drop by path:** `apps/desktop`, `apps/web/tests`, any `e2e`, `bench`, `perf`,
+   `stress` or `snapshot` folder, `native/`, `packages/ssh`, `packages/sandbox`.
+3. **Drop by content:** a file that imports `playwright`, `puppeteer`,
+   `selenium-webdriver`, `webdriverio`, `electron` or `@vitest/browser`, or reads
+   `DSH_SNAPSHOT`.
+4. **Calibrate once, natively.** Run each remaining file alone at the range's
+   checkpoint on a plain Docker volume with the runtime image, outside LayerFS,
+   with `--network none` and a 10 s timeout. A file that fails or times out there
+   is skip-listed for that range with its reason (`tests.skipped` in the plan):
+   it is environment-dependent or broken at that commit, not LayerFS's problem.
+5. **Cap:** up to 60 s of native test time per range (at most 30 files, fastest
+   first); milestones up to 5 min.
+
+**Run:** `vitest run <files>` with the range's own root config, in a one-shot
+Workspace, with `CI=1` and no network.
+
+**Pass rule:** each file's result in LayerFS equals its native result. A file
+that passes natively and fails in LayerFS is a stop finding (a LayerFS bug). It is
+never skip-listed after the fact.
 
 ### The two nested cycles
 
@@ -82,7 +118,7 @@ The oracle cannot take ignored files from git. Their expected state:
    - history matches the plan;
    - every planned conflict happened and was resolved;
    - ignored files match their expected state;
-   - the range's tests pass.
+   - the range's unit tests give their native results (§2, Tests).
 5. *Write the range outputs* (§3) and *evaluate the gates* (§5).
 6. *Seal and snapshot* when due (§7): every range during the pilot, then when
    fast-forwarding would cost more than a snapshot, before an optimize fix, and
@@ -243,8 +279,9 @@ work.
    (`pnpm fetch`), keep it on its own Docker volume outside LayerFS, and install
    with `--offline --frozen-lockfile`. There is no network wait, and an install
    always gives the same result.
-5. **Tiered tests.** `quick` every range (smoke: build of the packages the range
-   changed), `full` at milestones (the plan marks which).
+5. **Cheap unit tests only** (§2, Tests). Each range builds the packages it
+   changed and runs their calibrated unit tests; milestones run every package's.
+   Nothing that needs a browser, Electron, the native addon or the network.
 6. **Fast-forward, never restart.** Recovery restores the newest good snapshot
    and fast-rebuilds the ranges after it with the fast-rebuild player (no timing,
    no tests, no Sandboxes beyond what content needs). No range is replayed from 0.
@@ -434,7 +471,7 @@ them here.
 | Range growth: new stored bytes | ≤ 3× the median of earlier ranges | — | Optimize when > 3× the median or > 2 GiB |
 | Snapshot time against the range's new blocks | grows with new blocks | — | Optimize when it grows with the Store's size instead |
 | Seal: WAL before seal, seal time | steady | growing | Optimize if it blocks the next range |
-| Wall time per range; projected total | within budget | within 1.5× | Re-plan range size or test tiers |
+| Wall time per range; projected total | within budget | within 1.5× | Re-plan range size or the test cap |
 
 - **Pass:** continue.
 - **Watch:** continue, and run the probes at the next milestone.
@@ -658,7 +695,7 @@ After consolidation, the runner verifies the range's oracle:
 - **ignored files:** `node_modules` matches the lockfile's expected state (§2,
   Ignored files); the build outputs the range's commands make exist;
 - history shape, step outcomes and planned conflicts;
-- the range's tests.
+- the range's unit tests, against their native results (§2, Tests).
 
 So the check grows with the range's changes, not with the tree (§4).
 
@@ -678,7 +715,7 @@ block hashes over one shared block store. Every snapshot is complete, but each
 writes only the blocks the Store changed since the snapshots before it. LayerFS
 content is mostly added and rarely rewritten, so a range changes its new content
 plus the index pages it touched: an estimated 100–300 MiB, against a Store of
-~8 GiB at the end.
+~7 GiB at the end.
 
 ```
 ~/lfs-history/snapshots/
@@ -823,12 +860,11 @@ Estimate at range 202 (to be replaced by the pilot's numbers):
 | Tracked history and Commit metadata (249k Commits) | ~3 GiB (1.5–6) |
 | `node_modules`: the first install and 197 incremental ones | ~2.5 GiB (1.2–3.5) |
 | Build outputs every range | ~0.5 GiB |
-| Desktop build at the 5 milestones | ~1.5 GiB |
-| **Working Store** | **~8 GiB (5–12)** |
+| **Working Store** | **~7 GiB (4.5–10.5)** |
 | All snapshots, block-incremental | ~15 GiB (10–25) |
-| One fork at a time | ≤ 8 GiB |
+| One fork at a time | ≤ 7 GiB |
 | Install overlay peak (deleted after the commit) | ~3 GiB |
-| **Peak extra disk** | **~35 GiB; worst case ~60 GiB** |
+| **Peak extra disk** | **~33 GiB; worst case ~55 GiB** |
 
 Docker would stay near 100 of its 200 GiB, and the Mac above 290 GiB free. The
 uncertain part is LayerFS's ratio on `node_modules`: P1 starts by Initing a dsh
@@ -838,8 +874,8 @@ measures more than 2× this estimate, re-plan before range 6.
 What would break the estimate, and is therefore ruled out (§2, Ignored files):
 - a clean install every range: ~78k deletes and 78k writes each, ~15 million
   file changes over 197 installs;
-- the desktop build every range: its packed app changes every build and does not
-  deduplicate, an estimated 50–100 GiB;
+- the desktop build: its packed app changes every build and does not
+  deduplicate, an estimated 50–100 GiB if built every range (§2 never builds it);
 - caches that churn on every command;
 - full-copy snapshots: up to ~140 GiB for 2 rolling copies, 5 milestones and a
   failed copy.
@@ -920,7 +956,7 @@ most chains before depth 8. Doubling its depth would change little.
 | P0 · Plan and oracles | `plan.mjs` and `oracle.mjs` over the whole history, without LayerFS | **Done 2026-10-17:** plan and oracle for all 202 ranges; every plan passes the `replayPlan` static check |
 | P1 · Pilot | First, one Init of a dsh checkout with `node_modules` (its stored-to-raw ratio). Then the first ~300 commits, fs only, one lane, a snapshot every range, plus the delta control arm. Builds `snapshot.mjs` and `inspect.mjs` | Every checkpoint matches git; baselines and gate thresholds recorded; growth per range and per install within 2× the §7 estimate, or re-planned |
 | P2 · Multi-agent | Lanes, the 5–10 agent crew, one-shot Workspaces, planned conflicts | Every planned conflict hit and resolved; identity holds |
-| P3 · Sandbox share | The 9 : 1 split, FUSE timing, `node_modules` installs, test tiers | Deduplication and FUSE gates pass |
+| P3 · Sandbox share | The 9 : 1 split, FUSE timing, `node_modules` installs, unit tests (§2, Tests) | Deduplication and FUSE gates pass |
 | P4 · Recovery and demo | Milestone snapshots, probes, one kill and resume from a fork, one fast rebuild, the Live demo window seeded from a fork; the LayerFS page's checkpoint views (§7, Inspecting a checkpoint) | Recovery proved; the demo passes check-demo in dsh |
 | P5 · Full history | All 202 ranges. Controls: squashed history, and one Commit per git commit | Latency-vs-depth and storage curves, with history cost separated from tree size and from Commit granularity |
 

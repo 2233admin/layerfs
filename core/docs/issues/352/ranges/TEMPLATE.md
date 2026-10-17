@@ -33,7 +33,7 @@ under `metrics/`.
 | History shape | Commits per Branch, merges, publish | as planned | |
 | Step outcomes | n matched / n | 100% | |
 | Planned conflicts | hit / planned, by kind | all hit, none unplanned | |
-| Ignored output and tests | `node_modules` present; tests passed / run | all | |
+| Ignored output and unit tests | `node_modules` as expected; test files equal to native / run; skipped (by reason) | all equal | |
 | Health | Workspaces open, overlays left, daemon RSS, open files, WAL before seal | 0, 0, flat | |
 | Speed | worst kind: ratio to baseline (p50, p95) | ≤ 1.2× | |
 | Scaling | worst probe: depth slope, tree slope | flat | |

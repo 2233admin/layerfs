@@ -123,8 +123,12 @@ When you need one of these, stop and say so on #352.
   recovery by forking a snapshot (never by extracting from a Store), and the disk
   guard before every range.
 - **Ignored files.** Follow SPEC.md §2, Ignored files: `node_modules` installed on
-  top of the existing tree, a clean install and the desktop build only at
-  milestones, the pnpm store outside LayerFS.
+  top of the existing tree, a clean install only at milestones, no desktop
+  build, the pnpm store outside LayerFS.
+- **Tests.** Cheap unit tests only (SPEC.md §2, Tests): never a browser,
+  Selenium or Playwright, Electron, the native addon, the network or dsh's own
+  test scripts. A unit test must give its native result; one that passes
+  natively and fails in LayerFS is a stop, never a new skip.
 - **Troubleshooting a checkpoint.** Use `inspect.mjs` (SPEC.md §7, Inspecting a
   checkpoint) on the live Store or a fork, never on snapshot files in place.
 
@@ -155,6 +159,9 @@ reaches it (SPEC.md §6). The fixer's playbook (D0–D6) depends on them.
 2. `snapshot.mjs`: take, verify and fork block-incremental snapshots (SPEC.md §7).
 3. `inspect.mjs`: `ls`, `cat`, `diff`, `stats`, `trend`, `open` (SPEC.md §7,
    Inspecting a checkpoint).
+4. The test selection in `plan.mjs` and its one-time native calibration (SPEC.md
+   §2, Tests): each range's unit test files, skips with reasons, and native
+   results.
 
 **Rules:**
 - Continue the same builder and fixer with SendMessage, so they keep what they
