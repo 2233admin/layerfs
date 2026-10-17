@@ -122,6 +122,7 @@ The `dsh-layerfs-demo` bundle adds the LayerFS mock model: an LLM provider that 
 | `shop` | root | Live only. #334's Builder 2 replayed, 19 steps: a small web shop built over six milestones, 12 recorded commands (npm, esbuild, node tests, a server smoke) run again |
 | `depot` | root | Live only. #337's Builder 2 replayed, 103 steps: a Rust inventory service and its browser client, 82 recorded commands (cargo fetch and builds from crates.io, cargo and Python tests, Chromium) run again in Workspaces that stay mounted across steps |
 | `crew` | root + 5 | Live only. #340's Builder 2 r3 replayed, 1,550 steps: a lead and 17 agents playing as 6 roles build one application on Branches of their own; 304 recorded commands, of which the 147 that only verify and belong to a browser proof are disabled (their run files say `"verification": "no-browser"`) and the other 157 run; the roles run at the same time and wait for each other only where they touched the same Branch |
+| `checkpoints` | root, a01, a02 | #352's checkpoints, small: four ranges in which two agents write on lanes of their own and the lead merges, publishes and verifies; each range ends at a checkpoint with a (fake) verdict. The strip shows the checkpoint timeline; click a reached checkpoint to select it, and Resume (off until #352 P2's Store snapshots) says what resuming after it would do |
 
 #### Replayed runs
 
@@ -135,6 +136,8 @@ A scenario is `scenario.json` (format `layerfs-mock-scenario` version 2), with i
 - a call step: one preset tool and its arguments. A bash step names a `script` (sent as `node --input-type=module <<'JS'`), a `run` (calls of the scenario's `lib`, imported and awaited in such a script) or a `command`. `expect` lists the LayerFS outcomes its trace should show, `retry` reruns it on matching output, and `as` names a background job;
 - a reply step: the turn's closing text. `until` makes the agent wait for those subagents to report first;
 - a pause step: milliseconds before the next step.
+
+A root step may carry `checkpoint: { label, verdict?, note? }` (#352): when the root agent finishes it, the run has reached that checkpoint. `verdict` is pass, watch, optimize or stop. The mock keeps each demo's reached checkpoints in `<profile>/dsh-layerfs-demo/checkpoints/<demo>.json`, so they outlive a dsh web restart (the run then reads as interrupted), and the strip draws them as a timeline colored by verdict.
 
 `@name` in an argument is a subagent or job started earlier. A subagent's `description` is its name in the scenario. `order` places the demo in lists and `speed` sets how fast the mock runs it at first. Every scenario's `fixture` is `demo-workspace/`, the shared website; its install, build, test and serve are small shell scripts, not npm: test checks each page's heading and that every `@/…` import resolves, and serve answers each page's heading on localhost:3000 (with python3). The sandbox demo's scripts keep their notes between bash calls under `<temp>/dsh-layerfs/demo-notes/<project>/`, outside the workspace folder, because Init imports everything in it.
 

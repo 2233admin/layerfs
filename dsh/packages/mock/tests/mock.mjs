@@ -15,7 +15,7 @@ import { Progress } from "../src/progress.js";
 import { compileScenario, loadScenarios, ScenarioError } from "../src/scenario.js";
 
 const scenarios = loadScenarios(fileURLToPath(new URL("../../../scenarios/", import.meta.url)));
-assert.deepEqual([...scenarios.keys()], ["tour", "parallel", "conflicts", "merge", "sandbox", "agents", "shop", "depot", "crew"]);
+assert.deepEqual([...scenarios.keys()], ["tour", "parallel", "conflicts", "merge", "sandbox", "agents", "shop", "depot", "crew", "checkpoints"]);
 assert.equal(scenarios.get("shop").live, true, "a replayed run plays only on Live LayerFS");
 assert.equal(scenarios.get("agents").speed, 1, "5 agents starts at 1×: its planned Conflict is arranged by pauses (#347 BUGS row 54)");
 assert.equal(scenarios.get("tour").speed, 1);
@@ -254,7 +254,7 @@ assert.match(out.find((c) => c.type === "block-end").block.text, /^Conflicts: [\
 assert.equal(out.at(-1).reason.kind, "stop");
 out = await chunks({ model: "nope", messages: [], tools });
 assert.equal(out.at(-1).reason.failure.code, "MOCK_NO_SCENARIO");
-assert.deepEqual((await adapter.listModels("layerfs-mock")).map((x) => x.name), ["LayerFS mock · Tour", "LayerFS mock · Parallel Branches", "LayerFS mock · Conflicts", "LayerFS mock · Commit & merge", "LayerFS mock · One Sandbox, two Workspaces", "LayerFS mock · 5 agents", "LayerFS mock · Shop", "LayerFS mock · Depot", "LayerFS mock · Crew"]);
+assert.deepEqual((await adapter.listModels("layerfs-mock")).map((x) => x.name), ["LayerFS mock · Tour", "LayerFS mock · Parallel Branches", "LayerFS mock · Conflicts", "LayerFS mock · Commit & merge", "LayerFS mock · One Sandbox, two Workspaces", "LayerFS mock · 5 agents", "LayerFS mock · Shop", "LayerFS mock · Depot", "LayerFS mock · Crew", "LayerFS mock · Checkpoints"]);
 const aborted = new AbortController(); aborted.abort();
 out = await chunks({ model: "tour", messages: [textMessage("user", "Run the demo.", { kind: "user" })], tools, signal: aborted.signal });
 assert.equal(out.at(-1).reason.kind, "aborted");
@@ -287,6 +287,27 @@ assert.equal(out.at(-1).reason.kind, "aborted");
   const ab = new AbortController(), cut = pace.wait("d", 1, ab.signal); // speed 0: no wait at all
   await cut; pace.set("d", 1); const held = pace.wait("d", 5000, ab.signal); ab.abort();
   await assert.rejects(held, { name: "AbortError" });
+}
+
+// checkpoints (#352): a root step may reach one; the journal keeps them past a restart
+{
+  assert.throws(() => compileScenario({ type: "layerfs-mock-scenario", version: 2, title: "t", agents: { root: [{ subagent: { description: "c", prompt: "p" } }, { reply: "w", until: ["c"] }, { reply: "x" }], c: [{ reply: "r", checkpoint: { label: "L" } }] } }, { name: "t", folder }),
+    /only the root agent's steps reach checkpoints|two replies in a row/);
+  assert.throws(() => withLib({}, [["go"]]) && compileScenario({ type: "layerfs-mock-scenario", version: 2, title: "t", lib: "lib.mjs", agents: { root: [{ bash: { description: "d", run: [["go"]] }, checkpoint: { label: "L", verdict: "maybe" } }] } }, { name: "t", folder }), /verdict: is one of pass, watch, optimize, stop/);
+  const demo = scenarios.get("checkpoints");
+  assert.deepEqual(demo.checkpoints.map((c) => [c.label, c.verdict]), [["Range 1", "pass"], ["Range 2", "pass"], ["Range 3", "watch"], ["Range 4", "pass"]]);
+  const dir = mkdtempSync(join(tmpdir(), "lfs-journal-"));
+  const p = new Progress(scenarios, dir), at = demo.checkpoints[1].index;
+  const root = (done) => ({ kind: "calls", done, of: demo.agents.root.length, phase: null });
+  p.report("checkpoints", "root", root(0), "s1");
+  assert.deepEqual(p.checkpoints("checkpoints").map((c) => c.reachedAt !== null), [false, false, false, false]);
+  p.report("checkpoints", "root", root(at + 1), "s1");
+  assert.deepEqual(p.checkpoints("checkpoints").map((c) => c.reachedAt !== null), [true, true, false, false], "every checkpoint at or before the finished step");
+  const restarted = new Progress(scenarios, dir);
+  assert.deepEqual(restarted.checkpoints("checkpoints").map((c) => c.reachedAt !== null), [true, true, false, false], "the journal outlives a restart");
+  const run = restarted.get("checkpoints");
+  assert.equal(run.state, "stopped"); assert.match(run.error, /interrupted/); assert.equal(run.done, at + 1);
+  assert.equal(new Progress(scenarios).get("checkpoints"), null, "no journal, no run");
 }
 
 console.log(`mock: ok (${scenarios.size} scenarios played)`);

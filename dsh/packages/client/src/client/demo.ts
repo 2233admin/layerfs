@@ -11,8 +11,10 @@ import { api, type InitJob } from './api.ts'
 
 export type DemoMode = 'live' | 'sim'
 /** A run's progress, from the mock model's replies (mock/src/progress.js). */
-export interface DemoRun { root: string, state: 'running' | 'done' | 'stopped', done: number, of: number, phase: string | null, error: string | null, started: number, ended: number | null }
-export interface Demo { id: string, title: string, blurb: string | null, agents: string[], speed: number, live: boolean, image: string | null, seed: string | null, seedError?: string, sessionId: string | null, run: DemoRun | null }
+export interface DemoRun { root: string, state: 'running' | 'done' | 'stopped', done: number, of: number, phase: string | null, error: string | null, started: number, ended: number | null, journal?: boolean }
+/** A checkpoint of the demo's scenario (#352); reachedAt is when the latest run reached it. */
+export interface DemoCheckpoint { label: string, verdict: 'pass' | 'watch' | 'optimize' | 'stop', note: string | null, reachedAt: number | null }
+export interface Demo { id: string, title: string, blurb: string | null, agents: string[], speed: number, live: boolean, image: string | null, seed: string | null, seedError?: string, sessionId: string | null, run: DemoRun | null, checkpoints?: DemoCheckpoint[] }
 export interface DemoInfo { workspace: string, preset: string, provider: string, prompt: string, intro: string, demos: Demo[] }
 
 /** What Play and the Session check use of dsh's Client services (read with ctx.get). */

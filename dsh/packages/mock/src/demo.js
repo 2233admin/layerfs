@@ -10,6 +10,8 @@
 //   POST /layerfs-demo/<id>/speed {speed}         how fast the mock plays it
 //                                          from now on: 1, 2, 4 or 0 (Max), pace.js
 // A demo's Session is kept in <stateDir>/sessions.json; Replay replaces it.
+// A demo with checkpoints (#352) lists them, each with when the latest run
+// reached it (progress.js keeps them in <stateDir>/checkpoints/).
 // A replayed run's demo (issue #347) also carries `live` (Live LayerFS only),
 // its Sandboxes' `image`, and `seed`, the folder its project is Inited from:
 // its seed.json written out under <stateDir>/seeds (seed.js).
@@ -75,7 +77,7 @@ export function registerDemoRoutes(ctx, { scenarios, progress, pace, workspace, 
   const view = (id, scenario, saved) => ({
     id, title: scenario.title, blurb: scenario.blurb ?? null, agents: Object.keys(scenario.agents), speed: pace.get(id),
     live: scenario.live === true, image: scenario.image ?? null, ...seedOf(id, scenario),
-    sessionId: saved[id] ?? null, run: progress.get(id),
+    sessionId: saved[id] ?? null, run: progress.get(id), checkpoints: progress.checkpoints(id),
   });
   const handler = async (req, res) => {
     const rejection = ctx.connection.requestRejection(req);

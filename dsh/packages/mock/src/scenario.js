@@ -18,6 +18,9 @@
 // A step is one of:
 //   { <tool>: args, say?, phase?, note?, expect?, retry?, as? }   one tool call
 //   { reply: "…", until?: [child, …], phase?, note? }   the agent's text; ends its turn
+// A root step may also carry `checkpoint: { label, verdict?, note? }`: when the
+// step is done the run has reached that checkpoint (a range's end, #352).
+// `verdict` is pass, watch, optimize or stop; progress.js keeps them on disk.
 //   { pause: ms }                                      pacing before the next step
 // Tools and their arguments are the preset's (see TOOLS). Three conveniences:
 // `bash.script` names a file under the scenario folder that becomes
@@ -56,7 +59,8 @@ export const TOOLS = {
   job_list: { args: [], required: [] },
   working_directory: { args: ["cd"], required: [] },
 };
-const STEP_FIELDS = ["say", "phase", "note", "expect", "retry", "as"];
+const STEP_FIELDS = ["say", "phase", "note", "expect", "retry", "as", "checkpoint"];
+const VERDICTS = ["pass", "watch", "optimize", "stop"];
 
 export class ScenarioError extends Error {
   constructor(where, message) { super(`${where}: ${message}`); this.name = "ScenarioError"; }
@@ -131,7 +135,9 @@ export function compileScenario(raw, { name, folder, where = name }) {
   for (const agent of Object.keys(agents)) {
     if (agent !== "root" && !parents.has(agent)) fail(`agents.${agent}`, "no subagent step starts this agent");
   }
-  return { name, title: raw.title, blurb: raw.blurb ?? "", fixture, order: raw.order ?? null, speed: raw.speed ?? 1, live: raw.live === true, image: raw.image ?? null, seed, agents, prompts, parents };
+  // the root steps that reach a checkpoint, by their position in root's steps
+  const checkpoints = agents.root.flatMap((step, index) => (step.checkpoint ? [{ index, ...step.checkpoint }] : []));
+  return { name, title: raw.title, blurb: raw.blurb ?? "", fixture, order: raw.order ?? null, speed: raw.speed ?? 1, live: raw.live === true, image: raw.image ?? null, seed, agents, prompts, parents, checkpoints };
 }
 
 function compileSteps(steps, path, context) {
@@ -149,7 +155,7 @@ function compileSteps(steps, path, context) {
       return;
     }
     if ("reply" in step) {
-      only(step, ["reply", "until", "phase", "note"], at, fail);
+      only(step, ["reply", "until", "phase", "note", "checkpoint"], at, fail);
       if (typeof step.reply !== "string" || !step.reply) fail(at, "reply is a non-empty string");
       if (out[out.length - 1]?.kind === "reply") fail(at, "two replies in a row: a turn holds at least one call");
       let until = [];
@@ -159,7 +165,7 @@ function compileSteps(steps, path, context) {
         if (index === steps.length - 1) fail(`${at}.until`, "the last reply has nothing to wait for");
         until = [...step.until];
       }
-      out.push({ kind: "reply", text: step.reply, until, delay, at, phase: step.phase ?? null, note: step.note ?? null });
+      out.push({ kind: "reply", text: step.reply, until, delay, at, phase: step.phase ?? null, note: step.note ?? null, checkpoint: compileCheckpoint(step.checkpoint, at, context) });
       delay = 0;
       return;
     }
@@ -220,11 +226,23 @@ function compileSteps(steps, path, context) {
     let retry = null;
     if (step.retry !== undefined) retry = compileRetry(step.retry, `${at}.retry`, fail);
     if (step.say !== undefined && (typeof step.say !== "string" || !step.say)) fail(`${at}.say`, "must be a non-empty string");
-    out.push({ kind: "call", call, say: step.say ?? null, retry, expect: step.expect ?? null, delay, at, phase: step.phase ?? null, note: step.note ?? null });
+    out.push({ kind: "call", call, say: step.say ?? null, retry, expect: step.expect ?? null, delay, at, phase: step.phase ?? null, note: step.note ?? null, checkpoint: compileCheckpoint(step.checkpoint, at, context) });
     delay = 0;
   });
   if (out[out.length - 1].kind !== "reply") out.push({ kind: "reply", text: "Done.", until: [], delay: 0, at: `${path} (end)`, phase: null, note: null });
   return out;
+}
+
+/** A step's checkpoint, checked: root steps only; null when the step has none. */
+function compileCheckpoint(checkpoint, at, { agent, fail }) {
+  if (checkpoint === undefined) return null;
+  if (agent !== "root") fail(`${at}.checkpoint`, "only the root agent's steps reach checkpoints");
+  if (!isObject(checkpoint)) fail(`${at}.checkpoint`, "is { label, verdict?, note? }");
+  only(checkpoint, ["label", "verdict", "note"], `${at}.checkpoint`, fail);
+  if (typeof checkpoint.label !== "string" || !checkpoint.label) fail(`${at}.checkpoint.label`, "must be a non-empty string");
+  if (checkpoint.verdict !== undefined && !VERDICTS.includes(checkpoint.verdict)) fail(`${at}.checkpoint.verdict`, `is one of ${VERDICTS.join(", ")}`);
+  if (checkpoint.note !== undefined && typeof checkpoint.note !== "string") fail(`${at}.checkpoint.note`, "must be a string");
+  return { label: checkpoint.label, verdict: checkpoint.verdict ?? "pass", note: checkpoint.note ?? null };
 }
 
 /** A script file under the scenario folder, as a bash command that feeds it to node on stdin. */

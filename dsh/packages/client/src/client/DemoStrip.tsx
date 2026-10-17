@@ -2,12 +2,14 @@
 // how far the run got (the mock model's steps of every agent, and the root
 // agent's phase), the run speed (how fast the mock plays it, mock/src/pace.js;
 // it applies to a run under way too), Sim or Live, and Play, which replays the
-// demo in a new Session (demo.ts). Other Sessions render nothing.
+// demo in a new Session (demo.ts). A demo with checkpoints (#352) also shows
+// their timeline (Checkpoints.tsx). Other Sessions render nothing.
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Button, IconPlayOutlineRegular, IconRefreshOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { demoApi, playDemo, SPEEDS, speedLabel, type Demo, type DemoInfo, type DemoMode, type DemoServices, type PlayStep } from './demo.ts'
 import { useDemoSessionLock } from './lockdown.ts'
 import { ProgressBar, jobFraction, jobText, useClock } from './Progress.tsx'
+import { Checkpoints, checkpointText } from './Checkpoints.tsx'
 
 // while a run goes, and slower while waiting for one to start
 const POLL_MS = 700, IDLE_POLL_MS = 2500
@@ -64,6 +66,10 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
   const halted = running && rootRunning === false && now - movedAt > HALT_MS
 
   if (!info || !demo) return null
+  // the checkpoints this Session's run reached; none before it runs
+  const checkpoints = demo.checkpoints?.length
+    ? demo.checkpoints.map((c) => (run ? c : { ...c, reachedAt: null }))
+    : null
   // a replayed run's demo plays on Live LayerFS only
   const mode: DemoMode = demo.live ? 'live' : chosen
 
@@ -84,7 +90,7 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
     line = playText(playing, now)
   } else if (run) {
     fraction = run.of ? run.done / run.of : 0
-    const steps = `${run.done} of ${run.of} steps`
+    const steps = `${run.done} of ${run.of} steps${checkpoints ? ` · ${checkpointText(checkpoints)}` : ''}`
     line = halted ? `Stopped · ${steps} · the session is not running`
       : run.state === 'running' ? `${run.phase ?? 'Running'} · ${steps} · ${clock(now - run.started)}`
       : run.state === 'done' ? `Finished · ${steps} · ${clock((run.ended ?? now) - run.started)}`
@@ -103,8 +109,9 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
       style={{ border: 0, padding: '2px 8px', font: 'inherit', fontSize: 12, cursor: 'pointer', color: 'inherit', background: demo.speed === value ? 'color-mix(in srgb, currentColor 14%, transparent)' : 'transparent' }}>{speedLabel(value)}</button>
   )
   return (
-    <div style={{ display: 'grid', gap: 6, margin: '0 0 6px', padding: '8px 12px', borderRadius: 10, border: '1px solid color-mix(in srgb, currentColor 12%, transparent)' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 6, margin: '0 0 6px', padding: '8px 12px', borderRadius: 10, border: '1px solid color-mix(in srgb, currentColor 12%, transparent)' }}>
       <ProgressBar fraction={fraction} />
+      {checkpoints ? <Checkpoints checkpoints={checkpoints} running={running && !halted} /> : null}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: error || halted || run?.state === 'stopped' ? 'var(--dsh-color-fg-danger, #d14343)' : 'var(--dsh-color-fg-muted, inherit)' }}
           title={error ?? line}>{error ?? line}</span>

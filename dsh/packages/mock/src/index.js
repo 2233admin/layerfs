@@ -32,16 +32,18 @@ export function apply(ctx, config) {
   const dir = config.scenarios || fileURLToPath(new URL("../../../scenarios/", import.meta.url));
   // an invalid scenario stops the plugin with the step at fault named
   const scenarios = loadScenarios(dir);
-  const progress = new Progress(scenarios);
+  const profile = ctx.get("profileContext");
+  const stateDir = config.stateDir || join(profile ? profile.dir : join(homedir(), ".dsh"), "dsh-layerfs-demo");
+  // each demo's checkpoint journal (#352), so reached checkpoints outlive a restart
+  const progress = new Progress(scenarios, join(stateDir, "checkpoints"));
   const pace = new Pace(scenarios);
   const fast = config.fast ?? process.env.LAYERFS_DEMO_FAST === "1";
   const adapter = createAdapter(LlmAdapter, scenarios, { typingMs: config.typingMs, fast, progress, intro: config.intro, pace });
   ctx.effect(() => ctx.llm.registerAdapter([PROVIDER], adapter), "layerfs-mock: model");
-  const profile = ctx.get("profileContext");
   const demo = {
     scenarios, progress, pace, provider: PROVIDER, preset: config.preset, prompt: config.prompt, intro: config.intro,
     workspace: config.workspace || fileURLToPath(new URL("../../../demo-workspace", import.meta.url)),
-    stateDir: config.stateDir || join(profile ? profile.dir : join(homedir(), ".dsh"), "dsh-layerfs-demo"),
+    stateDir,
   };
   ctx.inject(["webServer", "connection"], (child) => registerDemoRoutes(child, demo));
 }
