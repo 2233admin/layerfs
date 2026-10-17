@@ -496,11 +496,14 @@ export async function probes(run, k, { branch, tree }) {
     ["glob_tree", () => lf.fs.glob("main", "**/*.md", "/", 50, 0)],
     ["diff_files", () => lf.fs.diff_files("main", `${P}/a.txt`, "main", `${P}/b.txt`), { setup: async () => [(await lf.fs.stat("main", `${P}/a.txt`)).size, (await lf.fs.stat("main", `${P}/b.txt`)).size], input: (v, s) => ({ bytes: s }) }],
     ["list_commits", () => lf.branch.list_commits(branch, 20, 0), { input: (v) => ({ pageSize: 20, items: v.items.length }) }],
-    // v2 (F-014): two adjacent Commits of its own Branch with one fixed 2 KiB file added; only the diff is timed
-    ["diff_commits", (ids) => lf.branch.diff_commits(ids.from, ids.to, 50, 0, { hunks: false }), { version: 2, input: (v) => ({ files: v.items.length }), setup: async () => {
+    // v3 (F-014): two adjacent Commits of its own Branch, the second changing one fixed 2 KiB file; only the
+    // diff is timed. (v2 read a Commit off the fresh fork, which has none: main's head is a Layer; it never ran.)
+    ["diff_commits", (ids) => lf.branch.diff_commits(ids.from, ids.to, 50, 0, { hunks: false }), { version: 3, input: (v) => ({ files: v.items.length }), setup: async () => {
       await lf.branch.fork(`probe-${r}-d`, "main");
-      const from = (await lf.branch.list_commits(`probe-${r}-d`, 1, 0)).items[0].id;
-      await lf.fs.apply(`probe-${r}-d`, [{ op: "write", path: `${P}/diff-one.txt`, content: probeText(`diff ${r}`, 2048) }], "probe diff");
+      await lf.fs.apply(`probe-${r}-d`, [{ op: "write", path: `${P}/diff-one.txt`, content: probeText(`diff ${r} a`, 2048) }], "probe diff base");
+      const from = (await lf.branch.list_commits(`probe-${r}-d`, 1, 0)).items[0]?.id;
+      if (!from) throw new Error("probe diff_commits: the base Commit is missing");
+      await lf.fs.apply(`probe-${r}-d`, [{ op: "write", path: `${P}/diff-one.txt`, content: probeText(`diff ${r} b`, 2048) }], "probe diff");
       const c = (await lf.branch.list_commits(`probe-${r}-d`, 2, 0)).items;
       if (c.length !== 2 || c[1].id !== from) throw new Error(`probe diff_commits: the Commit after ${from} is not adjacent`);
       return { from, to: c[0].id };

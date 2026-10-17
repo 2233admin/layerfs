@@ -480,8 +480,10 @@ per 2 writes). In addition, the **scale probes** run once per range:
 > (list_small), files in scope (grep/glob scoped), both files' bytes
 > (diff_files), changed files (diff_commits), files per side (merge), page size
 > (list_commits), one 2 KiB file (one-shot commit). The `diff_commits` probe is
-> version 2 (`probes.diff_commits.version`): it forks its own Branch, adds one
-> fixed 2 KiB file, and diffs exactly those two adjacent Commits; version 1
+> version 3 (`probes.diff_commits.version`): it forks its own Branch, writes a
+> fixed 2 KiB file (Commit 1), rewrites it at the same size (Commit 2), and
+> diffs exactly those two adjacent Commits (version 2 looked for a Commit on
+> the fresh fork, which has none, and never produced a value); version 1
 > diffed the lane's newest Commit, whose change grew with the range (4 → 60
 > files). The gates fit a probe only over points of its version and recorded
 > input; a different earlier input, a missing input or too few such points is
