@@ -67,6 +67,8 @@
 
 ## 3. Operation latency
 
+Binary: daemon `0ef24121723a` (attempt 1).
+
 | Operation | Size class | n | p50 | p95 | p99 | max | Slowest phase |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | branch.diff_commits | — | 2 | 17.77 | 17.77 | 17.77 | 29.93 | sdk.read |
@@ -91,6 +93,8 @@
 | sandbox.unmount | — | 19 | 6.24 | 7.86 | 7.86 | 7.99 | — |
 
 ## 4. Scale probes
+
+Binary: daemon `0ef24121723a` (attempt 1).
 
 | Probe | ms | Counters |
 | --- | --- | --- |
@@ -129,9 +133,16 @@
 
 Written by the runner from the last 3 ranges.
 
-## 7. Findings and action (written by the lead)
+## 7. Findings and action
 
-- (none yet)
+No optimize or stop attempt.
+
+### Lead's note (written by the lead)
+
+- Watch: directory share 0.53 (metadata above half of new bytes); probe at milestone 4.
+- Scaling and counter checks were not judgeable at range 0 (one point); they were reported as pass under the gates of the time and stay as recorded (F2, F8 note).
+- Binary `0ef24121` belongs to the abandoned line `p1-pilot` (old Store format); the main line `p1-pilot-b` fast-rebuilt this range in the new format and verified it against the oracle, without new measurements.
+- Process note: this range's comment was posted about a minute before its report was pushed (RESULTS.md decision log). The report-format annotations (this note and the binary lines in §3–§4) were added on 2026-10-18 when the format rule F1–F8 was introduced; no recorded value changed.
 
 
 
