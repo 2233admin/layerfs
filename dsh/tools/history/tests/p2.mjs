@@ -14,7 +14,7 @@ import { aggregate, evaluate } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
 import { parseReport } from "../frozen.mjs";
-import { leadNote } from "../report.mjs";
+import { leadNote, loadBaselines, writeBaseline } from "../report.mjs";
 import { atHead } from "../frozen.mjs";
 import { laneChanges, mergedTree } from "../agents.mjs";
 import { measure, record } from "../lib.mjs";
@@ -371,3 +371,23 @@ for (const [name, fn] of tests) {
 rmSync(dir, { recursive: true, force: true });
 console.log(`${tests.length - failed}/${tests.length} passed`);
 if (failed) process.exit(1);
+
+test("baselines by daemon: one per re-baseline run, beside the pilot's, never mixed", () => {
+  const d = mkdtempSync(join(tmpdir(), "baseline-")), run = join(d, "run"), main = join(d, "main");
+  mkdirSync(run); mkdirSync(main);
+  const A = "511dceed".padEnd(64, "a"), B = "71001f65".padEnd(64, "b");
+  writeFileSync(join(main, "baseline.json"), JSON.stringify({ daemon: A, ranges: [2, 3, 4], ops: {}, probes: {} }));
+  const m = (range, daemon, p50) => ({ range, attempt: 1, mode: "measured", binary: { daemon }, ops: [{ op: "fs.read", sizeClass: "1–4 KiB", p50, p95: p50 * 2 }, { op: "fs.read", sizeClass: "≥1 MiB", p50: 9, p95: 12 }], probes: { stat: { ms: 3 } } });
+  for (const k of [2, 3, 4]) writeFileSync(join(run, `range-00${k}.a1.json`), JSON.stringify(m(k, B, k)));
+  assert.throws(() => writeBaseline({ metricsDir: run, ranges: [2, 3, 4, 5], out: main, run: "r" }), /no attempt of range 5/);
+  const { file, baseline } = writeBaseline({ metricsDir: run, ranges: [2, 3, 4], out: main, run: "p1-rebase" });
+  assert.equal(file, join(main, "baseline-71001f65bbbb.json"));
+  assert.deepEqual([baseline.ranges, baseline.ops["fs.read\u00001–4 KiB"], Object.keys(baseline.ops).length], [[2, 3, 4], { p50: 3, p95: 6 }, 2]);
+  const all = loadBaselines(main, { daemon: A });
+  assert.deepEqual([...all.keys()], [A, B]);
+  assert.throws(() => writeBaseline({ metricsDir: run, ranges: [2, 3, 4], out: main, run: "again" }), /already has a baseline/);
+  writeFileSync(join(run, "range-003.a2.json"), JSON.stringify(m(3, A, 1)));
+  rmSync(file);
+  assert.throws(() => writeBaseline({ metricsDir: run, ranges: [2, 3, 4], out: main, run: "mixed" }), /mixes daemons/);
+  rmSync(d, { recursive: true, force: true });
+});

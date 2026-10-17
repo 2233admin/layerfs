@@ -343,6 +343,14 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   Stores, Old data, Compatibility test, Recovery; kind 3: Why not kind 1, Why
   not kind 2, Rebuild cost, Start snapshot). Finding `002.a1` and its six
   records predate REBUILD.md and keep the SPEC §6 kind (F2).
+- **A speed baseline per daemon.** `baseline.json` stays the pilot's
+  (`511dceed`, `p1-pilot-b` ranges 2–4). A later daemon gets its own
+  `baseline-<daemon12>.json` beside it, built by `report.mjs baseline --run
+  <id> --metrics <run>/metrics --ranges 2-4` from one re-baseline run (label
+  `baseline`, its own folders) under that daemon alone, with all its size
+  classes. Each attempt is compared with its own daemon's baseline; a mix of
+  daemons, an unmeasured attempt or a second baseline for one daemon is
+  refused. `run.mjs new|fork --daemon <file>` pins a run to a daemon file.
 - **STATS.md bytes:** a derived range (†) has no byte data; a method seen only
   in derived ranges reads "—", and a total over both carries ‡ (measured
   ranges only).

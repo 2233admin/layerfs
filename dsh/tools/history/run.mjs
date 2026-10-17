@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 // The headless player of the history replay (#352 SPEC §2, §3, §7; SCRIPTS.md §1):
-//   node dsh/tools/history/run.mjs new  --run <id> --phase p1 [--label measured|dev|control] [--policy default|control]
+//   node dsh/tools/history/run.mjs new  --run <id> --phase p1 [--label measured|baseline|dev|control] [--policy default|control] [--daemon <path>]
 //   node dsh/tools/history/run.mjs play --run <id> --from N --to M [--mode measured|fast]
-//   node dsh/tools/history/run.mjs fork --run <new id> --from-run <id> --range N [--label …]
+//   node dsh/tools/history/run.mjs fork --run <new id> --from-run <id> --range N [--label …] [--daemon <path>]
+// --daemon pins the run to that daemon file (default: the release build for
+// `new`, the source run's for `fork`); a fork onto a newer daemon is a kind 1
+// or 2 continuation (REBUILD.md). A `baseline` run re-measures ranges under a
+// new daemon into its own folders; `report.mjs baseline` turns it into that
+// daemon's speed baseline beside the pilot's.
 //   node dsh/tools/history/run.mjs cleanup --run <id>
 //   node dsh/tools/history/run.mjs phase --run <id> --phase p2
 // `phase` moves a run to the next phase (P1 → P2 …) at the range it stands
@@ -525,7 +530,7 @@ async function cmdFork(o) {
   const k = Number(o.range);
   const manifest = JSON.parse(readFileSync(manifestPath(source.manifest.outputs.snapshots, k, source.manifest.run), "utf8"));
   if (!manifest.state) throw new Error(`snapshot ${k} carries no runner state`);
-  const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: source.manifest.env.LAYERFS_DAEMON, source: { run: source.manifest.run, range: k } });
+  const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), source: { run: source.manifest.run, range: k } });
   runManifest.binary = binaries(env);
   runManifest.planVersion = source.manifest.planVersion;
   mkdirSync(dir, { recursive: true });

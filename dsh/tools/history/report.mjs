@@ -3,6 +3,7 @@
 //   node dsh/tools/history/report.mjs --metrics <dir> --plan <dir> --docs <core/docs/issues/352> [--range N]
 //   node dsh/tools/history/report.mjs check <NNN> [--metrics <dir>] [--docs <dir>]   (reportcheck.mjs: F1–F8)
 //   node dsh/tools/history/report.mjs records [--docs <dir>]   (every fixes/ record states its REBUILD.md §4 kind fields)
+//   node dsh/tools/history/report.mjs baseline --run <id> --metrics <dir> --ranges 2-4 [--out <dir>]   (one daemon's speed baseline)
 //   node dsh/tools/history/report.mjs stats --metrics <dir> --docs <dir>   (STATS.md alone, e.g. its backfill)
 // A range whose latest attempt recorded the binding format's measurements
 // (REPORT_FORMAT.md) is written in that format (format.mjs); earlier ones keep
@@ -147,6 +148,42 @@ export function leadNote(old) {
   }
   const text = kept.join("\n").replace(/\n{3,}/g, "\n\n");
   return text.trim() === NONE_YET ? null : text;
+}
+
+/**
+ * The speed baselines by daemon (SPEC §4): baseline.json (the pilot's, daemon
+ * 511dceed) and one baseline-<daemon12>.json per later daemon, each built from
+ * one re-baseline run under that daemon alone (`report.mjs baseline`). An
+ * attempt is compared with its own daemon's baseline; none mixes daemons.
+ */
+export function loadBaselines(metricsDir, pilot = null) {
+  const out = new Map(pilot ? [[pilot.daemon ?? null, pilot]] : []);
+  if (!existsSync(metricsDir)) return out;
+  for (const f of readdirSync(metricsDir).filter((f) => /^baseline-[0-9a-f]{12}\.json$/.test(f))) {
+    const b = JSON.parse(readFileSync(join(metricsDir, f), "utf8"));
+    if (!b.daemon || f !== `baseline-${b.daemon.slice(0, 12)}.json`) throw new Error(`${f} is not named by its daemon ${b.daemon}`);
+    if (out.has(b.daemon)) throw new Error(`two baselines for daemon ${b.daemon.slice(0, 12)}`);
+    out.set(b.daemon, b);
+  }
+  return out;
+}
+
+/**
+ * Builds the speed baseline of one daemon from a re-baseline run's metrics
+ * (`ranges`, latest attempt each, all their size classes) into
+ * <out>/baseline-<daemon12>.json. Refuses unmeasured attempts, a mix of
+ * daemons, a missing range and a daemon that has a baseline (one series per binary, F2).
+ */
+export function writeBaseline({ metricsDir, ranges, out, run }) {
+  const attempts = loadAttempts(metricsDir);
+  const ms = ranges.map((k) => { const m = attempts.get(k)?.at(-1); if (!m) throw new Error(`no attempt of range ${k} in ${metricsDir}`); return m; });
+  if (ms.some((m) => m.mode !== "measured")) throw new Error("a baseline takes measured attempts only");
+  const b = { ...buildBaseline(ms), run, source: metricsDir, built: new Date().toISOString() };
+  const pilot = join(out, "baseline.json");
+  if (loadBaselines(out, existsSync(pilot) ? JSON.parse(readFileSync(pilot, "utf8")) : null).has(b.daemon)) throw new Error(`daemon ${b.daemon.slice(0, 12)} already has a baseline in ${out}`);
+  const file = join(out, `baseline-${b.daemon.slice(0, 12)}.json`);
+  writeFileSync(file, JSON.stringify(b, null, 1));
+  return { file, baseline: b };
 }
 
 /** The latency table of an attempt that recorded its calls (REPORT_OVERVIEW.md, SPEC §3c): classes, ×baseline, slopes, SQL work, FUSE. */
@@ -361,10 +398,13 @@ export function reportRange({ metricsDir, planDir, docs, oracleDir, range }) {
   const pilotDaemon = pilot.at(-1)?.binary?.daemon;
   const pilotOwn = pilot.filter((m) => m.binary?.daemon === pilotDaemon);
   const baselineFile = join(metricsDir, "baseline.json");
-  const baseline = existsSync(baselineFile) ? JSON.parse(readFileSync(baselineFile, "utf8"))
+  const pilotBaseline = existsSync(baselineFile) ? JSON.parse(readFileSync(baselineFile, "utf8"))
     : pilot.length === 5 && pilotOwn.length >= MINIMUM_POINTS ? buildBaseline(pilotOwn) : null;
+  const baselines = loadBaselines(metricsDir, pilotBaseline);
+  const baselineOf = (m) => baselines.get(m.binary?.daemon ?? null) ?? pilotBaseline;
+  const baseline = baselineOf(xs.at(-1));
   const seeds = loadSeeds(metricsDir).map((p) => withInputs(p, oracleDir));
-  if (baseline && !existsSync(baselineFile)) writeFileSync(baselineFile, JSON.stringify(baseline, null, 1));
+  if (pilotBaseline && !existsSync(baselineFile)) writeFileSync(baselineFile, JSON.stringify(pilotBaseline, null, 1));
   mkdirSync(join(docs, "ranges"), { recursive: true });
   const reportFile = (k) => join(docs, "ranges", `range-${pad(k)}.md`);
   const file = reportFile(range), legacy = legacyGates(file);
@@ -372,7 +412,7 @@ export function reportRange({ metricsDir, planDir, docs, oracleDir, range }) {
   const gates = xs.map((m) => {
     if (m.gate) return m.gate;
     if (legacy.has(m.attempt)) return legacy.get(m.attempt);
-    const gate = storedGate(m, evaluate(m, history, range < 5 ? null : baseline, undefined, seeds));
+    const gate = storedGate(m, evaluate(m, history, range < 5 ? null : baselineOf(m), undefined, seeds));
     storeGate(join(metricsDir, `range-${pad(range)}.a${m.attempt}.json`), gate);
     return gate;
   });
@@ -426,6 +466,14 @@ async function main() {
     for (const p of problems) console.log(p);
     console.log(problems.length ? `fixes/: FAIL ${problems.length}` : "fixes/: PASS REBUILD.md §4");
     process.exit(problems.length ? 1 : 0);
+  }
+  if (args[0] === "baseline") {
+    const [from, to] = String(opt("--ranges") ?? "").split("-").map(Number);
+    if (!opt("--metrics") || !opt("--run") || !Number.isInteger(from) || !Number.isInteger(to)) { console.error("usage: report.mjs baseline --run <id> --metrics <its metrics> --ranges 2-4 [--out <main metrics>]"); process.exit(2); }
+    const ranges = Array.from({ length: to - from + 1 }, (_, i) => from + i);
+    const r = writeBaseline({ metricsDir: opt("--metrics"), ranges, run: opt("--run"), out: opt("--out") ?? join(process.env.HOME, "lfs-history", "metrics") });
+    console.log(JSON.stringify({ file: r.file, daemon: r.baseline.daemon, ranges: r.baseline.ranges, ops: Object.keys(r.baseline.ops).length, probes: Object.keys(r.baseline.probes).length }));
+    return;
   }
   if (args[0] === "stats") {
     if (!opt("--metrics") || !opt("--docs")) { console.error("usage: report.mjs stats --metrics <dir> --docs <dir>"); process.exit(2); }
