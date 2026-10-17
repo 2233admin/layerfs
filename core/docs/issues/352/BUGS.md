@@ -69,6 +69,9 @@
 - **F-009 · concurrent unmounts of two Workspaces in one Sandbox fail
   "Workspace absent" (builder, 2026-10-18).** Worked around in the player with
   one Sandbox per agent. Owner: the fixer.
+  **Fixed** (fixer, D1, SDK addon): `refresh` skips a Workspace the daemon reports
+  absent, and a process's own discovery mutations take turns before the OS lock.
+  Addon `4e141e51`; [fixes/005-dev-f009-concurrent-unmount.md](fixes/005-dev-f009-concurrent-unmount.md).
 - **F-010 · the checkpoint `diff_commits` is not O(changed) (builder,
   2026-10-18; owner's point 7).** Pages return ~20–27 entries; page 0 grew
   127 → 213 ms (401k → 703k VM steps) from range 5 to 7 (dev run); per entry

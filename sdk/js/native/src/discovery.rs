@@ -127,8 +127,62 @@ pub(crate) fn project_dir(args: &SdkValue) -> Result<PathBuf> {
     private(&path, true)?;
     Ok(path)
 }
-/// A nonblocking OS lock is released even if its process exits. Busy is not retried.
-pub(crate) fn guard(directory: &Path) -> Result<File> {
+/// Calls of this process take turns on one directory before its OS lock; the
+/// wait is readiness, bounded, and nothing has been attempted before it ends.
+const IN_PROCESS_WAIT: Duration = Duration::from_secs(60);
+static HELD: Mutex<std::collections::BTreeSet<PathBuf>> =
+    Mutex::new(std::collections::BTreeSet::new());
+static FREED: std::sync::Condvar = std::sync::Condvar::new();
+
+/// One discovery mutation's ownership of a directory: this process's turn and
+/// the OS lock. Dropping it releases both.
+pub(crate) struct Guard {
+    _file: File,
+    directory: PathBuf,
+}
+impl Drop for Guard {
+    fn drop(&mut self) {
+        let mut held = HELD.lock().unwrap_or_else(|error| error.into_inner());
+        held.remove(&self.directory);
+        FREED.notify_all();
+    }
+}
+
+/// Another call of this process waits its turn; another process holding the
+/// OS lock is refused Busy, never waited for. Busy is not retried.
+pub(crate) fn guard(directory: &Path) -> Result<Guard> {
+    let deadline = std::time::Instant::now() + IN_PROCESS_WAIT;
+    let mut held = registry::lock(&HELD)?;
+    while held.contains(directory) {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            return Err(refused(
+                "Busy",
+                "another call of this process owns this discovery mutation",
+            ));
+        }
+        held = FREED
+            .wait_timeout(held, remaining)
+            .map_err(|_| refused("Failed", "discovery turn poisoned"))?
+            .0;
+    }
+    held.insert(directory.to_owned());
+    drop(held);
+    match os_lock(directory) {
+        Ok(file) => Ok(Guard {
+            _file: file,
+            directory: directory.to_owned(),
+        }),
+        Err(refusal) => {
+            let mut held = HELD.lock().unwrap_or_else(|error| error.into_inner());
+            held.remove(directory);
+            FREED.notify_all();
+            Err(refusal)
+        }
+    }
+}
+/// A nonblocking OS lock is released even if its process exits.
+fn os_lock(directory: &Path) -> Result<File> {
     let path = directory.join("ownership.lock");
     let file = OpenOptions::new()
         .read(true)
@@ -378,9 +432,13 @@ pub(crate) fn refresh(state: &SandboxState) -> Result<()> {
                     .get_int("namespace")
                     .ok_or_else(|| refused("InvalidInput", "namespace"))?,
             };
-            let status = workspace(&mut *crate::trace::control(&state.control)?)
-                .status(token)
-                .map_err(failed)?;
+            let status = match workspace(&mut *crate::trace::control(&state.control)?).status(token)
+            {
+                Ok(status) => status,
+                // Unmounted by the daemon; its owner removes the record next.
+                Err(failure) if absent(&failure) => continue,
+                Err(failure) => return Err(failed(failure)),
+            };
             let ready = status
                 .kernel
                 .and_then(|k| k.ready)
@@ -421,6 +479,10 @@ pub(crate) fn refresh(state: &SandboxState) -> Result<()> {
     *registry::lock(&state.mounts)? = mounts;
     *registry::lock(&state.processes)? = processes;
     Ok(())
+}
+fn absent(failure: &layerfs_api::OperationFailure) -> bool {
+    matches!(&failure.cause, layerfs_api::OperationCause::Remote(refusal)
+        if refusal.code == layerfs_bridge::control::ControlCode::Missing)
 }
 pub(crate) fn mount_file(
     state: &SandboxState,
