@@ -343,6 +343,15 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   Stores, Old data, Compatibility test, Recovery; kind 3: Why not kind 1, Why
   not kind 2, Rebuild cost, Start snapshot). Finding `002.a1` and its six
   records predate REBUILD.md and keep the SPEC §6 kind (F2).
+- **The diff_commits gate is per checkpoint, per changed entry** (F-012, lead
+  decision 2026-10-18). `steps.mjs checkpointDiff` sums ms and SQL work over
+  every page of the step `rNNN.verify` and divides by the changed entries it
+  listed (`perUnit["branch.diff_commits"]`, `basis: "checkpoint"`). Scaling
+  fits statements per entry, then ms per entry, against depth and against tree
+  files (the oracle's count); a rise against either is a finding. It is never
+  normalised by tree files. The one-file `diff_commits` probe stays on raw
+  counters, fitted against depth and tree files (`TREE_FLAT`). Older attempts'
+  per-page medians are a different basis and never share a fit.
 - **A speed baseline per daemon.** `baseline.json` stays the pilot's
   (`511dceed`, `p1-pilot-b` ranges 2–4). A later daemon gets its own
   `baseline-<daemon12>.json` beside it, built by `report.mjs baseline --run

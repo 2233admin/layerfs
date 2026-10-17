@@ -20,7 +20,7 @@ import { laneChanges, mergedTree } from "../agents.mjs";
 import { measure, record } from "../lib.mjs";
 import { loadBudget, wallProjection } from "../run.mjs";
 import {
-  attributeFuse, callOf, consolidationSteps, decoyBytes, nextPhase, p2Plan, route, sandboxCommands, STEP_KINDS, Tree,
+  attributeFuse, callOf, checkpointDiff, consolidationSteps, decoyBytes, nextPhase, p2Plan, route, sandboxCommands, STEP_KINDS, Tree,
 } from "../steps.mjs";
 import {
   buildOverview, callTable, categoryOf, categoryRows, CATEGORIES, checkOverview, derivedOverview, renderOverview, renderStats, stageSplit, tenths, timeLine,
@@ -390,4 +390,27 @@ test("baselines by daemon: one per re-baseline run, beside the pilot's, never mi
   rmSync(file);
   assert.throws(() => writeBaseline({ metricsDir: run, ranges: [2, 3, 4], out: main, run: "mixed" }), /mixes daemons/);
   rmSync(d, { recursive: true, force: true });
+});
+
+test("F-012 gate: checkpoint diff per changed entry, fitted against depth and tree files; never per tree file", () => {
+  const cp = (stmts, ms = 1) => ({ unit: "entry", basis: "checkpoint", pages: 2, entries: 100, ms: ms * 100, statements: stmts * 100, msPerEntry: ms, statementsPerEntry: stmts });
+  const mk = (range, depth, files, stmts, ms) => ({ range, binary: { daemon: "d" }, depth: { after: depth }, inputs: { tree: { files } }, checks: {}, perUnit: { "branch.diff_commits": cp(stmts, ms) } });
+  const depths = [1000, 4000, 2000, 8000, 3000], files = [400, 800, 1600, 3200, 6400];
+  const series = (f) => depths.map((d, i) => mk(i, d, files[i], f(i), 1));
+  const scaling = (xs) => evaluate(xs.at(-1), xs.slice(0, -1)).checks.find((c) => c.name === "Scaling");
+  const grows = scaling(series((i) => 0.25 * files[i]));
+  assert.equal(grows.result, "optimize", grows.value);
+  const flat = scaling(series(() => 6));
+  assert.equal(flat.result, "pass", flat.value);
+  assert.match(flat.value, /checkpoint (statements|ms) per entry/);
+  // ms alone rising with tree files also trips
+  assert.equal(scaling(depths.map((d, i) => mk(i, d, files[i], 6, files[i] / 400))).result, "optimize");
+});
+
+test("checkpointDiff sums every page of the checkpoint step, per changed entry", () => {
+  const line = (seq, step, ms, statements) => ({ seq, step, method: "branch.diff_commits", ms, ok: true, daemon: [{ sql: { writer: { statements, vm_steps: statements * 10 } } }] });
+  const log = [1, 2, 3].map((seq) => ({ seq, method: "branch.diff_commits", size: { kind: "entries", n: seq === 3 ? 7 : 60 } }));
+  const d = checkpointDiff([line(1, "r003.verify", 30, 300), line(2, "r003.verify", 10, 100), line(3, "probe:diff_commits", 5, 50)], log, "r003.verify");
+  assert.deepEqual([d.pages, d.entries, d.ms, d.statements, d.msPerEntry, d.statementsPerEntry, d.basis], [2, 120, 40, 400, 0.3333, 3.333, "checkpoint"]);
+  assert.equal(checkpointDiff([], log, "r003.verify"), null);
 });

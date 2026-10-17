@@ -50,7 +50,7 @@ import {
   binaries, closure, consolidate, HISTORY, Mismatch, probeFixture, probes, readTrace, REPO, Run,
   sandboxHealth, step, teardown, verify, versionStats, writeJson,
 } from "./lib.mjs";
-import { addDelta, deltaSummary, diskGuard, EXIT, nextPhase, pad, PHASES, phaseOps, Tree } from "./steps.mjs";
+import { addDelta, checkpointDiff, deltaSummary, diskGuard, EXIT, nextPhase, pad, PHASES, phaseOps, Tree } from "./steps.mjs";
 import { consolidateLanes, playAgents, pool, startRange } from "./agents.mjs";
 import { buildOverview, callTable } from "./stats.mjs";
 import { area } from "./plan-range.mjs";
@@ -384,9 +384,8 @@ async function playRange(run, k, mode) {
   m.ops = aggregate(t.calls);
   // every call by method (SPEC §3b), and the checkpoint diff's cost per entry it lists (SPEC §4)
   m.calls = callTable(t.all, run.sink.log);
-  const diffs = t.calls.filter((c) => c.method === "branch.diff_commits" && c.size?.n > 0);
-  const median = (xs) => { const v = [...xs].sort((a, b) => a - b); return v.length ? v[Math.floor((v.length - 1) / 2)] : null; };
-  m.perUnit = diffs.length ? { "branch.diff_commits": { unit: "entry", n: diffs.length, msPerEntry: +median(diffs.map((c) => c.ms / c.size.n)).toFixed(4), entries: median(diffs.map((c) => c.size.n)), ms: median(diffs.map((c) => c.ms)) } } : {};
+  const diff = checkpointDiff(t.all, run.sink.log, `r${pad(k)}.verify`);
+  m.perUnit = diff ? { "branch.diff_commits": diff } : {};
   // the checkpoint tree the scoped probes read (gates.mjs SCOPED)
   const oracle = JSON.parse(readFileSync(join(run.manifest.oracle, `oracle-${pad(k)}.json`), "utf8"));
   m.inputs = { tree: { files: oracle.files, bytes: oracle.bytes } };

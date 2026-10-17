@@ -111,6 +111,9 @@ export function exponent(points) {
  * attempt recorded without it is judged as it was, raw.
  */
 export const SCOPED = { grep_tree: (x) => x.inputs?.tree?.bytes };
+/** Probes whose raw counters must stay flat with tree size as well as depth (SPEC §4): the one-file diff. */
+export const TREE_FLAT = new Set(["diff_commits"]);
+const treeFiles = (x) => x.inputs?.tree?.files;
 
 /** The probe's value per unit of its own input, or the raw value when unscoped. */
 export function perInput(name, x, value, scoped) {
@@ -193,13 +196,23 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   const probeFits = [], counterFits = [];
   for (const name of Object.keys(m.probes || {})) {
     probeFits.push({ name: `${name}${unit(name)}`, e: exponent(all.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.ms, scoped)])) });
-    for (const k of Object.keys(m.probes[name].counters || {}))
+    for (const k of Object.keys(m.probes[name].counters || {})) {
       counterFits.push({ name: `${name}.${k}${unit(name)}`, e: exponent(all.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.counters?.[k], scoped)])) });
+      if (TREE_FLAT.has(name)) counterFits.push({ name: `${name}.${k}`, against: "tree files", e: exponent(all.map((x) => [treeFiles(x), x.probes?.[name]?.counters?.[k]])) });
+    }
   }
-  // An operation judged per unit of its own input (SPEC §4: diff_commits may grow with the entries changed,
-  // never with depth): its p50 ms per entry against depth, from attempts that recorded it (run.mjs perUnit).
+  // An operation judged per unit of its own input (SPEC §4, F-012: diff_commits may grow with the entries
+  // changed, never with depth or tree size): the checkpoint's whole difference (all pages) per changed entry,
+  // statements first, then ms, each fitted against depth and against tree files, over attempts with the same
+  // basis (run.mjs perUnit). Never normalised by tree files: a rise against either is a finding.
   for (const [op, p] of Object.entries(m.perUnit || {})) {
-    probeFits.push({ name: `${op} per ${p.unit}`, e: exponent(all.map((x) => [x.depth?.after, x.perUnit?.[op]?.msPerEntry])) });
+    const pts = all.filter((x) => x.perUnit?.[op] && x.perUnit[op].basis === p.basis);
+    for (const [key, what] of [["statementsPerEntry", "statements"], ["msPerEntry", "ms"]]) {
+      if (p[key] == null) continue;
+      const name = p.basis === "checkpoint" ? `${op} checkpoint ${what} per ${p.unit}` : `${op} per ${p.unit}`;
+      probeFits.push({ name, e: exponent(pts.map((x) => [x.depth?.after, x.perUnit[op][key]])) });
+      if (p.basis === "checkpoint") probeFits.push({ name, against: "tree files", e: exponent(pts.map((x) => [treeFiles(x), x.perUnit[op][key]])) });
+    }
   }
   const top = (fits, th) => fits.length
     ? { ...fits.reduce((m2, f) => ((f.e ?? -Infinity) > (m2.e ?? -Infinity) ? f : m2)), result: worst(fits.map((f) => band(f.e, th))) }
@@ -207,8 +220,8 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   const scale = top(probeFits, t.depthExponent), counter = top(counterFits, t.counterExponent);
   const fit = (f, what) => (fitted < MINIMUM_POINTS ? { value: insufficient(fitted), result: "watch" }
     : !f.name ? { value: `not judged: no ${what}`, result: "watch" }
-    : f.e == null ? { value: `not judged: ${f.name}: no depth exponent (points without depth or value)`, result: "watch" }
-    : { value: `${f.name}: depth exponent ${f.e}${seeded.length ? ` (${seeded.length} seeded probe point${seeded.length > 1 ? "s" : ""})` : ""}`, result: f.result });
+    : f.e == null ? { value: `not judged: ${f.name}: no ${f.against ?? "depth"} exponent (points without ${f.against ?? "depth"} or value)`, result: "watch" }
+    : { value: `${f.name}: ${f.against ?? "depth"} exponent ${f.e}${seeded.length ? ` (${seeded.length} seeded probe point${seeded.length > 1 ? "s" : ""})` : ""}`, result: f.result });
   const sv = fit(scale, "probes"), cv = fit(counter, "counters");
   add("Scaling", sv.value, `< ${t.depthExponent.watch}`, sv.result);
   add("Counters", cv.value, `< ${t.counterExponent.watch}`, cv.result);

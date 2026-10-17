@@ -401,6 +401,26 @@ export function callOf(line, entry = null) {
     ...(sql && (line.daemon ?? []).some((d) => d.sql) ? { sql } : {}), ...(line.fuse != null ? { fuse: line.fuse } : {}) };
 }
 
+/**
+ * The proof checkpoint's diff_commits (SPEC §4, F-012): every page of the
+ * checkpoint step's difference summed (ms and SQL work), per changed entry it
+ * listed (the diff's own input). Never per tree file. Null when the step
+ * listed no entries. `lines` are trace lines with `step`/`seq` split
+ * (readTrace), `log` the call records.
+ */
+export function checkpointDiff(lines, log, step) {
+  const bySeq = new Map(log.map((e) => [e.seq, e]));
+  const pages = lines.filter((l) => l.step === step && l.method === "branch.diff_commits")
+    .map((l) => callOf(l, bySeq.get(l.seq)?.method === l.method ? bySeq.get(l.seq) : null));
+  const entries = pages.reduce((n, c) => n + (c.size?.n ?? 0), 0);
+  if (!pages.length || !(entries > 0)) return null;
+  const ms = pages.reduce((n, c) => n + c.ms, 0);
+  const all = (k) => (pages.every((c) => c.sql?.[k] != null) ? pages.reduce((n, c) => n + c.sql[k], 0) : null);
+  const statements = all("statements"), vmSteps = all("vm_steps");
+  return { unit: "entry", basis: "checkpoint", pages: pages.length, entries, ms: +ms.toFixed(3), statements, vmSteps,
+    msPerEntry: +(ms / entries).toFixed(4), statementsPerEntry: statements == null ? null : +(statements / entries).toFixed(3) };
+}
+
 /** The kernel opcodes of FUSE's counters (the 39 the daemon reports, before the frame dispositions). */
 export const FUSE_OPCODES = ["lookup", "forget", "batch_forget", "getattr", "setattr", "readlink", "mknod", "mkdir", "unlink", "rmdir", "symlink", "rename", "link", "open", "read", "write", "flush", "release", "fsync", "opendir", "readdir", "readdirplus", "releasedir", "fsyncdir", "statfs", "setxattr", "getxattr", "listxattr", "removexattr", "access", "create", "getlk", "setlk", "bmap", "ioctl", "poll", "fallocate", "lseek", "copy_file_range"];
 
