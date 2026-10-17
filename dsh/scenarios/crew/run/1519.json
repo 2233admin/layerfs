@@ -9,7 +9,7 @@
  "output": null,
  "ms": 24,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "lead A09 seed frozen acceptance (exit 0)",
    "force": false,
    "commit": "12a3b0d2290b52a040a31282909f6cef9611dd8e364e606fc4748d32e91d37b97c",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

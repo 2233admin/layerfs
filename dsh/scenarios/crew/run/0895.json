@@ -1,7 +1,6 @@
 {
  "step": "I2c-038 I-09: baseline production census",
  "agent": "insight-b",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "      \"path\": \"packages/web/src/router.js\",\n      \"package\": \"web\",\n      \"prod\": 22\n    },\n    {\n      \"path\": \"packages/web/src/store.js\",\n      \"package\": \"web\",\n      \"prod\": 10\n    }\n  ]\n}\nf73b6acb7d073e90631936ad62be8705a9c2a2f93c7e2097e7ca4f5c062f12ab  scripts/count-loc.mjs",
  "ms": 356,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "      \"path\": \"packages/web/src/router.js\",\n      \"package\": \"web\",\n      \"prod\": 22\n    },\n    {\n      \"path\": \"packages/web/src/store.js\",\n      \"package\": \"web\",\n      \"prod\": 10\n    }\n  ]\n}\nf73b6acb7d073e90631936ad62be8705a9c2a2f93c7e2097e7ca4f5c062f12ab  scripts/count-loc.mjs",
    "ms": 356,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

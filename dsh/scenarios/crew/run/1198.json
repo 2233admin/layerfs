@@ -1,7 +1,7 @@
 {
  "step": "I1c-081 I-11 I-12 final full server package including new actual HTTP resource proofs exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

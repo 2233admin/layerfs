@@ -1,7 +1,7 @@
 {
  "step": "lead-405 L0: changed stable footer actual tab-return signout destination and heading proofs plus nine ownership cases and census",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

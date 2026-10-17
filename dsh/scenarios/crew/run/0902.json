@@ -1,7 +1,7 @@
 {
  "step": "lead-271 L0 auth state API errors deep-link native browser and paged overview changed proof",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

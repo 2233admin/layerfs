@@ -1,7 +1,7 @@
 {
  "step": "P1b-0123 P1b 023 P-M3 bounded stable Chromium administration proof exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

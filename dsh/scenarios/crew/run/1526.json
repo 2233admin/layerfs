@@ -1,7 +1,6 @@
 {
  "step": "lead-565 A11 restart: frozen acceptance command",
  "agent": "root",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "{\"mode\":\"restart\",\"artifactFiles\":{},\"checks\":[{\"name\":\"people organization team and roles survive restart\",\"ok\":true},{\"name\":\"issue fields labels parent comments and relations survive new server process\",\"ok\":true},{\"name\":\"project workflow board sprint and exact attachment survive restart\",\"ok\":true},{\"name\":\"search index and private and team filters survive new server process\",\"ok\":true},{\"name\":\"activity watches inbox read and unread state and digests survive restart\",\"ok\":true},{\"name\":\"imported project closure and reporting persist across a new server process\",\"ok\":true}],\"pass\":6,\"fail\":0,\"ok\":true}\n(node:24809) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)",
  "ms": 1405,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "{\"mode\":\"restart\",\"artifactFiles\":{},\"checks\":[{\"name\":\"people organization team and roles survive restart\",\"ok\":true},{\"name\":\"issue fields labels parent comments and relations survive new server process\",\"ok\":true},{\"name\":\"project workflow board sprint and exact attachment survive restart\",\"ok\":true},{\"name\":\"search index and private and team filters survive new server process\",\"ok\":true},{\"name\":\"activity watches inbox read and unread state and digests survive restart\",\"ok\":true},{\"name\":\"imported project closure and reporting persist across a new server process\",\"ok\":true}],\"pass\":6,\"fail\":0,\"ok\":true}\n(node:24809) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)",
    "ms": 1405,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

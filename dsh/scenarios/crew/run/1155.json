@@ -1,7 +1,7 @@
 {
  "step": "lead-354 Combined depth source: pinned install census build syntax production count and all package tests; formal size acceptance remains open",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

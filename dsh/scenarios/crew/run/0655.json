@@ -1,7 +1,6 @@
 {
  "step": "W1b-115 W-04: final frozen identity file ceiling and owned live process audit",
  "agent": "work-a",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "    },\n    {\n      \"path\": \"packages/cli/src/commands/insight-search.js\",\n      \"physicalLines\": 122\n    },\n    {\n      \"path\": \"packages/server/src/modules/work/issues.js\",\n      \"physicalLines\": 121\n    }\n  ],\n  \"ok\": true\n}",
  "ms": 253,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "    },\n    {\n      \"path\": \"packages/cli/src/commands/insight-search.js\",\n      \"physicalLines\": 122\n    },\n    {\n      \"path\": \"packages/server/src/modules/work/issues.js\",\n      \"physicalLines\": 121\n    }\n  ],\n  \"ok\": true\n}",
    "ms": 253,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

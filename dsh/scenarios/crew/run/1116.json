@@ -1,7 +1,7 @@
 {
  "step": "P1e-084 P1e changed real route and later audit browser proof exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

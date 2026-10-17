@@ -9,7 +9,7 @@
  "output": null,
  "ms": 18,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "I2 approved preview flag changed actual streamed import CLI proof (exit 0)",
    "force": false,
    "commit": "124a924a61eab0b2f8873a75d22ec5717e791a8a37d3f9a653852cd833e41a4d02",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

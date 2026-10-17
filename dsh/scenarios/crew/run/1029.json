@@ -1,7 +1,7 @@
 {
  "step": "lead-303 L0 native browser deep-link signup lifetime overview and explicit bootstrap recovery changed readiness proof",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

@@ -1,7 +1,7 @@
 {
  "step": "lead-102 P-M2: integration install census build syntax and all package tests",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

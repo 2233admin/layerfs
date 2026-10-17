@@ -9,7 +9,7 @@
  "output": null,
  "ms": 408,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "lead A01 reinstall frozen acceptance (exit 0)",
    "force": false,
    "commit": "12f03a6a9f5423d371bc0cf60f0c7d9fed5c253b5474cbb4036e179122c10e4b12",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

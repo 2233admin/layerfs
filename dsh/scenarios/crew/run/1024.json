@@ -1,7 +1,7 @@
 {
  "step": "lead-298 L0 current census full changed CLI and forced-document real browser proof",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

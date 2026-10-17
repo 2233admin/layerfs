@@ -1,7 +1,7 @@
 {
  "step": "W1c-055 W09/W10: build syntax and draft resolution HTTP and actual browser proofs",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

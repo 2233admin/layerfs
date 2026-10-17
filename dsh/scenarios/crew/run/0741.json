@@ -1,7 +1,7 @@
 {
  "step": "W2b-096 W08 workflow and attachment queue targeted proofs",
  "agent": "work-b",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

@@ -1,7 +1,7 @@
 {
  "step": "P1c-018 P-04: affected server package proof execute",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

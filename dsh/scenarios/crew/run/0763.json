@@ -1,7 +1,7 @@
 {
  "step": "W2b-115 W08 final affected package verification",
  "agent": "work-b",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

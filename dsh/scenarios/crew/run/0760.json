@@ -9,7 +9,7 @@
  "output": null,
  "ms": 19,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W2b 112 W-05: prepare planning bundle and syntax before tests (exit 0)",
    "force": false,
    "commit": "12fc389a62e5c66aa14e6103ae9c46c5c4120fb051a91801c460df6056afcabca1",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

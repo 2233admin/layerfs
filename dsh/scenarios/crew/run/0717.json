@@ -1,7 +1,6 @@
 {
  "step": "W2b-086 verify restored sprint CLI compatibility and exact source count",
  "agent": "work-b",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "    {\n      \"path\": \"packages/web/src/router.js\",\n      \"package\": \"web\",\n      \"prod\": 22\n    },\n    {\n      \"path\": \"packages/web/src/store.js\",\n      \"package\": \"web\",\n      \"prod\": 10\n    }\n  ]\n}",
  "ms": 11505,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "    {\n      \"path\": \"packages/web/src/router.js\",\n      \"package\": \"web\",\n      \"prod\": 22\n    },\n    {\n      \"path\": \"packages/web/src/store.js\",\n      \"package\": \"web\",\n      \"prod\": 10\n    }\n  ]\n}",
    "ms": 11505,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

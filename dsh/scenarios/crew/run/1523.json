@@ -9,7 +9,7 @@
  "output": null,
  "ms": 32,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "lead A10 smoke frozen acceptance (exit 0)",
    "force": false,
    "commit": "125bb31a5b2e9f1cf6ada6be1e45d45ce06b337bef8c3a8ff59f7397e20f0668dc",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

@@ -1,7 +1,7 @@
 {
  "step": "I1c-077 I-11 I-12 final full affected web package exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

@@ -1,7 +1,7 @@
 {
  "step": "lead-386 L0: source-corrected actual asynchronous heading deliberate focus and abandoned-route proof with natural census",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

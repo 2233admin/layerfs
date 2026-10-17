@@ -1,7 +1,7 @@
 {
  "step": "I1b-024 I-10: diagnostic build and syntax preparation exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 5928,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

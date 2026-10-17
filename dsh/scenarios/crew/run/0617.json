@@ -1,7 +1,7 @@
 {
  "step": "W1b-075 W-04: actual delayed filter and comment browser navigation proof",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

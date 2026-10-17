@@ -1,7 +1,7 @@
 {
  "step": "I1-149 I-M3 full affected server and CLI package integration proof",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

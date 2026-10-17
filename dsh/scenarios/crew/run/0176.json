@@ -1,7 +1,6 @@
 {
  "step": "lead-088 W-M2: required generation4 checks",
  "agent": "root",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "  duration_ms: 1.020792\n  type: 'test'\n  ...\n1..21\n# tests 21\n# suites 0\n# pass 21\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 56.484041",
  "ms": 8290,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "  duration_ms: 1.020792\n  type: 'test'\n  ...\n1..21\n# tests 21\n# suites 0\n# pass 21\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 56.484041",
    "ms": 8290,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

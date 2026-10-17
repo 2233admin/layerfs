@@ -1,7 +1,7 @@
 {
  "step": "W1c-040 W09/W10: prepare changed browser fixture and full affected web checkpoint",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

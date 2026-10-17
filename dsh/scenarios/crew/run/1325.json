@@ -1,7 +1,7 @@
 {
  "step": "I1d-179 I-13: diagnose original async suggestion Save geometry exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 3501,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

@@ -1,7 +1,6 @@
 {
  "step": "lead-577 A14 fresh remount: frozen acceptance command",
  "agent": "root",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "{\"mode\":\"remount\",\"artifactFiles\":{},\"checks\":[{\"name\":\"CLI executable mode and whoami after fresh mount\",\"ok\":true},{\"name\":\"saved executable issue CLI reads persisted fields after fresh Workspace mount\",\"ok\":true},{\"name\":\"project and completed sprint CLI read persisted planning after fresh mount\",\"ok\":true}],\"pass\":3,\"fail\":0,\"ok\":true}",
  "ms": 1339,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "{\"mode\":\"remount\",\"artifactFiles\":{},\"checks\":[{\"name\":\"CLI executable mode and whoami after fresh mount\",\"ok\":true},{\"name\":\"saved executable issue CLI reads persisted fields after fresh Workspace mount\",\"ok\":true},{\"name\":\"project and completed sprint CLI read persisted planning after fresh mount\",\"ok\":true}],\"pass\":3,\"fail\":0,\"ok\":true}",
    "ms": 1339,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

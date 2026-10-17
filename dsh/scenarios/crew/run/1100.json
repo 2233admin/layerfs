@@ -1,7 +1,7 @@
 {
  "step": "P1e-065 P1e changed people Chromium and state proof exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

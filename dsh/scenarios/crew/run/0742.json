@@ -15,7 +15,7 @@
   {
    "op": "fork",
    "name": "work-w04-w05-w06-checkpoint",
-   "from": "work.5#21",
+   "from": "work.5#26",
    "expect": "branch.fork:Forked"
   }
  ]

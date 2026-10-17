@@ -1,7 +1,7 @@
 {
  "step": "I1-102 I-M3 actual pinned-browser keyboard search safe highlights saved-filter and live controls",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

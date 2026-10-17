@@ -1,7 +1,7 @@
 {
  "step": "W1b-157 W-07: shared Markdown editing final affected web and source checkpoint",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

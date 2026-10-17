@@ -1,7 +1,7 @@
 {
  "step": "P1b-0118 P1b 021 P-M3 audit selector diagnostic browser proof exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

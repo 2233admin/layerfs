@@ -1,7 +1,7 @@
 {
  "step": "lead-241 L0 full affected CLI after source-diagnosed fixture correction and current census",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

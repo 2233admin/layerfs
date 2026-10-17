@@ -9,7 +9,7 @@
  "output": null,
  "ms": 10,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "I1d I-13: final exact production size and owned application process census (exit 0)",
    "force": false,
    "commit": "12c9885fa6eacbccc4b8bae79cbe029e63dcf2708e138fdf967dd3a12d28004086",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

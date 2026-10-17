@@ -9,7 +9,7 @@
  "output": null,
  "ms": 17,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "P1b 013 P-M3 current generation build and syntax (exit 0)",
    "force": false,
    "commit": "12f7bed407fc1e8744025019ef6c98e30b1d0dea98f868d9d1cf486ddffd6d591f",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

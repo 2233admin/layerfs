@@ -9,7 +9,7 @@
  "output": null,
  "ms": 7,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "W1b 085 W-04: frozen counter identity and production file ceiling audit (exit 0)",
    "force": false,
    "commit": "12b59bf05e2976457ec14cac40103b49379a8ea640ed664ef303e6c914ce0c0fd6",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

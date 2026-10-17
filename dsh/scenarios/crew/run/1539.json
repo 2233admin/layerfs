@@ -9,7 +9,7 @@
  "output": null,
  "ms": 12,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "lead A14 fresh remount frozen acceptance (exit 0)",
    "force": false,
    "commit": "126de1a51d38bea94eae673832fe72f7856b86c37dec18200e6b79368681c91ca3",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

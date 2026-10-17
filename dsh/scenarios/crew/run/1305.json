@@ -1,7 +1,7 @@
 {
  "step": "I1d-164 I-13: prepare atomic copy-heading readiness checks exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 6957,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

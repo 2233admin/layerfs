@@ -1,7 +1,7 @@
 {
  "step": "lead-370 L0: build then first actual asynchronous-heading browser regression at unchanged product source",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

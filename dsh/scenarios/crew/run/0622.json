@@ -1,7 +1,7 @@
 {
  "step": "W1b-080 W-04: full affected server CLI regression and production census",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

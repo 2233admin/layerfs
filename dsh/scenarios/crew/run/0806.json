@@ -1,7 +1,7 @@
 {
  "step": "lead-232 L0 changed CLI syntax build and17 meaningful targeted leaves",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

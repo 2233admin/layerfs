@@ -1,7 +1,6 @@
 {
  "step": "I1c-085 I-11 I-12 final frozen per-file hash physical census and live versus defunct custody exec",
  "agent": "insight-a",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "m\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11523,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11552,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11564,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11595,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":11598,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":11599,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11601,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11621,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11622,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11635,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11669,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11693,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11705,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11739,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":11741,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":11744,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11745,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11765,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11766,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11779,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11813,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11833,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11847,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"}],\"auditorPid\":12348,\"excludedAncestors\":[12348,12345,12339]}}",
  "ms": 517,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "m\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11523,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11552,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11564,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11595,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":11598,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":11599,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11601,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11621,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11622,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11635,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11669,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11693,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11705,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11739,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":11741,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":11744,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11745,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11765,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11766,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11779,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11813,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11833,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":11847,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"}],\"auditorPid\":12348,\"excludedAncestors\":[12348,12345,12339]}}",
    "ms": 517,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

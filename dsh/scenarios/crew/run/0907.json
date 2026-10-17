@@ -9,7 +9,7 @@
  "output": null,
  "ms": 25,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W1c 27 W09: build and prepare hierarchy syntax before tests (exit 0)",
    "force": false,
    "commit": "120a3b68eb702c772a32202fdad6b18c223c0ecef4ba75d14cd8b141fc1feb9b47",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

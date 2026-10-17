@@ -1,7 +1,7 @@
 {
  "step": "lead-283 L0 changed real browser startup profile ownership proof",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

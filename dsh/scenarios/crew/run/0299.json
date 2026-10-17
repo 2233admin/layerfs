@@ -1,7 +1,7 @@
 {
  "step": "P1b-0106 P1b 018 P-M3 final server permission security tests exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

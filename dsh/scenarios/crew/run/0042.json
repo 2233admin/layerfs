@@ -9,7 +9,7 @@
  "output": null,
  "ms": 7,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "P1 004 P-M1 affected package tests and LOC (exit 0)",
    "force": false,
    "commit": "12948663a971533b9252958a49fe7700a6a003a82ac19f7ab8f091d3f3301720ae",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

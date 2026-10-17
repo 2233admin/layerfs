@@ -9,7 +9,7 @@
  "output": null,
  "ms": 13,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "lead A11 restart frozen acceptance (exit 0)",
    "force": false,
    "commit": "1259ed6cac3e8936f7efaa574e352f4a043d5cd1b5a61f62c80d1dd034f21982b4",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

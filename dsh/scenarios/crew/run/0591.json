@@ -9,7 +9,7 @@
  "output": null,
  "ms": 19,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W1b 047 W-04: prepare issue depth build and syntax (exit 0)",
    "force": false,
    "commit": "123f58684ea3331d0caef732d6b4a6024a7969f8799c461d15b17d141bbde8824b",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

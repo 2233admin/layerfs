@@ -1,7 +1,6 @@
 {
  "step": "W2-0105 W-M3 real work acceptance smoke restart remount and audit",
  "agent": "work-b",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "repare-tests.mjs\n\n{\"syntaxFiles\":111,\"ok\":true}\n\n> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n{\"ok\":true,\"pass\":20,\"checks\":[{\"name\":\"people organization and team persist with owner membership\",\"ok\":true},{\"name\":\"people member and guest roles enforce administrative denials\",\"ok\":true},{\"name\":\"project create workflow update and permission-filtered list\",\"ok\":true},{\"name\":\"issue labels preserve project scope name and color\",\"ok\":true},{\"name\":\"issue fields numbering parent labels edit and HTTP read persist\",\"ok\":true},{\"name\":\"member comment safely renders markdown and explicitly mentions owner\",\"ok\":true},{\"name\":\"all issue relation kinds preserve directional and symmetric read views\",\"ok\":true},{\"name\":\"actual issue CLI reads filters labels comments and relation records\",\"ok\":true},{\"name\":\"board move within and across columns and atomic bulk fields\",\"ok\":true},{\"name\":\"sprint lifecycle scope history carry-over and daily burndown persist\",\"ok\":true},{\"name\":\"attachment raw upload SHA-256 metadata exact bytes and error cleanup\",\"ok\":true},{\"name\":\"work guest public HTTP denial outside its granted project\",\"ok\":true},{\"name\":\"actual project board sprint and streaming attachment CLI commands\",\"ok\":true},{\"name\":\"people organization team and roles survive restart\",\"ok\":true},{\"name\":\"issue fields labels parent comments and relations survive new server process\",\"ok\":true},{\"name\":\"project workflow board sprint and exact attachment survive restart\",\"ok\":true},{\"name\":\"saved executable issue CLI reads persisted fields after fresh Workspace mount\",\"ok\":true},{\"name\":\"project and completed sprint CLI read persisted planning after fresh mount\",\"ok\":true},{\"name\":\"Issue field permission Markdown mention relation CLI and event contracts documented; behavior covered by issue and discussion HTTP/CLI suites\",\"ok\":true},{\"name\":\"Work project/board/sprint/attachment permission entrypoints and API contracts reviewed; behavior covered by HTTP and CLI suites\",\"ok\":true}]}",
  "ms": 5226,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "repare-tests.mjs\n\n{\"syntaxFiles\":111,\"ok\":true}\n\n> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n{\"ok\":true,\"pass\":20,\"checks\":[{\"name\":\"people organization and team persist with owner membership\",\"ok\":true},{\"name\":\"people member and guest roles enforce administrative denials\",\"ok\":true},{\"name\":\"project create workflow update and permission-filtered list\",\"ok\":true},{\"name\":\"issue labels preserve project scope name and color\",\"ok\":true},{\"name\":\"issue fields numbering parent labels edit and HTTP read persist\",\"ok\":true},{\"name\":\"member comment safely renders markdown and explicitly mentions owner\",\"ok\":true},{\"name\":\"all issue relation kinds preserve directional and symmetric read views\",\"ok\":true},{\"name\":\"actual issue CLI reads filters labels comments and relation records\",\"ok\":true},{\"name\":\"board move within and across columns and atomic bulk fields\",\"ok\":true},{\"name\":\"sprint lifecycle scope history carry-over and daily burndown persist\",\"ok\":true},{\"name\":\"attachment raw upload SHA-256 metadata exact bytes and error cleanup\",\"ok\":true},{\"name\":\"work guest public HTTP denial outside its granted project\",\"ok\":true},{\"name\":\"actual project board sprint and streaming attachment CLI commands\",\"ok\":true},{\"name\":\"people organization team and roles survive restart\",\"ok\":true},{\"name\":\"issue fields labels parent comments and relations survive new server process\",\"ok\":true},{\"name\":\"project workflow board sprint and exact attachment survive restart\",\"ok\":true},{\"name\":\"saved executable issue CLI reads persisted fields after fresh Workspace mount\",\"ok\":true},{\"name\":\"project and completed sprint CLI read persisted planning after fresh mount\",\"ok\":true},{\"name\":\"Issue field permission Markdown mention relation CLI and event contracts documented; behavior covered by issue and discussion HTTP/CLI suites\",\"ok\":true},{\"name\":\"Work project/board/sprint/attachment permission entrypoints and API contracts reviewed; behavior covered by HTTP and CLI suites\",\"ok\":true}]}",
    "ms": 5226,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

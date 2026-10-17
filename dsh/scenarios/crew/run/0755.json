@@ -1,7 +1,7 @@
 {
  "step": "W1b-162 W-07: final disjoint owned Markdown issue editing checkpoint and census",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

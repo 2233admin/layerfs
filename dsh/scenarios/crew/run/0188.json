@@ -1,7 +1,6 @@
 {
  "step": "W2-0074 W-M3 prepare build sprint and streaming HTTP tests",
  "agent": "work-b",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 1,
  "output": "  duration_ms: 110.357\n  type: 'test'\n  ...\n1..22\n# tests 22\n# suites 0\n# pass 21\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 2098.831334",
  "ms": 4882,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:1"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 1,
    "output": "  duration_ms: 110.357\n  type: 'test'\n  ...\n1..22\n# tests 22\n# suites 0\n# pass 21\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 2098.831334",
    "ms": 4882,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:1",
+   "verification": true
   }
  ]
 }

@@ -9,7 +9,7 @@
  "output": null,
  "ms": 396,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "lead 062 L0: lifecycle integration checks and clean-stop proof (exit 0)",
    "force": false,
    "commit": "127fb562219dec8b23df5006aca1ca3a58baf39fd76b5f11185872916ebfb6a7c9",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

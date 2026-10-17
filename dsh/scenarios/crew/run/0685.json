@@ -1,7 +1,7 @@
 {
  "step": "W1b-135 W-06: canonical Markdown full affected package checkpoint",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

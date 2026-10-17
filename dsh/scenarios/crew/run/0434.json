@@ -1,7 +1,7 @@
 {
  "step": "lead-150 I-M1: full integration install build syntax and all package tests",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

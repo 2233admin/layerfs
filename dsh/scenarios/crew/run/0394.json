@@ -1,7 +1,6 @@
 {
  "step": "I1-053 I-M3 build syntax and shared query completion tests",
  "agent": "insight-a",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 1,
  "output": "# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 97.617792\nnpm error Lifecycle script `test` failed with error:\nnpm error code 1\nnpm error path /workspaces/8/packages/shared\nnpm error workspace @crew/shared@0.1.0\nnpm error location /workspaces/8/packages/shared\nnpm error command failed\nnpm error command sh -c node --test test/*.test.js",
  "ms": 3837,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:1"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 1,
    "output": "# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 97.617792\nnpm error Lifecycle script `test` failed with error:\nnpm error code 1\nnpm error path /workspaces/8/packages/shared\nnpm error workspace @crew/shared@0.1.0\nnpm error location /workspaces/8/packages/shared\nnpm error command failed\nnpm error command sh -c node --test test/*.test.js",
    "ms": 3837,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:1",
+   "verification": true
   }
  ]
 }

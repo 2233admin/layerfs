@@ -1,7 +1,7 @@
 {
  "step": "lead-549 A07 CLI tests: frozen acceptance command",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

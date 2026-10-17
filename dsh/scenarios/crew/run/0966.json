@@ -1,7 +1,7 @@
 {
  "step": "I2c-069 I-09: digest browser captured fetcher changed proof",
  "agent": "insight-b",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 8944,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

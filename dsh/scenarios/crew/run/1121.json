@@ -1,7 +1,7 @@
 {
  "step": "P1e-089 P1e corrected real app accepted and opaque-link route abandonment exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

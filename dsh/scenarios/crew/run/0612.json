@@ -1,7 +1,7 @@
 {
  "step": "W1b-068 W-04: browser proof after diagnosed cookie bootstrap correction",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

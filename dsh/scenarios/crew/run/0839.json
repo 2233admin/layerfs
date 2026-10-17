@@ -1,7 +1,7 @@
 {
  "step": "P1d-135 P-05: 020 P-05 server-package exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

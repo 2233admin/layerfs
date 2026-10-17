@@ -1,7 +1,7 @@
 {
  "step": "P1e-099 P1e final server package exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

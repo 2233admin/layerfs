@@ -1,7 +1,7 @@
 {
  "step": "I1-096 I-M3 actual pinned Chromium query editor and real-process restart proofs",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

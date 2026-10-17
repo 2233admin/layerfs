@@ -9,7 +9,7 @@
  "output": null,
  "ms": 10,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W1 016 W-M3 fresh Workspace unchanged data executable CLI read proof (exit 0)",
    "force": false,
    "commit": "1258e3e048a306b9feab933f79153fcfbaa65baf356e7f8e3c4f9129785d5c5b63",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

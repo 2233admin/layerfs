@@ -1,7 +1,7 @@
 {
  "step": "lead-196 W integration4: install census build syntax and all package tests at frozen checkpoint",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

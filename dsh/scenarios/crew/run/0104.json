@@ -9,7 +9,7 @@
  "output": null,
  "ms": 14,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W1 004 W-M1 prepare syntax and build (exit 0)",
    "force": false,
    "commit": "12e8057c382c2c159363c0daa29bf685bce2158cd8f859fc8e92908e4bf34ed61b",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

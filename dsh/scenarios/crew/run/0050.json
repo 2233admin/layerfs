@@ -1,7 +1,6 @@
 {
  "step": "P1-0055 007 P-M1 public HTTP smoke exec",
  "agent": "people",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "{\"ok\":true,\"checks\":[{\"name\":\"people organization and team persist with owner membership\",\"ok\":true},{\"name\":\"people member and guest roles enforce administrative denials\",\"ok\":true},{\"name\":\"people organization team and roles survive restart\",\"ok\":true}]}\n(node:1164) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)",
  "ms": 643,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "{\"ok\":true,\"checks\":[{\"name\":\"people organization and team persist with owner membership\",\"ok\":true},{\"name\":\"people member and guest roles enforce administrative denials\",\"ok\":true},{\"name\":\"people organization team and roles survive restart\",\"ok\":true}]}\n(node:1164) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)",
    "ms": 643,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

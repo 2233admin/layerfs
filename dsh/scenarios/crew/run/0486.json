@@ -1,7 +1,7 @@
 {
  "step": "I1-117 I-M3 actual browser proof after query-editor blur-layout correction",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

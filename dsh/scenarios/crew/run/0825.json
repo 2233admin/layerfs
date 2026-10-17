@@ -9,7 +9,7 @@
  "output": null,
  "ms": 7,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "P1d 016 P-05 CLI final syntax preparation (exit 0)",
    "force": false,
    "commit": "12125f95e3e85c32eb814104b55d897f4f883e6ed3514a8c18e0e6155d30a8a280",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

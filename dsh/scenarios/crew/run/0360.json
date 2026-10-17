@@ -1,7 +1,6 @@
 {
  "step": "P1c-022 P-04: final owned-process census execute",
  "agent": "people",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "  PID  PPID STAT COMMAND\n    1     0 Ssl  /usr/local/bin/layerfs-daemon --config /layerfs-local/config/daemon.setup\n   58     1 Z    [esbuild] <defunct>\n 1236     0 Ss   timeout 110 bash -c ps -eo pid,ppid,stat,args\n 1242  1236 R    ps -eo pid,ppid,stat,args",
  "ms": 32,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "  PID  PPID STAT COMMAND\n    1     0 Ssl  /usr/local/bin/layerfs-daemon --config /layerfs-local/config/daemon.setup\n   58     1 Z    [esbuild] <defunct>\n 1236     0 Ss   timeout 110 bash -c ps -eo pid,ppid,stat,args\n 1242  1236 R    ps -eo pid,ppid,stat,args",
    "ms": 32,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

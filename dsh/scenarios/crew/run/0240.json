@@ -1,7 +1,6 @@
 {
  "step": "W2-0115 W-M3 fresh Workspace persisted CLI and work restart reads",
  "agent": "work-b",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "{\"ok\":true,\"checks\":[{\"name\":\"saved executable issue CLI reads persisted fields after fresh Workspace mount\",\"ok\":true},{\"name\":\"project and completed sprint CLI read persisted planning after fresh mount\",\"ok\":true},{\"name\":\"issue fields labels parent comments and relations survive new server process\",\"ok\":true},{\"name\":\"project workflow board sprint and exact attachment survive restart\",\"ok\":true}],\"actualNewWorkspace\":true}",
  "ms": 844,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "{\"ok\":true,\"checks\":[{\"name\":\"saved executable issue CLI reads persisted fields after fresh Workspace mount\",\"ok\":true},{\"name\":\"project and completed sprint CLI read persisted planning after fresh mount\",\"ok\":true},{\"name\":\"issue fields labels parent comments and relations survive new server process\",\"ok\":true},{\"name\":\"project workflow board sprint and exact attachment survive restart\",\"ok\":true}],\"actualNewWorkspace\":true}",
    "ms": 844,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

@@ -9,7 +9,7 @@
  "output": null,
  "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "W1b 051 W-04: focused later-page revision and stale-response proofs (exit 1)",
    "force": false,
    "commit": "123f58684ea3331d0caef732d6b4a6024a7969f8799c461d15b17d141bbde8824b",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

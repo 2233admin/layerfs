@@ -1,7 +1,7 @@
 {
  "step": "I2-140 final owned server web CLI package behavior proof",
  "agent": "insight-b",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

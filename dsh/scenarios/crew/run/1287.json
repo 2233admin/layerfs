@@ -1,7 +1,7 @@
 {
  "step": "I1d-151 I-13: follow-up same-view build syntax and browser AST exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 6482,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

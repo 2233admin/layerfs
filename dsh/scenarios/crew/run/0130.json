@@ -9,7 +9,7 @@
  "output": null,
  "ms": 14,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W2 60 W-M2 prepare build board tests and frozen LOC (exit 1)",
    "force": false,
    "commit": "1219cf3cada294c7af739e0f09b66da2491e72d1369a6bff56bcbf028f50015f84",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

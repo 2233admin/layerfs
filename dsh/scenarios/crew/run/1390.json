@@ -1,7 +1,7 @@
 {
  "step": "P1f-036 people action lifetime: sandbox.exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

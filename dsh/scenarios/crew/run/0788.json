@@ -1,7 +1,7 @@
 {
  "step": "lead-209 W-M5 final work integration install census build syntax all package tests",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

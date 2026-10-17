@@ -9,7 +9,7 @@
  "output": null,
  "ms": 9,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "I1d I-13: focused canonical view and actual ownership CLI proof (exit 0)",
    "force": false,
    "commit": "12411eaa65400a6fbf9df83b4497990e5b61ea38f9f5e3e7b76c6d7da5d2225980",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

@@ -1,7 +1,7 @@
 {
  "step": "lead-309 Depth integration regenerated generated-only LWW output census syntax and all coherent package tests",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

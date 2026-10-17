@@ -141,7 +141,9 @@ function Board({ sessionId, view, error }: { sessionId: string, view: SessionVie
     const agents = Object.values(view.agents).join(',')
     let opening = false
     if (!play.current || play.current.agents !== agents) {
-      // a rebuild (the tab opened, or an agent was named): labels follow call order
+      // a rebuild (the tab opened, or an agent was named): labels follow call order;
+      // what the old playback already played is applied at once, not played again
+      const shown = play.current?.playback.done
       play.current?.playback.stop()
       opening = true
       const fresh = () => {
@@ -149,7 +151,7 @@ function Board({ sessionId, view, error }: { sessionId: string, view: SessionVie
         engine.onchange = () => b.rerender()
         return X.storyView(engine, { lead: 'main' })
       }
-      const playback: Playback = new Playback(fresh, (W, step) => show(b, W, step, playback), () => speed.current)
+      const playback: Playback = new Playback(fresh, (W, step) => show(b, W, step, playback), () => speed.current, shown)
       play.current = { playback, agents }
     }
     const lines = view.lines.map((line) => ({ ...line, agent: view.agents[line.agentId] ?? line.agent }))

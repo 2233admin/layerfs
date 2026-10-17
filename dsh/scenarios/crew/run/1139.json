@@ -1,7 +1,7 @@
 {
  "step": "P1e-107 P1e final disjoint web scope excluding retained independent search browser failure exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

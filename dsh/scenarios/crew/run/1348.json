@@ -9,7 +9,7 @@
  "output": null,
  "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "I1d I-13: final follow-up production size and owned process custody (exit 0)",
    "force": false,
    "commit": "126ed15e7e474d31698e2b3efcdb9b32e01f21ad4864916a29a734b6270d7d6365",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

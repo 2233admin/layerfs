@@ -9,7 +9,7 @@
  "output": null,
  "ms": 9,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "P1e targeted HTTP and canonical work revision regression (exit 0)",
    "force": false,
    "commit": "121f494a018927d2267de493da9b642af7d9611f0ee83059d9122d7a28a692cdd2",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

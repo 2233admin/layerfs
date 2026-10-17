@@ -1,7 +1,7 @@
 {
  "step": "lead-378 L0: changed-source delayed heading title/focus deliberate focus and abandoned-route covering proof plus natural census",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

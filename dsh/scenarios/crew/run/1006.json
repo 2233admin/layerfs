@@ -1,7 +1,7 @@
 {
  "step": "W1c-077 W09/W10: build syntax and real draft inspection ownership proof",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

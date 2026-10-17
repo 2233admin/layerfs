@@ -1,7 +1,7 @@
 {
  "step": "I1c-055 I-11 I-12 build syntax and Python AST before proof exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 6651,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

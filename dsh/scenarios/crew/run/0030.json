@@ -1,7 +1,7 @@
 {
  "step": "lead-033 L0: tools integration install census build syntax tests",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 3900,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

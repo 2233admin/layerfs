@@ -1,7 +1,7 @@
 {
  "step": "P1d-113 P-05: 013 P-05 focused final delivery and integration proof exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

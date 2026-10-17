@@ -1,7 +1,7 @@
 {
  "step": "I1d-159 I-13: follow-up final full web same-view editor coverage exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

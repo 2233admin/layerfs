@@ -1,7 +1,6 @@
 {
  "step": "P1f-040 people action lifetime: sandbox.exec",
  "agent": "people",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "fab7d0546c5127218463a6605f4870fa98d6f3cd06cd57f1cb1e3c069ffcd78\",\"physical\":51},{\"path\":\"packages/web/src/pages/work/routes.jsx\",\"package\":\"web\",\"prod\":17,\"bytes\":909,\"sha256\":\"ccdc7b82955e180043fb22610b40f598c9c6bfdcf041143cf321dedf9c647e3e\",\"physical\":17},{\"path\":\"packages/web/src/pages/work/sprint-detail.jsx\",\"package\":\"web\",\"prod\":141,\"bytes\":12063,\"sha256\":\"9f269868c5089e96a39349bf3236209331042c45bd3bb9e3ecbc42cb124c514f\",\"physical\":141},{\"path\":\"packages/web/src/pages/work/sprint-list.jsx\",\"package\":\"web\",\"prod\":42,\"bytes\":3183,\"sha256\":\"fc7a49d621b43da5698cc28f6823be38fbfbf80075a8290e7dd8901500ae8299\",\"physical\":42},{\"path\":\"packages/web/src/pages/work/sprint-state.js\",\"package\":\"web\",\"prod\":25,\"bytes\":1305,\"sha256\":\"eea55ffcf3811f5e534ed4dc1c23b41bd17c591b3ebe7a1befee9ca9d98ee642\",\"physical\":25},{\"path\":\"packages/web/src/pages/work/sprints.jsx\",\"package\":\"web\",\"prod\":28,\"bytes\":2124,\"sha256\":\"15045518202465a8ee10675f3563324b252fab8a43729b7a5b19c1c27171ccea\",\"physical\":28},{\"path\":\"packages/web/src/pages/work/workflow-review.js\",\"package\":\"web\",\"prod\":33,\"bytes\":1905,\"sha256\":\"61e9512daa631749e19aace3ca9aaf687f3d37e835abf66c57253e45e608e7ec\",\"physical\":33},{\"path\":\"packages/web/src/pages/work/workflow-review.jsx\",\"package\":\"web\",\"prod\":26,\"bytes\":2831,\"sha256\":\"aecd4c3e6320d446527a96717e546d53751d4207853316316639a0e61d5a69f4\",\"physical\":26},{\"path\":\"packages/web/src/route-focus.js\",\"package\":\"web\",\"prod\":26,\"bytes\":887,\"sha256\":\"8fb1c828872eafe682cdc71b890e73a8f9ddd39096a6c8dc5d28e1f463b39393\",\"physical\":26},{\"path\":\"packages/web/src/router.js\",\"package\":\"web\",\"prod\":23,\"bytes\":1014,\"sha256\":\"4a2f731c5bacb27f153ba90c37ca218c35569096f95b596e65046796b63a0d95\",\"physical\":23},{\"path\":\"packages/web/src/session-check.js\",\"package\":\"web\",\"prod\":92,\"bytes\":3274,\"sha256\":\"29a40ba5efd436e46c314c896b68b67ce01fa64afc1c8e09a1855c67a51d2d16\",\"physical\":92},{\"path\":\"packages/web/src/store.js\",\"package\":\"web\",\"prod\":10,\"bytes\":442,\"sha256\":\"960614047fc209edd3498fe14e31fd329eb464160fdeead12349e4e1726afca8\",\"physical\":10}]}",
  "ms": 449,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "fab7d0546c5127218463a6605f4870fa98d6f3cd06cd57f1cb1e3c069ffcd78\",\"physical\":51},{\"path\":\"packages/web/src/pages/work/routes.jsx\",\"package\":\"web\",\"prod\":17,\"bytes\":909,\"sha256\":\"ccdc7b82955e180043fb22610b40f598c9c6bfdcf041143cf321dedf9c647e3e\",\"physical\":17},{\"path\":\"packages/web/src/pages/work/sprint-detail.jsx\",\"package\":\"web\",\"prod\":141,\"bytes\":12063,\"sha256\":\"9f269868c5089e96a39349bf3236209331042c45bd3bb9e3ecbc42cb124c514f\",\"physical\":141},{\"path\":\"packages/web/src/pages/work/sprint-list.jsx\",\"package\":\"web\",\"prod\":42,\"bytes\":3183,\"sha256\":\"fc7a49d621b43da5698cc28f6823be38fbfbf80075a8290e7dd8901500ae8299\",\"physical\":42},{\"path\":\"packages/web/src/pages/work/sprint-state.js\",\"package\":\"web\",\"prod\":25,\"bytes\":1305,\"sha256\":\"eea55ffcf3811f5e534ed4dc1c23b41bd17c591b3ebe7a1befee9ca9d98ee642\",\"physical\":25},{\"path\":\"packages/web/src/pages/work/sprints.jsx\",\"package\":\"web\",\"prod\":28,\"bytes\":2124,\"sha256\":\"15045518202465a8ee10675f3563324b252fab8a43729b7a5b19c1c27171ccea\",\"physical\":28},{\"path\":\"packages/web/src/pages/work/workflow-review.js\",\"package\":\"web\",\"prod\":33,\"bytes\":1905,\"sha256\":\"61e9512daa631749e19aace3ca9aaf687f3d37e835abf66c57253e45e608e7ec\",\"physical\":33},{\"path\":\"packages/web/src/pages/work/workflow-review.jsx\",\"package\":\"web\",\"prod\":26,\"bytes\":2831,\"sha256\":\"aecd4c3e6320d446527a96717e546d53751d4207853316316639a0e61d5a69f4\",\"physical\":26},{\"path\":\"packages/web/src/route-focus.js\",\"package\":\"web\",\"prod\":26,\"bytes\":887,\"sha256\":\"8fb1c828872eafe682cdc71b890e73a8f9ddd39096a6c8dc5d28e1f463b39393\",\"physical\":26},{\"path\":\"packages/web/src/router.js\",\"package\":\"web\",\"prod\":23,\"bytes\":1014,\"sha256\":\"4a2f731c5bacb27f153ba90c37ca218c35569096f95b596e65046796b63a0d95\",\"physical\":23},{\"path\":\"packages/web/src/session-check.js\",\"package\":\"web\",\"prod\":92,\"bytes\":3274,\"sha256\":\"29a40ba5efd436e46c314c896b68b67ce01fa64afc1c8e09a1855c67a51d2d16\",\"physical\":92},{\"path\":\"packages/web/src/store.js\",\"package\":\"web\",\"prod\":10,\"bytes\":442,\"sha256\":\"960614047fc209edd3498fe14e31fd329eb464160fdeead12349e4e1726afca8\",\"physical\":10}]}",
    "ms": 449,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

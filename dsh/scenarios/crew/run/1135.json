@@ -1,7 +1,7 @@
 {
  "step": "P1e-103 P1e final CLI package regression exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

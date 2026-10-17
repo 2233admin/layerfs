@@ -1,7 +1,6 @@
 {
  "step": "I1d-196 I-13: final follow-up production size and owned process custody exec",
  "agent": "insight-a",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "ium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36114, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36129, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36171, \"comm\": \"chrome_crashpad\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36173, \"comm\": \"chrome_crashpad\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36176, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36177, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36197, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36198, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36211, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36245, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36266, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36296, \"comm\": \"chrome_crashpad\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36298, \"comm\": \"chrome_crashpad\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36300, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36302, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36313, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36331, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36332, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36350, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36382, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36407, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36420, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36472, \"comm\": \"chrome_crashpad\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36474, \"comm\": \"chrome_crashpad\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36477, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36478, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36498, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36499, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36510, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36546, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36567, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36581, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}], \"defunctCount\": 888}}",
  "ms": 524,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "ium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36114, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36129, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36171, \"comm\": \"chrome_crashpad\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36173, \"comm\": \"chrome_crashpad\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36176, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36177, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36197, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36198, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36211, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36245, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36266, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36296, \"comm\": \"chrome_crashpad\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36298, \"comm\": \"chrome_crashpad\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36300, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36302, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36313, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36331, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36332, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36350, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36382, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36407, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36420, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36472, \"comm\": \"chrome_crashpad\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36474, \"comm\": \"chrome_crashpad\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36477, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36478, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36498, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36499, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36510, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36546, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36567, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}, {\"pid\": 36581, \"comm\": \"chromium\", \"state\": \"Z\", \"ppid\": 1}], \"defunctCount\": 888}}",
    "ms": 524,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

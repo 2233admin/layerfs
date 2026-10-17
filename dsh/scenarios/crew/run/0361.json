@@ -9,7 +9,7 @@
  "output": null,
  "ms": 9,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "P1c P-04 final owned-process census (exit 0)",
    "force": false,
    "commit": "1290a3bce5fb30578e8f377680c397d6acf97ca9b67deb1533ced60f726c6dcc8f",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

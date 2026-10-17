@@ -9,7 +9,7 @@
  "output": null,
  "ms": 17,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "I2 assigned selector transfer inbox dashboard usability depth proof (exit 1)",
    "force": false,
    "commit": "12bdbecbed378d2f8bcb8e8e04440eb59887b791e557efc6d0372ed7a32edb6646",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

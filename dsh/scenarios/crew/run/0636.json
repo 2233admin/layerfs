@@ -1,7 +1,7 @@
 {
  "step": "W1b-097 W-04: changed watched-delete and strengthened actual work browser proof",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

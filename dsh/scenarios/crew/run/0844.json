@@ -9,7 +9,7 @@
  "output": null,
  "ms": 10,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "P1d 021 P-05 cli-package (exit 0)",
    "force": false,
    "commit": "12b3a81a88f41fb05dfa9fd31009513d24c371117fad7032eafd74ef37a932561d",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

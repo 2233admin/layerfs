@@ -1,7 +1,7 @@
 {
  "step": "W2-0100 W-M3 diagnose board body console and current API",
  "agent": "work-b",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 4689,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

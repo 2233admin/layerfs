@@ -1,7 +1,6 @@
 {
  "step": "P1c-010 P-04: build and syntax before changed verification execute",
  "agent": "people",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":129,\"ok\":true}",
  "ms": 3155,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":129,\"ok\":true}",
    "ms": 3155,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

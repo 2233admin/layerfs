@@ -1,7 +1,7 @@
 {
  "step": "W1c-050 W09/W10: prepare W1 draft changes and focused pure and existing browser proofs",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

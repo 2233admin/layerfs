@@ -1,7 +1,7 @@
 {
  "step": "lead-138 P-M3 fixed: integration install build syntax all tests actual process audit",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

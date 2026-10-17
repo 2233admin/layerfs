@@ -9,7 +9,7 @@
  "output": null,
  "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "W1 010 W-M2 markdown comments and relation HTTP tests (exit 0)",
    "force": false,
    "commit": "12fbb1a99849bb97c915901244a2d051062e1d73ea43c838c5ab5065c1e142d245",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

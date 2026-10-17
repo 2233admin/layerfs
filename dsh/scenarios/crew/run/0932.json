@@ -1,7 +1,7 @@
 {
  "step": "lead-278 L0 actual runtime cleanup and changed renderer browser proof with current census",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

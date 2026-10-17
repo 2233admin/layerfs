@@ -9,7 +9,7 @@
  "output": null,
  "ms": 16,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W2 88 W-M3 build and full focused sprint attachment client tests (exit 0)",
    "force": false,
    "commit": "124dabdaa9278e98cf832a9a5f6e1ac518303604d03a7ee17496463a6d587bb3e8",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

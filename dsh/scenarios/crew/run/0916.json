@@ -1,7 +1,7 @@
 {
  "step": "W1c-031 W09/W10: prepare and focused hierarchy pure HTTP pinned browser proofs",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

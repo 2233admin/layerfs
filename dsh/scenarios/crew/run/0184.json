@@ -9,7 +9,7 @@
  "output": null,
  "ms": 17,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W1 019 W-M3 complete changed package verification and maintained source census (exit 0)",
    "force": false,
    "commit": "12e95e5af662918b07c8c9e7c8e4b38786be6b23bbac3228b6a1d94dfcc04b63d7",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

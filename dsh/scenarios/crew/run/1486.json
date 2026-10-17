@@ -1,7 +1,6 @@
 {
  "step": "lead-525 A01 reinstall: frozen acceptance command",
  "agent": "root",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "\nadded 75 packages in 832ms\n{\"kind\":\"dependency-census\",\"agent\":\"lead\",\"lane\":\"acceptance.3\",\"workspace\":\"3b9d74954adda15e3c1c32e599bdad0a577596bb98d482990343b2aabb4d537a\",\"installTraceStep\":\"lead-525 A01 reinstall: frozen acceptance command\",\"lockfileSha256\":\"06922ecc5ec47d7b094196e2e297082a9b204c9eceb5b6c3414882687a54c6d1\",\"roots\":[{\"root\":\"node_modules\",\"files\":713,\"bytes\":23725986}]}",
  "ms": 1667,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "\nadded 75 packages in 832ms\n{\"kind\":\"dependency-census\",\"agent\":\"lead\",\"lane\":\"acceptance.3\",\"workspace\":\"3b9d74954adda15e3c1c32e599bdad0a577596bb98d482990343b2aabb4d537a\",\"installTraceStep\":\"lead-525 A01 reinstall: frozen acceptance command\",\"lockfileSha256\":\"06922ecc5ec47d7b094196e2e297082a9b204c9eceb5b6c3414882687a54c6d1\",\"roots\":[{\"root\":\"node_modules\",\"files\":713,\"bytes\":23725986}]}",
    "ms": 1667,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

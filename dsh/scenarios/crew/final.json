@@ -400,6 +400,20 @@
       "merged": null,
       "optional": true
      }
+    ],
+    "extras": [
+     {
+      "after": 1,
+      "message": "lead A03 prepare tests frozen acceptance (exit 0)"
+     },
+     {
+      "after": 1,
+      "message": "lead A04 shared tests frozen acceptance (exit 0)"
+     },
+     {
+      "after": 1,
+      "message": "lead A08 LOC frozen acceptance (exit 0)"
+     }
     ]
    },
    "acceptance.2": {
@@ -416,6 +430,16 @@
       "via": "exec",
       "merged": null,
       "optional": true
+     }
+    ],
+    "extras": [
+     {
+      "after": 1,
+      "message": "lead A03 prepare tests frozen acceptance (exit 0)"
+     },
+     {
+      "after": 1,
+      "message": "lead A04 shared tests frozen acceptance (exit 0)"
      }
     ]
    },
@@ -463,6 +487,28 @@
       "via": "exec",
       "merged": null,
       "optional": true
+     }
+    ],
+    "extras": [
+     {
+      "after": 1,
+      "message": "lead A03 prepare tests frozen acceptance (exit 0)"
+     },
+     {
+      "after": 1,
+      "message": "lead A04 shared tests frozen acceptance (exit 0)"
+     },
+     {
+      "after": 1,
+      "message": "lead A08 LOC frozen acceptance (exit 0)"
+     },
+     {
+      "after": 5,
+      "message": "lead A13 audit frozen acceptance (exit 0)"
+     },
+     {
+      "after": 6,
+      "message": "lead A15 process audit frozen acceptance (exit 0)"
      }
     ]
    },
@@ -596,6 +642,28 @@
       "message": "I2 validated transfer closure cycles and explicit identity plan",
       "via": "fs",
       "merged": null
+     }
+    ],
+    "extras": [
+     {
+      "after": 12,
+      "message": "I1 054 I-M3 build syntax and shared query completion tests (exit 1)"
+     },
+     {
+      "after": 18,
+      "message": "I1 069 I-M3 actual scoped-token search and filter executable integration (exit 1)"
+     },
+     {
+      "after": 19,
+      "message": "I1 074 I-M3 actual scoped-token search filter and plain-help proofs (exit 0)"
+     },
+     {
+      "after": 20,
+      "message": "I2 changed M2 actual CLI proof (exit 0)"
+     },
+     {
+      "after": 20,
+      "message": "I1 078 I-M3 frozen production LOC and largest file census (exit 0)"
      }
     ]
    },
@@ -841,6 +909,32 @@
       "via": "fs",
       "merged": null
      }
+    ],
+    "extras": [
+     {
+      "after": 14,
+      "message": "I2 M3 transfer dashboard and reporting behavior proof (exit 1)"
+     },
+     {
+      "after": 15,
+      "message": "I2 changed M3 transfer dashboard reporting behavior proof (exit 0)"
+     },
+     {
+      "after": 36,
+      "message": "I1 154 I-M3 frozen production LOC and largest file census (exit 0)"
+     },
+     {
+      "after": 38,
+      "message": "I1 158 I1 final owned application browser process audit with defunct states separate (exit 0)"
+     },
+     {
+      "after": 45,
+      "message": "I2 final changed transfer date proof acceptance audit and source census (exit 0)"
+     },
+     {
+      "after": 45,
+      "message": "I2 diagnose retained browser descendant states before final close (exit 0)"
+     }
     ]
    },
    "insight.4": {
@@ -903,6 +997,20 @@
       "via": "fs",
       "merged": null
      }
+    ],
+    "extras": [
+     {
+      "after": -1,
+      "message": "I2c I-09: baseline production census (exit 0)"
+     },
+     {
+      "after": 4,
+      "message": "I2c I-09: digest targeted due HTTP CLI proof (exit 0)"
+     },
+     {
+      "after": 10,
+      "message": "I2c I-09: final source counter physical and live-process census (exit 0)"
+     }
     ]
    },
    "insight.5": {
@@ -934,6 +1042,12 @@
       "via": "exec",
       "merged": null,
       "optional": true
+     }
+    ],
+    "extras": [
+     {
+      "after": 2,
+      "message": "I1b 034 I-10: diagnostic sink syntax preparation (exit 0)"
      }
     ]
    },
@@ -983,6 +1097,16 @@
       "via": "exec",
       "merged": null,
       "optional": true
+     }
+    ],
+    "extras": [
+     {
+      "after": -1,
+      "message": "I1c I-11 baseline frozen production census (exit 0)"
+     },
+     {
+      "after": 7,
+      "message": "I1c I-11 I-12 final frozen per-file hash physical census and live versus defunct custody (exit 0)"
      }
     ]
    },
@@ -1073,6 +1197,24 @@
       "via": "exec",
       "merged": null,
       "optional": true
+     }
+    ],
+    "extras": [
+     {
+      "after": -1,
+      "message": "I1d I-13: record exact initial production census (exit 0)"
+     },
+     {
+      "after": 2,
+      "message": "I1d I-13: focused canonical view and actual ownership CLI proof (exit 0)"
+     },
+     {
+      "after": 9,
+      "message": "I1d I-13: final exact production size and owned application process census (exit 0)"
+     },
+     {
+      "after": 15,
+      "message": "I1d I-13: final follow-up production size and owned process custody (exit 0)"
      }
     ]
    },
@@ -1299,6 +1441,12 @@
       "merged": null,
       "optional": true
      }
+    ],
+    "extras": [
+     {
+      "after": -1,
+      "message": "lead 078 W-M1: frozen source census diagnostic (exit 0)"
+     }
     ]
    },
    "int-work-m2": {
@@ -1419,6 +1567,12 @@
       "message": "lead acceptance-only repair: invocation-owned CLI proof artifacts, exclusive fresh source and actual same-output refusal assertions; keep oldfiles and failedA10; Production LOC10005->10005(delta0)",
       "via": "fs",
       "merged": null
+     }
+    ],
+    "extras": [
+     {
+      "after": 0,
+      "message": "lead 487 A10 fixture repair486 syntax fourmodules passed; frozen counter10005delta0 passed; original sample/outputs retained; next formal proof starts from new main (exit 0)"
      }
     ]
    },
@@ -1623,6 +1777,12 @@
       "via": "fs",
       "merged": null
      }
+    ],
+    "extras": [
+     {
+      "after": 0,
+      "message": "lead 123 L0: process namespace audit implementation proof (exit 0)"
+     }
     ]
    },
    "lead-tools.4": {
@@ -1659,6 +1819,16 @@
       "via": "exec",
       "merged": null,
       "optional": true
+     }
+    ],
+    "extras": [
+     {
+      "after": 3,
+      "message": "P1f frozen counter and exact production physical hash census (exit 0)"
+     },
+     {
+      "after": 3,
+      "message": "P1f final owned process custody audit (exit 0)"
      }
     ]
    },
@@ -1703,6 +1873,16 @@
       "via": "exec",
       "merged": null,
       "optional": true
+     }
+    ],
+    "extras": [
+     {
+      "after": 2,
+      "message": "P1 004 P-M1 affected package tests and LOC (exit 0)"
+     },
+     {
+      "after": 6,
+      "message": "P1 009 P-M1 final affected tests and LOC (exit 0)"
      }
     ]
    },
@@ -1820,6 +2000,20 @@
       "via": "fs",
       "merged": null
      }
+    ],
+    "extras": [
+     {
+      "after": 10,
+      "message": "P1b 024 P-M3 source census physical scope and process custody (exit 0)"
+     },
+     {
+      "after": 10,
+      "message": "P1b 025 P-M3 determine browser and build process states (exit 0)"
+     },
+     {
+      "after": 10,
+      "message": "P1b 026 P-M3 final maintained-source size and custody check (exit 0)"
+     }
     ]
    },
    "people.4": {
@@ -1835,6 +2029,12 @@
       "via": "exec",
       "merged": null,
       "optional": true
+     }
+    ],
+    "extras": [
+     {
+      "after": 1,
+      "message": "P1c P-04 final owned-process census (exit 0)"
      }
     ]
    },
@@ -1898,6 +2098,60 @@
       "via": "exec",
       "merged": null,
       "optional": true
+     }
+    ],
+    "extras": [
+     {
+      "after": 1,
+      "message": "P1d 009 P-05 retained delivery revocation defect proof (exit 1)"
+     },
+     {
+      "after": 5,
+      "message": "P1d 016 P-05 CLI final syntax preparation (exit 0)"
+     },
+     {
+      "after": 5,
+      "message": "P1d 017 P-05 actual CLI boundary proof (exit 0)"
+     },
+     {
+      "after": 6,
+      "message": "P1d 019 P-05 final-prepare (exit 0)"
+     },
+     {
+      "after": 6,
+      "message": "P1d 021 P-05 cli-package (exit 0)"
+     },
+     {
+      "after": 6,
+      "message": "P1d 022 P-05 runtime registered route census (exit 0)"
+     },
+     {
+      "after": 7,
+      "message": "P1d 024 P-05 final audit syntax (exit 0)"
+     },
+     {
+      "after": 8,
+      "message": "P1d 028 P-05 retained cookie policy defect proof after syntax (exit 1)"
+     },
+     {
+      "after": 10,
+      "message": "P1d 031 P-05 actual HTTP cookie policy repaired proof (exit 0)"
+     },
+     {
+      "after": 10,
+      "message": "P1d 033 P-05 final source CLI package proof (exit 0)"
+     },
+     {
+      "after": 10,
+      "message": "P1d 025 P-05 actual HTTP CLI restart and final route audit (exit 0)"
+     },
+     {
+      "after": 10,
+      "message": "P1d 034 P-05 frozen production source census (exit 0)"
+     },
+     {
+      "after": 10,
+      "message": "P1d 035 P-05 terminal owned process census (exit 0)"
      }
     ]
    },
@@ -1987,6 +2241,20 @@
       "merged": null,
       "optional": true
      }
+    ],
+    "extras": [
+     {
+      "after": 5,
+      "message": "P1e targeted HTTP and canonical work revision regression (exit 0)"
+     },
+     {
+      "after": 15,
+      "message": "P1e final runtime routes frozen LOC hashes and physical source limits (exit 0)"
+     },
+     {
+      "after": 15,
+      "message": "P1e final owned process census (exit 0)"
+     }
     ]
    },
    "work-w04-w05-w06-checkpoint": {
@@ -2057,6 +2325,16 @@
       "via": "exec",
       "merged": null,
       "optional": true
+     }
+    ],
+    "extras": [
+     {
+      "after": 10,
+      "message": "W1 005 W-M1 focused issue HTTP shared web and CLI tests (exit 0)"
+     },
+     {
+      "after": 10,
+      "message": "W1 006 W-M1 combined all package tests (exit 0)"
      }
     ]
    },
@@ -2150,6 +2428,16 @@
       "via": "exec",
       "merged": null,
       "optional": true
+     }
+    ],
+    "extras": [
+     {
+      "after": 8,
+      "message": "W1 010 W-M2 markdown comments and relation HTTP tests (exit 0)"
+     },
+     {
+      "after": 9,
+      "message": "W1 011 W-M2 complete package regression and source census (exit 1)"
      }
     ]
    },
@@ -2290,6 +2578,16 @@
       "via": "exec",
       "merged": null,
       "optional": true
+     }
+    ],
+    "extras": [
+     {
+      "after": 9,
+      "message": "W1 021 W-M3 all issue endpoint role permission HTTP audit (exit 0)"
+     },
+     {
+      "after": 24,
+      "message": "W2 124 W-M3 final changed web regression and frozen production census (exit 0)"
      }
     ]
    },
@@ -2523,6 +2821,56 @@
       "via": "fs",
       "merged": null
      }
+    ],
+    "extras": [
+     {
+      "after": 3,
+      "message": "W1b 051 W-04: focused later-page revision and stale-response proofs (exit 1)"
+     },
+     {
+      "after": 4,
+      "message": "W1b 059 W-04: focused issue depth state and CLI proofs (exit 0)"
+     },
+     {
+      "after": 10,
+      "message": "W1b 085 W-04: frozen counter identity and production file ceiling audit (exit 0)"
+     },
+     {
+      "after": 11,
+      "message": "W1b 091 W-04: shared regression and own sandbox process census (exit 0)"
+     },
+     {
+      "after": 13,
+      "message": "W1b 103 W-04: focused final deletion snapshot fallback and visibility proof (exit 1)"
+     },
+     {
+      "after": 14,
+      "message": "W1b 108 W-04: focused dual-endpoint deletion activity authorization proof (exit 0)"
+     },
+     {
+      "after": 15,
+      "message": "W1b 116 W-04: final frozen identity file ceiling and owned live process audit (exit 0)"
+     },
+     {
+      "after": 28,
+      "message": "W1b 140 W-06: canonical Markdown CLI and frozen census checkpoint (exit 1)"
+     },
+     {
+      "after": 29,
+      "message": "W2b 087 W-05: verify restored sprint CLI compatibility and exact source count (exit 0)"
+     },
+     {
+      "after": 29,
+      "message": "W1b 144 W-06: canonical Markdown current production census without test gating (exit 0)"
+     },
+     {
+      "after": 41,
+      "message": "W2b 120 W-05: final production census file ceiling and process closure audit (exit 0)"
+     },
+     {
+      "after": 41,
+      "message": "W1b 167 W-07: final owned source hash ceiling and process custody after Markdown scopes (exit 0)"
+     }
     ]
    },
    "work.6": {
@@ -2601,6 +2949,20 @@
       "via": "exec",
       "merged": null,
       "optional": true
+     }
+    ],
+    "extras": [
+     {
+      "after": 11,
+      "message": "W1c 62 W10: prepare and corrected pure and same-timestamp HTTP field resolution proofs (exit 0)"
+     },
+     {
+      "after": 11,
+      "message": "W1c 70 W09/W10: final frozen counter source hashes and production file ceiling (exit 0)"
+     },
+     {
+      "after": 13,
+      "message": "W1c 86 W09/W10: final frozen counter source hashes and production file ceiling (exit 0)"
      }
     ]
    }

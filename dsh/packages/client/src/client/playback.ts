@@ -7,7 +7,9 @@
 // shows the window, the run and the Commit. A long queue plays faster, to stay
 // about CATCH_UP steps behind at most; no step is dropped. When the tab
 // opens, calls that ended over RECENT_MS ago are shown at once and the rest
-// play, so a run just started (a demo's Play) plays from its first call.
+// play, so a run just started (a demo's Play) plays from its first call. A
+// rebuild when an agent is named applies at once what already played, so no
+// Workspace opens and closes on screen twice.
 import * as X from '../../../model/src/index.js'
 
 /** Playback speeds: a multiple of the hold times, or 0 for none (each call shows as it lands). */
@@ -35,7 +37,7 @@ export function holdOf(line: { method: string, ok?: boolean }): number {
 /** The same rule as the trace source's (model/src/sources/trace.js): lines that are not steps of their own. */
 const rides = (method: string) => method === 'sandbox.service' || (method.startsWith('operator.') && method !== 'operator.process.start' && method !== 'operator.process.cancel')
 
-export interface Step { a: string, line: any, replay: (W: any) => void, instant?: boolean }
+export interface Step { a: string, line: any, replay: (W: any) => void, instant?: boolean, ids: string[] }
 
 export class Playback {
   W: any
@@ -48,13 +50,17 @@ export class Playback {
   private wake: (() => void) | null = null
   private feeding: Promise<void> = Promise.resolve()
   played = 0
+  /** Ids of the lines played so far, for a rebuild to skip past. */
+  readonly done = new Set<string>()
 
   /**
    * @param fresh a new view model (an empty trace replay)
    * @param show draws the model after `step`, or after catching up (null)
    * @param speed the speed now
+   * @param shown the lines an earlier playback of the same session already played: a
+   *   rebuild (an agent was named) applies them at once instead of playing them again
    */
-  constructor(private fresh: () => any, private show: (W: any, step: Step | null) => void, private speed: () => Speed) {
+  constructor(private fresh: () => any, private show: (W: any, step: Step | null) => void, private speed: () => Speed, private shown = new Set<string>()) {
     this.W = fresh()
   }
 
@@ -87,11 +93,11 @@ export class Playback {
       if (rides(line.method)) continue
       const batch = this.pending
       this.pending = []
-      this.queue.push({ a: line.agent || agent, line, replay: (W) => { for (const l of batch) X.replayLine(W, l, { agent, t0 }) } })
-      if (k < instant) this.queue[this.queue.length - 1].instant = true
+      this.queue.push({ a: line.agent || agent, line, ids: batch.map((l) => l.id), replay: (W) => { for (const l of batch) X.replayLine(W, l, { agent, t0 }) } })
+      if (k < instant || this.shown.has(line.id)) this.queue[this.queue.length - 1].instant = true
     }
     if (opening) {
-      while (this.queue[0]?.instant) { await X.runStep(this.W, this.queue.shift()!, {}); this.played++ }
+      while (this.queue[0]?.instant) await this.run(this.queue.shift()!)
       this.show(this.W, null)
     }
     this.wake?.() // a longer queue may shorten the hold under way
@@ -109,8 +115,7 @@ export class Playback {
     try {
       while (this.queue.length && !this.stopped) {
         const step = this.queue.shift()!
-        await X.runStep(this.W, step, {})
-        this.played++
+        await this.run(step)
         if (this.stopped) return
         this.show(this.W, step)
         await this.hold(holdOf(step.line), Date.now())
@@ -119,6 +124,12 @@ export class Playback {
     } finally {
       this.running = false
     }
+  }
+
+  private async run(step: Step) {
+    await X.runStep(this.W, step, {})
+    this.played++
+    for (const id of step.ids) this.done.add(id)
   }
 
   /** Waits out `ms` at the current speed, from `since`; a speed change takes effect at once. */

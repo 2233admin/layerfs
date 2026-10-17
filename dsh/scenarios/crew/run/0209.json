@@ -1,7 +1,7 @@
 {
  "step": "W2-0096 W-M3 real Chromium pointer drag persists status",
  "agent": "work-b",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

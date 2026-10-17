@@ -1,7 +1,7 @@
 {
  "step": "lead-569 A12 browser: frozen acceptance command",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 4764,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

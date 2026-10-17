@@ -1,7 +1,7 @@
 {
  "step": "lead-430 Integration: execute previously unrun combined CLI checkpoint stopped by earlier web failure, no passed-package repeat",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

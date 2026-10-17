@@ -1,7 +1,7 @@
 {
  "step": "P1e-079 P1e corrected people HTTP Chromium state proof exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

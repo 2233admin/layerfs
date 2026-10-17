@@ -9,7 +9,7 @@
  "output": null,
  "ms": 12,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "P1 003 P-M1 build and prepare tests (exit 0)",
    "force": false,
    "commit": "12948663a971533b9252958a49fe7700a6a003a82ac19f7ab8f091d3f3301720ae",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

@@ -9,7 +9,7 @@
  "output": null,
  "ms": 7,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "W1 005 W-M1 focused issue HTTP shared web and CLI tests (exit 0)",
    "force": false,
    "commit": "12e8057c382c2c159363c0daa29bf685bce2158cd8f859fc8e92908e4bf34ed61b",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

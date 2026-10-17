@@ -1,7 +1,7 @@
 {
  "step": "W1b-153 W-07: actual shared Markdown toolbar keyboard and selection browser proof",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

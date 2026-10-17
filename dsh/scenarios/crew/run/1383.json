@@ -9,7 +9,7 @@
  "output": null,
  "ms": 24,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "P1f prepare changed lifetime source (exit 0)",
    "force": false,
    "commit": "1248927a2e829778bfa9fb12dfe25af5ac95a7eea05a850511aa1d41009e511d63",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

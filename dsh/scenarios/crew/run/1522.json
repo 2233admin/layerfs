@@ -1,7 +1,6 @@
 {
  "step": "lead-561 A10 smoke: frozen acceptance command",
  "agent": "root",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "safely renders markdown and explicitly mentions owner\",\"ok\":true},{\"name\":\"all issue relation kinds preserve directional and symmetric read views\",\"ok\":true},{\"name\":\"actual issue CLI reads filters labels comments and relation records\",\"ok\":true},{\"name\":\"board move within and across columns and atomic bulk fields\",\"ok\":true},{\"name\":\"sprint lifecycle scope history carry-over and daily burndown persist\",\"ok\":true},{\"name\":\"attachment raw upload SHA-256 metadata exact bytes and error cleanup\",\"ok\":true},{\"name\":\"work guest public HTTP denial outside its granted project\",\"ok\":true},{\"name\":\"actual project board sprint and streaming attachment CLI commands\",\"ok\":true},{\"name\":\"compound search grammar precedence dates assignee and highlighted canonical issue\",\"ok\":true},{\"name\":\"saved personal filter is private and saved team filter executes for same-team member\",\"ok\":true},{\"name\":\"actual search and saved-filter CLI run through owner scoped token\",\"ok\":true},{\"name\":\"activity feed and explicit personal watch use canonical issue events\",\"ok\":true},{\"name\":\"owner mention produces unread inbox with reversible exact owned read state\",\"ok\":true},{\"name\":\"real authenticated SSE receives a member mutation and cleans up its stream\",\"ok\":true},{\"name\":\"digest batches private unread updates once and preserves browser notification state\",\"ok\":true},{\"name\":\"actual feed inbox preferences and digest CLI families use scoped authentication\",\"ok\":true},{\"name\":\"dashboard counts throughput and burndown reuse visible canonical work\",\"ok\":true},{\"name\":\"JSON CSV export validated preview and atomic remapped import preserve required content\",\"ok\":true},{\"name\":\"actual dashboard and streamed project export import CLI families roundtrip\",\"ok\":true},{\"name\":\"final fresh owner mention remains unread on the initial browser inbox page\",\"ok\":true}],\"pass\":28,\"fail\":0,\"ok\":true}\n(node:24415) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)",
  "ms": 6443,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "safely renders markdown and explicitly mentions owner\",\"ok\":true},{\"name\":\"all issue relation kinds preserve directional and symmetric read views\",\"ok\":true},{\"name\":\"actual issue CLI reads filters labels comments and relation records\",\"ok\":true},{\"name\":\"board move within and across columns and atomic bulk fields\",\"ok\":true},{\"name\":\"sprint lifecycle scope history carry-over and daily burndown persist\",\"ok\":true},{\"name\":\"attachment raw upload SHA-256 metadata exact bytes and error cleanup\",\"ok\":true},{\"name\":\"work guest public HTTP denial outside its granted project\",\"ok\":true},{\"name\":\"actual project board sprint and streaming attachment CLI commands\",\"ok\":true},{\"name\":\"compound search grammar precedence dates assignee and highlighted canonical issue\",\"ok\":true},{\"name\":\"saved personal filter is private and saved team filter executes for same-team member\",\"ok\":true},{\"name\":\"actual search and saved-filter CLI run through owner scoped token\",\"ok\":true},{\"name\":\"activity feed and explicit personal watch use canonical issue events\",\"ok\":true},{\"name\":\"owner mention produces unread inbox with reversible exact owned read state\",\"ok\":true},{\"name\":\"real authenticated SSE receives a member mutation and cleans up its stream\",\"ok\":true},{\"name\":\"digest batches private unread updates once and preserves browser notification state\",\"ok\":true},{\"name\":\"actual feed inbox preferences and digest CLI families use scoped authentication\",\"ok\":true},{\"name\":\"dashboard counts throughput and burndown reuse visible canonical work\",\"ok\":true},{\"name\":\"JSON CSV export validated preview and atomic remapped import preserve required content\",\"ok\":true},{\"name\":\"actual dashboard and streamed project export import CLI families roundtrip\",\"ok\":true},{\"name\":\"final fresh owner mention remains unread on the initial browser inbox page\",\"ok\":true}],\"pass\":28,\"fail\":0,\"ok\":true}\n(node:24415) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)",
    "ms": 6443,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

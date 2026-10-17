@@ -1,7 +1,7 @@
 {
  "step": "W1b-131 W-04: canonical Markdown HTTP notification and actual preview checkpoint",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

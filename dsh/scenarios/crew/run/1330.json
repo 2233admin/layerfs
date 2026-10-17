@@ -1,7 +1,7 @@
 {
  "step": "lead-396 L0: build prepare then session ownership native-tab and async heading covering proofs at changed source plus census",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

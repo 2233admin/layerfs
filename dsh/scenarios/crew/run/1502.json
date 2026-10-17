@@ -1,7 +1,7 @@
 {
  "step": "lead-541 A05 server tests: frozen acceptance command",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

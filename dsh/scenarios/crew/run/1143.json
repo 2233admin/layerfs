@@ -1,7 +1,6 @@
 {
  "step": "P1e-111 P1e final runtime routes frozen LOC hashes and physical source limits exec",
  "agent": "people",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": ".json\":\"06922ecc5ec47d7b094196e2e297082a9b204c9eceb5b6c3414882687a54c6d1\"},\"productionFileCount\":201,\"largest\":[{\"file\":\"packages/shared/src/markdown.js\",\"physical\":228,\"sha256\":\"320767a0354f40dbee659dc4f3a9816a4096f4d98aa5df1e805fd20e8f2423e2\"},{\"file\":\"packages/server/src/modules/work/projects.js\",\"physical\":174,\"sha256\":\"ec35a528ea5d8710f865c6416aa374820f71eb76b1eb633a5d39de6b6704f4ff\"},{\"file\":\"packages/web/src/pages/work/board.jsx\",\"physical\":168,\"sha256\":\"d4ae3717b18ccfb7606862af654b7f09f6038d26332be30ea49035191d01ba96\"},{\"file\":\"packages/server/src/modules/work/sprints.js\",\"physical\":162,\"sha256\":\"8f7cb924ce40f247eb633e81e61cceacd3eee488beb183178aec135a7d250456\"},{\"file\":\"packages/server/src/modules/insight/transfer-validation.js\",\"physical\":152,\"sha256\":\"f1059060d0485d0a03ff2bf59fc5e1593ed341c74cd1bf76d42cfcd0801bdb3b\"},{\"file\":\"packages/web/src/pages/work/sprint-detail.jsx\",\"physical\":141,\"sha256\":\"9f269868c5089e96a39349bf3236209331042c45bd3bb9e3ecbc42cb124c514f\"},{\"file\":\"packages/cli/src/commands/people.js\",\"physical\":134,\"sha256\":\"fbf65509f2c74bc5b7e3b03d8fda3aad3f4e5ca87bd148aa9299a0afbed2c2be\"},{\"file\":\"packages/web/src/pages/insight/search.jsx\",\"physical\":131,\"sha256\":\"bfa7a91e4fa0e836634938ff2f319807a24244a9d6fc52c9f311b0bcd34840a8\"},{\"file\":\"packages/server/src/modules/work/issues.js\",\"physical\":123,\"sha256\":\"44903a7fdbc2ad1373e8a38f0445471ce81679d8f14b43ae88211e70a008ce13\"},{\"file\":\"packages/cli/src/commands/insight-search.js\",\"physical\":122,\"sha256\":\"ae8075dd005de48d2609a5ebd0c809201b1c5188ed85d48a5e6043e91719ddf7\"},{\"file\":\"packages/server/src/modules/insight/filters.js\",\"physical\":117,\"sha256\":\"501e6b3f3d02d89f0a1ea9369955b5041e498ae55de7b76a8ebb536b554c53d9\"},{\"file\":\"packages/server/src/modules/work/sprint-history.js\",\"physical\":116,\"sha256\":\"9a1b6940e4b22b36d73d8355d1d300c779966ba34016eac7a64b3a261b6d69da\"}],\"excessive\":[]}\n(node:19250) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)",
  "ms": 1302,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": ".json\":\"06922ecc5ec47d7b094196e2e297082a9b204c9eceb5b6c3414882687a54c6d1\"},\"productionFileCount\":201,\"largest\":[{\"file\":\"packages/shared/src/markdown.js\",\"physical\":228,\"sha256\":\"320767a0354f40dbee659dc4f3a9816a4096f4d98aa5df1e805fd20e8f2423e2\"},{\"file\":\"packages/server/src/modules/work/projects.js\",\"physical\":174,\"sha256\":\"ec35a528ea5d8710f865c6416aa374820f71eb76b1eb633a5d39de6b6704f4ff\"},{\"file\":\"packages/web/src/pages/work/board.jsx\",\"physical\":168,\"sha256\":\"d4ae3717b18ccfb7606862af654b7f09f6038d26332be30ea49035191d01ba96\"},{\"file\":\"packages/server/src/modules/work/sprints.js\",\"physical\":162,\"sha256\":\"8f7cb924ce40f247eb633e81e61cceacd3eee488beb183178aec135a7d250456\"},{\"file\":\"packages/server/src/modules/insight/transfer-validation.js\",\"physical\":152,\"sha256\":\"f1059060d0485d0a03ff2bf59fc5e1593ed341c74cd1bf76d42cfcd0801bdb3b\"},{\"file\":\"packages/web/src/pages/work/sprint-detail.jsx\",\"physical\":141,\"sha256\":\"9f269868c5089e96a39349bf3236209331042c45bd3bb9e3ecbc42cb124c514f\"},{\"file\":\"packages/cli/src/commands/people.js\",\"physical\":134,\"sha256\":\"fbf65509f2c74bc5b7e3b03d8fda3aad3f4e5ca87bd148aa9299a0afbed2c2be\"},{\"file\":\"packages/web/src/pages/insight/search.jsx\",\"physical\":131,\"sha256\":\"bfa7a91e4fa0e836634938ff2f319807a24244a9d6fc52c9f311b0bcd34840a8\"},{\"file\":\"packages/server/src/modules/work/issues.js\",\"physical\":123,\"sha256\":\"44903a7fdbc2ad1373e8a38f0445471ce81679d8f14b43ae88211e70a008ce13\"},{\"file\":\"packages/cli/src/commands/insight-search.js\",\"physical\":122,\"sha256\":\"ae8075dd005de48d2609a5ebd0c809201b1c5188ed85d48a5e6043e91719ddf7\"},{\"file\":\"packages/server/src/modules/insight/filters.js\",\"physical\":117,\"sha256\":\"501e6b3f3d02d89f0a1ea9369955b5041e498ae55de7b76a8ebb536b554c53d9\"},{\"file\":\"packages/server/src/modules/work/sprint-history.js\",\"physical\":116,\"sha256\":\"9a1b6940e4b22b36d73d8355d1d300c779966ba34016eac7a64b3a261b6d69da\"}],\"excessive\":[]}\n(node:19250) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)",
    "ms": 1302,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

@@ -1,7 +1,7 @@
 {
  "step": "I1b-042 I-10: final browser proof build and syntax preparation exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 5757,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

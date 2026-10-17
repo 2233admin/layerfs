@@ -1,7 +1,6 @@
 {
  "step": "I1d-081 I-13: record exact initial production census exec",
  "agent": "insight-a",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "    {\n      \"path\": \"packages/web/src/router.js\",\n      \"package\": \"web\",\n      \"prod\": 23\n    },\n    {\n      \"path\": \"packages/web/src/store.js\",\n      \"package\": \"web\",\n      \"prod\": 10\n    }\n  ]\n}",
  "ms": 381,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "    {\n      \"path\": \"packages/web/src/router.js\",\n      \"package\": \"web\",\n      \"prod\": 23\n    },\n    {\n      \"path\": \"packages/web/src/store.js\",\n      \"package\": \"web\",\n      \"prod\": 10\n    }\n  ]\n}",
    "ms": 381,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

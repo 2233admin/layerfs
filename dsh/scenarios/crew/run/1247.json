@@ -1,7 +1,7 @@
 {
  "step": "I1d-118 I-13: changed current result and canonical return Chromium proof exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 3989,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

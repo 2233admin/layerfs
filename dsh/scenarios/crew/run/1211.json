@@ -9,7 +9,7 @@
  "output": null,
  "ms": 12,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "I1d I-13: record exact initial production census (exit 0)",
    "force": false,
    "commit": "126f96456621bfbcf43489508d8b6bef67f86883d77a9536829bb48d270b135ca1",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

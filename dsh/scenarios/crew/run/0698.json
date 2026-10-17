@@ -1,7 +1,7 @@
 {
  "step": "W2b-070 W05 affected package regression and production census",
  "agent": "work-b",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

@@ -4,7 +4,7 @@
  "title": "Crew",
  "order": 9,
  "speed": 1,
- "blurb": "Replays a lead and its crew of agents building one application together, on Branches of their own. Every recorded write is applied and every recorded command runs again in a Workspace, except those that only verify, which are disabled.",
+ "blurb": "Replays a lead and its crew of agents building one application together, on Branches of their own. Every recorded write is applied and every recorded command runs again in a Workspace, except those that only verify and drive a browser, which are disabled.",
  "live": true,
  "image": "sha256:091f785ba7d5d036dfa350e8fd69ee1fcd2d8320c3706841c8c95e6411eee9d2",
  "seed": "seed.json",
@@ -226,15 +226,19 @@
    },
    {
     "bash": {
-     "description": "lead-013 L0: fresh Branch build syntax and four package tests (verification disabled)",
+     "description": "lead-013 L0: fresh Branch build syntax and four package tests",
      "run": [
       [
        "step",
        "crew",
        "0012"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -252,7 +256,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -413,15 +417,19 @@
    },
    {
     "bash": {
-     "description": "lead-023 L0: published-main fresh-fork verification and source baseline (verification disabled)",
+     "description": "lead-023 L0: published-main fresh-fork verification and source baseline",
      "run": [
       [
        "step",
        "crew",
        "0022"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -439,7 +447,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -697,15 +705,19 @@
    },
    {
     "bash": {
-     "description": "lead-045 P-M1: integration install census build syntax and package tests (verification disabled)",
+     "description": "lead-045 P-M1: integration install census build syntax and package tests",
      "run": [
       [
        "step",
        "crew",
        "0063"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -723,7 +735,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -978,15 +990,19 @@
    },
    {
     "bash": {
-     "description": "lead-061 L0: lifecycle integration install build tests and clean-stop proof (verification disabled)",
+     "description": "lead-061 L0: lifecycle integration install build tests and clean-stop proof",
      "run": [
       [
        "step",
        "crew",
        "0085"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -1004,7 +1020,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -1155,15 +1171,19 @@
    },
    {
     "bash": {
-     "description": "lead-067 W-M1: integration install census build syntax and all package tests (verification disabled)",
+     "description": "lead-067 W-M1: integration install census build syntax and all package tests",
      "run": [
       [
        "step",
        "crew",
        "0116"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -1181,7 +1201,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -1266,15 +1286,19 @@
    },
    {
     "bash": {
-     "description": "lead-073 W-M1: required generation cutover checks (verification disabled)",
+     "description": "lead-073 W-M1: required generation cutover checks",
      "run": [
       [
        "step",
        "crew",
        "0122"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -1292,7 +1316,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -1393,15 +1417,19 @@
    },
    {
     "bash": {
-     "description": "lead-077 W-M1: frozen production census for depth planning (verification disabled)",
+     "description": "lead-077 W-M1: frozen production census for depth planning",
      "run": [
       [
        "step",
        "crew",
        "0136"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -1419,7 +1447,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "lead"
    },
@@ -1623,15 +1651,19 @@
    },
    {
     "bash": {
-     "description": "lead-082 W-M2: integration install census build syntax and all package tests (verification disabled)",
+     "description": "lead-082 W-M2: integration install census build syntax and all package tests",
      "run": [
       [
        "step",
        "crew",
        "0161"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -1655,7 +1687,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -1758,15 +1790,19 @@
    },
    {
     "bash": {
-     "description": "lead-088 W-M2: required generation4 checks (verification disabled)",
+     "description": "lead-088 W-M2: required generation4 checks",
      "run": [
       [
        "step",
        "crew",
        "0176"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -1784,7 +1820,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -2409,15 +2445,19 @@
    },
    {
     "bash": {
-     "description": "lead-122 L0: validate syntax and actual process namespace audit (verification disabled)",
+     "description": "lead-122 L0: validate syntax and actual process namespace audit",
      "run": [
       [
        "step",
        "crew",
        "0317"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -2435,7 +2475,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "lead"
    },
@@ -4224,15 +4264,19 @@
    },
    {
     "bash": {
-     "description": "lead-183 I-M2/M3: diagnostic cross-lane public API and actual CLI smoke (verification disabled)",
+     "description": "lead-183 I-M2/M3: diagnostic cross-lane public API and actual CLI smoke",
      "run": [
       [
        "step",
        "crew",
        "0586"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -4250,7 +4294,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -6341,15 +6385,19 @@
    },
    {
     "bash": {
-     "description": "lead-327 L0: changed A13 census tooling proof and diagnostic current runtime smoke; formal acceptance remains open (verification disabled)",
+     "description": "lead-327 L0: changed A13 census tooling proof and diagnostic current runtime smoke; formal acceptance remains open",
      "run": [
       [
        "step",
        "crew",
        "1090"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -6379,7 +6427,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -7716,15 +7764,19 @@
    },
    {
     "bash": {
-     "description": "lead-438 A01 reinstall: frozen acceptance command (verification disabled)",
+     "description": "lead-438 A01 reinstall: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1406"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -7742,7 +7794,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -7789,15 +7841,19 @@
    },
    {
     "bash": {
-     "description": "lead-442 A02 build: frozen acceptance command (verification disabled)",
+     "description": "lead-442 A02 build: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1410"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -7815,7 +7871,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -7862,15 +7918,19 @@
    },
    {
     "bash": {
-     "description": "lead-446 A03 prepare tests: frozen acceptance command (verification disabled)",
+     "description": "lead-446 A03 prepare tests: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1414"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -7888,7 +7948,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "lead"
    },
@@ -7935,15 +7995,19 @@
    },
    {
     "bash": {
-     "description": "lead-450 A04 shared tests: frozen acceptance command (verification disabled)",
+     "description": "lead-450 A04 shared tests: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1418"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -7961,7 +8025,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "lead"
    },
@@ -8227,15 +8291,19 @@
    },
    {
     "bash": {
-     "description": "lead-466 A08 LOC: frozen acceptance command (verification disabled)",
+     "description": "lead-466 A08 LOC: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1434"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -8253,7 +8321,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "lead"
    },
@@ -8300,15 +8368,19 @@
    },
    {
     "bash": {
-     "description": "lead-470 A09 seed: frozen acceptance command (verification disabled)",
+     "description": "lead-470 A09 seed: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1438"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -8326,7 +8398,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -8373,15 +8445,19 @@
    },
    {
     "bash": {
-     "description": "lead-474 A10 smoke: frozen acceptance command (verification disabled)",
+     "description": "lead-474 A10 smoke: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1442"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:1"
+    ],
     "phase": "lead"
    },
    {
@@ -8399,7 +8475,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -8484,15 +8560,19 @@
    },
    {
     "bash": {
-     "description": "lead-486 A10 repair: syntax-check four changed tooling modules and frozen unchanged10005 production gate; no repeated unit/package qualification (verification disabled)",
+     "description": "lead-486 A10 repair: syntax-check four changed tooling modules and frozen unchanged10005 production gate; no repeated unit/package qualification",
      "run": [
       [
        "step",
        "crew",
        "1448"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -8510,7 +8590,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "lead"
    },
@@ -8595,15 +8675,19 @@
    },
    {
     "bash": {
-     "description": "lead-492 A01 reinstall: frozen acceptance command (verification disabled)",
+     "description": "lead-492 A01 reinstall: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1454"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -8621,7 +8705,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -8668,15 +8752,19 @@
    },
    {
     "bash": {
-     "description": "lead-496 A02 build: frozen acceptance command (verification disabled)",
+     "description": "lead-496 A02 build: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1458"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -8694,7 +8782,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -8741,15 +8829,19 @@
    },
    {
     "bash": {
-     "description": "lead-500 A03 prepare tests: frozen acceptance command (verification disabled)",
+     "description": "lead-500 A03 prepare tests: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1462"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -8767,7 +8859,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "lead"
    },
@@ -8814,15 +8906,19 @@
    },
    {
     "bash": {
-     "description": "lead-504 A04 shared tests: frozen acceptance command (verification disabled)",
+     "description": "lead-504 A04 shared tests: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1466"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -8840,7 +8936,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "lead"
    },
@@ -9182,15 +9278,19 @@
    },
    {
     "bash": {
-     "description": "lead-525 A01 reinstall: frozen acceptance command (verification disabled)",
+     "description": "lead-525 A01 reinstall: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1486"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -9208,7 +9308,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -9255,15 +9355,19 @@
    },
    {
     "bash": {
-     "description": "lead-529 A02 build: frozen acceptance command (verification disabled)",
+     "description": "lead-529 A02 build: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1490"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -9281,7 +9385,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -9328,15 +9432,19 @@
    },
    {
     "bash": {
-     "description": "lead-533 A03 prepare tests: frozen acceptance command (verification disabled)",
+     "description": "lead-533 A03 prepare tests: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1494"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -9354,7 +9462,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "lead"
    },
@@ -9401,15 +9509,19 @@
    },
    {
     "bash": {
-     "description": "lead-537 A04 shared tests: frozen acceptance command (verification disabled)",
+     "description": "lead-537 A04 shared tests: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1498"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -9427,7 +9539,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "lead"
    },
@@ -9693,15 +9805,19 @@
    },
    {
     "bash": {
-     "description": "lead-553 A08 LOC: frozen acceptance command (verification disabled)",
+     "description": "lead-553 A08 LOC: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1514"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -9719,7 +9835,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "lead"
    },
@@ -9766,15 +9882,19 @@
    },
    {
     "bash": {
-     "description": "lead-557 A09 seed: frozen acceptance command (verification disabled)",
+     "description": "lead-557 A09 seed: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1518"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -9792,7 +9912,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -9839,15 +9959,19 @@
    },
    {
     "bash": {
-     "description": "lead-561 A10 smoke: frozen acceptance command (verification disabled)",
+     "description": "lead-561 A10 smoke: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1522"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -9865,7 +9989,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -9912,15 +10036,19 @@
    },
    {
     "bash": {
-     "description": "lead-565 A11 restart: frozen acceptance command (verification disabled)",
+     "description": "lead-565 A11 restart: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1526"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -9938,7 +10066,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -10058,15 +10186,19 @@
    },
    {
     "bash": {
-     "description": "lead-573 A13 audit: frozen acceptance command (verification disabled)",
+     "description": "lead-573 A13 audit: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1534"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -10084,7 +10216,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "lead"
    },
@@ -10131,15 +10263,19 @@
    },
    {
     "bash": {
-     "description": "lead-577 A14 fresh remount: frozen acceptance command (verification disabled)",
+     "description": "lead-577 A14 fresh remount: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1538"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -10157,7 +10293,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ],
     "phase": "lead"
    },
@@ -10204,15 +10340,19 @@
    },
    {
     "bash": {
-     "description": "lead-581 A15 process audit: frozen acceptance command (verification disabled)",
+     "description": "lead-581 A15 process audit: frozen acceptance command",
      "run": [
       [
        "step",
        "crew",
        "1542"
       ]
-     ]
+     ],
+     "timeoutMs": 170000
     },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ],
     "phase": "lead"
    },
    {
@@ -10230,7 +10370,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ],
     "phase": "lead"
    },
@@ -10409,15 +10549,19 @@
    },
    {
     "bash": {
-     "description": "P1-0040 003 P-M1 build and prepare tests exec (verification disabled)",
+     "description": "P1-0040 003 P-M1 build and prepare tests exec",
      "run": [
       [
        "step",
        "crew",
        "0037"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -10434,7 +10578,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -10478,15 +10622,19 @@
    },
    {
     "bash": {
-     "description": "P1-0044 004 P-M1 affected package tests and LOC exec (verification disabled)",
+     "description": "P1-0044 004 P-M1 affected package tests and LOC exec",
      "run": [
       [
        "step",
        "crew",
        "0041"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -10503,7 +10651,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -10565,15 +10713,19 @@
    },
    {
     "bash": {
-     "description": "P1-0051 006 P-M1 final build and prepare tests exec (verification disabled)",
+     "description": "P1-0051 006 P-M1 final build and prepare tests exec",
      "run": [
       [
        "step",
        "crew",
        "0046"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -10590,7 +10742,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -10634,15 +10786,19 @@
    },
    {
     "bash": {
-     "description": "P1-0055 007 P-M1 public HTTP smoke exec (verification disabled)",
+     "description": "P1-0055 007 P-M1 public HTTP smoke exec",
      "run": [
       [
        "step",
        "crew",
        "0050"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -10659,7 +10815,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -10703,15 +10859,19 @@
    },
    {
     "bash": {
-     "description": "P1-0059 008 P-M1 HTTP and new-process restart smoke exec (verification disabled)",
+     "description": "P1-0059 008 P-M1 HTTP and new-process restart smoke exec",
      "run": [
       [
        "step",
        "crew",
        "0054"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -10728,7 +10888,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -10772,15 +10932,19 @@
    },
    {
     "bash": {
-     "description": "P1-0063 009 P-M1 final affected tests and LOC exec (verification disabled)",
+     "description": "P1-0063 009 P-M1 final affected tests and LOC exec",
      "run": [
       [
        "step",
        "crew",
        "0058"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -10797,7 +10961,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -10919,15 +11083,19 @@
    },
    {
     "bash": {
-     "description": "P1b-0063 P1b 004 P-M2 build and syntax preparation exec (verification disabled)",
+     "description": "P1b-0063 P1b 004 P-M2 build and syntax preparation exec",
      "run": [
       [
        "step",
        "crew",
        "0230"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -10944,7 +11112,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -11075,15 +11243,19 @@
    },
    {
     "bash": {
-     "description": "P1b-0075 P1b 007 P-M2 actual HTTP smoke and process restart exec (verification disabled)",
+     "description": "P1b-0075 P1b 007 P-M2 actual HTTP smoke and process restart exec",
      "run": [
       [
        "step",
        "crew",
        "0249"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -11100,7 +11272,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -11240,15 +11412,19 @@
    },
    {
     "bash": {
-     "description": "P1b-0092 P1b 013 P-M3 current generation build and syntax exec (verification disabled)",
+     "description": "P1b-0092 P1b 013 P-M3 current generation build and syntax exec",
      "run": [
       [
        "step",
        "crew",
        "0285"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -11265,7 +11441,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -11795,15 +11971,19 @@
    },
    {
     "bash": {
-     "description": "P1b-0131 P1b 024 P-M3 source census physical scope and process custody exec (verification disabled)",
+     "description": "P1b-0131 P1b 024 P-M3 source census physical scope and process custody exec",
      "run": [
       [
        "step",
        "crew",
        "0323"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -11820,7 +12000,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -11864,15 +12044,19 @@
    },
    {
     "bash": {
-     "description": "P1b-0135 P1b 025 P-M3 determine browser and build process states exec (verification disabled)",
+     "description": "P1b-0135 P1b 025 P-M3 determine browser and build process states exec",
      "run": [
       [
        "step",
        "crew",
        "0327"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -11889,7 +12073,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -11933,15 +12117,19 @@
    },
    {
     "bash": {
-     "description": "P1b-0139 P1b 026 P-M3 final maintained-source size and custody check exec (verification disabled)",
+     "description": "P1b-0139 P1b 026 P-M3 final maintained-source size and custody check exec",
      "run": [
       [
        "step",
        "crew",
        "0331"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -11958,7 +12146,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -12044,15 +12232,19 @@
    },
    {
     "bash": {
-     "description": "P1c-010 P-04: build and syntax before changed verification execute (verification disabled)",
+     "description": "P1c-010 P-04: build and syntax before changed verification execute",
      "run": [
       [
        "step",
        "crew",
        "0345"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -12069,7 +12261,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -12254,15 +12446,19 @@
    },
    {
     "bash": {
-     "description": "P1c-022 P-04: final owned-process census execute (verification disabled)",
+     "description": "P1c-022 P-04: final owned-process census execute",
      "run": [
       [
        "step",
        "crew",
        "0360"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "reply": "people: turn 8 done, through P1c-022 P-04: final owned-process census execute."
@@ -12282,7 +12478,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -12365,15 +12561,19 @@
    },
    {
     "bash": {
-     "description": "P1d-099 P-05: 008 P-05 baseline build and syntax exec (verification disabled)",
+     "description": "P1d-099 P-05: 008 P-05 baseline build and syntax exec",
      "run": [
       [
        "step",
        "crew",
        "0796"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -12390,7 +12590,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -12434,15 +12634,19 @@
    },
    {
     "bash": {
-     "description": "P1d-103 P-05: 009 P-05 retained delivery revocation defect proof exec (verification disabled)",
+     "description": "P1d-103 P-05: 009 P-05 retained delivery revocation defect proof exec",
      "run": [
       [
        "step",
        "crew",
        "0800"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:1"
+    ]
    },
    {
     "pause": 50
@@ -12459,7 +12663,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -12539,15 +12743,19 @@
    },
    {
     "bash": {
-     "description": "P1d-109 P-05: 012 P-05 repaired build and syntax exec (verification disabled)",
+     "description": "P1d-109 P-05: 012 P-05 repaired build and syntax exec",
      "run": [
       [
        "step",
        "crew",
        "0812"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -12564,7 +12772,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -12695,15 +12903,19 @@
    },
    {
     "bash": {
-     "description": "P1d-122 P-05: 016 P-05 CLI final syntax preparation exec (verification disabled)",
+     "description": "P1d-122 P-05: 016 P-05 CLI final syntax preparation exec",
      "run": [
       [
        "step",
        "crew",
        "0824"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -12720,7 +12932,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -12764,15 +12976,19 @@
    },
    {
     "bash": {
-     "description": "P1d-126 P-05: 017 P-05 actual CLI boundary proof exec (verification disabled)",
+     "description": "P1d-126 P-05: 017 P-05 actual CLI boundary proof exec",
      "run": [
       [
        "step",
        "crew",
        "0828"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -12789,7 +13005,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -12851,15 +13067,19 @@
    },
    {
     "bash": {
-     "description": "P1d-131 P-05: 019 P-05 final-prepare exec (verification disabled)",
+     "description": "P1d-131 P-05: 019 P-05 final-prepare exec",
      "run": [
       [
        "step",
        "crew",
        "0835"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -12876,7 +13096,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -12989,15 +13209,19 @@
    },
    {
     "bash": {
-     "description": "P1d-139 P-05: 021 P-05 cli-package exec (verification disabled)",
+     "description": "P1d-139 P-05: 021 P-05 cli-package exec",
      "run": [
       [
        "step",
        "crew",
        "0843"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -13014,7 +13238,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -13058,15 +13282,19 @@
    },
    {
     "bash": {
-     "description": "P1d-143 P-05: 022 P-05 runtime registered route census exec (verification disabled)",
+     "description": "P1d-143 P-05: 022 P-05 runtime registered route census exec",
      "run": [
       [
        "step",
        "crew",
        "0847"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -13083,7 +13311,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -13145,15 +13373,19 @@
    },
    {
     "bash": {
-     "description": "P1d-148 P-05: 024 P-05 final audit syntax exec (verification disabled)",
+     "description": "P1d-148 P-05: 024 P-05 final audit syntax exec",
      "run": [
       [
        "step",
        "crew",
        "0852"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -13170,7 +13402,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -13238,15 +13470,19 @@
    },
    {
     "bash": {
-     "description": "P1d-156 P-05: 028 P-05 retained cookie policy defect proof after syntax exec (verification disabled)",
+     "description": "P1d-156 P-05: 028 P-05 retained cookie policy defect proof after syntax exec",
      "run": [
       [
        "step",
        "crew",
        "0858"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:1"
+    ]
    },
    {
     "pause": 50
@@ -13263,7 +13499,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -13325,15 +13561,19 @@
    },
    {
     "bash": {
-     "description": "P1d-161 P-05: 030 P-05 final cookie build and syntax exec (verification disabled)",
+     "description": "P1d-161 P-05: 030 P-05 final cookie build and syntax exec",
      "run": [
       [
        "step",
        "crew",
        "0863"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -13350,7 +13590,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -13394,15 +13634,19 @@
    },
    {
     "bash": {
-     "description": "P1d-165 P-05: 031 P-05 actual HTTP cookie policy repaired proof exec (verification disabled)",
+     "description": "P1d-165 P-05: 031 P-05 actual HTTP cookie policy repaired proof exec",
      "run": [
       [
        "step",
        "crew",
        "0867"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -13419,7 +13663,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -13532,15 +13776,19 @@
    },
    {
     "bash": {
-     "description": "P1d-173 P-05: 033 P-05 final source CLI package proof exec (verification disabled)",
+     "description": "P1d-173 P-05: 033 P-05 final source CLI package proof exec",
      "run": [
       [
        "step",
        "crew",
        "0875"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -13557,7 +13805,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -13601,15 +13849,19 @@
    },
    {
     "bash": {
-     "description": "P1d-177 P-05: 025 P-05 actual HTTP CLI restart and final route audit exec (verification disabled)",
+     "description": "P1d-177 P-05: 025 P-05 actual HTTP CLI restart and final route audit exec",
      "run": [
       [
        "step",
        "crew",
        "0879"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -13626,7 +13878,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -13670,15 +13922,19 @@
    },
    {
     "bash": {
-     "description": "P1d-181 P-05: 034 P-05 frozen production source census exec (verification disabled)",
+     "description": "P1d-181 P-05: 034 P-05 frozen production source census exec",
      "run": [
       [
        "step",
        "crew",
        "0883"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -13695,7 +13951,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -13739,15 +13995,19 @@
    },
    {
     "bash": {
-     "description": "P1d-185 P-05: 035 P-05 terminal owned process census exec (verification disabled)",
+     "description": "P1d-185 P-05: 035 P-05 terminal owned process census exec",
      "run": [
       [
        "step",
        "crew",
        "0887"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -13764,7 +14024,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -13904,15 +14164,19 @@
    },
    {
     "bash": {
-     "description": "P1e-054 P1e prepare people build and syntax exec (verification disabled)",
+     "description": "P1e-054 P1e prepare people build and syntax exec",
      "run": [
       [
        "step",
        "crew",
        "1065"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -13929,7 +14193,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -13991,15 +14255,19 @@
    },
    {
     "bash": {
-     "description": "P1e-059 P1e targeted HTTP and canonical work revision regression exec (verification disabled)",
+     "description": "P1e-059 P1e targeted HTTP and canonical work revision regression exec",
      "run": [
       [
        "step",
        "crew",
        "1081"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -14016,7 +14284,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -14549,15 +14817,19 @@
    },
    {
     "bash": {
-     "description": "P1e-095 P1e final build and syntax exec (verification disabled)",
+     "description": "P1e-095 P1e final build and syntax exec",
      "run": [
       [
        "step",
        "crew",
        "1127"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -14574,7 +14846,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -14825,15 +15097,19 @@
    },
    {
     "bash": {
-     "description": "P1e-111 P1e final runtime routes frozen LOC hashes and physical source limits exec (verification disabled)",
+     "description": "P1e-111 P1e final runtime routes frozen LOC hashes and physical source limits exec",
      "run": [
       [
        "step",
        "crew",
        "1143"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -14850,7 +15126,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -14894,15 +15170,19 @@
    },
    {
     "bash": {
-     "description": "P1e-123 P1e final owned process census exec (verification disabled)",
+     "description": "P1e-123 P1e final owned process census exec",
      "run": [
       [
        "step",
        "crew",
        "1147"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -14919,7 +15199,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -15005,15 +15285,19 @@
    },
    {
     "bash": {
-     "description": "P1f-019 people action lifetime: sandbox.exec (verification disabled)",
+     "description": "P1f-019 people action lifetime: sandbox.exec",
      "run": [
       [
        "step",
        "crew",
        "1372"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -15030,7 +15314,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -15161,15 +15445,19 @@
    },
    {
     "bash": {
-     "description": "P1f-028 people action lifetime: sandbox.exec (verification disabled)",
+     "description": "P1f-028 people action lifetime: sandbox.exec",
      "run": [
       [
        "step",
        "crew",
        "1382"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -15186,7 +15474,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -15368,15 +15656,19 @@
    },
    {
     "bash": {
-     "description": "P1f-040 people action lifetime: sandbox.exec (verification disabled)",
+     "description": "P1f-040 people action lifetime: sandbox.exec",
      "run": [
       [
        "step",
        "crew",
        "1394"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -15393,7 +15685,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -15437,15 +15729,19 @@
    },
    {
     "bash": {
-     "description": "P1f-045 people action lifetime: sandbox.exec (verification disabled)",
+     "description": "P1f-045 people action lifetime: sandbox.exec",
      "run": [
       [
        "step",
        "crew",
        "1398"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -15462,7 +15758,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -15647,15 +15943,19 @@
    },
    {
     "bash": {
-     "description": "W2-0041 W-M1 prepare build and project tests (verification disabled)",
+     "description": "W2-0041 W-M1 prepare build and project tests",
      "run": [
       [
        "step",
        "crew",
        "0091"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -15672,7 +15972,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -15740,15 +16040,19 @@
    },
    {
     "bash": {
-     "description": "W2-0049 W-M1 prepare build project cross-package tests (verification disabled)",
+     "description": "W2-0049 W-M1 prepare build project cross-package tests",
      "run": [
       [
        "step",
        "crew",
        "0097"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -15765,7 +16069,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -15869,15 +16173,19 @@
    },
    {
     "bash": {
-     "description": "W2-0058 W-M2 prepare build board tests and frozen LOC (verification disabled)",
+     "description": "W2-0058 W-M2 prepare build board tests and frozen LOC",
      "run": [
       [
        "step",
        "crew",
        "0129"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:1|0"
+    ]
    },
    {
     "pause": 50
@@ -15894,7 +16202,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -15968,15 +16276,19 @@
    },
    {
     "bash": {
-     "description": "W2-0063 W-M2 prepare build board and CLI tests plus frozen LOC (verification disabled)",
+     "description": "W2-0063 W-M2 prepare build board and CLI tests plus frozen LOC",
      "run": [
       [
        "step",
        "crew",
        "0149"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "reply": "work-b: turn 11 done, through W2-0063 W-M2 prepare build board and CLI tests plus frozen LOC."
@@ -15996,7 +16308,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -16085,15 +16397,19 @@
    },
    {
     "bash": {
-     "description": "W2-0074 W-M3 prepare build sprint and streaming HTTP tests (verification disabled)",
+     "description": "W2-0074 W-M3 prepare build sprint and streaming HTTP tests",
      "run": [
       [
        "step",
        "crew",
        "0188"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:1"
+    ]
    },
    {
     "pause": 50
@@ -16110,7 +16426,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -16211,15 +16527,19 @@
    },
    {
     "bash": {
-     "description": "W2-0086 W-M3 build and full focused sprint attachment client tests (verification disabled)",
+     "description": "W2-0086 W-M3 build and full focused sprint attachment client tests",
      "run": [
       [
        "step",
        "crew",
        "0201"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -16236,7 +16556,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -16472,15 +16792,19 @@
    },
    {
     "bash": {
-     "description": "W2-0105 W-M3 real work acceptance smoke restart remount and audit (verification disabled)",
+     "description": "W2-0105 W-M3 real work acceptance smoke restart remount and audit",
      "run": [
       [
        "step",
        "crew",
        "0219"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -16497,7 +16821,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -16541,15 +16865,19 @@
    },
    {
     "bash": {
-     "description": "W2-0109 W-M3 final complete package regression and frozen LOC (verification disabled)",
+     "description": "W2-0109 W-M3 final complete package regression and frozen LOC",
      "run": [
       [
        "step",
        "crew",
        "0223"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -16566,7 +16894,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -16652,15 +16980,19 @@
    },
    {
     "bash": {
-     "description": "W2-0115 W-M3 fresh Workspace persisted CLI and work restart reads (verification disabled)",
+     "description": "W2-0115 W-M3 fresh Workspace persisted CLI and work restart reads",
      "run": [
       [
        "step",
        "crew",
        "0240"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -16677,7 +17009,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -16790,15 +17122,19 @@
    },
    {
     "bash": {
-     "description": "W2-0123 W-M3 final changed web regression and frozen production census (verification disabled)",
+     "description": "W2-0123 W-M3 final changed web regression and frozen production census",
      "run": [
       [
        "step",
        "crew",
        "0253"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -16815,7 +17151,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -16988,15 +17324,19 @@
    },
    {
     "bash": {
-     "description": "W2b-047 prepare planning bundle and syntax before tests (verification disabled)",
+     "description": "W2b-047 prepare planning bundle and syntax before tests",
      "run": [
       [
        "step",
        "crew",
        "0661"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -17013,7 +17353,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -17096,15 +17436,19 @@
    },
    {
     "bash": {
-     "description": "W2b-053 prepare planning bundle and syntax before tests (verification disabled)",
+     "description": "W2b-053 prepare planning bundle and syntax before tests",
      "run": [
       [
        "step",
        "crew",
        "0672"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -17121,7 +17465,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -17258,15 +17602,19 @@
    },
    {
     "bash": {
-     "description": "W2b-062 prepare planning bundle and syntax before tests (verification disabled)",
+     "description": "W2b-062 prepare planning bundle and syntax before tests",
      "run": [
       [
        "step",
        "crew",
        "0688"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -17283,7 +17631,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -17672,15 +18020,19 @@
    },
    {
     "bash": {
-     "description": "W2b-086 verify restored sprint CLI compatibility and exact source count (verification disabled)",
+     "description": "W2b-086 verify restored sprint CLI compatibility and exact source count",
      "run": [
       [
        "step",
        "crew",
        "0717"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -17697,7 +18049,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -17786,15 +18138,19 @@
    },
    {
     "bash": {
-     "description": "W2b-092 prepare planning bundle and syntax before tests (verification disabled)",
+     "description": "W2b-092 prepare planning bundle and syntax before tests",
      "run": [
       [
        "step",
        "crew",
        "0732"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -17811,7 +18167,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -17996,15 +18352,19 @@
    },
    {
     "bash": {
-     "description": "W2b-111 prepare planning bundle and syntax before tests (verification disabled)",
+     "description": "W2b-111 prepare planning bundle and syntax before tests",
      "run": [
       [
        "step",
        "crew",
        "0759"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -18021,7 +18381,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -18143,15 +18503,19 @@
    },
    {
     "bash": {
-     "description": "W2b-119 final production census file ceiling and process closure audit (verification disabled)",
+     "description": "W2b-119 final production census file ceiling and process closure audit",
      "run": [
       [
        "step",
        "crew",
        "0769"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -18168,7 +18532,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -18452,15 +18816,19 @@
    },
    {
     "bash": {
-     "description": "W1-0037 004 W-M1 prepare syntax and build exec (verification disabled)",
+     "description": "W1-0037 004 W-M1 prepare syntax and build exec",
      "run": [
       [
        "step",
        "crew",
        "0103"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -18477,7 +18845,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -18521,15 +18889,19 @@
    },
    {
     "bash": {
-     "description": "W1-0041 005 W-M1 focused issue HTTP shared web and CLI tests exec (verification disabled)",
+     "description": "W1-0041 005 W-M1 focused issue HTTP shared web and CLI tests exec",
      "run": [
       [
        "step",
        "crew",
        "0107"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -18546,7 +18918,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -18590,15 +18962,19 @@
    },
    {
     "bash": {
-     "description": "W1-0045 006 W-M1 combined all package tests exec (verification disabled)",
+     "description": "W1-0045 006 W-M1 combined all package tests exec",
      "run": [
       [
        "step",
        "crew",
        "0111"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -18615,7 +18991,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -18704,15 +19080,19 @@
    },
    {
     "bash": {
-     "description": "W1-0057 009 W-M2 syntax and bundle preparation exec (verification disabled)",
+     "description": "W1-0057 009 W-M2 syntax and bundle preparation exec",
      "run": [
       [
        "step",
        "crew",
        "0134"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -18729,7 +19109,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -18773,15 +19153,19 @@
    },
    {
     "bash": {
-     "description": "W1-0061 010 W-M2 markdown comments and relation HTTP tests exec (verification disabled)",
+     "description": "W1-0061 010 W-M2 markdown comments and relation HTTP tests exec",
      "run": [
       [
        "step",
        "crew",
        "0142"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -18798,7 +19182,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -18848,15 +19232,19 @@
    },
    {
     "bash": {
-     "description": "W1-0065 011 W-M2 complete package regression and source census exec (verification disabled)",
+     "description": "W1-0065 011 W-M2 complete package regression and source census exec",
      "run": [
       [
        "step",
        "crew",
        "0146"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:1|0"
+    ]
    },
    {
     "reply": "work-a: turn 10 done, through W1-0065 011 W-M2 complete package regression and source census exec."
@@ -18876,7 +19264,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -18944,15 +19332,19 @@
    },
    {
     "bash": {
-     "description": "W1-0081 013 W-M2 complete issue syntax bundle HTTP shared web CLI checks exec (verification disabled)",
+     "description": "W1-0081 013 W-M2 complete issue syntax bundle HTTP shared web CLI checks exec",
      "run": [
       [
        "step",
        "crew",
        "0156"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -18969,7 +19361,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -19037,15 +19429,19 @@
    },
    {
     "bash": {
-     "description": "W1-0087 015 W-M3 actual HTTP CLI smoke and clean process restart proof exec (verification disabled)",
+     "description": "W1-0087 015 W-M3 actual HTTP CLI smoke and clean process restart proof exec",
      "run": [
       [
        "step",
        "crew",
        "0167"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -19062,7 +19458,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -19106,15 +19502,19 @@
    },
    {
     "bash": {
-     "description": "W1-0091 016 W-M3 fresh Workspace unchanged data executable CLI read proof exec (verification disabled)",
+     "description": "W1-0091 016 W-M3 fresh Workspace unchanged data executable CLI read proof exec",
      "run": [
       [
        "step",
        "crew",
        "0171"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -19131,7 +19531,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -19217,15 +19617,19 @@
    },
    {
     "bash": {
-     "description": "W1-0102 019 W-M3 complete changed package verification and maintained source census exec (verification disabled)",
+     "description": "W1-0102 019 W-M3 complete changed package verification and maintained source census exec",
      "run": [
       [
        "step",
        "crew",
        "0183"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -19242,7 +19646,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -19310,15 +19714,19 @@
    },
    {
     "bash": {
-     "description": "W1-0107 021 W-M3 all issue endpoint role permission HTTP audit exec (verification disabled)",
+     "description": "W1-0107 021 W-M3 all issue endpoint role permission HTTP audit exec",
      "run": [
       [
        "step",
        "crew",
        "0194"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -19335,7 +19743,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -19457,15 +19865,19 @@
    },
    {
     "bash": {
-     "description": "W1b-046 W-04: prepare issue depth build and syntax (verification disabled)",
+     "description": "W1b-046 W-04: prepare issue depth build and syntax",
      "run": [
       [
        "step",
        "crew",
        "0590"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -19482,7 +19894,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -19526,15 +19938,19 @@
    },
    {
     "bash": {
-     "description": "W1b-050 W-04: focused later-page revision and stale-response proofs (verification disabled)",
+     "description": "W1b-050 W-04: focused later-page revision and stale-response proofs",
      "run": [
       [
        "step",
        "crew",
        "0594"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:1"
+    ]
    },
    {
     "pause": 50
@@ -19551,7 +19967,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -19613,15 +20029,19 @@
    },
    {
     "bash": {
-     "description": "W1b-058 W-04: focused issue depth state and CLI proofs (verification disabled)",
+     "description": "W1b-058 W-04: focused issue depth state and CLI proofs",
      "run": [
       [
        "step",
        "crew",
        "0602"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -19638,7 +20058,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -20030,15 +20450,19 @@
    },
    {
     "bash": {
-     "description": "W1b-084 W-04: frozen counter identity and production file ceiling audit (verification disabled)",
+     "description": "W1b-084 W-04: frozen counter identity and production file ceiling audit",
      "run": [
       [
        "step",
        "crew",
        "0626"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -20055,7 +20479,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -20117,15 +20541,19 @@
    },
    {
     "bash": {
-     "description": "W1b-090 W-04: shared regression and own sandbox process census (verification disabled)",
+     "description": "W1b-090 W-04: shared regression and own sandbox process census",
      "run": [
       [
        "step",
        "crew",
        "0631"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -20142,7 +20570,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -20291,15 +20719,19 @@
    },
    {
     "bash": {
-     "description": "W1b-102 W-04: focused final deletion snapshot fallback and visibility proof (verification disabled)",
+     "description": "W1b-102 W-04: focused final deletion snapshot fallback and visibility proof",
      "run": [
       [
        "step",
        "crew",
        "0642"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:1|0"
+    ]
    },
    {
     "pause": 50
@@ -20316,7 +20748,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -20378,15 +20810,19 @@
    },
    {
     "bash": {
-     "description": "W1b-107 W-04: focused dual-endpoint deletion activity authorization proof (verification disabled)",
+     "description": "W1b-107 W-04: focused dual-endpoint deletion activity authorization proof",
      "run": [
       [
        "step",
        "crew",
        "0647"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -20403,7 +20839,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -20516,15 +20952,19 @@
    },
    {
     "bash": {
-     "description": "W1b-115 W-04: final frozen identity file ceiling and owned live process audit (verification disabled)",
+     "description": "W1b-115 W-04: final frozen identity file ceiling and owned live process audit",
      "run": [
       [
        "step",
        "crew",
        "0655"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -20541,7 +20981,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -20609,15 +21049,19 @@
    },
    {
     "bash": {
-     "description": "W1b-126 W-04: focused canonical Markdown code and safe inline proof (verification disabled)",
+     "description": "W1b-126 W-04: focused canonical Markdown code and safe inline proof",
      "run": [
       [
        "step",
        "crew",
        "0667"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -20634,7 +21078,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -20855,15 +21299,19 @@
    },
    {
     "bash": {
-     "description": "W1b-139 W-06: canonical Markdown CLI and frozen census checkpoint (verification disabled)",
+     "description": "W1b-139 W-06: canonical Markdown CLI and frozen census checkpoint",
      "run": [
       [
        "step",
        "crew",
        "0712"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:1"
+    ]
    },
    {
     "reply": "work-a: turn 30 done, through W1b-139 W-06: canonical Markdown CLI and frozen census checkpoint."
@@ -20883,7 +21331,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -20933,15 +21381,19 @@
    },
    {
     "bash": {
-     "description": "W1b-143 W-06: canonical Markdown current production census without test gating (verification disabled)",
+     "description": "W1b-143 W-06: canonical Markdown current production census without test gating",
      "run": [
       [
        "step",
        "crew",
        "0721"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "reply": "work-a: turn 33 done, through W1b-143 W-06: canonical Markdown current production census without test gating."
@@ -20961,7 +21413,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -21029,15 +21481,19 @@
    },
    {
     "bash": {
-     "description": "W1b-148 W-07: focused Markdown command selection and serialization proof (verification disabled)",
+     "description": "W1b-148 W-07: focused Markdown command selection and serialization proof",
      "run": [
       [
        "step",
        "crew",
        "0727"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -21054,7 +21510,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -21377,15 +21833,19 @@
    },
    {
     "bash": {
-     "description": "W1b-166 W-07: final owned source hash ceiling and process custody after Markdown scopes (verification disabled)",
+     "description": "W1b-166 W-07: final owned source hash ceiling and process custody after Markdown scopes",
      "run": [
       [
        "step",
        "crew",
        "0773"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "reply": "work-a: turn 48 done, through W1b-166 W-07: final owned source hash ceiling and process custody after Markdown scopes."
@@ -21405,7 +21865,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -21509,15 +21969,19 @@
    },
    {
     "bash": {
-     "description": "W1c-026 W09/W10: build and prepare hierarchy syntax before tests (verification disabled)",
+     "description": "W1c-026 W09/W10: build and prepare hierarchy syntax before tests",
      "run": [
       [
        "step",
        "crew",
        "0906"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -21534,7 +21998,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -21839,15 +22303,19 @@
    },
    {
     "bash": {
-     "description": "W1c-045 W09/W10: build and prepare hierarchy syntax before tests (verification disabled)",
+     "description": "W1c-045 W09/W10: build and prepare hierarchy syntax before tests",
      "run": [
       [
        "step",
        "crew",
        "0947"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -21864,7 +22332,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -22118,15 +22586,19 @@
    },
    {
     "bash": {
-     "description": "W1c-061 W09/W10: prepare and corrected pure and same-timestamp HTTP field resolution proofs (verification disabled)",
+     "description": "W1c-061 W09/W10: prepare and corrected pure and same-timestamp HTTP field resolution proofs",
      "run": [
       [
        "step",
        "crew",
        "0983"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -22143,7 +22615,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -22256,15 +22728,19 @@
    },
    {
     "bash": {
-     "description": "W1c-069 W09/W10: final frozen counter source hashes and production file ceiling (verification disabled)",
+     "description": "W1c-069 W09/W10: final frozen counter source hashes and production file ceiling",
      "run": [
       [
        "step",
        "crew",
        "0996"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -22281,7 +22757,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -22481,15 +22957,19 @@
    },
    {
     "bash": {
-     "description": "W1c-085 W09/W10: final frozen counter source hashes and production file ceiling (verification disabled)",
+     "description": "W1c-085 W09/W10: final frozen counter source hashes and production file ceiling",
      "run": [
       [
        "step",
        "crew",
        "1014"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -22506,7 +22986,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -22802,15 +23282,19 @@
    },
    {
     "bash": {
-     "description": "I1-044 I-M1 build syntax and shared query tests (verification disabled)",
+     "description": "I1-044 I-M1 build syntax and shared query tests",
      "run": [
       [
        "step",
        "crew",
        "0385"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:1"
+    ]
    },
    {
     "pause": 50
@@ -22827,7 +23311,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -22901,15 +23385,19 @@
    },
    {
     "bash": {
-     "description": "I1-053 I-M3 build syntax and shared query completion tests (verification disabled)",
+     "description": "I1-053 I-M3 build syntax and shared query completion tests",
      "run": [
       [
        "step",
        "crew",
        "0394"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:1"
+    ]
    },
    {
     "reply": "insight-a: turn 9 done, through I1-053 I-M3 build syntax and shared query completion tests."
@@ -22929,7 +23417,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -22991,15 +23479,19 @@
    },
    {
     "bash": {
-     "description": "I1-058 I-M3 shared HTTP web and actual token CLI search-filter proofs (verification disabled)",
+     "description": "I1-058 I-M3 shared HTTP web and actual token CLI search-filter proofs",
      "run": [
       [
        "step",
        "crew",
        "0401"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:1"
+    ]
    },
    {
     "pause": 50
@@ -23016,7 +23508,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -23090,15 +23582,19 @@
    },
    {
     "bash": {
-     "description": "I1-068 I-M3 actual scoped-token search and filter executable integration (verification disabled)",
+     "description": "I1-068 I-M3 actual scoped-token search and filter executable integration",
      "run": [
       [
        "step",
        "crew",
        "0410"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:1"
+    ]
    },
    {
     "reply": "insight-a: turn 14 done, through I1-068 I-M3 actual scoped-token search and filter executable integration."
@@ -23118,7 +23614,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -23180,15 +23676,19 @@
    },
    {
     "bash": {
-     "description": "I1-073 I-M3 actual scoped-token search filter and plain-help proofs (verification disabled)",
+     "description": "I1-073 I-M3 actual scoped-token search filter and plain-help proofs",
      "run": [
       [
        "step",
        "crew",
        "0417"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -23205,7 +23705,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -23255,15 +23755,19 @@
    },
    {
     "bash": {
-     "description": "I1-077 I-M3 frozen production LOC and largest file census (verification disabled)",
+     "description": "I1-077 I-M3 frozen production LOC and largest file census",
      "run": [
       [
        "step",
        "crew",
        "0426"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "reply": "insight-a: turn 17 done, through I1-077 I-M3 frozen production LOC and largest file census."
@@ -23283,7 +23787,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -23390,15 +23894,19 @@
    },
    {
     "bash": {
-     "description": "I1-088 I-M3 candidate-index Unicode and search UI-state regressions (verification disabled)",
+     "description": "I1-088 I-M3 candidate-index Unicode and search UI-state regressions",
      "run": [
       [
        "step",
        "crew",
        "0444"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "reply": "insight-a: turn 21 done, through I1-088 I-M3 candidate-index Unicode and search UI-state regressions."
@@ -23418,7 +23926,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -24461,15 +24969,19 @@
    },
    {
     "bash": {
-     "description": "I1-153 I-M3 frozen production LOC and largest file census (verification disabled)",
+     "description": "I1-153 I-M3 frozen production LOC and largest file census",
      "run": [
       [
        "step",
        "crew",
        "0537"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -24486,7 +24998,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -24536,15 +25048,19 @@
    },
    {
     "bash": {
-     "description": "I1-157 I1 final owned application browser process audit with defunct states separate (verification disabled)",
+     "description": "I1-157 I1 final owned application browser process audit with defunct states separate",
      "run": [
       [
        "step",
        "crew",
        "0546"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "reply": "insight-a: turn 43 done, through I1-157 I1 final owned application browser process audit with defunct states separate."
@@ -24564,7 +25080,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -24806,15 +25322,19 @@
    },
    {
     "bash": {
-     "description": "I1b-033 I-10: diagnostic sink syntax preparation exec (verification disabled)",
+     "description": "I1b-033 I-10: diagnostic sink syntax preparation exec",
      "run": [
       [
        "step",
        "crew",
        "1056"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -24831,7 +25351,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -25262,15 +25782,19 @@
    },
    {
     "bash": {
-     "description": "I1c-040 I-11 baseline frozen production census exec (verification disabled)",
+     "description": "I1c-040 I-11 baseline frozen production census exec",
      "run": [
       [
        "step",
        "crew",
        "1162"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "reply": "insight-a: turn 48 done, through I1c-040 I-11 baseline frozen production census exec."
@@ -25290,7 +25814,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -25352,15 +25876,19 @@
    },
    {
     "bash": {
-     "description": "I1c-045 I-11 I-12 product build and syntax before tests exec (verification disabled)",
+     "description": "I1c-045 I-11 I-12 product build and syntax before tests exec",
      "run": [
       [
        "step",
        "crew",
        "1167"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -25377,7 +25905,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -25958,15 +26486,19 @@
    },
    {
     "bash": {
-     "description": "I1c-085 I-11 I-12 final frozen per-file hash physical census and live versus defunct custody exec (verification disabled)",
+     "description": "I1c-085 I-11 I-12 final frozen per-file hash physical census and live versus defunct custody exec",
      "run": [
       [
        "step",
        "crew",
        "1202"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -25983,7 +26515,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -26051,15 +26583,19 @@
    },
    {
     "bash": {
-     "description": "I1d-081 I-13: record exact initial production census exec (verification disabled)",
+     "description": "I1d-081 I-13: record exact initial production census exec",
      "run": [
       [
        "step",
        "crew",
        "1210"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "reply": "insight-a: turn 51 done, through I1d-081 I-13: record exact initial production census exec."
@@ -26079,7 +26615,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -26159,15 +26695,19 @@
    },
    {
     "bash": {
-     "description": "I1d-087 I-13: build and prepare saved-filter view tests exec (verification disabled)",
+     "description": "I1d-087 I-13: build and prepare saved-filter view tests exec",
      "run": [
       [
        "step",
        "crew",
        "1216"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -26184,7 +26724,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -26228,15 +26768,19 @@
    },
    {
     "bash": {
-     "description": "I1d-091 I-13: focused canonical view and actual ownership CLI proof exec (verification disabled)",
+     "description": "I1d-091 I-13: focused canonical view and actual ownership CLI proof exec",
      "run": [
       [
        "step",
        "crew",
        "1220"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -26253,7 +26797,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -27146,15 +27690,19 @@
    },
    {
     "bash": {
-     "description": "I1d-144 I-13: final exact production size and owned application process census exec (verification disabled)",
+     "description": "I1d-144 I-13: final exact production size and owned application process census exec",
      "run": [
       [
        "step",
        "crew",
        "1274"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -27171,7 +27719,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -27977,15 +28525,19 @@
    },
    {
     "bash": {
-     "description": "I1d-196 I-13: final follow-up production size and owned process custody exec (verification disabled)",
+     "description": "I1d-196 I-13: final follow-up production size and owned process custody exec",
      "run": [
       [
        "step",
        "crew",
        "1347"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -28002,7 +28554,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -28238,15 +28790,19 @@
    },
    {
     "bash": {
-     "description": "I2-056 I-M1 build syntax activity behavior proof (verification disabled)",
+     "description": "I2-056 I-M1 build syntax activity behavior proof",
      "run": [
       [
        "step",
        "crew",
        "0392"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "reply": "insight-b: turn 8 done, through I2-056 I-M1 build syntax activity behavior proof."
@@ -28266,7 +28822,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -28454,15 +29010,19 @@
    },
    {
     "bash": {
-     "description": "I2-074 changed M2 actual CLI proof (verification disabled)",
+     "description": "I2-074 changed M2 actual CLI proof",
      "run": [
       [
        "step",
        "crew",
        "0422"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -28479,7 +29039,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -28667,15 +29227,19 @@
    },
    {
     "bash": {
-     "description": "I2-093 M3 maintained build syntax and source census (verification disabled)",
+     "description": "I2-093 M3 maintained build syntax and source census",
      "run": [
       [
        "step",
        "crew",
        "0464"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -28692,7 +29256,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -28760,15 +29324,19 @@
    },
    {
     "bash": {
-     "description": "I2-098 M3 transfer dashboard and reporting behavior proof (verification disabled)",
+     "description": "I2-098 M3 transfer dashboard and reporting behavior proof",
      "run": [
       [
        "step",
        "crew",
        "0476"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:1"
+    ]
    },
    {
     "pause": 50
@@ -28785,7 +29353,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -28847,15 +29415,19 @@
    },
    {
     "bash": {
-     "description": "I2-103 changed M3 transfer dashboard reporting behavior proof (verification disabled)",
+     "description": "I2-103 changed M3 transfer dashboard reporting behavior proof",
      "run": [
       [
        "step",
        "crew",
        "0481"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -28872,7 +29444,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -29060,15 +29632,19 @@
    },
    {
     "bash": {
-     "description": "I2-117 selector transfer and inbox depth build syntax checkpoint (verification disabled)",
+     "description": "I2-117 selector transfer and inbox depth build syntax checkpoint",
      "run": [
       [
        "step",
        "crew",
        "0522"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -29085,7 +29661,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -29174,15 +29750,19 @@
    },
    {
     "bash": {
-     "description": "I2-123 assigned selector transfer inbox dashboard usability depth proof (verification disabled)",
+     "description": "I2-123 assigned selector transfer inbox dashboard usability depth proof",
      "run": [
       [
        "step",
        "crew",
        "0542"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:1"
+    ]
    },
    {
     "pause": 50
@@ -29199,7 +29779,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -29285,15 +29865,19 @@
    },
    {
     "bash": {
-     "description": "I2-134 approved preview flag changed actual streamed import CLI proof (verification disabled)",
+     "description": "I2-134 approved preview flag changed actual streamed import CLI proof",
      "run": [
       [
        "step",
        "crew",
        "0553"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -29310,7 +29894,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -29483,15 +30067,19 @@
    },
    {
     "bash": {
-     "description": "I2-145 final changed transfer date proof acceptance audit and source census (verification disabled)",
+     "description": "I2-145 final changed transfer date proof acceptance audit and source census",
      "run": [
       [
        "step",
        "crew",
        "0566"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -29508,7 +30096,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -29621,15 +30209,19 @@
    },
    {
     "bash": {
-     "description": "I2-154 diagnose retained browser descendant states before final close (verification disabled)",
+     "description": "I2-154 diagnose retained browser descendant states before final close",
      "run": [
       [
        "step",
        "crew",
        "0574"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -29646,7 +30238,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -29714,15 +30306,19 @@
    },
    {
     "bash": {
-     "description": "I2c-038 I-09: baseline production census (verification disabled)",
+     "description": "I2c-038 I-09: baseline production census",
      "run": [
       [
        "step",
        "crew",
        "0895"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "reply": "insight-b: turn 39 done, through I2c-038 I-09: baseline production census."
@@ -29742,7 +30338,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -29840,15 +30436,19 @@
    },
    {
     "bash": {
-     "description": "I2c-045 I-09: digest build and syntax before proof (verification disabled)",
+     "description": "I2c-045 I-09: digest build and syntax before proof",
      "run": [
       [
        "step",
        "crew",
        "0911"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:1"
+    ]
    },
    {
     "pause": 50
@@ -29865,7 +30465,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:Committed|UpToDate"
     ]
    },
    {
@@ -29927,15 +30527,19 @@
    },
    {
     "bash": {
-     "description": "I2c-050 I-09: digest targeted due HTTP CLI proof (verification disabled)",
+     "description": "I2c-050 I-09: digest targeted due HTTP CLI proof",
      "run": [
       [
        "step",
        "crew",
        "0921"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -29952,7 +30556,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {
@@ -30431,15 +31035,19 @@
    },
    {
     "bash": {
-     "description": "I2c-083 I-09: final source counter physical and live-process census (verification disabled)",
+     "description": "I2c-083 I-09: final source counter physical and live-process census",
      "run": [
       [
        "step",
        "crew",
        "1000"
       ]
-     ]
-    }
+     ],
+     "timeoutMs": 170000
+    },
+    "expect": [
+     "sandbox.exec:exit:0"
+    ]
    },
    {
     "pause": 50
@@ -30456,7 +31064,7 @@
      ]
     },
     "expect": [
-     "sandbox.commit:UpToDate"
+     "sandbox.commit:UpToDate|Committed"
     ]
    },
    {

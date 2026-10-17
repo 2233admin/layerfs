@@ -1,7 +1,6 @@
 {
  "step": "I2-098 M3 transfer dashboard and reporting behavior proof",
  "agent": "insight-b",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 1,
  "output": "\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n/workspaces/21/packages/server/test/insight-transfer.test.js:89\n  for(const value of ['=SUM(A1)','+cmd','-cmd','@eval','  =hidden','\\t+hidden'])assert.equal(csvCell(value),'\"''+value+'\"');\n                                                                                                            ^^^\n\nSyntaxError: missing ) after argument list\n    at checkSyntax (node:internal/main/check_syntax:74:5)\n\nNode.js v22.23.1",
  "ms": 2251,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:1"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 1,
    "output": "\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n/workspaces/21/packages/server/test/insight-transfer.test.js:89\n  for(const value of ['=SUM(A1)','+cmd','-cmd','@eval','  =hidden','\\t+hidden'])assert.equal(csvCell(value),'\"''+value+'\"');\n                                                                                                            ^^^\n\nSyntaxError: missing ) after argument list\n    at checkSyntax (node:internal/main/check_syntax:74:5)\n\nNode.js v22.23.1",
    "ms": 2251,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:1",
+   "verification": true
   }
  ]
 }

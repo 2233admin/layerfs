@@ -1,7 +1,7 @@
 {
  "step": "W1b-111 W-04: final affected package regression build and frozen source census",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

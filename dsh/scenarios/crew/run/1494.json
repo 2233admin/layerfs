@@ -1,7 +1,6 @@
 {
  "step": "lead-533 A03 prepare tests: frozen acceptance command",
  "agent": "root",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":264,\"ok\":true}",
  "ms": 6584,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":264,\"ok\":true}",
    "ms": 6584,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

@@ -9,7 +9,7 @@
  "output": null,
  "ms": 15,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W1 009 W-M2 syntax and bundle preparation (exit 0)",
    "force": false,
    "commit": "12fbb1a99849bb97c915901244a2d051062e1d73ea43c838c5ab5065c1e142d245",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

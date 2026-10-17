@@ -1,7 +1,7 @@
 {
  "step": "lead-414 Integration: pinned install exact census rebuild syntax frozen LOC check and all four disjoint package suites at combined final source",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

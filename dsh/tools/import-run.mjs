@@ -8,9 +8,10 @@
 // order checks). The conversion formula is SPEC.md's (core/docs/issues/347).
 // Each command is classed from the record: one whose following Commit changed
 // no tracked file (or only CPython bytecode, which no recorded main holds) is
-// verification only. `verification=off` (Crew's default, the owner's decision
-// for #350) keeps such a step but runs no command in it: the run file marks
-// the call, the replay says so, and the Commit after it must be UpToDate.
+// verification only. `verification=off` keeps such a step but runs no command
+// in it: the run file marks the call, the replay says so, and the Commit after
+// it must be UpToDate. `no-browser` (Crew's default, the owner's decision for
+// #350) does so only for those of a browser proof.
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, lstatSync, readlinkSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -22,7 +23,7 @@ import { storeReads } from "./import/reads.mjs";
 const FORMATS = {
   shop: { read: async (i) => (await import("./import/shop.mjs")).readShop(i), title: "Shop", order: 7, blurb: "a builder agent's recorded run of a small web shop, from skeleton to admin page, over six milestones", target: 60, verification: "on", inputs: ["trace", "builder", "seed"] },
   depot: { read: async (i) => (await import("./import/depot.mjs")).readDepot(i), title: "Depot", order: 8, blurb: "a builder agent's recorded run of a Rust inventory service and its browser client", target: 240, verification: "on", inputs: ["receipts", "seed"] },
-  crew: { read: async (i) => (await import("./import/crew.mjs")).readCrew(i), title: "Crew", order: 9, blurb: "a lead and its crew of agents building one application together, on Branches of their own", target: 120, floor: 50, verification: "off", inputs: ["traces", "agents", "seed"] },
+  crew: { read: async (i) => (await import("./import/crew.mjs")).readCrew(i), title: "Crew", order: 9, blurb: "a lead and its crew of agents building one application together, on Branches of their own", target: 120, floor: 50, verification: "no-browser", inputs: ["traces", "agents", "seed"] },
 };
 const IMAGE = "sha256:091f785ba7d5d036dfa350e8fd69ee1fcd2d8320c3706841c8c95e6411eee9d2";
 const WRITES = new Set(["fs.apply", "fs.write", "fs.edit", "fs.mkdir", "fs.rm", "fs.cp", "fs.mv"]);

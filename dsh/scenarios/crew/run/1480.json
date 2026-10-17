@@ -1,7 +1,7 @@
 {
  "step": "lead-519 Formal2 fixture repair: Python AST and unchanged frozen10005 production gate",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

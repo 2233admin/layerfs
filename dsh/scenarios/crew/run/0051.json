@@ -9,7 +9,7 @@
  "output": null,
  "ms": 11,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "P1 007 P-M1 public HTTP smoke (exit 0)",
    "force": false,
    "commit": "12b1cd8182b5ad8aab9c0c459e92b470907f3bd194b327dc4a704733cfa487783e",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

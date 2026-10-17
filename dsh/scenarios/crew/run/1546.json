@@ -1,7 +1,7 @@
 {
  "step": "lead-585 Final custody: enumerate live daemon/own controls separately from all defunct entries, require no unexpected live app/browser",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 429,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

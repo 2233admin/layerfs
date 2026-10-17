@@ -1,6 +1,6 @@
 # dsh demo conversion — #347
 
-> **Status:** Current implementation plan; Shop (#348) is closed, Depot (#349) is converted, Crew (#350) is converted with its verification commands disabled and passed its closing Live Play (2026-10-17).
+> **Status:** Current implementation plan; Shop (#348) is closed, Depot (#349) is converted, Crew (#350) is converted with its browser verification commands disabled and passed its closing Live Play (2026-10-17).
 
 Convert the three finished application runs of collection
 [#336](https://github.com/Ephemeral-AI-Lab/layerfs/issues/336) into Live demos of
@@ -157,9 +157,9 @@ Each field of a kept step comes from the record:
   failure must be one of its two Selenium errors raised in
   `people-browser.py`. The tests run in temporary folders, so either outcome
   leaves the Workspaces alike, and the final tree is compared anyway. This is
-  a decision recorded on #350; no other outcome is relaxed. While Crew's
-  verification commands are disabled (next bullet) none of these commands runs,
-  so this rule is dormant; it is the rule they come back with.
+  a decision recorded on #350; no other outcome is relaxed. Crew's browser
+  commands are disabled (next bullet), so the browser races are dormant; the
+  others (rank exhaustion, signed credentials, deleted relation activity) apply.
 - **Verification commands (Crew).** The owner's decision on #350 (2026-10-17):
   Crew proves that agents work and collaborate on a long-horizon project on
   LayerFS, not that the builders' own tests pass, so the commands that only
@@ -180,10 +180,14 @@ Each field of a kept step comes from the record:
   make names the one before it). Every SDK call, the
   cross-agent order and the final tree are checked as before. To bring the
   commands back, convert with `verification=on` (Shop and Depot's default):
-  they run, with the races rule above. `verification=no-browser` disables only
-  the verification commands that drive a browser through Selenium (they run a
-  browser script or proof, or their recorded output shows Selenium or a test
-  named for a browser; `drivesBrowser` in `import/crew.mjs`) and runs the rest.
+  they run, with the races rule above. `verification=no-browser` (Crew's
+  default since the owner's later decision the same day, BUGS row 50) disables
+  only the verification commands that belong to a browser proof (they name a
+  browser script, proof, flag or the proof's data, or their recorded output
+  shows Selenium or a test named for a browser; `drivesBrowser` in
+  `import/crew.mjs`): 147 are disabled and 157 run, strict but for the races
+  rule. With every command on, Selenium included, a replay is not reproducible
+  run to run (BUGS rows 47–50), so that mode is not used.
 - **Agent.** Shop and Depot: the builder plays as `root`. Crew: lead → `root`;
   `P1…P1f` → `people`; `W1*` → `work-a`; `W2*` → `work-b`; `I1*` → `insight-a`;
   `I2*` → `insight-b`. The observer (`main`) is dropped.

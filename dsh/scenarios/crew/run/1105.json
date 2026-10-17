@@ -1,7 +1,7 @@
 {
  "step": "P1e-074 P1e diagnostic retained Chromium DOM console failures exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

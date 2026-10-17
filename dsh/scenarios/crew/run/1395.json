@@ -9,7 +9,7 @@
  "output": null,
  "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "P1f frozen counter and exact production physical hash census (exit 0)",
    "force": false,
    "commit": "1248927a2e829778bfa9fb12dfe25af5ac95a7eea05a850511aa1d41009e511d63",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

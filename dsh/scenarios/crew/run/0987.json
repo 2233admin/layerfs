@@ -1,7 +1,7 @@
 {
  "step": "W1c-065 W09/W10: final full affected server and web packages at completed draft and hierarchy source",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

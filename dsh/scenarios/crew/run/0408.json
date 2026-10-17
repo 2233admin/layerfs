@@ -1,7 +1,7 @@
 {
  "step": "I2-069 I-M2 live and CLI behavior checkpoint",
  "agent": "insight-b",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

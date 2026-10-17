@@ -1,7 +1,7 @@
 {
  "step": "W2b-134 full web with authenticated initial navigation readiness",
  "agent": "work-b",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

@@ -9,7 +9,7 @@
  "output": null,
  "ms": 19,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "I1c I-11 I-12 product build and syntax before tests (exit 0)",
    "force": false,
    "commit": "12fa372582e62949ac7dd36c9b51ee005ccb3f1fcd06bd2813d690a519e0e85d52",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

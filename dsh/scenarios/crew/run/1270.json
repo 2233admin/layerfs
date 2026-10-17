@@ -1,7 +1,7 @@
 {
  "step": "I1d-140 I-13: final full CLI ownership coverage exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

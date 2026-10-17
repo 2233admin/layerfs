@@ -1,7 +1,7 @@
 {
  "step": "lead-178 I-M2/M3: install census build syntax all package tests",
  "agent": "root",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

@@ -1,7 +1,7 @@
 {
  "step": "I1d-192 I-13: final full web with stable suggestion geometry exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

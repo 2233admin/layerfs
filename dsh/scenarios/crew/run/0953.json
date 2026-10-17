@@ -1,7 +1,7 @@
 {
  "step": "I2c-063 I-09: digest browser changed render readiness proof",
  "agent": "insight-b",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

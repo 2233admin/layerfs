@@ -9,7 +9,7 @@
  "output": null,
  "ms": 35,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "lead 089 W-M2: required generation4 build syntax and package checks (exit 0)",
    "force": false,
    "commit": "12c33046b5f6e64b0ebd0285b140b0db6ad1174bccd386abffbe75ba5b8867964f",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

@@ -1,7 +1,6 @@
 {
  "step": "P1b-0139 P1b 026 P-M3 final maintained-source size and custody check exec",
  "agent": "people",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": " 6275     1 Z    chrome_crashpad\n 6278     1 Z    chrome_crashpad\n 6279     1 Z    chromium\n 6281     1 Z    chromium\n 6300     1 Z    chromium\n 6301     1 Z    chromium\n 6315     1 Z    chromium\n 6349     1 Z    chromium\n 6370     1 Z    chromium\n 6385     1 Z    chromium\n 6477     0 Ss   timeout\n 6483  6477 R    ps",
  "ms": 293,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": " 6275     1 Z    chrome_crashpad\n 6278     1 Z    chrome_crashpad\n 6279     1 Z    chromium\n 6281     1 Z    chromium\n 6300     1 Z    chromium\n 6301     1 Z    chromium\n 6315     1 Z    chromium\n 6349     1 Z    chromium\n 6370     1 Z    chromium\n 6385     1 Z    chromium\n 6477     0 Ss   timeout\n 6483  6477 R    ps",
    "ms": 293,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

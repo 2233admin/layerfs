@@ -9,7 +9,7 @@
  "output": null,
  "ms": 36,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "lead 184 I-M2/M3: isolated cross-lane API actual CLI smoke28 passed and temporary data removed (exit 0)",
    "force": false,
    "commit": "126458d4158bc95c35f650e3cd91a833376657e540aee5a2d18b3ea67c5e21d4a0",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

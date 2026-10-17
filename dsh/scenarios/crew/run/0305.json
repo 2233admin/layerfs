@@ -1,7 +1,7 @@
 {
  "step": "P1b-0110 P1b 019 P-M3 Chromium HTTP CLI restart and registered-route audit exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

@@ -9,7 +9,7 @@
  "output": null,
  "ms": 7,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "W1b 140 W-06: canonical Markdown CLI and frozen census checkpoint (exit 1)",
    "force": false,
    "commit": "1291430944e7d50402fc34d4bfdc978547cc92dbf77138cd53e0fe6260b0d2a58b",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

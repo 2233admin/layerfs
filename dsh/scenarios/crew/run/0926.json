@@ -1,7 +1,7 @@
 {
  "step": "W1c-035 W09/W10: full affected server and web hierarchy checkpoint",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

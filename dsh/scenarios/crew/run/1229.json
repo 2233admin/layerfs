@@ -1,7 +1,7 @@
 {
  "step": "I1d-100 I-13: actual Chromium saved-filter URL return and custody proof exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

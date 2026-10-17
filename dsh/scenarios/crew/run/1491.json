@@ -9,7 +9,7 @@
  "output": null,
  "ms": 14,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "lead A02 build frozen acceptance (exit 0)",
    "force": false,
    "commit": "1232418b3f91f4222f25e915f974abbfb8577b06ca072a469baa2070508262d124",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

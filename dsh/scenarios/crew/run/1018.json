@@ -1,7 +1,7 @@
 {
  "step": "W1c-089 W09/W10: owned live versus defunct process audit before terminal cleanup",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 77,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

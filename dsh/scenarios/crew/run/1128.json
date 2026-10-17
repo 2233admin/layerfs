@@ -9,7 +9,7 @@
  "output": null,
  "ms": 19,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "P1e final build and syntax (exit 0)",
    "force": false,
    "commit": "1267e38de0152c086bedca6a46fc96d07edeaeb844dca3ee87a6c0d36bf6931ad0",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

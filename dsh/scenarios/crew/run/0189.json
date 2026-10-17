@@ -9,7 +9,7 @@
  "output": null,
  "ms": 16,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:Committed|UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W2 76 W-M3 prepare build sprint and streaming HTTP tests (exit 1)",
    "force": false,
    "commit": "12567736cc819c6db176446e76a8e0d1df8cf14036c8ecd2d92bd13d418ae6e0a9",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:Committed|UpToDate"
   }
  ]
 }

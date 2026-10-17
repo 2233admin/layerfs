@@ -1,7 +1,7 @@
 {
  "step": "I1-139 I-M3 browser typed-builder search-filter controls and actual token CLI final proof",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

@@ -1,7 +1,6 @@
 {
  "step": "I1-068 I-M3 actual scoped-token search and filter executable integration",
  "agent": "insight-a",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 1,
  "output": "    maybeClose (node:internal/child_process:1101:16)\n    ChildProcess._handle.onexit (node:internal/child_process:304:5)\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 3\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1977.303459",
  "ms": 5538,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:1"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 1,
    "output": "    maybeClose (node:internal/child_process:1101:16)\n    ChildProcess._handle.onexit (node:internal/child_process:304:5)\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 3\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1977.303459",
    "ms": 5538,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:1",
+   "verification": true
   }
  ]
 }

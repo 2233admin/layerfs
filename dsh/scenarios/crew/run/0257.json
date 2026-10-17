@@ -1,7 +1,7 @@
 {
  "step": "W2-0127 W-M3 final owned application browser process audit",
  "agent": "work-b",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 57,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

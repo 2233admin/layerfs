@@ -1,7 +1,7 @@
 {
  "step": "P1b-0096 P1b 014 P-M3 all package tests exec",
  "agent": "people",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

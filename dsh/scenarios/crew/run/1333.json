@@ -1,7 +1,7 @@
 {
  "step": "I1d-184 I-13: build stable suggestion slot and prepare actual geometry proof exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 6346,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

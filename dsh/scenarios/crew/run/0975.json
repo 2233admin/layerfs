@@ -1,7 +1,7 @@
 {
  "step": "I2c-073 I-09: final affected server web CLI packages",
  "agent": "insight-b",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

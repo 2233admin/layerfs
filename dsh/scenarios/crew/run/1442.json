@@ -1,7 +1,6 @@
 {
  "step": "lead-474 A10 smoke: frozen acceptance command",
  "agent": "root",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 1,
  "output": "ession revoke and password change/reset preserve account custody\",\"ok\":true},{\"name\":\"people scoped token, immediate revocation, audit and real CLI commands\",\"ok\":true},{\"name\":\"project create workflow update and permission-filtered list\",\"ok\":true},{\"name\":\"issue labels preserve project scope name and color\",\"ok\":true},{\"name\":\"issue fields numbering parent labels edit and HTTP read persist\",\"ok\":true},{\"name\":\"member comment safely renders markdown and explicitly mentions owner\",\"ok\":true},{\"name\":\"all issue relation kinds preserve directional and symmetric read views\",\"ok\":true},{\"name\":\"actual issue CLI reads filters labels comments and relation records\",\"ok\":true},{\"name\":\"board move within and across columns and atomic bulk fields\",\"ok\":true},{\"name\":\"sprint lifecycle scope history carry-over and daily burndown persist\",\"ok\":true},{\"name\":\"attachment raw upload SHA-256 metadata exact bytes and error cleanup\",\"ok\":true},{\"name\":\"work guest public HTTP denial outside its granted project\",\"ok\":true},{\"name\":\"actual project board sprint and streaming attachment CLI commands\",\"ok\":false,\"error\":\"node_modules/.bin/crew exited 1: {\\\"error\\\":{\\\"code\\\":\\\"EEXIST\\\",\\\"message\\\":\\\"EEXIST: file already exists, open '/workspaces/79/data/cli-attachment-output.bin'\\\",\\\"details\\\":null}}\\n\"},{\"name\":\"Mode completion\",\"ok\":false,\"error\":\"node_modules/.bin/crew exited 1: {\\\"error\\\":{\\\"code\\\":\\\"EEXIST\\\",\\\"message\\\":\\\"EEXIST: file already exists, open '/workspaces/79/data/cli-attachment-output.bin'\\\",\\\"details\\\":null}}\\n\"}],\"pass\":15,\"fail\":2,\"ok\":false}\n(node:6916) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n{\"serverLogs\":{\"stdout\":\"{\\\"ready\\\":true,\\\"port\\\":41679,\\\"pid\\\":6927}\\n{\\\"stopped\\\":true,\\\"reason\\\":\\\"SIGTERM\\\",\\\"forced\\\":false}\\n\",\"stderr\":\"(node:6927) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n\"}}",
  "ms": 3601,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:1"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 1,
    "output": "ession revoke and password change/reset preserve account custody\",\"ok\":true},{\"name\":\"people scoped token, immediate revocation, audit and real CLI commands\",\"ok\":true},{\"name\":\"project create workflow update and permission-filtered list\",\"ok\":true},{\"name\":\"issue labels preserve project scope name and color\",\"ok\":true},{\"name\":\"issue fields numbering parent labels edit and HTTP read persist\",\"ok\":true},{\"name\":\"member comment safely renders markdown and explicitly mentions owner\",\"ok\":true},{\"name\":\"all issue relation kinds preserve directional and symmetric read views\",\"ok\":true},{\"name\":\"actual issue CLI reads filters labels comments and relation records\",\"ok\":true},{\"name\":\"board move within and across columns and atomic bulk fields\",\"ok\":true},{\"name\":\"sprint lifecycle scope history carry-over and daily burndown persist\",\"ok\":true},{\"name\":\"attachment raw upload SHA-256 metadata exact bytes and error cleanup\",\"ok\":true},{\"name\":\"work guest public HTTP denial outside its granted project\",\"ok\":true},{\"name\":\"actual project board sprint and streaming attachment CLI commands\",\"ok\":false,\"error\":\"node_modules/.bin/crew exited 1: {\\\"error\\\":{\\\"code\\\":\\\"EEXIST\\\",\\\"message\\\":\\\"EEXIST: file already exists, open '/workspaces/79/data/cli-attachment-output.bin'\\\",\\\"details\\\":null}}\\n\"},{\"name\":\"Mode completion\",\"ok\":false,\"error\":\"node_modules/.bin/crew exited 1: {\\\"error\\\":{\\\"code\\\":\\\"EEXIST\\\",\\\"message\\\":\\\"EEXIST: file already exists, open '/workspaces/79/data/cli-attachment-output.bin'\\\",\\\"details\\\":null}}\\n\"}],\"pass\":15,\"fail\":2,\"ok\":false}\n(node:6916) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n{\"serverLogs\":{\"stdout\":\"{\\\"ready\\\":true,\\\"port\\\":41679,\\\"pid\\\":6927}\\n{\\\"stopped\\\":true,\\\"reason\\\":\\\"SIGTERM\\\",\\\"forced\\\":false}\\n\",\"stderr\":\"(node:6927) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n\"}}",
    "ms": 3601,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:1",
+   "verification": true
   }
  ]
 }

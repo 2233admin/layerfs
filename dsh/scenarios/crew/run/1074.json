@@ -1,7 +1,7 @@
 {
  "step": "I1b-046 I-10: native saved draft HTTP and search state changed proof exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

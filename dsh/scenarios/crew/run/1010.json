@@ -1,7 +1,7 @@
 {
  "step": "W1c-081 W09/W10: full affected web after inspection ownership repair",
  "agent": "work-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

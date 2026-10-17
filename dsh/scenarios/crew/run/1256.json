@@ -1,7 +1,7 @@
 {
  "step": "I1d-127 I-13: actual main-header return and copy persistence proof exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 7330,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

@@ -1,7 +1,6 @@
 {
  "step": "lead-557 A09 seed: frozen acceptance command",
  "agent": "root",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "\n> crew@0.1.0 seed\n> node scripts/seed.mjs\n\n{\"ok\":true,\"message\":\"Demo data is ready; see README for documented credentials\"}\n(node:24392) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)",
  "ms": 1207,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "\n> crew@0.1.0 seed\n> node scripts/seed.mjs\n\n{\"ok\":true,\"message\":\"Demo data is ready; see README for documented credentials\"}\n(node:24392) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)",
    "ms": 1207,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

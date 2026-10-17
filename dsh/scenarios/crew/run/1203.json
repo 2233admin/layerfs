@@ -9,7 +9,7 @@
  "output": null,
  "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate"
+  "sandbox.commit:UpToDate|Committed"
  ],
  "calls": [
   {
@@ -18,7 +18,8 @@
    "message": "I1c I-11 I-12 final frozen per-file hash physical census and live versus defunct custody (exit 0)",
    "force": false,
    "commit": "1269ae883252f79f230a4a73dfca02b8a3d043a7bba10a02b0c10426f30e454921",
-   "expect": "sandbox.commit:UpToDate"
+   "expect": "sandbox.commit:UpToDate|Committed",
+   "generated": true
   }
  ]
 }

@@ -1,7 +1,7 @@
 {
  "step": "W2b-080 W05 final web CLI regression and counter",
  "agent": "work-b",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,

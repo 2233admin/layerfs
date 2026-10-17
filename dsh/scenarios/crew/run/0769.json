@@ -1,7 +1,6 @@
 {
  "step": "W2b-119 final production census file ceiling and process closure audit",
  "agent": "work-b",
- "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -9,7 +8,9 @@
  "exit": 0,
  "output": "      \"physical\": 117\n    },\n    {\n      \"path\": \"packages/server/src/modules/work/sprint-history.js\",\n      \"package\": \"server\",\n      \"prod\": 116,\n      \"physical\": 116\n    }\n  ],\n  \"over999\": []\n}\n{\"mode\":\"closed\",\"checks\":[{\"name\":\"No retained or live application/browser processes in selected Sandbox\",\"ok\":true}],\"pass\":1,\"fail\":0,\"ok\":true}",
  "ms": 473,
- "expect": [],
+ "expect": [
+  "sandbox.exec:exit:0"
+ ],
  "calls": [
   {
    "op": "exec",
@@ -19,9 +20,8 @@
    "exit": 0,
    "output": "      \"physical\": 117\n    },\n    {\n      \"path\": \"packages/server/src/modules/work/sprint-history.js\",\n      \"package\": \"server\",\n      \"prod\": 116,\n      \"physical\": 116\n    }\n  ],\n  \"over999\": []\n}\n{\"mode\":\"closed\",\"checks\":[{\"name\":\"No retained or live application/browser processes in selected Sandbox\",\"ok\":true}],\"pass\":1,\"fail\":0,\"ok\":true}",
    "ms": 473,
-   "expect": null,
-   "verification": true,
-   "disabled": true
+   "expect": "sandbox.exec:exit:0",
+   "verification": true
   }
  ]
 }

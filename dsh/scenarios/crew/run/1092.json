@@ -1,7 +1,7 @@
 {
  "step": "I1b-060 I-10: final frozen source census and live versus defunct process custody exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 450,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]

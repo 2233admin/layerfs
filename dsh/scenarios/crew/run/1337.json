@@ -1,7 +1,7 @@
 {
  "step": "I1d-188 I-13: fixed native Save geometry and return persistence proof exec",
  "agent": "insight-a",
- "verification": "off",
+ "verification": "no-browser",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -21,6 +21,7 @@
    "ms": 10369,
    "expect": null,
    "verification": true,
+   "browser": true,
    "disabled": true
   }
  ]
