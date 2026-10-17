@@ -191,7 +191,11 @@ reaches it (SPEC.md §6). The fixer's playbook (D0–D6) depends on them.
 3. At every range completion:
    - write `range-NNN.json` and the report `ranges/range-NNN.md`;
    - add the row to `RANGES.md`;
-   - decide the gate.
+   - decide the gate;
+   - post the range's issue comment on #352: `report.mjs` writes it to
+     `~/lfs-history/metrics/comment-NNN.md` in a fixed format (SPEC.md §3), and
+     the lead posts it with `gh issue comment 352 --body-file <it>`. Every
+     range gets one, whatever its verdict; a rerun posts another for its attempt.
 4. Act on the gate:
    - **Stop:** run the bug cycle.
    - **Optimize:** fix it, then compare old and new binaries with the probes on

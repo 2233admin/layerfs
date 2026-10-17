@@ -320,6 +320,23 @@ At each range's completion, the runner writes three things:
   | Range | dsh commits | Depth | Verdict | Worst speed ratio | Worst scaling slope | New stored bytes | Report |
   | --- | --- | --- | --- | --- | --- | --- | --- |
 
+- One comment on issue #352, posted by the lead: `report.mjs` writes it to
+  `~/lfs-history/metrics/comment-NNN.md` (`renderComment`) in this fixed format:
+
+  ```text
+  ### Range NNN · **<verdict>** · attempt K
+  dsh `<first>`..`<checkpoint>` (N commits) · depth A → B · daemon `<id>` · wall T s
+
+  | Check | Value | Result |      (only checks that did not pass; else "All N checks pass.")
+
+  **Work:** bash calls · LayerFS Commits · conflicts hit/planned · unit tests equal/run
+  **Slowest p95:** the three slowest operations by p95
+  **Storage:** +new stored (total) · dedupe · compression · snapshot +new bytes in ms
+  **Next:** continue, or why the runner stopped and who acts
+
+  Report: link to ranges/range-NNN.md
+  ```
+
 The sections below list what the report contains.
 
 ### a. Range

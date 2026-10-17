@@ -11,7 +11,7 @@ import { area, dirCounts, finishes, planRange, replayPlan, rng, stateDiff } from
 import { apply, summarize } from "../plan.mjs";
 import { compareTree, expectations } from "../oracle.mjs";
 import { aggregate, buildBaseline, evaluate, exponent, rising, sizeClass } from "../gates.mjs";
-import { renderIndex, renderRange, LEAD_START } from "../report.mjs";
+import { renderComment, renderIndex, renderRange, LEAD_START } from "../report.mjs";
 
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
@@ -224,6 +224,17 @@ test("the report keeps the lead's section and the index links each range", () =>
   for (const h of ["## Attempts", "## 1. Checks", "## 2. Work", "## 3. Operation latency", "## 4. Scale probes", "## 5. Storage", "## 6. Trends", "## 8. Evidence"]) assert.ok(md.includes(h), h);
   assert.ok(md.includes("- found something"));
   assert.ok(renderIndex([{ range: 0, dshCommits: 10, depth: 5, verdict: "pass", worst: "—", newStored: 1024 }]).includes("[range-000](ranges/range-000.md)"));
+});
+
+test("the issue comment has a fixed shape and names what happens next", () => {
+  const { plan } = planAll()[0];
+  const m = metrics(0);
+  const ok = renderComment({ plan, summary: summarize(plan), attempts: [m], gates: [evaluate(m)] });
+  assert.ok(ok.startsWith("### Range 000 · **pass** · attempt 1"));
+  for (const part of ["**Work:**", "**Slowest p95:**", "**Storage:**", "**Next:** Continues", "range-000.md)"]) assert.ok(ok.includes(part), part);
+  const bad = { ...m, checks: { ...m.checks, tests: { equal: 3, run: 4 } } };
+  const stop = renderComment({ plan, summary: summarize(plan), attempts: [bad], gates: [evaluate(bad)] });
+  assert.ok(stop.includes("**stop**") && stop.includes("| Correctness |") && stop.includes("bug cycle"));
 });
 
 let failed = 0;
