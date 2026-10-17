@@ -8,3 +8,4 @@
 | 001 | 60 | 1,114 | **watch** | Directory share | 2.7 MiB | [range-001](ranges/range-001.md) |
 | 002 | 63 | 1,533 | **watch** | Scaling | 2.0 MiB | [range-002](ranges/range-002.md) |
 | 003 | 60 | 2,611 | **watch** | Speed | 5.3 MiB | [range-003](ranges/range-003.md) |
+| 004 | 68 | 3,497 | **watch** | Speed | 4.5 MiB | [range-004](ranges/range-004.md) |
