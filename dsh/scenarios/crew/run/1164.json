@@ -1,5 +1,5 @@
 {
- "step": "I1c-041 I-11 baseline frozen production census commit",
+ "step": "I1c-042 I-11 baseline frozen production census unmount",
  "agent": "insight-a",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 13,
+ "ms": 6,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "I1c:/workspaces/1",
-   "message": "I1c I-11 baseline frozen production census (exit 0)",
-   "force": false,
-   "commit": "120affd35401a89f0d59de0359f64b1f3d5ea704c55a7e4680c551a2e8b9cc2d43",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

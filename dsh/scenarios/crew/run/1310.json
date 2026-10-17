@@ -1,26 +1,24 @@
 {
- "step": "I1d-168 I-13: changed actual Chromium copied-resource heading proofs exec",
- "agent": "insight-a",
- "kind": "replay",
+ "step": "lead-387 Actual delayed heading deliberate keyboard focus and abandoned route proof386 passed1/1 after fixture correction; syntax253 passed; production natural9612 at this isolated main branch",
+ "agent": "root",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'node --test --test-name-pattern='\"'\"'list direct resource|detail run edit copy return'\"'\"' packages/web/test/filter-browser.test.js packages/web/test/filter-view-browser.test.js'",
- "exit": 1,
- "output": "    async Test.run (node:internal/test_runner/test:1054:7)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 1\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 10979.587296",
- "ms": 11041,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 25,
  "expect": [
-  "sandbox.exec:exit:1"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
-   "ws": "I1d:/workspaces/29",
-   "command": "timeout 110 bash -c 'node --test --test-name-pattern='\"'\"'list direct resource|detail run edit copy return'\"'\"' packages/web/test/filter-browser.test.js packages/web/test/filter-view-browser.test.js'",
-   "message": "changed actual Chromium copied-resource heading proofs",
-   "exit": 1,
-   "output": "    async Test.run (node:internal/test_runner/test:1054:7)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 1\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 10979.587296",
-   "ms": 11041,
-   "expect": "sandbox.exec:exit:1"
+   "op": "commit",
+   "ws": "lead:/workspaces/59",
+   "message": "lead 387 Actual delayed heading deliberate keyboard focus and abandoned route proof386 passed1/1 after fixture correction; syntax253 passed; production natural9612 at this isolated main branch (exit 0…",
+   "force": false,
+   "commit": "1206283c0cb05419c34389149bcd36bb5918fcfc3c7b45482dd2bc6ca39c92952d",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

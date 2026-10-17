@@ -1,22 +1,22 @@
 {
- "step": "lead-435 Integration: publish complete10005 production source with all package scopes passed and preserved current main",
+ "step": "lead-436 A00: fresh frozen acceptance Branch from final main326ed3ae publication",
  "agent": "root",
  "kind": "history",
- "branch": "int-final-qualified.1",
+ "branch": null,
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 25,
+ "ms": 23,
  "expect": [
-  "branch.publish:Added"
+  "branch.fork:Forked"
  ],
  "calls": [
   {
-   "op": "publish",
-   "branch": "int-final-qualified.1",
-   "commit": null,
-   "expect": "branch.publish:Added"
+   "op": "fork",
+   "name": "acceptance",
+   "from": "main",
+   "expect": "branch.fork:Forked"
   }
  ]
 }

@@ -1,6 +1,7 @@
 {
  "step": "I1-139 I-M3 browser typed-builder search-filter controls and actual token CLI final proof",
  "agent": "insight-a",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "  duration_ms: 480.016083\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 2220.158251",
  "ms": 11182,
- "expect": [
-  "sandbox.exec:exit:0|1"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,10 @@
    "exit": 0,
    "output": "  duration_ms: 480.016083\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 2220.158251",
    "ms": 11182,
-   "expect": "sandbox.exec:exit:0|1",
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true,
    "flaky": {
     "tests": [
      "actual pinned browser uses keyboard query completions safe results saved-filter form and live pause"

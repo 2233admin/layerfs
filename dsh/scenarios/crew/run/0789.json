@@ -9,7 +9,7 @@
  "output": null,
  "ms": 438,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "lead 210 W-M5 full integration473 passing leaves CLI35 server243 shared89 web106 zero failures (exit 0)",
    "force": false,
    "commit": "123db51d97159c671077bf620bf60d70f1317c8cd7994c2fabfc44a7f1cc81b874",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

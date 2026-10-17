@@ -15,7 +15,7 @@
   {
    "op": "fork",
    "name": "insight.5",
-   "from": "int-depth-spine#1",
+   "from": "int-depth-spine#0",
    "expect": "branch.fork:Forked"
   }
  ]

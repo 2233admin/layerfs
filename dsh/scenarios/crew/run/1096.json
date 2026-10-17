@@ -1,5 +1,5 @@
 {
- "step": "lead-328 L0: A13 maintained census252 syntax targets and runtime diagnostic smoke28 of28 pass; zero production source change",
+ "step": "lead-329 L0: terminal unmount after complete A13 tooling and smoke diagnostic",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,18 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 46,
+ "ms": 38,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/51",
-   "message": "lead 328 L0: A13 maintained census252 syntax targets and runtime diagnostic smoke28 of28 pass; zero production source change (exit 0)",
-   "force": false,
-   "commit": "12361f49e46ae4cdfdc86fe974a63266240f053610f9725e433aac3759371fbd61",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

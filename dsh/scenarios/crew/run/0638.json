@@ -9,7 +9,7 @@
  "output": null,
  "ms": 7,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "W1b 098 W-04: changed watched-delete and strengthened actual work browser proof (exit 1)",
    "force": false,
    "commit": "129fc01bd2ac40266d384d41574b450befbf0f6f3e0f781381f60bfe03ea35cb01",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

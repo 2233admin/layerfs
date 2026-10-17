@@ -1,5 +1,5 @@
 {
- "step": "lead-355 Combined depth qualification exit0 per raw354: CLI59 server293 shared89 web145 allpass; syntax252; pinned install census retained; size9586 gateOPEN414",
+ "step": "lead-356 Combined depth qualification complete: terminal unmount before reviewed publication",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,18 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 510,
+ "ms": 42,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/52",
-   "message": "lead 355 Combined depth qualification exit0 per raw354: CLI59 server293 shared89 web145 allpass; syntax252; pinned install census retained; size9586 gateOPEN414 (exit 0)",
-   "force": false,
-   "commit": "120db759e1795cb1d77be152b9fc0ea3d9c311d4c0e81ca2d8367037fb7c81b0f2",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

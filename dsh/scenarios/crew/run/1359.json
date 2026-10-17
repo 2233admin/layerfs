@@ -1,5 +1,5 @@
 {
- "step": "lead-411 Integration: merge final Insight source with isolated L0 session and focus work",
+ "step": "lead-412 Integration: merge current main into combined final source before qualification",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,17 +7,17 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 117,
+ "ms": 20,
  "expect": [
   "branch.merge:Merged"
  ],
  "calls": [
   {
    "op": "merge",
-   "a": "insight.7",
-   "b": "lead-focus.1",
-   "name": "int-final-shell.1",
-   "message": "lead: combine final I13 and stable query suggestion controls with L0 delayed heading and bounded session lifecycle plus reviewed fixture readiness",
+   "a": "int-final-shell.1",
+   "b": "main",
+   "name": "int-final.1",
+   "message": "lead: explicitly preserve current published main in final combined source graph before clean rebuild and qualification",
    "expect": "branch.merge:Merged"
   }
  ]

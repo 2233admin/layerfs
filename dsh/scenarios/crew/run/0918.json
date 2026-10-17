@@ -9,7 +9,7 @@
  "output": null,
  "ms": 10,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "W1c 32 W09: prepare and focused hierarchy pure HTTP pinned browser proofs (exit 0)",
    "force": false,
    "commit": "12a31ab6ab43b4691fc7c81b5f200533753ce04ef5ba4d300c4388b4ecc7d95f61",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

@@ -1,5 +1,5 @@
 {
- "step": "P1e-100 P1e final server package outcome",
+ "step": "P1e-101 P1e final server package unmount",
  "agent": "people",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 12,
+ "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "P1e:/workspaces/22",
-   "message": "P1e final server package (exit 0)",
-   "force": false,
-   "commit": "1267e38de0152c086bedca6a46fc96d07edeaeb844dca3ee87a6c0d36bf6931ad0",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

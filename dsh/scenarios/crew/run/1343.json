@@ -1,5 +1,5 @@
 {
- "step": "lead-397 Retain396 exit1: nine pure ownership and focus browser passed; native-tab test failed while signing out secondtab, currentfooter shows check completion; cause under review no session browser …",
+ "step": "lead-398 L0: terminal unmount session changed-source native-click failure396",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,18 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 64,
+ "ms": 20,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/63",
-   "message": "lead 397 Retain396 exit1: nine pure ownership and focus browser passed; native-tab test failed while signing out secondtab, currentfooter shows check completion; cause under review no session browser …",
-   "force": false,
-   "commit": "127d25cd33d3ae67b4d86749ad15bbc09d72abd2f4b3f0836f45c7c7d70983650c",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

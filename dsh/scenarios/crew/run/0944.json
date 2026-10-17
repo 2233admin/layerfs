@@ -9,7 +9,7 @@
  "output": null,
  "ms": 36,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "lead 279 L0 runtime5 passed; browser startup still fails initial navigation with explicit custom profile; retained changed proof (exit 1)",
    "force": false,
    "commit": "12b7613c97b46c0a9093f8e992f010c6495d29a35366d048a8666ea4b742079b8f",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

@@ -1,22 +1,20 @@
 {
- "step": "lead-404 L0: mount stable session-footer changed-source covering proof",
- "agent": "root",
+ "step": "I1d-201 I-13: sole terminalclose after lead RELEASE and original daemon streams",
+ "agent": "insight-a",
  "kind": "history",
- "branch": "lead-focus.1",
+ "branch": null,
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 33,
+ "ms": 1317,
  "expect": [
-  "sandbox.mount:Mounted"
+  "sandbox.close:Closed"
  ],
  "calls": [
   {
-   "op": "mount",
-   "branch": "lead-focus.1",
-   "ws": "lead:/workspaces/65",
-   "expect": "sandbox.mount:Mounted"
+   "op": "close",
+   "expect": "sandbox.close:Closed"
   }
  ]
 }

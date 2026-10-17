@@ -1,5 +1,5 @@
 {
- "step": "I1c-087 I-11 I-12 final frozen per-file hash physical census and live versus defunct custody unmount",
+ "step": "I1c-090 I-11 I-12 sole terminal close after both daemon streams",
  "agent": "insight-a",
  "kind": "history",
  "branch": null,
@@ -7,16 +7,14 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 6,
+ "ms": 1324,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.close:Closed"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "I1c:/workspaces/14",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "close",
+   "expect": "sandbox.close:Closed"
   }
  ]
 }

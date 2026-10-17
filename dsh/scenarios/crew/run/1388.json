@@ -1,5 +1,5 @@
 {
- "step": "P1f-033 people action lifetime: sandbox.commit",
+ "step": "P1f-034 people action lifetime: sandbox.unmount",
  "agent": "people",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 9,
+ "ms": 7,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "P1f:/workspaces/6",
-   "message": "P1f changed lifetime and all people administration browser modes (exit 0)",
-   "force": false,
-   "commit": "1248927a2e829778bfa9fb12dfe25af5ac95a7eea05a850511aa1d41009e511d63",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

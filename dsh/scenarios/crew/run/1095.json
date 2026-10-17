@@ -1,22 +1,24 @@
 {
- "step": "I1b-062 I-10: final frozen source census and live versus defunct process custody unmount",
- "agent": "insight-a",
+ "step": "lead-328 L0: A13 maintained census252 syntax targets and runtime diagnostic smoke28 of28 pass; zero production source change",
+ "agent": "root",
  "kind": "history",
  "branch": null,
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 6,
+ "ms": 46,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "I1b:/workspaces/12",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "commit",
+   "ws": "lead:/workspaces/51",
+   "message": "lead 328 L0: A13 maintained census252 syntax targets and runtime diagnostic smoke28 of28 pass; zero production source change (exit 0)",
+   "force": false,
+   "commit": "12361f49e46ae4cdfdc86fe974a63266240f053610f9725e433aac3759371fbd61",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

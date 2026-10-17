@@ -1,6 +1,7 @@
 {
  "step": "W1b-090 W-04: shared regression and own sandbox process census",
  "agent": "work-a",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": " 9015     1 Z    chrome_crashpad\n 9017     1 Z    chrome_crashpad\n 9020     1 Z    chromium\n 9021     1 Z    chromium\n 9041     1 Z    chromium\n 9042     1 Z    chromium\n 9054     1 Z    chromium\n 9089     1 Z    chromium\n 9109     1 Z    chromium\n 9123     1 Z    chromium\n13072     0 Ss   timeout\n13078 13072 R    ps",
  "ms": 299,
- "expect": [
-  "sandbox.exec:exit:0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,9 @@
    "exit": 0,
    "output": " 9015     1 Z    chrome_crashpad\n 9017     1 Z    chrome_crashpad\n 9020     1 Z    chromium\n 9021     1 Z    chromium\n 9041     1 Z    chromium\n 9042     1 Z    chromium\n 9054     1 Z    chromium\n 9089     1 Z    chromium\n 9109     1 Z    chromium\n 9123     1 Z    chromium\n13072     0 Ss   timeout\n13078 13072 R    ps",
    "ms": 299,
-   "expect": "sandbox.exec:exit:0"
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

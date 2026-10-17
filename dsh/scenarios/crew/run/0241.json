@@ -9,7 +9,7 @@
  "output": null,
  "ms": 10,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W2 116 W-M3 fresh Workspace persisted CLI and work restart reads (exit 0)",
    "force": false,
    "commit": "12e38421e4565d7a4e3688ffc4e10b370d69d1870a2b9a2302b1f2c3070c0e2946",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

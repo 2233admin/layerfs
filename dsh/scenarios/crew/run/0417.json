@@ -1,6 +1,7 @@
 {
  "step": "I1-073 I-M3 actual scoped-token search filter and plain-help proofs",
  "agent": "insight-a",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "  duration_ms: 380.70975\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1891.50371",
  "ms": 5320,
- "expect": [
-  "sandbox.exec:exit:0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,9 @@
    "exit": 0,
    "output": "  duration_ms: 380.70975\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1891.50371",
    "ms": 5320,
-   "expect": "sandbox.exec:exit:0"
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

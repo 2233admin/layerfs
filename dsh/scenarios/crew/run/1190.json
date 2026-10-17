@@ -1,22 +1,27 @@
 {
- "step": "I1c-072 I-11 I-12 build syntax and Python AST before proof mount",
+ "step": "I1c-073 I-11 I-12 build syntax and Python AST before proof exec",
  "agent": "insight-a",
- "kind": "history",
- "branch": "insight.6",
+ "verification": "off",
+ "kind": "replay",
+ "branch": null,
  "writes": null,
- "command": null,
- "exit": null,
- "output": null,
- "ms": 26,
- "expect": [
-  "sandbox.mount:Mounted"
- ],
+ "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests && python3 -c \"import ast,pathlib; ast.parse(pathlib.Path('\\''packages/web/test/filter-browser.py'\\'').read_text()); print('\\''filter browser Python AST valid'\\'')\"'",
+ "exit": 0,
+ "output": "> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":256,\"ok\":true}\nfilter browser Python AST valid",
+ "ms": 6871,
+ "expect": [],
  "calls": [
   {
-   "op": "mount",
-   "branch": "insight.6",
+   "op": "exec",
    "ws": "I1c:/workspaces/11",
-   "expect": "sandbox.mount:Mounted"
+   "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests && python3 -c \"import ast,pathlib; ast.parse(pathlib.Path('\\''packages/web/test/filter-browser.py'\\'').read_text()); print('\\''filter browser Python AST valid'\\'')\"'",
+   "message": "I-11 I-12 build syntax and Python AST before proof",
+   "exit": 0,
+   "output": "> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":256,\"ok\":true}\nfilter browser Python AST valid",
+   "ms": 6871,
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

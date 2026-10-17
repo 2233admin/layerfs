@@ -1,5 +1,5 @@
 {
- "step": "P1e-108 P1e final disjoint web scope excluding retained independent search browser failure outcome",
+ "step": "P1e-109 P1e final disjoint web scope excluding retained independent search browser failure unmount",
  "agent": "people",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 14,
+ "ms": 9,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "P1e:/workspaces/24",
-   "message": "P1e final disjoint web scope excluding retained independent search browser failure (exit 0)",
-   "force": false,
-   "commit": "1267e38de0152c086bedca6a46fc96d07edeaeb844dca3ee87a6c0d36bf6931ad0",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

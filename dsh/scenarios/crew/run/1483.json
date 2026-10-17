@@ -1,22 +1,22 @@
 {
- "step": "lead-521 Formal2 fixture repair: terminal unmount before corrected fixture publication",
+ "step": "lead-522 Formal2 repair: publish current async request fixture observation only; production10005 unchanged and historical failure retained",
  "agent": "root",
  "kind": "history",
- "branch": null,
+ "branch": "lead-people-observation.1",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 30,
+ "ms": 21,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "branch.publish:Added"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "lead:/workspaces/89",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "publish",
+   "branch": "lead-people-observation.1",
+   "commit": null,
+   "expect": "branch.publish:Added"
   }
  ]
 }

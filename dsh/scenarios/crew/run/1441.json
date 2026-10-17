@@ -1,22 +1,22 @@
 {
- "step": "lead-472 A09 seed: terminal acceptance unmount",
+ "step": "lead-473 A10 smoke: fresh acceptance Workspace",
  "agent": "root",
  "kind": "history",
- "branch": null,
+ "branch": "acceptance",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 7,
+ "ms": 28,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "lead:/workspaces/78",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "mount",
+   "branch": "acceptance",
+   "ws": "lead:/workspaces/79",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

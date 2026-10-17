@@ -1,5 +1,5 @@
 {
- "step": "lead-459 A06 web tests: capture completed Bash including any failure",
+ "step": "lead-460 A06 web tests: terminal acceptance unmount",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -9,17 +9,14 @@
  "output": null,
  "ms": 9,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/75",
-   "message": "lead A06 web tests frozen acceptance (exit 0)",
-   "force": false,
-   "commit": "12535515b450b590a45aa2c1f34c9cd2462d87f0123b8e719815d289b9c6666e34",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

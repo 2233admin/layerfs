@@ -1,22 +1,27 @@
 {
- "step": "I1c-039 I-11 baseline frozen production census mount",
+ "step": "I1c-040 I-11 baseline frozen production census exec",
  "agent": "insight-a",
- "kind": "history",
- "branch": "insight.6",
+ "verification": "off",
+ "kind": "replay",
+ "branch": null,
  "writes": null,
- "command": null,
- "exit": null,
- "output": null,
- "ms": 46,
- "expect": [
-  "sandbox.mount:Mounted"
- ],
+ "command": "timeout 110 bash -c 'node scripts/count-loc.mjs'",
+ "exit": 0,
+ "output": "    {\n      \"path\": \"packages/web/src/router.js\",\n      \"package\": \"web\",\n      \"prod\": 23\n    },\n    {\n      \"path\": \"packages/web/src/store.js\",\n      \"package\": \"web\",\n      \"prod\": 10\n    }\n  ]\n}",
+ "ms": 514,
+ "expect": [],
  "calls": [
   {
-   "op": "mount",
-   "branch": "insight.6",
+   "op": "exec",
    "ws": "I1c:/workspaces/1",
-   "expect": "sandbox.mount:Mounted"
+   "command": "timeout 110 bash -c 'node scripts/count-loc.mjs'",
+   "message": "I-11 baseline frozen production census",
+   "exit": 0,
+   "output": "    {\n      \"path\": \"packages/web/src/router.js\",\n      \"package\": \"web\",\n      \"prod\": 23\n    },\n    {\n      \"path\": \"packages/web/src/store.js\",\n      \"package\": \"web\",\n      \"prod\": 10\n    }\n  ]\n}",
+   "ms": 514,
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

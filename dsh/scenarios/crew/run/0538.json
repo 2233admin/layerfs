@@ -9,7 +9,7 @@
  "output": null,
  "ms": 9,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "I1 154 I-M3 frozen production LOC and largest file census (exit 0)",
    "force": false,
    "commit": "126cfb087668495407ed5e77846f401e98e640410ac1877560cdb8a13117a7e274",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

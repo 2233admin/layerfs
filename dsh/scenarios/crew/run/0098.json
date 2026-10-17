@@ -9,7 +9,7 @@
  "output": null,
  "ms": 16,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W2 51 W-M1 prepare build project cross-package tests (exit 0)",
    "force": false,
    "commit": "125e696b73accf4f65c82b0104f8594f6fe16a5a6cde8330ab1e612555538ff12b",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

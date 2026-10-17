@@ -9,7 +9,7 @@
  "output": null,
  "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "I2c I-09: final source counter physical and live-process census (exit 0)",
    "force": false,
    "commit": "12f219430a68f5f6afc181b95127e040cfad82ce53b930831a18a41559120cf295",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

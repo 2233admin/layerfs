@@ -1,6 +1,7 @@
 {
  "step": "lead-138 P-M3 fixed: integration install build syntax all tests actual process audit",
  "agent": "root",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "  type: 'test'\n  ...\n1..38\n# tests 38\n# suites 0\n# pass 38\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 101.178417\n{\"mode\":\"closed\",\"checks\":[{\"name\":\"No retained or live application/browser processes in selected Sandbox\",\"ok\":true}],\"pass\":1,\"fail\":0,\"ok\":true}",
  "ms": 15086,
- "expect": [
-  "sandbox.exec:exit:0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,10 @@
    "exit": 0,
    "output": "  type: 'test'\n  ...\n1..38\n# tests 38\n# suites 0\n# pass 38\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 101.178417\n{\"mode\":\"closed\",\"checks\":[{\"name\":\"No retained or live application/browser processes in selected Sandbox\",\"ok\":true}],\"pass\":1,\"fail\":0,\"ok\":true}",
    "ms": 15086,
-   "expect": "sandbox.exec:exit:0"
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true
   }
  ]
 }

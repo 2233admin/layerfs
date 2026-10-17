@@ -9,7 +9,7 @@
  "output": null,
  "ms": 15,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W1b 064 W-04: pinned browser issue editor discussion navigation proof (exit 1)",
    "force": false,
    "commit": "12b25eb6f0b7ecb83c69c3e9de4c0f97c07c4272b6ddd9012fa72de4af6ee7a07c",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

@@ -1,5 +1,5 @@
 {
- "step": "P1e-090 P1e corrected real app accepted and opaque-link route abandonment outcome",
+ "step": "P1e-091 P1e corrected real app accepted and opaque-link route abandonment unmount",
  "agent": "people",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 11,
+ "ms": 7,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "P1e:/workspaces/18",
-   "message": "P1e corrected real app accepted and opaque-link route abandonment (exit 0)",
-   "force": false,
-   "commit": "12df3cc9cdb81734fe85881094b00976dd5ba88d743a953eccde7bd621be9d1db6",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

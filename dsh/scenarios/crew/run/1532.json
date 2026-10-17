@@ -1,5 +1,5 @@
 {
- "step": "lead-570 A12 browser: capture completed Bash including any failure",
+ "step": "lead-571 A12 browser: terminal acceptance unmount",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,18 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 19,
+ "ms": 6,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/101",
-   "message": "lead A12 browser frozen acceptance (exit 0)",
-   "force": false,
-   "commit": "121e9f34a917995a099b2269759a8fa0d6bcda94a364741f499bc123b91d531b43",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

@@ -1,6 +1,7 @@
 {
  "step": "lead-232 L0 changed CLI syntax build and17 meaningful targeted leaves",
  "agent": "root",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 1,
  "output": "    async Test.run (node:internal/test_runner/test:1054:7)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n1..17\n# tests 17\n# suites 0\n# pass 16\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 696.981001",
  "ms": 5688,
- "expect": [
-  "sandbox.exec:exit:1"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,10 @@
    "exit": 1,
    "output": "    async Test.run (node:internal/test_runner/test:1054:7)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n1..17\n# tests 17\n# suites 0\n# pass 16\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 696.981001",
    "ms": 5688,
-   "expect": "sandbox.exec:exit:1"
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true
   }
  ]
 }

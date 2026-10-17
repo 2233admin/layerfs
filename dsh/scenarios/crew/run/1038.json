@@ -15,7 +15,7 @@
   {
    "op": "fork",
    "name": "people.6",
-   "from": "int-depth-spine#1",
+   "from": "int-depth-spine#0",
    "expect": "branch.fork:Forked"
   }
  ]

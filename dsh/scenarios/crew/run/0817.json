@@ -9,7 +9,7 @@
  "output": null,
  "ms": 10,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "P1d 013 P-05 focused final delivery and integration proof (exit 0)",
    "force": false,
    "commit": "120688df873125ea0281cb11f2e989b5d5fab8949312ceb7f83bac312e8ef2fb9b",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

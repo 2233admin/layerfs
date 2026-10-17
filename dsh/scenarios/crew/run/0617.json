@@ -1,6 +1,7 @@
 {
  "step": "W1b-075 W-04: actual delayed filter and comment browser navigation proof",
  "agent": "work-a",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "  duration_ms: 4638.124169\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 5094.219461",
  "ms": 10302,
- "expect": [
-  "sandbox.exec:exit:0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,10 @@
    "exit": 0,
    "output": "  duration_ms: 4638.124169\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 5094.219461",
    "ms": 10302,
-   "expect": "sandbox.exec:exit:0"
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true
   }
  ]
 }

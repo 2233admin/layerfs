@@ -9,7 +9,7 @@
  "output": null,
  "ms": 73,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "W1b 136 W-06: canonical Markdown full affected package checkpoint (exit 1)",
    "force": false,
    "commit": "12b8055b5bd7f05fff25ff0a5ec179c1168148c85698e92b42036c69ec917fe0a8",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

@@ -9,7 +9,7 @@
  "output": null,
  "ms": 7,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "W1b 116 W-04: final frozen identity file ceiling and owned live process audit (exit 0)",
    "force": false,
    "commit": "12b986573337391d3bfaaa5466f1a30ce72ca6f703583810b5fd23c7d8b7e77b7b",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

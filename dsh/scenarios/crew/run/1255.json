@@ -1,22 +1,22 @@
 {
- "step": "I1d-125 I-13: prepare main-header saved-filter return proof unmount",
+ "step": "I1d-126 I-13: actual main-header return and copy persistence proof mount",
  "agent": "insight-a",
  "kind": "history",
- "branch": null,
+ "branch": "insight.7",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 6,
+ "ms": 27,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "I1d:/workspaces/16",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "mount",
+   "branch": "insight.7",
+   "ws": "I1d:/workspaces/17",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

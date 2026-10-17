@@ -1,22 +1,22 @@
 {
- "step": "P1e-097 P1e final build and syntax unmount",
+ "step": "P1e-098 P1e final server package mount",
  "agent": "people",
  "kind": "history",
- "branch": null,
+ "branch": "people.6",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 7,
+ "ms": 30,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "P1e:/workspaces/21",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "mount",
+   "branch": "people.6",
+   "ws": "P1e:/workspaces/22",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

@@ -1,6 +1,7 @@
 {
  "step": "W2b-057 targeted planning revision and browser proofs",
  "agent": "work-b",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 1,
  "output": "  duration_ms: 2613.921001\n  type: 'test'\n  ...\n1..19\n# tests 19\n# suites 0\n# pass 18\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 14393.057214",
  "ms": 14463,
- "expect": [
-  "sandbox.exec:exit:1|0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,10 @@
    "exit": 1,
    "output": "  duration_ms: 2613.921001\n  type: 'test'\n  ...\n1..19\n# tests 19\n# suites 0\n# pass 18\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 14393.057214",
    "ms": 14463,
-   "expect": "sandbox.exec:exit:1|0",
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true,
    "flaky": {
     "tests": [
      "pinned browser planning planning preserves resource lifecycle"

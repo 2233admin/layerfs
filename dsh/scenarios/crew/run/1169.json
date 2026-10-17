@@ -1,5 +1,5 @@
 {
- "step": "I1c-046 I-11 I-12 product build and syntax before tests commit",
+ "step": "I1c-047 I-11 I-12 product build and syntax before tests unmount",
  "agent": "insight-a",
  "kind": "history",
  "branch": null,
@@ -7,18 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 19,
+ "ms": 7,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "I1c:/workspaces/3",
-   "message": "I1c I-11 I-12 product build and syntax before tests (exit 0)",
-   "force": false,
-   "commit": "12fa372582e62949ac7dd36c9b51ee005ccb3f1fcd06bd2813d690a519e0e85d52",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

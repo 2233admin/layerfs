@@ -9,7 +9,7 @@
  "output": null,
  "ms": 20,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W1b 076 W-04: actual delayed filter and comment browser navigation proof (exit 0)",
    "force": false,
    "commit": "1252fcff1e47abf0bec46b6a063a3b6af79c00c83d7669f5631c4abc51f5308b0e",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

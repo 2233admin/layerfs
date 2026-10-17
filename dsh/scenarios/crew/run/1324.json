@@ -1,22 +1,22 @@
 {
- "step": "I1d-177 I-13: prepare async suggestion geometry regression unmount",
+ "step": "I1d-178 I-13: diagnose original async suggestion Save geometry mount",
  "agent": "insight-a",
  "kind": "history",
- "branch": null,
+ "branch": "insight.7",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 7,
+ "ms": 18,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "I1d:/workspaces/31",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "mount",
+   "branch": "insight.7",
+   "ws": "I1d:/workspaces/32",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

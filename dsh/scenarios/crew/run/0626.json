@@ -1,6 +1,7 @@
 {
  "step": "W1b-084 W-04: frozen counter identity and production file ceiling audit",
  "agent": "work-a",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "    },\n    {\n      \"path\": \"packages/cli/src/commands/insight-search.js\",\n      \"physicalLines\": 122\n    },\n    {\n      \"path\": \"packages/server/src/modules/work/issues.js\",\n      \"physicalLines\": 121\n    }\n  ],\n  \"ok\": true\n}",
  "ms": 218,
- "expect": [
-  "sandbox.exec:exit:0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,9 @@
    "exit": 0,
    "output": "    },\n    {\n      \"path\": \"packages/cli/src/commands/insight-search.js\",\n      \"physicalLines\": 122\n    },\n    {\n      \"path\": \"packages/server/src/modules/work/issues.js\",\n      \"physicalLines\": 121\n    }\n  ],\n  \"ok\": true\n}",
    "ms": 218,
-   "expect": "sandbox.exec:exit:0"
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

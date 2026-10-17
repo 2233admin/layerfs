@@ -9,7 +9,7 @@
  "output": null,
  "ms": 23,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W2 120 W-M3 rebuilt automatic JSX real Chromium pointer proof (exit 0)",
    "force": false,
    "commit": "123cfe55dfab0e37fbd341f419b36d4180b6399e85b1b0cb8f41b1c92970c3f9cf",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

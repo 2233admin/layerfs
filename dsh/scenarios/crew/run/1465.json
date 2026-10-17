@@ -1,22 +1,22 @@
 {
- "step": "lead-502 A03 prepare tests: terminal acceptance unmount",
+ "step": "lead-503 A04 shared tests: fresh acceptance Workspace",
  "agent": "root",
  "kind": "history",
- "branch": null,
+ "branch": "acceptance.2",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 6,
+ "ms": 21,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "lead:/workspaces/84",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "mount",
+   "branch": "acceptance.2",
+   "ws": "lead:/workspaces/85",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

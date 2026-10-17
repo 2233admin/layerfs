@@ -1,6 +1,7 @@
 {
  "step": "lead-061 L0: lifecycle integration install build tests and clean-stop proof",
  "agent": "root",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 50.3575\n{\"ok\":true,\"checks\":[\"real server readiness\",\"HTTP health\",\"bounded SIGTERM clean exit\"]}",
  "ms": 6903,
- "expect": [
-  "sandbox.exec:exit:0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,9 @@
    "exit": 0,
    "output": "  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 50.3575\n{\"ok\":true,\"checks\":[\"real server readiness\",\"HTTP health\",\"bounded SIGTERM clean exit\"]}",
    "ms": 6903,
-   "expect": "sandbox.exec:exit:0"
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

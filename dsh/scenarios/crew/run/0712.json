@@ -1,6 +1,7 @@
 {
  "step": "W1b-139 W-06: canonical Markdown CLI and frozen census checkpoint",
  "agent": "work-a",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 1,
  "output": "# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 6847.101003\nnpm error Lifecycle script `test` failed with error:\nnpm error code 1\nnpm error path /workspaces/32/packages/cli\nnpm error workspace @crew/cli@0.1.0\nnpm error location /workspaces/32/packages/cli\nnpm error command failed\nnpm error command sh -c node --test test/*.test.js",
  "ms": 7044,
- "expect": [
-  "sandbox.exec:exit:1"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,9 @@
    "exit": 1,
    "output": "# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 6847.101003\nnpm error Lifecycle script `test` failed with error:\nnpm error code 1\nnpm error path /workspaces/32/packages/cli\nnpm error workspace @crew/cli@0.1.0\nnpm error location /workspaces/32/packages/cli\nnpm error command failed\nnpm error command sh -c node --test test/*.test.js",
    "ms": 7044,
-   "expect": "sandbox.exec:exit:1"
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

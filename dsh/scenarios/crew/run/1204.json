@@ -1,5 +1,5 @@
 {
- "step": "I1c-086 I-11 I-12 final frozen per-file hash physical census and live versus defunct custody commit",
+ "step": "I1c-087 I-11 I-12 final frozen per-file hash physical census and live versus defunct custody unmount",
  "agent": "insight-a",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 8,
+ "ms": 6,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "I1c:/workspaces/14",
-   "message": "I1c I-11 I-12 final frozen per-file hash physical census and live versus defunct custody (exit 0)",
-   "force": false,
-   "commit": "1269ae883252f79f230a4a73dfca02b8a3d043a7bba10a02b0c10426f30e454921",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

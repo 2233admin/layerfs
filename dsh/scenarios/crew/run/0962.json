@@ -9,7 +9,7 @@
  "output": null,
  "ms": 10,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "W1c 51 W10: prepare W1 draft changes and focused pure and existing browser proofs (exit 1)",
    "force": false,
    "commit": "12ee39e60dfa8617cf23c10b7583b2d4423ec89392f788b0e2564fc9646a6dd982",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

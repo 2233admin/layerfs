@@ -1,24 +1,22 @@
 {
- "step": "lead-434 Integration: final complete source with current main and synchronous People teardown proof",
+ "step": "lead-435 Integration: publish complete10005 production source with all package scopes passed and preserved current main",
  "agent": "root",
  "kind": "history",
- "branch": null,
+ "branch": "int-final-qualified.1",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 23,
+ "ms": 25,
  "expect": [
-  "branch.merge:Merged"
+  "branch.publish:Added"
  ],
  "calls": [
   {
-   "op": "merge",
-   "a": "people-action-lifecycle-p1f.1",
-   "b": "main",
-   "name": "int-final-qualified.1",
-   "message": "lead: preserve current main and integrate proven exact synchronous People action teardown; web177 pass, unchanged shared89 server296 CLI62 receipts reused by scope",
-   "expect": "branch.merge:Merged"
+   "op": "publish",
+   "branch": "int-final-qualified.1",
+   "commit": null,
+   "expect": "branch.publish:Added"
   }
  ]
 }

@@ -1,6 +1,7 @@
 {
  "step": "lead-271 L0 auth state API errors deep-link native browser and paged overview changed proof",
  "agent": "root",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 1,
  "output": "  duration_ms: 0.433167\n  type: 'test'\n  ...\n1..12\n# tests 12\n# suites 0\n# pass 11\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 11735.496547",
  "ms": 17294,
- "expect": [
-  "sandbox.exec:exit:1|0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,10 @@
    "exit": 1,
    "output": "  duration_ms: 0.433167\n  type: 'test'\n  ...\n1..12\n# tests 12\n# suites 0\n# pass 11\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 11735.496547",
    "ms": 17294,
-   "expect": "sandbox.exec:exit:1|0",
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true,
    "flaky": {
     "tests": [
      "actual pinned browser authenticates deep links protects abandoned forms and recovers a failed session check"

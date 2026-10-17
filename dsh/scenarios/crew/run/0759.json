@@ -1,6 +1,7 @@
 {
  "step": "W2b-111 prepare planning bundle and syntax before tests",
  "agent": "work-b",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":216,\"ok\":true}",
  "ms": 5066,
- "expect": [
-  "sandbox.exec:exit:0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,9 @@
    "exit": 0,
    "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":216,\"ok\":true}",
    "ms": 5066,
-   "expect": "sandbox.exec:exit:0"
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

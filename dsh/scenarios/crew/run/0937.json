@@ -9,7 +9,7 @@
  "output": null,
  "ms": 9,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "W1c 41 W09: prepare changed browser fixture and full affected web checkpoint (exit 0)",
    "force": false,
    "commit": "1226b10ceac802906d16e7653b6282ed4a8c464ab8edcab546b313008e7bfcf952",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

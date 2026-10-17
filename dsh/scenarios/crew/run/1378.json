@@ -1,26 +1,24 @@
 {
- "step": "P1f-023 people action lifetime: sandbox.exec",
+ "step": "P1f-024 people action lifetime: sandbox.commit",
  "agent": "people",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'node --test --test-name-pattern='\\''pinned browser people action'\\'' packages/web/test/people-admin-browser.test.js'",
- "exit": 1,
- "output": "    async Test.run (node:internal/test_runner/test:1054:7)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 2140.469709",
- "ms": 2221,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 8,
  "expect": [
-  "sandbox.exec:exit:1"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "P1f:/workspaces/3",
-   "command": "timeout 110 bash -c 'node --test --test-name-pattern='\\''pinned browser people action'\\'' packages/web/test/people-admin-browser.test.js'",
-   "message": "original-source deterministic lifetime regression",
-   "exit": 1,
-   "output": "    async Test.run (node:internal/test_runner/test:1054:7)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 2140.469709",
-   "ms": 2221,
-   "expect": "sandbox.exec:exit:1"
+   "message": "P1f original-source deterministic lifetime regression (exit 1)",
+   "force": false,
+   "commit": "12c4bb2be8250b6323fb52ee2e39b0fd0665f6d924b346249697ec352b6f8b1e72",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

@@ -1,22 +1,22 @@
 {
- "step": "lead-490 A00 revision2: fresh acceptance Branch from repaired main32911c5f; first failed campaign immutable",
+ "step": "lead-491 A01 reinstall: fresh acceptance Workspace",
  "agent": "root",
  "kind": "history",
- "branch": null,
+ "branch": "acceptance.2",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 21,
+ "ms": 30,
  "expect": [
-  "branch.fork:Forked"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "fork",
-   "name": "acceptance.2",
-   "from": "main",
-   "expect": "branch.fork:Forked"
+   "op": "mount",
+   "branch": "acceptance.2",
+   "ws": "lead:/workspaces/82",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

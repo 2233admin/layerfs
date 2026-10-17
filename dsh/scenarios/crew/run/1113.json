@@ -1,22 +1,24 @@
 {
- "step": "P1e-081 P1e corrected people HTTP Chromium state proof unmount",
- "agent": "people",
+ "step": "lead-330 L0: merge completed I1b test hardening with isolated acceptance tooling",
+ "agent": "root",
  "kind": "history",
  "branch": null,
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 9,
+ "ms": 98,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "branch.merge:Merged"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "P1e:/workspaces/14",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "merge",
+   "a": "lead-acceptance-review.1",
+   "b": "insight.5",
+   "name": "int-depth-diagnostics",
+   "message": "lead: combine A13 maintained-file census and changed actual saved-filter POST proof",
+   "expect": "branch.merge:Merged"
   }
  ]
 }

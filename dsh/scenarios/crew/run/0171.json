@@ -1,6 +1,7 @@
 {
  "step": "W1-0091 016 W-M3 fresh Workspace unchanged data executable CLI read proof exec",
  "agent": "work-a",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "{\"mode\":\"issue-fresh-remount-read-only\",\"checks\":[{\"name\":\"issue fields labels parent comments and relations survive new server process\",\"ok\":true},{\"name\":\"saved executable issue CLI reads persisted fields after fresh Workspace mount\",\"ok\":true}],\"ok\":true}",
  "ms": 703,
- "expect": [
-  "sandbox.exec:exit:0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,9 @@
    "exit": 0,
    "output": "{\"mode\":\"issue-fresh-remount-read-only\",\"checks\":[{\"name\":\"issue fields labels parent comments and relations survive new server process\",\"ok\":true},{\"name\":\"saved executable issue CLI reads persisted fields after fresh Workspace mount\",\"ok\":true}],\"ok\":true}",
    "ms": 703,
-   "expect": "sandbox.exec:exit:0"
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

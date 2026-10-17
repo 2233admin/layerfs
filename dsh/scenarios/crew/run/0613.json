@@ -9,7 +9,7 @@
  "output": null,
  "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "W1b 069 W-04: browser proof after diagnosed cookie bootstrap correction (exit 1)",
    "force": false,
    "commit": "12257d228129009884f34debb755850d48d55037136a5723b9605e86d75598dd92",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

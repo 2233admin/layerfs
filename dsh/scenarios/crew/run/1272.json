@@ -1,5 +1,5 @@
 {
- "step": "I1d-141 I-13: final full CLI ownership coverage commit",
+ "step": "I1d-142 I-13: final full CLI ownership coverage unmount",
  "agent": "insight-a",
  "kind": "history",
  "branch": null,
@@ -9,17 +9,14 @@
  "output": null,
  "ms": 7,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "I1d:/workspaces/21",
-   "message": "I1d I-13: final full CLI ownership coverage (exit 0)",
-   "force": false,
-   "commit": "12c9885fa6eacbccc4b8bae79cbe029e63dcf2708e138fdf967dd3a12d28004086",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

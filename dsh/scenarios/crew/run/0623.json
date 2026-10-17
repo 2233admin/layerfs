@@ -9,7 +9,7 @@
  "output": null,
  "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "W1b 081 W-04: full affected server CLI regression and production census (exit 0)",
    "force": false,
    "commit": "12b59bf05e2976457ec14cac40103b49379a8ea640ed664ef303e6c914ce0c0fd6",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

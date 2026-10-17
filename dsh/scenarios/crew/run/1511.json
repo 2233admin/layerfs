@@ -1,26 +1,24 @@
 {
- "step": "lead-549 A07 CLI tests: frozen acceptance command",
+ "step": "lead-550 A07 CLI tests: capture completed Bash including any failure",
  "agent": "root",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'acceptance.3'\"'\"' CREW_WORKSPACE='\"'\"'e9298057e08ab3b01b6c4aa8a216323c8dde53cad5cf6b11e7e75b24fc4ab075'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-549 A07 CLI tests: frozen acceptance command'\"'\"'; npm test --workspace packages/cli'",
- "exit": 0,
- "output": "  duration_ms: 157.190167\n  type: 'test'\n  ...\n1..62\n# tests 62\n# suites 0\n# pass 62\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 8831.336921",
- "ms": 9050,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 9,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "lead:/workspaces/96",
-   "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'acceptance.3'\"'\"' CREW_WORKSPACE='\"'\"'e9298057e08ab3b01b6c4aa8a216323c8dde53cad5cf6b11e7e75b24fc4ab075'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-549 A07 CLI tests: frozen acceptance command'\"'\"'; npm test --workspace packages/cli'",
-   "message": "A07 CLI tests: frozen acceptance command",
-   "exit": 0,
-   "output": "  duration_ms: 157.190167\n  type: 'test'\n  ...\n1..62\n# tests 62\n# suites 0\n# pass 62\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 8831.336921",
-   "ms": 9050,
-   "expect": "sandbox.exec:exit:0"
+   "message": "lead A07 CLI tests frozen acceptance (exit 0)",
+   "force": false,
+   "commit": "1232418b3f91f4222f25e915f974abbfb8577b06ca072a469baa2070508262d124",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

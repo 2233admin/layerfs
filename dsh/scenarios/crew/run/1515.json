@@ -1,26 +1,24 @@
 {
- "step": "lead-553 A08 LOC: frozen acceptance command",
+ "step": "lead-554 A08 LOC: capture completed Bash including any failure",
  "agent": "root",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'acceptance.3'\"'\"' CREW_WORKSPACE='\"'\"'011cf8c05d4cd391a4c00e44772c561bf54e1809f27f9af82ea9933d4bed3321'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-553 A08 LOC: frozen acceptance command'\"'\"'; node scripts/count-loc.mjs --check'",
- "exit": 0,
- "output": "    {\n      \"path\": \"packages/web/src/session-check.js\",\n      \"package\": \"web\",\n      \"prod\": 92\n    },\n    {\n      \"path\": \"packages/web/src/store.js\",\n      \"package\": \"web\",\n      \"prod\": 10\n    }\n  ]\n}",
- "ms": 401,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 8,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "lead:/workspaces/97",
-   "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'acceptance.3'\"'\"' CREW_WORKSPACE='\"'\"'011cf8c05d4cd391a4c00e44772c561bf54e1809f27f9af82ea9933d4bed3321'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-553 A08 LOC: frozen acceptance command'\"'\"'; node scripts/count-loc.mjs --check'",
-   "message": "A08 LOC: frozen acceptance command",
-   "exit": 0,
-   "output": "    {\n      \"path\": \"packages/web/src/session-check.js\",\n      \"package\": \"web\",\n      \"prod\": 92\n    },\n    {\n      \"path\": \"packages/web/src/store.js\",\n      \"package\": \"web\",\n      \"prod\": 10\n    }\n  ]\n}",
-   "ms": 401,
-   "expect": "sandbox.exec:exit:0"
+   "message": "lead A08 LOC frozen acceptance (exit 0)",
+   "force": false,
+   "commit": "1232418b3f91f4222f25e915f974abbfb8577b06ca072a469baa2070508262d124",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

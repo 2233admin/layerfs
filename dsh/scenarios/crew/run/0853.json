@@ -9,7 +9,7 @@
  "output": null,
  "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "P1d 024 P-05 final audit syntax (exit 0)",
    "force": false,
    "commit": "125462072740507bb4a2fe71e403499fbd4ccc57c2d6cb912690cbbb0ed815c469",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

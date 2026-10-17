@@ -1,5 +1,5 @@
 {
- "step": "lead-350 T1: serial create I1c Sandbox",
+ "step": "lead-351 P06 P07 P08: merge permanently closed P1e exact current generation with all integrated depth",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,15 +7,18 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 333,
+ "ms": 117,
  "expect": [
-  "sandbox.create:Ready"
+  "branch.merge:Merged"
  ],
  "calls": [
   {
-   "op": "create",
-   "for": "insight-a",
-   "expect": "sandbox.create:Ready"
+   "op": "merge",
+   "a": "int-depth-diagnostics",
+   "b": "people.6",
+   "name": "int-depth-admin",
+   "message": "lead: integrate completed people administration with current source and saved-filter test hardening",
+   "expect": "branch.merge:Merged"
   }
  ]
 }

@@ -9,7 +9,7 @@
  "output": null,
  "ms": 15,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W1 013 W-M2 complete issue syntax bundle HTTP shared web CLI checks (exit 0)",
    "force": false,
    "commit": "12eca467eaed3b4cfefa741f206faf5bd1598ddb518a3c96fe0f255047ba0edc34",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

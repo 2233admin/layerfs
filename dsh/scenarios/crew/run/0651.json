@@ -1,6 +1,7 @@
 {
  "step": "W1b-111 W-04: final affected package regression build and frozen source census",
  "agent": "work-a",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "    {\n      \"path\": \"packages/web/src/router.js\",\n      \"package\": \"web\",\n      \"prod\": 22\n    },\n    {\n      \"path\": \"packages/web/src/store.js\",\n      \"package\": \"web\",\n      \"prod\": 10\n    }\n  ]\n}",
  "ms": 36558,
- "expect": [
-  "sandbox.exec:exit:0|1"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,10 @@
    "exit": 0,
    "output": "    {\n      \"path\": \"packages/web/src/router.js\",\n      \"package\": \"web\",\n      \"prod\": 22\n    },\n    {\n      \"path\": \"packages/web/src/store.js\",\n      \"package\": \"web\",\n      \"prod\": 10\n    }\n  ]\n}",
    "ms": 36558,
-   "expect": "sandbox.exec:exit:0|1",
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true,
    "flaky": {
     "tests": [
      "actual pinned browser uses keyboard query completions safe results saved-filter form and live pause"

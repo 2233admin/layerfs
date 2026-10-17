@@ -1,22 +1,22 @@
 {
- "step": "lead-575 A13 audit: terminal acceptance unmount",
+ "step": "lead-576 A14 fresh remount: fresh acceptance Workspace",
  "agent": "root",
  "kind": "history",
- "branch": null,
+ "branch": "acceptance.3",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 7,
+ "ms": 29,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "lead:/workspaces/102",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "mount",
+   "branch": "acceptance.3",
+   "ws": "lead:/workspaces/103",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

@@ -1,5 +1,5 @@
 {
- "step": "I1c-065 I-11 I-12 build syntax and Python AST before proof commit",
+ "step": "I1c-066 I-11 I-12 build syntax and Python AST before proof unmount",
  "agent": "insight-a",
  "kind": "history",
  "branch": null,
@@ -7,18 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 16,
+ "ms": 7,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "I1c:/workspaces/8",
-   "message": "I1c I-11 I-12 build syntax and Python AST before proof (exit 0)",
-   "force": false,
-   "commit": "12a02b01b23604b8d82b376e0f9cdf0e690ac5067423019ec9f0fdc22a1a9aa404",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

@@ -1,6 +1,7 @@
 {
  "step": "P1b-0131 P1b 024 P-M3 source census physical scope and process custody exec",
  "agent": "people",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": " 6275     1 chrome_crashpad\n 6278     1 chrome_crashpad\n 6279     1 chromium\n 6281     1 chromium\n 6300     1 chromium\n 6301     1 chromium\n 6315     1 chromium\n 6349     1 chromium\n 6370     1 chromium\n 6385     1 chromium\n 6442     0 timeout\n 6448  6442 ps",
  "ms": 251,
- "expect": [
-  "sandbox.exec:exit:0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,9 @@
    "exit": 0,
    "output": " 6275     1 chrome_crashpad\n 6278     1 chrome_crashpad\n 6279     1 chromium\n 6281     1 chromium\n 6300     1 chromium\n 6301     1 chromium\n 6315     1 chromium\n 6349     1 chromium\n 6370     1 chromium\n 6385     1 chromium\n 6442     0 timeout\n 6448  6442 ps",
    "ms": 251,
-   "expect": "sandbox.exec:exit:0"
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

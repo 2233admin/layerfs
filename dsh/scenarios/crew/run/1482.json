@@ -1,5 +1,5 @@
 {
- "step": "lead-520 Formal2 fixture repair519 PythonAST and unchanged10005counter passed; retained failed512; next complete proof on new main identity",
+ "step": "lead-521 Formal2 fixture repair: terminal unmount before corrected fixture publication",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 31,
+ "ms": 30,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/89",
-   "message": "lead 520 Formal2 fixture repair519 PythonAST and unchanged10005counter passed; retained failed512; next complete proof on new main identity (exit 0)",
-   "force": false,
-   "commit": "1265ae579d077140ca62cca80b1d6a0ffc2a4609abf10755c9f336768f2a728710",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

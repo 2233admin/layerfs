@@ -1,6 +1,7 @@
 {
  "step": "I1-144 I-M3 actual browser saved-filter stale-edit recovery and access-loss custody",
  "agent": "insight-a",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "  duration_ms: 5243.726253\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 5624.159628",
  "ms": 9847,
- "expect": [
-  "sandbox.exec:exit:0|1"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,10 @@
    "exit": 0,
    "output": "  duration_ms: 5243.726253\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 5624.159628",
    "ms": 9847,
-   "expect": "sandbox.exec:exit:0|1",
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true,
    "flaky": {
     "tests": [
      "actual pinned browser uses keyboard query completions safe results saved-filter form and live pause"

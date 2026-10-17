@@ -1,22 +1,22 @@
 {
- "step": "lead-555 A08 LOC: terminal acceptance unmount",
+ "step": "lead-556 A09 seed: fresh acceptance Workspace",
  "agent": "root",
  "kind": "history",
- "branch": null,
+ "branch": "acceptance.3",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 7,
+ "ms": 27,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "lead:/workspaces/97",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "mount",
+   "branch": "acceptance.3",
+   "ws": "lead:/workspaces/98",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

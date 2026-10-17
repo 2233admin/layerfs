@@ -1,5 +1,5 @@
 {
- "step": "lead-406 Retain405 exit1: actual cross-tab expiry and destination restoration passed; manual check200 but viewport-y geometry assertion failed;9 ownership and focus passed, fixture isolation under rev…",
+ "step": "lead-407 L0: terminal unmount retained405 geometry assertion failure",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,18 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 45,
+ "ms": 33,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/65",
-   "message": "lead 406 Retain405 exit1: actual cross-tab expiry and destination restoration passed; manual check200 but viewport-y geometry assertion failed;9 ownership and focus passed, fixture isolation under rev…",
-   "force": false,
-   "commit": "12cada1d5680bf5758fc6685a79d058ed66716e25ed403b6c59f7b37c12a2e1159",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

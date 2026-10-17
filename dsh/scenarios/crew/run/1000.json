@@ -1,6 +1,7 @@
 {
  "step": "I2c-083 I-09: final source counter physical and live-process census",
  "agent": "insight-b",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "omm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8172,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8200,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8222,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8236,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8273,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":8275,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":8278,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8279,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8297,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8298,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8310,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8347,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8367,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8381,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8419,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":8422,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":8423,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8425,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8444,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8445,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8457,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8493,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8513,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8527,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"}]}",
  "ms": 408,
- "expect": [
-  "sandbox.exec:exit:0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,9 @@
    "exit": 0,
    "output": "omm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8172,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8200,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8222,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8236,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8273,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":8275,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":8278,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8279,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8297,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8298,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8310,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8347,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8367,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8381,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8419,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":8422,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chrome_crashpad\",\"args\":\"[chrome_crashpad] <defunct>\"},{\"pid\":8423,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8425,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8444,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8445,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8457,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8493,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8513,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"},{\"pid\":8527,\"ppid\":1,\"stat\":\"Z\",\"comm\":\"chromium\",\"args\":\"[chromium] <defunct>\"}]}",
    "ms": 408,
-   "expect": "sandbox.exec:exit:0"
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

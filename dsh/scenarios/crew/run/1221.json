@@ -1,26 +1,24 @@
 {
- "step": "I1d-091 I-13: focused canonical view and actual ownership CLI proof exec",
+ "step": "I1d-092 I-13: focused canonical view and actual ownership CLI proof commit",
  "agent": "insight-a",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'node --test packages/web/test/filter-view.test.js packages/cli/test/search.test.js'",
- "exit": 0,
- "output": "  duration_ms: 0.140375\n  type: 'test'\n  ...\n1..15\n# tests 15\n# suites 0\n# pass 15\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 4234.105585",
- "ms": 4302,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 9,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "I1d:/workspaces/5",
-   "command": "timeout 110 bash -c 'node --test packages/web/test/filter-view.test.js packages/cli/test/search.test.js'",
-   "message": "focused canonical view and actual ownership CLI proof",
-   "exit": 0,
-   "output": "  duration_ms: 0.140375\n  type: 'test'\n  ...\n1..15\n# tests 15\n# suites 0\n# pass 15\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 4234.105585",
-   "ms": 4302,
-   "expect": "sandbox.exec:exit:0"
+   "message": "I1d I-13: focused canonical view and actual ownership CLI proof (exit 0)",
+   "force": false,
+   "commit": "12411eaa65400a6fbf9df83b4497990e5b61ea38f9f5e3e7b76c6d7da5d2225980",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

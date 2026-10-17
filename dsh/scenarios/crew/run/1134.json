@@ -1,22 +1,22 @@
 {
- "step": "P1e-101 P1e final server package unmount",
+ "step": "P1e-102 P1e final CLI package regression mount",
  "agent": "people",
  "kind": "history",
- "branch": null,
+ "branch": "people.6",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 8,
+ "ms": 27,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "P1e:/workspaces/22",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "mount",
+   "branch": "people.6",
+   "ws": "P1e:/workspaces/23",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

@@ -1,26 +1,24 @@
 {
- "step": "lead-442 A02 build: frozen acceptance command",
+ "step": "lead-443 A02 build: capture completed Bash including any failure",
  "agent": "root",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'acceptance'\"'\"' CREW_WORKSPACE='\"'\"'8b5063293b59a2777710e042fc6dfa2bf96c4f6ce218e586bacd01bba0f1343a'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-442 A02 build: frozen acceptance command'\"'\"'; npm run build'",
- "exit": 0,
- "output": "\n> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs",
- "ms": 508,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 15,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "lead:/workspaces/71",
-   "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'acceptance'\"'\"' CREW_WORKSPACE='\"'\"'8b5063293b59a2777710e042fc6dfa2bf96c4f6ce218e586bacd01bba0f1343a'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-442 A02 build: frozen acceptance command'\"'\"'; npm run build'",
-   "message": "A02 build: frozen acceptance command",
-   "exit": 0,
-   "output": "\n> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs",
-   "ms": 508,
-   "expect": "sandbox.exec:exit:0"
+   "message": "lead A02 build frozen acceptance (exit 0)",
+   "force": false,
+   "commit": "12535515b450b590a45aa2c1f34c9cd2462d87f0123b8e719815d289b9c6666e34",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

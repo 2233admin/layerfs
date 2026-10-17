@@ -1,5 +1,5 @@
 {
- "step": "lead-364 I13: fresh successor source for exact CLI ownership and saved-filter URL return completion",
+ "step": "lead-365 T1: serial create I1d Sandbox",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,16 +7,15 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 17,
+ "ms": 295,
  "expect": [
-  "branch.fork:Forked"
+  "sandbox.create:Ready"
  ],
  "calls": [
   {
-   "op": "fork",
-   "name": "insight.7",
-   "from": "int-filter-workflow.1#0",
-   "expect": "branch.fork:Forked"
+   "op": "create",
+   "for": "insight-a",
+   "expect": "sandbox.create:Ready"
   }
  ]
 }

@@ -1,26 +1,24 @@
 {
- "step": "I1d-184 I-13: build stable suggestion slot and prepare actual geometry proof exec",
+ "step": "I1d-185 I-13: build stable suggestion slot and prepare actual geometry proof commit",
  "agent": "insight-a",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests && python3 -c \"import ast; [ast.parse(open(p).read()) for p in ['\"'\"'packages/web/test/filter-browser.py'\"'\"','\"'\"'packages/web/test/filter-view-browser.py'\"'\"']]\"'",
- "exit": 0,
- "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":259,\"ok\":true}",
- "ms": 6346,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 17,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "I1d:/workspaces/34",
-   "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests && python3 -c \"import ast; [ast.parse(open(p).read()) for p in ['\"'\"'packages/web/test/filter-browser.py'\"'\"','\"'\"'packages/web/test/filter-view-browser.py'\"'\"']]\"'",
-   "message": "build stable suggestion slot and prepare actual geometry proof",
-   "exit": 0,
-   "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":259,\"ok\":true}",
-   "ms": 6346,
-   "expect": "sandbox.exec:exit:0"
+   "message": "I1d I-13: build stable suggestion slot and prepare actual geometry proof (exit 0)",
+   "force": false,
+   "commit": "126ed15e7e474d31698e2b3efcdb9b32e01f21ad4864916a29a734b6270d7d6365",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

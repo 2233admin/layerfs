@@ -1,22 +1,22 @@
 {
- "step": "lead-494 A01 reinstall: terminal acceptance unmount",
+ "step": "lead-495 A02 build: fresh acceptance Workspace",
  "agent": "root",
  "kind": "history",
- "branch": null,
+ "branch": "acceptance.2",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 9,
+ "ms": 30,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "lead:/workspaces/82",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "mount",
+   "branch": "acceptance.2",
+   "ws": "lead:/workspaces/83",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

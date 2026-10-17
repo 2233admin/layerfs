@@ -1,5 +1,5 @@
 {
- "step": "lead-371 Retain first delayed-heading regression exit1 raw370: issue h1 rendered but original Crew title and BODY focus persist; build and prepare passed; product unchanged",
+ "step": "lead-372 L0: terminal unmount initial failed focus regression cycle",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,18 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 38,
+ "ms": 29,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/55",
-   "message": "lead 371 Retain first delayed-heading regression exit1 raw370: issue h1 rendered but original Crew title and BODY focus persist; build and prepare passed; product unchanged (exit 1)",
-   "force": false,
-   "commit": "12abb33174ef2bd8ff90ca1683df6ed53fe9837f0ff84ae2f2aff5adaebe8b79c7",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

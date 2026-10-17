@@ -1,5 +1,5 @@
 {
- "step": "lead-582 A15 process audit: capture completed Bash including any failure",
+ "step": "lead-583 A15 process audit: terminal acceptance unmount",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 11,
+ "ms": 5,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/104",
-   "message": "lead A15 process audit frozen acceptance (exit 0)",
-   "force": false,
-   "commit": "126de1a51d38bea94eae673832fe72f7856b86c37dec18200e6b79368681c91ca3",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

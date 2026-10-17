@@ -9,7 +9,7 @@
  "output": null,
  "ms": 17,
  "expect": [
-  "sandbox.commit:Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "P1b 017 P-M3 final build and syntax preparation (exit 0)",
    "force": false,
    "commit": "1216903ea3b386216addf14e2f171a84333622283ec8126ab853cd39fe6b6e54dc",
-   "expect": "sandbox.commit:Committed"
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

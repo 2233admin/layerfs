@@ -1,5 +1,5 @@
 {
- "step": "lead-538 A04 shared tests: capture completed Bash including any failure",
+ "step": "lead-539 A04 shared tests: terminal acceptance unmount",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 7,
+ "ms": 5,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/93",
-   "message": "lead A04 shared tests frozen acceptance (exit 0)",
-   "force": false,
-   "commit": "1232418b3f91f4222f25e915f974abbfb8577b06ca072a469baa2070508262d124",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

@@ -1,6 +1,7 @@
 {
  "step": "lead-209 W-M5 final work integration install census build syntax all package tests",
  "agent": "root",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "  duration_ms: 0.456083\n  type: 'test'\n  ...\n1..106\n# tests 106\n# suites 0\n# pass 106\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 18718.691176",
  "ms": 40658,
- "expect": [
-  "sandbox.exec:exit:0|1"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,10 @@
    "exit": 0,
    "output": "  duration_ms: 0.456083\n  type: 'test'\n  ...\n1..106\n# tests 106\n# suites 0\n# pass 106\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 18718.691176",
    "ms": 40658,
-   "expect": "sandbox.exec:exit:0|1",
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true,
    "flaky": {
     "tests": [
      "pinned browser planning planning preserves resource lifecycle",

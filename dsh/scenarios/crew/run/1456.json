@@ -1,5 +1,5 @@
 {
- "step": "lead-493 A01 reinstall: capture completed Bash including any failure",
+ "step": "lead-494 A01 reinstall: terminal acceptance unmount",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,18 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 408,
+ "ms": 9,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/82",
-   "message": "lead A01 reinstall frozen acceptance (exit 0)",
-   "force": false,
-   "commit": "12f03a6a9f5423d371bc0cf60f0c7d9fed5c253b5474cbb4036e179122c10e4b12",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

@@ -1,6 +1,7 @@
 {
  "step": "W2-0096 W-M3 real Chromium pointer drag persists status",
  "agent": "work-b",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 1,
  "output": "#11 0xaaaad68398d0 <unknown>\n#12 0xaaaad6839adc <unknown>\n#13 0xaaaad684dc3c <unknown>\n#14 0xffff9e27ee9c <unknown>\n#15 0xffff9e2e7b18 <unknown>\n\n\n    at child (file:///workspaces/22/scripts/acceptance-runtime.mjs:14:77)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async file:///workspaces/22/[eval1]:13:16\n\nNode.js v22.23.1",
  "ms": 17940,
- "expect": [
-  "sandbox.exec:exit:1"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,10 @@
    "exit": 1,
    "output": "#11 0xaaaad68398d0 <unknown>\n#12 0xaaaad6839adc <unknown>\n#13 0xaaaad684dc3c <unknown>\n#14 0xffff9e27ee9c <unknown>\n#15 0xffff9e2e7b18 <unknown>\n\n\n    at child (file:///workspaces/22/scripts/acceptance-runtime.mjs:14:77)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async file:///workspaces/22/[eval1]:13:16\n\nNode.js v22.23.1",
    "ms": 17940,
-   "expect": "sandbox.exec:exit:1"
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true
   }
  ]
 }

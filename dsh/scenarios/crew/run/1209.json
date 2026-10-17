@@ -1,21 +1,22 @@
 {
- "step": "lead-365 T1: serial create I1d Sandbox",
- "agent": "root",
+ "step": "I1d-080 I-13: record exact initial production census mount",
+ "agent": "insight-a",
  "kind": "history",
- "branch": null,
+ "branch": "insight.7",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 295,
+ "ms": 29,
  "expect": [
-  "sandbox.create:Ready"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "create",
-   "for": "insight-a",
-   "expect": "sandbox.create:Ready"
+   "op": "mount",
+   "branch": "insight.7",
+   "ws": "I1d:/workspaces/1",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

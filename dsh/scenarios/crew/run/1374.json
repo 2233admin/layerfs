@@ -1,22 +1,24 @@
 {
- "step": "lead-432 Integration: terminal unmount completed first combined CLI checkpoint",
- "agent": "root",
+ "step": "P1f-020 people action lifetime: sandbox.commit",
+ "agent": "people",
  "kind": "history",
  "branch": null,
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 18,
+ "ms": 17,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "lead:/workspaces/69",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "commit",
+   "ws": "P1f:/workspaces/2",
+   "message": "P1f prepare original-source regression (exit 0)",
+   "force": false,
+   "commit": "12c4bb2be8250b6323fb52ee2e39b0fd0665f6d924b346249697ec352b6f8b1e72",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

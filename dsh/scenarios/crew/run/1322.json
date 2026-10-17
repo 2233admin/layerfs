@@ -1,26 +1,24 @@
 {
- "step": "I1d-175 I-13: prepare async suggestion geometry regression exec",
+ "step": "I1d-176 I-13: prepare async suggestion geometry regression commit",
  "agent": "insight-a",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'npm run prepare-tests && python3 -c \"import ast; ast.parse(open('\"'\"'packages/web/test/filter-view-browser.py'\"'\"').read())\"'",
- "exit": 0,
- "output": "\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":259,\"ok\":true}",
- "ms": 5499,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 7,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "I1d:/workspaces/31",
-   "command": "timeout 110 bash -c 'npm run prepare-tests && python3 -c \"import ast; ast.parse(open('\"'\"'packages/web/test/filter-view-browser.py'\"'\"').read())\"'",
-   "message": "prepare async suggestion geometry regression",
-   "exit": 0,
-   "output": "\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":259,\"ok\":true}",
-   "ms": 5499,
-   "expect": "sandbox.exec:exit:0"
+   "message": "I1d I-13: prepare async suggestion geometry regression (exit 0)",
+   "force": false,
+   "commit": "1227091103d429ae5d2058379e2eee0ddab2740775457844a538cd3919666b9a24",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

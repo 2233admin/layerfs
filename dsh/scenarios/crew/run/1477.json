@@ -1,5 +1,5 @@
 {
- "step": "lead-514 A06 web tests: terminal acceptance unmount",
+ "step": "lead-516 Formal2 repair: isolate exact asynchronous request-observation fixture from unchanged final main",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,16 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 8,
+ "ms": 36,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "branch.fork:Forked"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "lead:/workspaces/87",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "fork",
+   "name": "lead-people-observation.1",
+   "from": "main",
+   "expect": "branch.fork:Forked"
   }
  ]
 }

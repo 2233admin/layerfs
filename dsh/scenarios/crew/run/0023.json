@@ -9,7 +9,7 @@
  "output": null,
  "ms": 30,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "lead 024 L0: published-main fresh-fork proof (exit 0)",
    "force": false,
    "commit": "122501d08289ce799b7c237c9fed44e596a37d4241977ac2264d968b4f0b885e80",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

@@ -1,5 +1,5 @@
 {
- "step": "P1e-125 P1e final owned process census unmount",
+ "step": "P1e-126 P1e sole permanent terminal close after original daemon streams saved",
  "agent": "people",
  "kind": "history",
  "branch": null,
@@ -7,16 +7,14 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 7,
+ "ms": 1339,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.close:Closed"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "P1e:/workspaces/26",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "close",
+   "expect": "sandbox.close:Closed"
   }
  ]
 }

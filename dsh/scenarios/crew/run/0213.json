@@ -1,6 +1,7 @@
 {
  "step": "W2-0100 W-M3 diagnose board body console and current API",
  "agent": "work-b",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "{\"assignee\": null, \"assigneeId\": null, \"createdAt\": \"2026-10-16T07:27:21.906Z\", \"createdBy\": \"16f1604d-b5eb-4b43-83e3-2be15fdf26bd\", \"creator\": {\"id\": \"16f1604d-b5eb-4b43-83e3-2be15fdf26bd\", \"name\": \"Browser\"}, \"description\": \"\", \"dueDate\": null, \"estimate\": null, \"id\": \"01f14b9d-52d9-4fb1-834d-e0aa9234df7f\", \"key\": \"BROW-1\", \"labels\": [], \"mentionedUserIds\": [], \"number\": 1, \"orgId\": \"fdc8e7ff-0653-417d-8925-121213051e3d\", \"parentId\": null, \"priority\": 0, \"projectId\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\", \"projectKey\": \"BROW\", \"rank\": 1024, \"statusCategory\": \"todo\", \"statusId\": \"6bc6de17-d3be-4270-a22a-2f341511f5c5\", \"statusName\": \"Todo\", \"title\": \"Drag with a real pointer\", \"updatedAt\": \"2026-10-16T07:27:21.906Z\"}], \"status\": {\"category\": \"todo\", \"id\": \"6bc6de17-d3be-4270-a22a-2f341511f5c5\", \"name\": \"Todo\", \"position\": 0, \"projectId\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\"}}, {\"issues\": [], \"status\": {\"category\": \"active\", \"id\": \"77be6d5b-168d-4e30-a2ee-6728abdd46a1\", \"name\": \"Doing\", \"position\": 1, \"projectId\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\"}}, {\"issues\": [], \"status\": {\"category\": \"done\", \"id\": \"5a6cb3c3-5625-49c0-a1a4-d3a055912844\", \"name\": \"Done\", \"position\": 2, \"projectId\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\"}}], \"permissions\": {\"write\": true}, \"project\": {\"archived\": false, \"createdAt\": \"2026-10-16T07:27:21.895Z\", \"description\": \"\", \"id\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\", \"key\": \"BROW\", \"name\": \"Browser board\", \"nextIssueNumber\": 2, \"orgId\": \"fdc8e7ff-0653-417d-8925-121213051e3d\", \"statuses\": [{\"category\": \"todo\", \"id\": \"6bc6de17-d3be-4270-a22a-2f341511f5c5\", \"name\": \"Todo\", \"position\": 0, \"projectId\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\"}, {\"category\": \"active\", \"id\": \"77be6d5b-168d-4e30-a2ee-6728abdd46a1\", \"name\": \"Doing\", \"position\": 1, \"projectId\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\"}, {\"category\": \"done\", \"id\": \"5a6cb3c3-5625-49c0-a1a4-d3a055912844\", \"name\": \"Done\", \"position\": 2, \"projectId\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\"}], \"updatedAt\": \"2026-10-16T07:27:21.895Z\"}}}",
  "ms": 4689,
- "expect": [
-  "sandbox.exec:exit:0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,9 @@
    "exit": 0,
    "output": "{\"assignee\": null, \"assigneeId\": null, \"createdAt\": \"2026-10-16T07:27:21.906Z\", \"createdBy\": \"16f1604d-b5eb-4b43-83e3-2be15fdf26bd\", \"creator\": {\"id\": \"16f1604d-b5eb-4b43-83e3-2be15fdf26bd\", \"name\": \"Browser\"}, \"description\": \"\", \"dueDate\": null, \"estimate\": null, \"id\": \"01f14b9d-52d9-4fb1-834d-e0aa9234df7f\", \"key\": \"BROW-1\", \"labels\": [], \"mentionedUserIds\": [], \"number\": 1, \"orgId\": \"fdc8e7ff-0653-417d-8925-121213051e3d\", \"parentId\": null, \"priority\": 0, \"projectId\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\", \"projectKey\": \"BROW\", \"rank\": 1024, \"statusCategory\": \"todo\", \"statusId\": \"6bc6de17-d3be-4270-a22a-2f341511f5c5\", \"statusName\": \"Todo\", \"title\": \"Drag with a real pointer\", \"updatedAt\": \"2026-10-16T07:27:21.906Z\"}], \"status\": {\"category\": \"todo\", \"id\": \"6bc6de17-d3be-4270-a22a-2f341511f5c5\", \"name\": \"Todo\", \"position\": 0, \"projectId\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\"}}, {\"issues\": [], \"status\": {\"category\": \"active\", \"id\": \"77be6d5b-168d-4e30-a2ee-6728abdd46a1\", \"name\": \"Doing\", \"position\": 1, \"projectId\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\"}}, {\"issues\": [], \"status\": {\"category\": \"done\", \"id\": \"5a6cb3c3-5625-49c0-a1a4-d3a055912844\", \"name\": \"Done\", \"position\": 2, \"projectId\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\"}}], \"permissions\": {\"write\": true}, \"project\": {\"archived\": false, \"createdAt\": \"2026-10-16T07:27:21.895Z\", \"description\": \"\", \"id\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\", \"key\": \"BROW\", \"name\": \"Browser board\", \"nextIssueNumber\": 2, \"orgId\": \"fdc8e7ff-0653-417d-8925-121213051e3d\", \"statuses\": [{\"category\": \"todo\", \"id\": \"6bc6de17-d3be-4270-a22a-2f341511f5c5\", \"name\": \"Todo\", \"position\": 0, \"projectId\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\"}, {\"category\": \"active\", \"id\": \"77be6d5b-168d-4e30-a2ee-6728abdd46a1\", \"name\": \"Doing\", \"position\": 1, \"projectId\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\"}, {\"category\": \"done\", \"id\": \"5a6cb3c3-5625-49c0-a1a4-d3a055912844\", \"name\": \"Done\", \"position\": 2, \"projectId\": \"37139ea8-c10b-4c63-8b4e-b0c0429ddcfc\"}], \"updatedAt\": \"2026-10-16T07:27:21.895Z\"}}}",
    "ms": 4689,
-   "expect": "sandbox.exec:exit:0"
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

@@ -1,5 +1,5 @@
 {
- "step": "lead-379 Retain changed focus proof378 exit1: delayed heading and deliberate focus passed; abandon case fixture wrongly expected literal Overview, rendered actual Your teams work together; no PASS cla…",
+ "step": "lead-380 L0: terminal unmount retained changed browser fixture failure378",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -9,16 +9,14 @@
  "output": null,
  "ms": 32,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/57",
-   "message": "lead 379 Retain changed focus proof378 exit1: delayed heading and deliberate focus passed; abandon case fixture wrongly expected literal Overview, rendered actual Your teams work together; no PASS cla…",
-   "force": false,
-   "commit": "127cd27d7a0208d7f6b22ce62c2aa15b46de972eb6bee201ca19992c9d7b6267c7",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

@@ -9,7 +9,7 @@
  "output": null,
  "ms": 16,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W1b 149 W-07: focused Markdown command selection and serialization proof (exit 0)",
    "force": false,
    "commit": "12fe04c0dec3ece24c38d916f660ef2e5f47cee48a8cebb2a30365251a72ad5b18",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

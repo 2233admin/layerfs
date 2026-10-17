@@ -1,22 +1,27 @@
 {
- "step": "P1f-018 people action lifetime: sandbox.mount",
+ "step": "P1f-019 people action lifetime: sandbox.exec",
  "agent": "people",
- "kind": "history",
- "branch": "people-action-lifecycle-p1f.1",
+ "verification": "off",
+ "kind": "replay",
+ "branch": null,
  "writes": null,
- "command": null,
- "exit": null,
- "output": null,
- "ms": 23,
- "expect": [
-  "sandbox.mount:Mounted"
- ],
+ "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests'",
+ "exit": 0,
+ "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":264,\"ok\":true}",
+ "ms": 6953,
+ "expect": [],
  "calls": [
   {
-   "op": "mount",
-   "branch": "people-action-lifecycle-p1f.1",
+   "op": "exec",
    "ws": "P1f:/workspaces/2",
-   "expect": "sandbox.mount:Mounted"
+   "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests'",
+   "message": "prepare original-source regression",
+   "exit": 0,
+   "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":264,\"ok\":true}",
+   "ms": 6953,
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

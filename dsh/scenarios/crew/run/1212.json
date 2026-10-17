@@ -1,5 +1,5 @@
 {
- "step": "I1d-082 I-13: record exact initial production census commit",
+ "step": "I1d-083 I-13: record exact initial production census unmount",
  "agent": "insight-a",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 12,
+ "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "I1d:/workspaces/1",
-   "message": "I1d I-13: record exact initial production census (exit 0)",
-   "force": false,
-   "commit": "126f96456621bfbcf43489508d8b6bef67f86883d77a9536829bb48d270b135ca1",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

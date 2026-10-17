@@ -9,7 +9,7 @@
  "output": null,
  "ms": 20,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "W1 015 W-M3 actual HTTP CLI smoke and clean process restart proof (exit 0)",
    "force": false,
    "commit": "12bbc78f72b1364ab4867569b81af515cca9c8784b9f6f01b56791f04064e43792",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

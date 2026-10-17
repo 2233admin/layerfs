@@ -1,5 +1,5 @@
 {
- "step": "lead-421 P1f: isolate exact combined source for narrow People action unmount lifecycle repair",
+ "step": "lead-422 P1f: new uniquely named lifecycle Branch after421 NameTaken, no existing Branch reset or replay",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,16 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 34,
+ "ms": 26,
  "expect": [
-  "branch.fork:NameTaken"
+  "branch.fork:Forked"
  ],
  "calls": [
   {
    "op": "fork",
-   "name": "people.6",
+   "name": "people-action-lifecycle-p1f.1",
    "from": "int-final.1",
-   "expect": "branch.fork:NameTaken"
+   "expect": "branch.fork:Forked"
   }
  ]
 }

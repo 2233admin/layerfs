@@ -1,6 +1,7 @@
 {
  "step": "lead-108 W-M3: integration install census regenerate bundle syntax and package tests",
  "agent": "root",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "  duration_ms: 0.593209\n  type: 'test'\n  ...\n1..30\n# tests 30\n# suites 0\n# pass 30\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 69.442333",
  "ms": 13922,
- "expect": [
-  "sandbox.exec:exit:0|1"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,10 @@
    "exit": 0,
    "output": "  duration_ms: 0.593209\n  type: 'test'\n  ...\n1..30\n# tests 30\n# suites 0\n# pass 30\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 69.442333",
    "ms": 13922,
-   "expect": "sandbox.exec:exit:0|1",
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true,
    "flaky": {
     "tests": [
      "signed credentials are purpose bound and reject tampering or changed secret"

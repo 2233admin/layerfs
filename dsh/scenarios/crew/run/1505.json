@@ -1,22 +1,22 @@
 {
- "step": "lead-543 A05 server tests: terminal acceptance unmount",
+ "step": "lead-544 A06 web tests: fresh acceptance Workspace",
  "agent": "root",
  "kind": "history",
- "branch": null,
+ "branch": "acceptance.3",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 6,
+ "ms": 44,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "lead:/workspaces/94",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "mount",
+   "branch": "acceptance.3",
+   "ws": "lead:/workspaces/95",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

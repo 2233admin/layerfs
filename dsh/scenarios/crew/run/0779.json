@@ -9,7 +9,7 @@
  "output": null,
  "ms": 12,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "W2b 135 W-05: full web with authenticated initial navigation readiness (exit 0)",
    "force": false,
    "commit": "12f33ebc2d0fbfef4a32c3f9e618862cbd19cd631dd7b5626a196b74d04fc7829e",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

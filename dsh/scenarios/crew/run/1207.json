@@ -1,5 +1,5 @@
 {
- "step": "lead-363 I11 I12: exact closed I1c merge with L0 documentation and current main ancestry",
+ "step": "lead-364 I13: fresh successor source for exact CLI ownership and saved-filter URL return completion",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,18 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 192,
+ "ms": 17,
  "expect": [
-  "branch.merge:Merged"
+  "branch.fork:Forked"
  ],
  "calls": [
   {
-   "op": "merge",
-   "a": "insight.6",
-   "b": "lead-docs-current.1",
-   "name": "int-filter-workflow.1",
-   "message": "lead: integrate closed saved-filter workflow with current main dependency state and reviewed architecture",
-   "expect": "branch.merge:Merged"
+   "op": "fork",
+   "name": "insight.7",
+   "from": "int-filter-workflow.1#0",
+   "expect": "branch.fork:Forked"
   }
  ]
 }

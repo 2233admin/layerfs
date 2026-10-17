@@ -9,7 +9,7 @@
  "output": null,
  "ms": 7,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "P1b 018 P-M3 final server permission security tests (exit 0)",
    "force": false,
    "commit": "1216903ea3b386216addf14e2f171a84333622283ec8126ab853cd39fe6b6e54dc",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

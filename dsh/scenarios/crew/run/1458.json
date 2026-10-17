@@ -1,22 +1,27 @@
 {
- "step": "lead-495 A02 build: fresh acceptance Workspace",
+ "step": "lead-496 A02 build: frozen acceptance command",
  "agent": "root",
- "kind": "history",
- "branch": "acceptance.2",
+ "verification": "off",
+ "kind": "replay",
+ "branch": null,
  "writes": null,
- "command": null,
- "exit": null,
- "output": null,
- "ms": 30,
- "expect": [
-  "sandbox.mount:Mounted"
- ],
+ "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'acceptance.2'\"'\"' CREW_WORKSPACE='\"'\"'654de5fd01e0798c0a87ca28ee7df5ff02e839055abe0811a4e9eca6f5ca1249'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-496 A02 build: frozen acceptance command'\"'\"'; npm run build'",
+ "exit": 0,
+ "output": "\n> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs",
+ "ms": 505,
+ "expect": [],
  "calls": [
   {
-   "op": "mount",
-   "branch": "acceptance.2",
+   "op": "exec",
    "ws": "lead:/workspaces/83",
-   "expect": "sandbox.mount:Mounted"
+   "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'acceptance.2'\"'\"' CREW_WORKSPACE='\"'\"'654de5fd01e0798c0a87ca28ee7df5ff02e839055abe0811a4e9eca6f5ca1249'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-496 A02 build: frozen acceptance command'\"'\"'; npm run build'",
+   "message": "A02 build: frozen acceptance command",
+   "exit": 0,
+   "output": "\n> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs",
+   "ms": 505,
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

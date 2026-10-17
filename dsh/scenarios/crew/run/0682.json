@@ -9,7 +9,7 @@
  "output": null,
  "ms": 9,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "W1b 132 W-04: canonical Markdown HTTP notification and actual preview checkpoint (exit 0)",
    "force": false,
    "commit": "12be1c520059fba6cbd806da53ae0308df0516c36c7f9e545ff09e1588dd8bb74d",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

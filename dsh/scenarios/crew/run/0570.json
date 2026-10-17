@@ -1,6 +1,7 @@
 {
  "step": "I2-149 final production physical census counter identity and owned process custody",
  "agent": "insight-b",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 1,
  "output": "{\"files\":162,\"maxPhysical\":{\"path\":\"packages/server/src/modules/work/projects.js\",\"physical\":166},\"largest\":[{\"path\":\"packages/server/src/modules/work/projects.js\",\"physical\":166},{\"path\":\"packages/web/src/pages/work/projects.jsx\",\"physical\":164},{\"path\":\"packages/web/src/pages/work/sprints.jsx\",\"physical\":160},{\"path\":\"packages/web/src/pages/work/board.jsx\",\"physical\":153},{\"path\":\"packages/server/src/modules/insight/transfer-validation.js\",\"physical\":152},{\"path\":\"packages/server/src/modules/work/sprints.js\",\"physical\":135},{\"path\":\"packages/cli/src/commands/people.js\",\"physical\":134},{\"path\":\"packages/web/src/pages/insight/search.jsx\",\"physical\":131},{\"path\":\"packages/cli/src/commands/insight-search.js\",\"physical\":122},{\"path\":\"packages/server/src/modules/work/issues.js\",\"physical\":120}],\"over999\":[],\"counterSha256\":\"f73b6acb7d073e90631936ad62be8705a9c2a2f93c7e2097e7ca4f5c062f12ab\",\"ownedLiveAppOrBrowserProcesses\":[[\"12786\",\"1\",\"chromium\"],[\"12787\",\"1\",\"chromium\"],[\"12806\",\"1\",\"chromium\"],[\"12807\",\"1\",\"chromium\"],[\"12819\",\"1\",\"chromium\"],[\"12855\",\"1\",\"chromium\"],[\"12876\",\"1\",\"chromium\"],[\"12890\",\"1\",\"chromium\"]]}",
  "ms": 158,
- "expect": [
-  "sandbox.exec:exit:1"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,9 @@
    "exit": 1,
    "output": "{\"files\":162,\"maxPhysical\":{\"path\":\"packages/server/src/modules/work/projects.js\",\"physical\":166},\"largest\":[{\"path\":\"packages/server/src/modules/work/projects.js\",\"physical\":166},{\"path\":\"packages/web/src/pages/work/projects.jsx\",\"physical\":164},{\"path\":\"packages/web/src/pages/work/sprints.jsx\",\"physical\":160},{\"path\":\"packages/web/src/pages/work/board.jsx\",\"physical\":153},{\"path\":\"packages/server/src/modules/insight/transfer-validation.js\",\"physical\":152},{\"path\":\"packages/server/src/modules/work/sprints.js\",\"physical\":135},{\"path\":\"packages/cli/src/commands/people.js\",\"physical\":134},{\"path\":\"packages/web/src/pages/insight/search.jsx\",\"physical\":131},{\"path\":\"packages/cli/src/commands/insight-search.js\",\"physical\":122},{\"path\":\"packages/server/src/modules/work/issues.js\",\"physical\":120}],\"over999\":[],\"counterSha256\":\"f73b6acb7d073e90631936ad62be8705a9c2a2f93c7e2097e7ca4f5c062f12ab\",\"ownedLiveAppOrBrowserProcesses\":[[\"12786\",\"1\",\"chromium\"],[\"12787\",\"1\",\"chromium\"],[\"12806\",\"1\",\"chromium\"],[\"12807\",\"1\",\"chromium\"],[\"12819\",\"1\",\"chromium\"],[\"12855\",\"1\",\"chromium\"],[\"12876\",\"1\",\"chromium\"],[\"12890\",\"1\",\"chromium\"]]}",
    "ms": 158,
-   "expect": "sandbox.exec:exit:1"
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

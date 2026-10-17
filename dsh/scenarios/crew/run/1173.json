@@ -1,26 +1,24 @@
 {
- "step": "I1c-055 I-11 I-12 build syntax and Python AST before proof exec",
+ "step": "I1c-056 I-11 I-12 build syntax and Python AST before proof commit",
  "agent": "insight-a",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests && python3 -c \"import ast,pathlib; ast.parse(pathlib.Path('\\''packages/web/test/filter-browser.py'\\'').read_text()); print('\\''filter browser Python AST valid'\\'')\"'",
- "exit": 0,
- "output": "> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":256,\"ok\":true}\nfilter browser Python AST valid",
- "ms": 6651,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 20,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "I1c:/workspaces/5",
-   "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests && python3 -c \"import ast,pathlib; ast.parse(pathlib.Path('\\''packages/web/test/filter-browser.py'\\'').read_text()); print('\\''filter browser Python AST valid'\\'')\"'",
-   "message": "I-11 I-12 build syntax and Python AST before proof",
-   "exit": 0,
-   "output": "> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":256,\"ok\":true}\nfilter browser Python AST valid",
-   "ms": 6651,
-   "expect": "sandbox.exec:exit:0"
+   "message": "I1c I-11 I-12 build syntax and Python AST before proof (exit 0)",
+   "force": false,
+   "commit": "12ab7acd4138543c482b3cf60164785de8ab5b89da01e668639e46daaad306955c",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

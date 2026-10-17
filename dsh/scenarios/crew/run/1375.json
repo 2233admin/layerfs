@@ -1,5 +1,5 @@
 {
- "step": "P1f-020 people action lifetime: sandbox.commit",
+ "step": "P1f-021 people action lifetime: sandbox.unmount",
  "agent": "people",
  "kind": "history",
  "branch": null,
@@ -7,18 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 17,
+ "ms": 7,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "P1f:/workspaces/2",
-   "message": "P1f prepare original-source regression (exit 0)",
-   "force": false,
-   "commit": "12c4bb2be8250b6323fb52ee2e39b0fd0665f6d924b346249697ec352b6f8b1e72",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

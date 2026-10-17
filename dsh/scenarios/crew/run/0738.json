@@ -9,7 +9,7 @@
  "output": null,
  "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "W1b 154 W-07: actual shared Markdown toolbar keyboard and selection browser proof (exit 0)",
    "force": false,
    "commit": "12d64b547753f8e6ea636b16dd45949da5baef6438b522e2e3034154509475b75e",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

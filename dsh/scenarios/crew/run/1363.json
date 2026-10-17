@@ -1,5 +1,5 @@
 {
- "step": "lead-415 Retain414 candidate10005 LOC gate passed, pinned census/build/syntax264/shared89/server296 passed; web176of177 failed people lifetime immediate unmount-abort assertion; CLI not reached, no pu…",
+ "step": "lead-416 Integration: terminal unmount candidate414 failure retained for exact people lifecycle diagnosis",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,18 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 501,
+ "ms": 37,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/68",
-   "message": "lead 415 Retain414 candidate10005 LOC gate passed, pinned census/build/syntax264/shared89/server296 passed; web176of177 failed people lifetime immediate unmount-abort assertion; CLI not reached, no pu…",
-   "force": false,
-   "commit": "1202c734d3696f08c3897b42b59544defe7b8a3c82216d9ef33a0de579078fe437",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

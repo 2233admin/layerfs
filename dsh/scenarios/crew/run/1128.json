@@ -1,26 +1,24 @@
 {
- "step": "P1e-095 P1e final build and syntax exec",
+ "step": "P1e-096 P1e final build and syntax outcome",
  "agent": "people",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests'",
- "exit": 0,
- "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":251,\"ok\":true}",
- "ms": 6146,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 19,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "P1e:/workspaces/21",
-   "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests'",
-   "message": "P1e final build and syntax",
-   "exit": 0,
-   "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":251,\"ok\":true}",
-   "ms": 6146,
-   "expect": "sandbox.exec:exit:0"
+   "message": "P1e final build and syntax (exit 0)",
+   "force": false,
+   "commit": "1267e38de0152c086bedca6a46fc96d07edeaeb844dca3ee87a6c0d36bf6931ad0",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

@@ -1,21 +1,22 @@
 {
- "step": "lead-423 T1: serial create P1f Sandbox",
+ "step": "lead-429 Integration: mount still-unrun CLI package checkpoint from combined candidate414",
  "agent": "root",
  "kind": "history",
- "branch": null,
+ "branch": "int-final.1",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 283,
+ "ms": 42,
  "expect": [
-  "sandbox.create:Ready"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "create",
-   "for": "people",
-   "expect": "sandbox.create:Ready"
+   "op": "mount",
+   "branch": "int-final.1",
+   "ws": "lead:/workspaces/69",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

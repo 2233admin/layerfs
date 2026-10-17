@@ -157,7 +157,33 @@ Each field of a kept step comes from the record:
   failure must be one of its two Selenium errors raised in
   `people-browser.py`. The tests run in temporary folders, so either outcome
   leaves the Workspaces alike, and the final tree is compared anyway. This is
-  a decision recorded on #350; no other outcome is relaxed.
+  a decision recorded on #350; no other outcome is relaxed. While Crew's
+  verification commands are disabled (next bullet) none of these commands runs,
+  so this rule is dormant; it is the rule they come back with.
+- **Verification commands (Crew).** The owner's decision on #350 (2026-10-17):
+  Crew proves that agents work and collaborate on a long-horizon project on
+  LayerFS, not that the builders' own tests pass, so the commands that only
+  verify are disabled for now. A command is verification only when the Commit
+  after it in its Workspace was recorded `UpToDate`, or changed no tracked file,
+  or changed only CPython bytecode (`__pycache__`, which no recorded `main`
+  holds): 299 of Crew's 304 (tests, builds, censuses and the browser proofs).
+  The five that run are the lead's `npm install` (it writes `package-lock.json`)
+  and four scripts that write source files, with their recorded exit codes. A
+  disabled command keeps its step and its run-file call (command, recorded exit
+  and output, `verification: true`, `disabled: true`, and the run file's
+  `verification: "off"`); `replay.mjs` prints `verification disabled: …
+  (recorded exit N)` and runs nothing in its place, and the step expects no exec
+  outcome. The Commit after it must answer `UpToDate` (nothing ran since the
+  mount or the last Commit), a stricter check than the record's; a recorded
+  `Committed` there becomes optional in the order check, and a recorded ref
+  `branch#i` counts only the Commits a run makes (one to a Commit it does not
+  make names the one before it). Every SDK call, the
+  cross-agent order and the final tree are checked as before. To bring the
+  commands back, convert with `verification=on` (Shop and Depot's default):
+  they run, with the races rule above. `verification=no-browser` disables only
+  the verification commands that drive a browser through Selenium (they run a
+  browser script or proof, or their recorded output shows Selenium or a test
+  named for a browser; `drivesBrowser` in `import/crew.mjs`) and runs the rest.
 - **Agent.** Shop and Depot: the builder plays as `root`. Crew: lead → `root`;
   `P1…P1f` → `people`; `W1*` → `work-a`; `W2*` → `work-b`; `I1*` → `insight-a`;
   `I2*` → `insight-b`. The observer (`main`) is dropped.
@@ -174,9 +200,11 @@ Each field of a kept step comes from the record:
   roles otherwise run at the same time. A wait whose roles have all finished
   already is skipped by the mock (saying it would end the lead's turn with
   nothing left to wake it).
-- **Pause.** `clamp(gap × k, 400, 3000)` ms, where `gap` is the time since the
+- **Pause.** `clamp(gap × k, 400, 3000)` ms (Crew: `clamp(gap × k, 50, 3000)`,
+  since 1,550 pauses of at least 400 ms would sum to 620 s), where `gap` is the time since the
   agent's previous kept step ended. `k` is chosen so that the pauses sum to the
-  demo's target thinking time: Shop 1 min, Depot 4 min, Crew 8 min. The commands'
+  demo's target thinking time: Shop 1 min, Depot 4 min, Crew 2 min (8 min
+  until the owner's 2026-10-17 decision). The commands'
   real run time comes on top.
 - **Timeouts.** Recorded commands carry their own inner `timeout` (at most 110 s).
   The converter rejects a command without one, except one recorded under 10 s,

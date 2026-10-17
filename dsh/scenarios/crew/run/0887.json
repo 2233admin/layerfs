@@ -1,6 +1,7 @@
 {
  "step": "P1d-185 P-05: 035 P-05 terminal owned process census exec",
  "agent": "people",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "  PID  PPID STAT COMMAND\n    1     0 Ssl  /usr/local/bin/layerfs-daemon --config /layerfs-local/config/daemon.setup\n   63     1 Z    [esbuild] <defunct>\n 1695     1 Z    [esbuild] <defunct>\n12620     1 Z    [esbuild] <defunct>\n17167     0 Ss   timeout 110 bash -c ps -eo pid,ppid,stat,args\n17173 17167 R    ps -eo pid,ppid,stat,args",
  "ms": 47,
- "expect": [
-  "sandbox.exec:exit:0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,9 @@
    "exit": 0,
    "output": "  PID  PPID STAT COMMAND\n    1     0 Ssl  /usr/local/bin/layerfs-daemon --config /layerfs-local/config/daemon.setup\n   63     1 Z    [esbuild] <defunct>\n 1695     1 Z    [esbuild] <defunct>\n12620     1 Z    [esbuild] <defunct>\n17167     0 Ss   timeout 110 bash -c ps -eo pid,ppid,stat,args\n17173 17167 R    ps -eo pid,ppid,stat,args",
    "ms": 47,
-   "expect": "sandbox.exec:exit:0"
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

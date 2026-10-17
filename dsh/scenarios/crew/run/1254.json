@@ -1,5 +1,5 @@
 {
- "step": "I1d-124 I-13: prepare main-header saved-filter return proof commit",
+ "step": "I1d-125 I-13: prepare main-header saved-filter return proof unmount",
  "agent": "insight-a",
  "kind": "history",
  "branch": null,
@@ -9,17 +9,14 @@
  "output": null,
  "ms": 6,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "I1d:/workspaces/16",
-   "message": "I1d I-13: prepare main-header saved-filter return proof (exit 0)",
-   "force": false,
-   "commit": "120b91f4bb4e33676824f3796f1ae8cc0f30ed978b9634994e929ad938309f3c8d",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

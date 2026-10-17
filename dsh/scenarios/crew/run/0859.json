@@ -9,7 +9,7 @@
  "output": null,
  "ms": 7,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "P1d 028 P-05 retained cookie policy defect proof after syntax (exit 1)",
    "force": false,
    "commit": "12f8d9221aa500d800bacb92835b09af7dd2357b03c659033b9b86162dfed476f4",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

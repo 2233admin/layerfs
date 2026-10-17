@@ -1,5 +1,5 @@
 {
- "step": "lead-476 A10 smoke: terminal acceptance unmount",
+ "step": "lead-483 A10 repair: fresh tooling Branch from published main, preserve failed acceptance runtime sample separately",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,16 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 9,
+ "ms": 22,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "branch.fork:Forked"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "lead:/workspaces/79",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "fork",
+   "name": "lead-acceptance-artifacts.1",
+   "from": "main",
+   "expect": "branch.fork:Forked"
   }
  ]
 }

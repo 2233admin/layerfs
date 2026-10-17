@@ -9,7 +9,7 @@
  "output": null,
  "ms": 19,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "lead 165 Lead tools4: browser driver syntax passed pending coherent source integration and actual acceptance (exit 0)",
    "force": false,
    "commit": "123d4c80405df1b64b91e9fb70917b9583594db43e7ad784a1440d4239950362a4",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

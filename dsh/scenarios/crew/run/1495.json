@@ -1,26 +1,24 @@
 {
- "step": "lead-533 A03 prepare tests: frozen acceptance command",
+ "step": "lead-534 A03 prepare tests: capture completed Bash including any failure",
  "agent": "root",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'acceptance.3'\"'\"' CREW_WORKSPACE='\"'\"'593b150c6f0ea4790118b9d6c9d146ddebf73f02595ccca65b46920a33c38530'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-533 A03 prepare tests: frozen acceptance command'\"'\"'; npm run prepare-tests'",
- "exit": 0,
- "output": "\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":264,\"ok\":true}",
- "ms": 6584,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 7,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "lead:/workspaces/92",
-   "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'acceptance.3'\"'\"' CREW_WORKSPACE='\"'\"'593b150c6f0ea4790118b9d6c9d146ddebf73f02595ccca65b46920a33c38530'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-533 A03 prepare tests: frozen acceptance command'\"'\"'; npm run prepare-tests'",
-   "message": "A03 prepare tests: frozen acceptance command",
-   "exit": 0,
-   "output": "\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":264,\"ok\":true}",
-   "ms": 6584,
-   "expect": "sandbox.exec:exit:0"
+   "message": "lead A03 prepare tests frozen acceptance (exit 0)",
+   "force": false,
+   "commit": "1232418b3f91f4222f25e915f974abbfb8577b06ca072a469baa2070508262d124",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

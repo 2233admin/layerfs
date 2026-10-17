@@ -1,5 +1,5 @@
 {
- "step": "lead-487 A10 fixture repair486 syntax fourmodules passed; frozen counter10005delta0 passed; original sample/outputs retained; next formal proof starts from new main",
+ "step": "lead-488 A10 repair: terminal unmount tooling-only syntax checkpoint before publication",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 28,
+ "ms": 30,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/81",
-   "message": "lead 487 A10 fixture repair486 syntax fourmodules passed; frozen counter10005delta0 passed; original sample/outputs retained; next formal proof starts from new main (exit 0)",
-   "force": false,
-   "commit": "1285d9738cb34c2de99b480e3553e169ef70fd6bd7e187a6757f4b6c21e1ad860f",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

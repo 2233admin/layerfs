@@ -1,6 +1,7 @@
 {
  "step": "W1c-065 W09/W10: final full affected server and web packages at completed draft and hierarchy source",
  "agent": "work-a",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "  duration_ms: 0.609833\n  type: 'test'\n  ...\n1..123\n# tests 123\n# suites 0\n# pass 123\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 24207.313428",
  "ms": 37280,
- "expect": [
-  "sandbox.exec:exit:0|1"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,10 @@
    "exit": 0,
    "output": "  duration_ms: 0.609833\n  type: 'test'\n  ...\n1..123\n# tests 123\n# suites 0\n# pass 123\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 24207.313428",
    "ms": 37280,
-   "expect": "sandbox.exec:exit:0|1",
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true,
    "flaky": {
     "tests": [
      "pinned browser planning planning preserves resource lifecycle",

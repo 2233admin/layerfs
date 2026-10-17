@@ -1,26 +1,24 @@
 {
- "step": "I1c-045 I-11 I-12 product build and syntax before tests exec",
+ "step": "I1c-046 I-11 I-12 product build and syntax before tests commit",
  "agent": "insight-a",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests'",
- "exit": 0,
- "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":253,\"ok\":true}",
- "ms": 6236,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 19,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "I1c:/workspaces/3",
-   "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests'",
-   "message": "I-11 I-12 product build and syntax before tests",
-   "exit": 0,
-   "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":253,\"ok\":true}",
-   "ms": 6236,
-   "expect": "sandbox.exec:exit:0"
+   "message": "I1c I-11 I-12 product build and syntax before tests (exit 0)",
+   "force": false,
+   "commit": "12fa372582e62949ac7dd36c9b51ee005ccb3f1fcd06bd2813d690a519e0e85d52",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

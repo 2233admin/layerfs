@@ -82,6 +82,15 @@ const PROOF_RACES = [
 /** The names of the tests a node --test run reports passed or failed. */
 const ranTests = (output) => [...String(output).matchAll(/^(?:not )?ok \d+ - (.*)$/gm)].map((m) => m[1].trim());
 
+/**
+ * Whether a recorded command drives a browser through Selenium: it runs a
+ * browser script or proof (compiling one does not count), or its recorded
+ * output shows Selenium or a test named for a browser (`verification=no-browser`).
+ */
+export const drivesBrowser = (command, output) =>
+  /-browser\.py(?!\s*(&&|$|'))|--browser|browser-smoke|selenium/i.test(String(command).replace(/py_compile[^&]*/g, "")) ||
+  /selenium|chromedriver|^(?:not )?ok \d+ - .*\bbrowser\b/im.test(String(output));
+
 /** Whether `output` fails with one of the race's errors, raised in its file, and no test. */
 export const raceError = (output, { errors, where }) => !failedTests(output).length && output.includes(`${where}", line`) && errors.some((e) => output.includes(`${e}:`));
 /** The names of the tests a node --test run reports failed. */
@@ -176,6 +185,7 @@ export function readCrew({ traces, agents }) {
         }
         call.output = record ? `${record.result?.stdout ?? ""}${record.result?.stderr ?? ""}` : "";
         call.exitCode = record?.result?.exitCode ?? null;
+        if (drivesBrowser(call.command, call.output)) call.browser = true;
         const proof = PROOF_RACES.find((f) => f.step.test(step.label));
         if (proof) {
           if (call.exitCode !== 0 && !raceError(call.output, proof)) throw new Error(`${origin} ${step.label}: the record does not fail with ${proof.errors.join(" or ")} in ${proof.where}`);

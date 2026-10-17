@@ -1,6 +1,7 @@
 {
  "step": "W2b-134 full web with authenticated initial navigation readiness",
  "agent": "work-b",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "  type: 'test'\n  ...\n1..106\n# tests 106\n# suites 0\n# pass 106\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 19654.91305\n{\"mode\":\"closed\",\"checks\":[{\"name\":\"No retained or live application/browser processes in selected Sandbox\",\"ok\":true}],\"pass\":1,\"fail\":0,\"ok\":true}",
  "ms": 20030,
- "expect": [
-  "sandbox.exec:exit:0|1"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,10 @@
    "exit": 0,
    "output": "  type: 'test'\n  ...\n1..106\n# tests 106\n# suites 0\n# pass 106\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 19654.91305\n{\"mode\":\"closed\",\"checks\":[{\"name\":\"No retained or live application/browser processes in selected Sandbox\",\"ok\":true}],\"pass\":1,\"fail\":0,\"ok\":true}",
    "ms": 20030,
-   "expect": "sandbox.exec:exit:0|1",
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true,
    "flaky": {
     "tests": [
      "pinned browser planning planning preserves resource lifecycle",

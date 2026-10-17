@@ -1,26 +1,24 @@
 {
- "step": "lead-492 A01 reinstall: frozen acceptance command",
+ "step": "lead-493 A01 reinstall: capture completed Bash including any failure",
  "agent": "root",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'acceptance.2'\"'\"' CREW_WORKSPACE='\"'\"'750c34721e096f7843e284ea056b5bbe45a5e2abc6ab5f5c7387d03d43a6df40'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-492 A01 reinstall: frozen acceptance command'\"'\"'; rm -rf node_modules packages/web/dist && npm ci --fetch-retries=0 --fetch-timeout=60000 --no-audit --no-fund && node scripts/dependency-census.mjs'",
- "exit": 0,
- "output": "\nadded 75 packages in 724ms\n{\"kind\":\"dependency-census\",\"agent\":\"lead\",\"lane\":\"acceptance.2\",\"workspace\":\"750c34721e096f7843e284ea056b5bbe45a5e2abc6ab5f5c7387d03d43a6df40\",\"installTraceStep\":\"lead-492 A01 reinstall: frozen acceptance command\",\"lockfileSha256\":\"06922ecc5ec47d7b094196e2e297082a9b204c9eceb5b6c3414882687a54c6d1\",\"roots\":[{\"root\":\"node_modules\",\"files\":713,\"bytes\":23725986}]}",
- "ms": 1523,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 408,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "lead:/workspaces/82",
-   "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'acceptance.2'\"'\"' CREW_WORKSPACE='\"'\"'750c34721e096f7843e284ea056b5bbe45a5e2abc6ab5f5c7387d03d43a6df40'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-492 A01 reinstall: frozen acceptance command'\"'\"'; rm -rf node_modules packages/web/dist && npm ci --fetch-retries=0 --fetch-timeout=60000 --no-audit --no-fund && node scripts/dependency-census.mjs'",
-   "message": "A01 reinstall: frozen acceptance command",
-   "exit": 0,
-   "output": "\nadded 75 packages in 724ms\n{\"kind\":\"dependency-census\",\"agent\":\"lead\",\"lane\":\"acceptance.2\",\"workspace\":\"750c34721e096f7843e284ea056b5bbe45a5e2abc6ab5f5c7387d03d43a6df40\",\"installTraceStep\":\"lead-492 A01 reinstall: frozen acceptance command\",\"lockfileSha256\":\"06922ecc5ec47d7b094196e2e297082a9b204c9eceb5b6c3414882687a54c6d1\",\"roots\":[{\"root\":\"node_modules\",\"files\":713,\"bytes\":23725986}]}",
-   "ms": 1523,
-   "expect": "sandbox.exec:exit:0"
+   "message": "lead A01 reinstall frozen acceptance (exit 0)",
+   "force": false,
+   "commit": "12f03a6a9f5423d371bc0cf60f0c7d9fed5c253b5474cbb4036e179122c10e4b12",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

@@ -1,22 +1,22 @@
 {
- "step": "lead-436 A00: fresh frozen acceptance Branch from final main326ed3ae publication",
+ "step": "lead-437 A01 reinstall: fresh acceptance Workspace",
  "agent": "root",
  "kind": "history",
- "branch": null,
+ "branch": "acceptance",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 23,
+ "ms": 32,
  "expect": [
-  "branch.fork:Forked"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "fork",
-   "name": "acceptance",
-   "from": "main",
-   "expect": "branch.fork:Forked"
+   "op": "mount",
+   "branch": "acceptance",
+   "ws": "lead:/workspaces/70",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

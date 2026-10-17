@@ -1,6 +1,7 @@
 {
  "step": "W2-0119 W-M3 rebuilt automatic JSX real Chromium pointer proof",
  "agent": "work-b",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":113,\"ok\":true}\n\n> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n{\"ok\": true, \"check\": \"Actual Selenium mouse hold/move/release persisted board status\", \"issueId\": \"01f14b9d-52d9-4fb1-834d-e0aa9234df7f\", \"targetStatusId\": \"77be6d5b-168d-4e30-a2ee-6728abdd46a1\"}",
  "ms": 7295,
- "expect": [
-  "sandbox.exec:exit:0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,10 @@
    "exit": 0,
    "output": "> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":113,\"ok\":true}\n\n> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n{\"ok\": true, \"check\": \"Actual Selenium mouse hold/move/release persisted board status\", \"issueId\": \"01f14b9d-52d9-4fb1-834d-e0aa9234df7f\", \"targetStatusId\": \"77be6d5b-168d-4e30-a2ee-6728abdd46a1\"}",
    "ms": 7295,
-   "expect": "sandbox.exec:exit:0"
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true
   }
  ]
 }

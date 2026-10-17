@@ -1,26 +1,24 @@
 {
- "step": "I1d-132 I-13: final saved-filter build syntax and browser AST exec",
+ "step": "I1d-133 I-13: final saved-filter build syntax and browser AST commit",
  "agent": "insight-a",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests && python3 -c \"import ast; ast.parse(open('\"'\"'packages/web/test/filter-view-browser.py'\"'\"').read())\"'",
- "exit": 0,
- "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":259,\"ok\":true}",
- "ms": 6838,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 20,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "I1d:/workspaces/19",
-   "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests && python3 -c \"import ast; ast.parse(open('\"'\"'packages/web/test/filter-view-browser.py'\"'\"').read())\"'",
-   "message": "final saved-filter build syntax and browser AST",
-   "exit": 0,
-   "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":259,\"ok\":true}",
-   "ms": 6838,
-   "expect": "sandbox.exec:exit:0"
+   "message": "I1d I-13: final saved-filter build syntax and browser AST (exit 0)",
+   "force": false,
+   "commit": "12c9885fa6eacbccc4b8bae79cbe029e63dcf2708e138fdf967dd3a12d28004086",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

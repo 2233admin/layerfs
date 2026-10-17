@@ -1,22 +1,28 @@
 {
- "step": "I1c-058 I-11 I-12 focused draft HTTP and actual Chromium proofs mount",
+ "step": "I1c-059 I-11 I-12 focused draft HTTP and actual Chromium proofs exec",
  "agent": "insight-a",
- "kind": "history",
- "branch": "insight.6",
+ "verification": "off",
+ "kind": "replay",
+ "branch": null,
  "writes": null,
- "command": null,
- "exit": null,
- "output": null,
- "ms": 36,
- "expect": [
-  "sandbox.mount:Mounted"
- ],
+ "command": "timeout 110 bash -c 'node --test packages/web/test/filter-draft.test.js packages/server/test/filter-resource.test.js packages/web/test/filter-browser.test.js'",
+ "exit": 1,
+ "output": "  duration_ms: 0.250875\n  type: 'test'\n  ...\n1..12\n# tests 12\n# suites 0\n# pass 11\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 19680.147926",
+ "ms": 19763,
+ "expect": [],
  "calls": [
   {
-   "op": "mount",
-   "branch": "insight.6",
+   "op": "exec",
    "ws": "I1c:/workspaces/6",
-   "expect": "sandbox.mount:Mounted"
+   "command": "timeout 110 bash -c 'node --test packages/web/test/filter-draft.test.js packages/server/test/filter-resource.test.js packages/web/test/filter-browser.test.js'",
+   "message": "I-11 I-12 focused draft HTTP and actual Chromium proofs",
+   "exit": 1,
+   "output": "  duration_ms: 0.250875\n  type: 'test'\n  ...\n1..12\n# tests 12\n# suites 0\n# pass 11\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 19680.147926",
+   "ms": 19763,
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true
   }
  ]
 }

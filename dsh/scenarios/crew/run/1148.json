@@ -1,26 +1,24 @@
 {
- "step": "P1e-123 P1e final owned process census exec",
+ "step": "P1e-124 P1e final owned process census outcome",
  "agent": "people",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'ps -eo pid,ppid,stat,args'",
- "exit": 0,
- "output": "19114     1 Z    [chrome_crashpad] <defunct>\n19117     1 Z    [chrome_crashpad] <defunct>\n19118     1 Z    [chromium] <defunct>\n19120     1 Z    [chromium] <defunct>\n19139     1 Z    [chromium] <defunct>\n19140     1 Z    [chromium] <defunct>\n19158     1 Z    [chromium] <defunct>\n19188     1 Z    [chromium] <defunct>\n19208     1 Z    [chromium] <defunct>\n19222     1 Z    [chromium] <defunct>\n19279     0 Ss   timeout 110 bash -c ps -eo pid,ppid,stat,args\n19285 19279 R    ps -eo pid,ppid,stat,args",
- "ms": 90,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 9,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "P1e:/workspaces/26",
-   "command": "timeout 110 bash -c 'ps -eo pid,ppid,stat,args'",
-   "message": "P1e final owned process census",
-   "exit": 0,
-   "output": "19114     1 Z    [chrome_crashpad] <defunct>\n19117     1 Z    [chrome_crashpad] <defunct>\n19118     1 Z    [chromium] <defunct>\n19120     1 Z    [chromium] <defunct>\n19139     1 Z    [chromium] <defunct>\n19140     1 Z    [chromium] <defunct>\n19158     1 Z    [chromium] <defunct>\n19188     1 Z    [chromium] <defunct>\n19208     1 Z    [chromium] <defunct>\n19222     1 Z    [chromium] <defunct>\n19279     0 Ss   timeout 110 bash -c ps -eo pid,ppid,stat,args\n19285 19279 R    ps -eo pid,ppid,stat,args",
-   "ms": 90,
-   "expect": "sandbox.exec:exit:0"
+   "message": "P1e final owned process census (exit 0)",
+   "force": false,
+   "commit": "1267e38de0152c086bedca6a46fc96d07edeaeb844dca3ee87a6c0d36bf6931ad0",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

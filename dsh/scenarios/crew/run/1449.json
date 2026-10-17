@@ -1,26 +1,24 @@
 {
- "step": "lead-486 A10 repair: syntax-check four changed tooling modules and frozen unchanged10005 production gate; no repeated unit/package qualification",
+ "step": "lead-487 A10 fixture repair486 syntax fourmodules passed; frozen counter10005delta0 passed; original sample/outputs retained; next formal proof starts from new main",
  "agent": "root",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'lead-acceptance-artifacts.1'\"'\"' CREW_WORKSPACE='\"'\"'f7e8688245872ed18fe1142836f3249084b5c80c00828889a757b859904b702a'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-486 A10 repair: syntax-check four changed tooling modules and frozen unchanged10005 production gate; no repeated unit/package qualification'\"'\"'; node --check scripts/acceptance.mjs && node --check scripts/acceptance-runtime.mjs && node --check scripts/checks/work-planning.mjs && node --check scripts/checks/insight-planning.mjs && node scripts/count-loc.mjs --check'",
- "exit": 0,
- "output": "    {\n      \"path\": \"packages/web/src/session-check.js\",\n      \"package\": \"web\",\n      \"prod\": 92\n    },\n    {\n      \"path\": \"packages/web/src/store.js\",\n      \"package\": \"web\",\n      \"prod\": 10\n    }\n  ]\n}",
- "ms": 452,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 28,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "lead:/workspaces/81",
-   "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'lead-acceptance-artifacts.1'\"'\"' CREW_WORKSPACE='\"'\"'f7e8688245872ed18fe1142836f3249084b5c80c00828889a757b859904b702a'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-486 A10 repair: syntax-check four changed tooling modules and frozen unchanged10005 production gate; no repeated unit/package qualification'\"'\"'; node --check scripts/acceptance.mjs && node --check scripts/acceptance-runtime.mjs && node --check scripts/checks/work-planning.mjs && node --check scripts/checks/insight-planning.mjs && node scripts/count-loc.mjs --check'",
-   "message": "A10 repair: syntax-check four changed tooling modules and frozen unchanged10005 production gate; no repeated unit/package qualification",
-   "exit": 0,
-   "output": "    {\n      \"path\": \"packages/web/src/session-check.js\",\n      \"package\": \"web\",\n      \"prod\": 92\n    },\n    {\n      \"path\": \"packages/web/src/store.js\",\n      \"package\": \"web\",\n      \"prod\": 10\n    }\n  ]\n}",
-   "ms": 452,
-   "expect": "sandbox.exec:exit:0"
+   "message": "lead 487 A10 fixture repair486 syntax fourmodules passed; frozen counter10005delta0 passed; original sample/outputs retained; next formal proof starts from new main (exit 0)",
+   "force": false,
+   "commit": "1285d9738cb34c2de99b480e3553e169ef70fd6bd7e187a6757f4b6c21e1ad860f",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

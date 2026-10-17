@@ -1,22 +1,22 @@
 {
- "step": "I1c-057 I-11 I-12 build syntax and Python AST before proof unmount",
+ "step": "I1c-058 I-11 I-12 focused draft HTTP and actual Chromium proofs mount",
  "agent": "insight-a",
  "kind": "history",
- "branch": null,
+ "branch": "insight.6",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 8,
+ "ms": 36,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "I1c:/workspaces/5",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "mount",
+   "branch": "insight.6",
+   "ws": "I1c:/workspaces/6",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

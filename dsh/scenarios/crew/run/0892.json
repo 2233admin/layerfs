@@ -15,7 +15,7 @@
   {
    "op": "fork",
    "name": "work.6",
-   "from": "people.5#10",
+   "from": "people.5#7",
    "expect": "branch.fork:Forked"
   }
  ]

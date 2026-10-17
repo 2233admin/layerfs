@@ -400,32 +400,6 @@
       "merged": null,
       "optional": true
      }
-    ],
-    "extras": [
-     {
-      "after": 1,
-      "message": "lead A03 prepare tests frozen acceptance (exit 0)"
-     },
-     {
-      "after": 1,
-      "message": "lead A04 shared tests frozen acceptance (exit 0)"
-     },
-     {
-      "after": 1,
-      "message": "lead A05 server tests frozen acceptance (exit 0)"
-     },
-     {
-      "after": 1,
-      "message": "lead A06 web tests frozen acceptance (exit 0)"
-     },
-     {
-      "after": 1,
-      "message": "lead A07 CLI tests frozen acceptance (exit 0)"
-     },
-     {
-      "after": 1,
-      "message": "lead A08 LOC frozen acceptance (exit 0)"
-     }
     ]
    },
    "acceptance.2": {
@@ -442,24 +416,6 @@
       "via": "exec",
       "merged": null,
       "optional": true
-     }
-    ],
-    "extras": [
-     {
-      "after": 1,
-      "message": "lead A03 prepare tests frozen acceptance (exit 0)"
-     },
-     {
-      "after": 1,
-      "message": "lead A04 shared tests frozen acceptance (exit 0)"
-     },
-     {
-      "after": 1,
-      "message": "lead A05 server tests frozen acceptance (exit 0)"
-     },
-     {
-      "after": 1,
-      "message": "lead A06 web tests frozen acceptance (exit 1)"
      }
     ]
    },
@@ -507,44 +463,6 @@
       "via": "exec",
       "merged": null,
       "optional": true
-     }
-    ],
-    "extras": [
-     {
-      "after": 1,
-      "message": "lead A03 prepare tests frozen acceptance (exit 0)"
-     },
-     {
-      "after": 1,
-      "message": "lead A04 shared tests frozen acceptance (exit 0)"
-     },
-     {
-      "after": 1,
-      "message": "lead A05 server tests frozen acceptance (exit 0)"
-     },
-     {
-      "after": 1,
-      "message": "lead A06 web tests frozen acceptance (exit 0)"
-     },
-     {
-      "after": 1,
-      "message": "lead A07 CLI tests frozen acceptance (exit 0)"
-     },
-     {
-      "after": 1,
-      "message": "lead A08 LOC frozen acceptance (exit 0)"
-     },
-     {
-      "after": 5,
-      "message": "lead A13 audit frozen acceptance (exit 0)"
-     },
-     {
-      "after": 6,
-      "message": "lead A15 process audit frozen acceptance (exit 0)"
-     },
-     {
-      "after": 6,
-      "message": "lead 586 Final custody585exit0:1795processrecords,1792defunctZ separately retained; onlydaemon1/currenttimeout25181/auditnode25187live, zero unexpected app/browser (exit 0)"
      }
     ]
    },
@@ -678,28 +596,6 @@
       "message": "I2 validated transfer closure cycles and explicit identity plan",
       "via": "fs",
       "merged": null
-     }
-    ],
-    "extras": [
-     {
-      "after": 12,
-      "message": "I1 054 I-M3 build syntax and shared query completion tests (exit 1)"
-     },
-     {
-      "after": 18,
-      "message": "I1 069 I-M3 actual scoped-token search and filter executable integration (exit 1)"
-     },
-     {
-      "after": 19,
-      "message": "I1 074 I-M3 actual scoped-token search filter and plain-help proofs (exit 0)"
-     },
-     {
-      "after": 20,
-      "message": "I2 changed M2 actual CLI proof (exit 0)"
-     },
-     {
-      "after": 20,
-      "message": "I1 078 I-M3 frozen production LOC and largest file census (exit 0)"
      }
     ]
    },
@@ -945,64 +841,6 @@
       "via": "fs",
       "merged": null
      }
-    ],
-    "extras": [
-     {
-      "after": 9,
-      "message": "I1 103 I-M3 actual pinned-browser keyboard search safe highlights saved-filter and live controls (exit 1)"
-     },
-     {
-      "after": 12,
-      "message": "I1 108 I-M3 actual pinned-browser keyboard search safe highlights saved-filter and live controls (exit 1)"
-     },
-     {
-      "after": 13,
-      "message": "I1 113 I-M3 actual pinned-browser keyboard search safe highlights saved-filter and live controls (exit 1)"
-     },
-     {
-      "after": 14,
-      "message": "I2 M3 transfer dashboard and reporting behavior proof (exit 1)"
-     },
-     {
-      "after": 15,
-      "message": "I2 changed M3 transfer dashboard reporting behavior proof (exit 0)"
-     },
-     {
-      "after": 29,
-      "message": "I1 135 I-M3 browser typed-builder search-filter controls and actual token CLI final proof (exit 1)"
-     },
-     {
-      "after": 31,
-      "message": "I1 140 I-M3 browser typed-builder search-filter controls and actual token CLI final proof (exit 0)"
-     },
-     {
-      "after": 34,
-      "message": "I1 145 I-M3 actual browser saved-filter stale-edit recovery and access-loss custody (exit 0)"
-     },
-     {
-      "after": 36,
-      "message": "I1 150 I-M3 full affected server and CLI package integration proof (exit 0)"
-     },
-     {
-      "after": 36,
-      "message": "I1 154 I-M3 frozen production LOC and largest file census (exit 0)"
-     },
-     {
-      "after": 38,
-      "message": "I1 158 I1 final owned application browser process audit with defunct states separate (exit 0)"
-     },
-     {
-      "after": 45,
-      "message": "I2 final changed transfer date proof acceptance audit and source census (exit 0)"
-     },
-     {
-      "after": 45,
-      "message": "I2 final production physical census counter identity and owned process custody (exit 1)"
-     },
-     {
-      "after": 45,
-      "message": "I2 diagnose retained browser descendant states before final close (exit 0)"
-     }
     ]
    },
    "insight.4": {
@@ -1065,36 +903,6 @@
       "via": "fs",
       "merged": null
      }
-    ],
-    "extras": [
-     {
-      "after": -1,
-      "message": "I2c I-09: baseline production census (exit 0)"
-     },
-     {
-      "after": 4,
-      "message": "I2c I-09: digest targeted due HTTP CLI proof (exit 0)"
-     },
-     {
-      "after": 5,
-      "message": "I2c I-09: pinned Chromium digest cadence and org custody (exit 1)"
-     },
-     {
-      "after": 9,
-      "message": "I2c I-09: digest browser captured fetcher changed proof (exit 0)"
-     },
-     {
-      "after": 9,
-      "message": "I2c I-09: final affected server web CLI packages (exit 0)"
-     },
-     {
-      "after": 10,
-      "message": "I2c I-09: saved event changed proof and affected server package (exit 0)"
-     },
-     {
-      "after": 10,
-      "message": "I2c I-09: final source counter physical and live-process census (exit 0)"
-     }
     ]
    },
    "insight.5": {
@@ -1108,7 +916,8 @@
      {
       "message": "I1b 025 I-10: diagnostic build and syntax preparation (exit 0)",
       "via": "exec",
-      "merged": null
+      "merged": null,
+      "optional": true
      },
      {
       "message": "I1b 031 I-10: retain passive browser form diagnostics on passing and failing attempts",
@@ -1125,37 +934,6 @@
       "via": "exec",
       "merged": null,
       "optional": true
-     },
-     {
-      "message": "I1b 058 I-10: remove inspected generated search-browser py_compile cache after source proof",
-      "via": "fs",
-      "merged": null
-     }
-    ],
-    "extras": [
-     {
-      "after": 1,
-      "message": "I1b 029 I-10: instrumented actual saved-filter browser diagnostic (exit 0)"
-     },
-     {
-      "after": 2,
-      "message": "I1b 034 I-10: diagnostic sink syntax preparation (exit 0)"
-     },
-     {
-      "after": 2,
-      "message": "I1b 038 I-10: full web passive save submission diagnostic (exit 0)"
-     },
-     {
-      "after": 4,
-      "message": "I1b 047 I-10: native saved draft HTTP and search state changed proof (exit 0)"
-     },
-     {
-      "after": 4,
-      "message": "I1b 051 I-10: full web covering proof with canonical saved filter assertions (exit 0)"
-     },
-     {
-      "after": 5,
-      "message": "I1b 061 I-10: final frozen source census and live versus defunct process custody (exit 0)"
      }
     ]
    },
@@ -1205,32 +983,6 @@
       "via": "exec",
       "merged": null,
       "optional": true
-     }
-    ],
-    "extras": [
-     {
-      "after": -1,
-      "message": "I1c I-11 baseline frozen production census (exit 0)"
-     },
-     {
-      "after": 3,
-      "message": "I1c I-11 I-12 focused draft HTTP and actual Chromium proofs (exit 1)"
-     },
-     {
-      "after": 5,
-      "message": "I1c I-11 diagnosed custody browser with native valid form readiness (exit 0)"
-     },
-     {
-      "after": 7,
-      "message": "I1c I-11 I-12 final full affected web package (exit 0)"
-     },
-     {
-      "after": 7,
-      "message": "I1c I-11 I-12 final full server package including new actual HTTP resource proofs (exit 0)"
-     },
-     {
-      "after": 7,
-      "message": "I1c I-11 I-12 final frozen per-file hash physical census and live versus defunct custody (exit 0)"
      }
     ]
    },
@@ -1322,92 +1074,6 @@
       "merged": null,
       "optional": true
      }
-    ],
-    "extras": [
-     {
-      "after": -1,
-      "message": "I1d I-13: record exact initial production census (exit 0)"
-     },
-     {
-      "after": 2,
-      "message": "I1d I-13: focused canonical view and actual ownership CLI proof (exit 0)"
-     },
-     {
-      "after": 4,
-      "message": "I1d I-13: actual Chromium saved-filter URL return and custody proof (exit 1)"
-     },
-     {
-      "after": 5,
-      "message": "I1d I-13: prepare atomic browser list observations (exit 0)"
-     },
-     {
-      "after": 5,
-      "message": "I1d I-13: changed actual Chromium return context proof (exit 1)"
-     },
-     {
-      "after": 6,
-      "message": "I1d I-13: prepare singular saved-filter result assertion (exit 0)"
-     },
-     {
-      "after": 6,
-      "message": "I1d I-13: changed current result and canonical return Chromium proof (exit 1)"
-     },
-     {
-      "after": 7,
-      "message": "I1d I-13: prepare main-header saved-filter return proof (exit 0)"
-     },
-     {
-      "after": 7,
-      "message": "I1d I-13: actual main-header return and copy persistence proof (exit 0)"
-     },
-     {
-      "after": 9,
-      "message": "I1d I-13: final full web saved-filter view coverage (exit 0)"
-     },
-     {
-      "after": 9,
-      "message": "I1d I-13: final full CLI ownership coverage (exit 0)"
-     },
-     {
-      "after": 9,
-      "message": "I1d I-13: final exact production size and owned application process census (exit 0)"
-     },
-     {
-      "after": 11,
-      "message": "I1d I-13: actual Chromium same-view editor preservation proof (exit 0)"
-     },
-     {
-      "after": 11,
-      "message": "I1d I-13: follow-up final full web same-view editor coverage (exit 1)"
-     },
-     {
-      "after": 12,
-      "message": "I1d I-13: prepare atomic copy-heading readiness checks (exit 0)"
-     },
-     {
-      "after": 12,
-      "message": "I1d I-13: changed actual Chromium copied-resource heading proofs (exit 1)"
-     },
-     {
-      "after": 13,
-      "message": "I1d I-13: prepare async suggestion geometry regression (exit 0)"
-     },
-     {
-      "after": 13,
-      "message": "I1d I-13: diagnose original async suggestion Save geometry (exit 1)"
-     },
-     {
-      "after": 15,
-      "message": "I1d I-13: fixed native Save geometry and return persistence proof (exit 0)"
-     },
-     {
-      "after": 15,
-      "message": "I1d I-13: final full web with stable suggestion geometry (exit 1)"
-     },
-     {
-      "after": 15,
-      "message": "I1d I-13: final follow-up production size and owned process custody (exit 0)"
-     }
     ]
    },
    "int-depth-admin": {
@@ -1432,7 +1098,7 @@
      {
       "message": "lead: combine A13 maintained-file census and changed actual saved-filter POST proof",
       "via": "merge",
-      "merged": "insight.5#5"
+      "merged": "insight.5#4"
      }
     ]
    },
@@ -1494,12 +1160,6 @@
       "via": "exec",
       "merged": null,
       "optional": true
-     }
-    ],
-    "extras": [
-     {
-      "after": 0,
-      "message": "lead 431 Previously unrun combined CLI checkpoint430 passed62/62;0fail cancel skip todo; no source changes or repeated passed package families (exit 0)"
      }
     ]
    },
@@ -1609,7 +1269,8 @@
      {
       "message": "lead 034 L0: tools integration validation and pinned dependency census (exit 0)",
       "via": "exec",
-      "merged": null
+      "merged": null,
+      "optional": true
      }
     ]
    },
@@ -1635,13 +1296,8 @@
      {
       "message": "lead 068 W-M1: integration install build syntax and 98 passing tests (exit 0)",
       "via": "exec",
-      "merged": null
-     }
-    ],
-    "extras": [
-     {
-      "after": -1,
-      "message": "lead 078 W-M1: frozen source census diagnostic (exit 0)"
+      "merged": null,
+      "optional": true
      }
     ]
    },
@@ -1764,12 +1420,6 @@
       "via": "fs",
       "merged": null
      }
-    ],
-    "extras": [
-     {
-      "after": 0,
-      "message": "lead 487 A10 fixture repair486 syntax fourmodules passed; frozen counter10005delta0 passed; original sample/outputs retained; next formal proof starts from new main (exit 0)"
-     }
     ]
    },
    "lead-acceptance-review.1": {
@@ -1865,16 +1515,6 @@
       "via": "fs",
       "merged": null
      }
-    ],
-    "extras": [
-     {
-      "after": 4,
-      "message": "lead 387 Actual delayed heading deliberate keyboard focus and abandoned route proof386 passed1/1 after fixture correction; syntax253 passed; production natural9612 at this isolated main branch (exit 0…"
-     },
-     {
-      "after": 5,
-      "message": "lead 392 Retain native-tab session regression391 exit1: second tab signed out, first tab still renders protected issue and authenticated navigation; syntax255 passed (exit 1)"
-     }
     ]
    },
    "lead-people-observation.1": {
@@ -1884,12 +1524,6 @@
       "message": "lead integration-only fixture repair: establish actual old/current request admission after immediate first-render assertions; preserve rapid-unmount and forbidden-stale-cursor checks/budgets; productiondelta0",
       "via": "fs",
       "merged": null
-     }
-    ],
-    "extras": [
-     {
-      "after": 0,
-      "message": "lead 520 Formal2 fixture repair519 PythonAST and unchanged10005counter passed; retained failed512; next complete proof on new main identity (exit 0)"
      }
     ]
    },
@@ -1949,24 +1583,6 @@
       "via": "fs",
       "merged": null
      }
-    ],
-    "extras": [
-     {
-      "after": 2,
-      "message": "lead 242 L0 full CLI52 passing leaves including17 new; corrected fixture proof and census (exit 0)"
-     },
-     {
-      "after": 7,
-      "message": "lead 284 L0 browser startup and auth flows reached; delayed-login fixture inactive because second URL changed hash only; retain proof failure (exit 1)"
-     },
-     {
-      "after": 8,
-      "message": "lead 299 L0 current8996 census and full CLI54 passed; browser heading readiness stale element failure retained (exit 1)"
-     },
-     {
-      "after": 9,
-      "message": "lead 304 L0 native browser1 passed all10 actual auth deep-link overview scope and bootstrap recovery flags (exit 0)"
-     }
     ]
    },
    "lead-tools.1": {
@@ -2007,12 +1623,6 @@
       "via": "fs",
       "merged": null
      }
-    ],
-    "extras": [
-     {
-      "after": 0,
-      "message": "lead 123 L0: process namespace audit implementation proof (exit 0)"
-     }
     ]
    },
    "lead-tools.4": {
@@ -2022,12 +1632,6 @@
       "message": "lead tools4: use exact actual query submit control with paged search selectors (exit 0)",
       "via": "fs",
       "merged": null
-     }
-    ],
-    "extras": [
-     {
-      "after": 0,
-      "message": "lead 165 Lead tools4: browser driver syntax passed pending coherent source integration and actual acceptance (exit 0)"
      }
     ]
    },
@@ -2055,28 +1659,6 @@
       "via": "exec",
       "merged": null,
       "optional": true
-     }
-    ],
-    "extras": [
-     {
-      "after": 1,
-      "message": "P1f original-source deterministic lifetime regression (exit 1)"
-     },
-     {
-      "after": 3,
-      "message": "P1f changed lifetime and all people administration browser modes (exit 0)"
-     },
-     {
-      "after": 3,
-      "message": "P1f final full web tests (exit 0)"
-     },
-     {
-      "after": 3,
-      "message": "P1f frozen counter and exact production physical hash census (exit 0)"
-     },
-     {
-      "after": 3,
-      "message": "P1f final owned process custody audit (exit 0)"
      }
     ]
    },
@@ -2121,16 +1703,6 @@
       "via": "exec",
       "merged": null,
       "optional": true
-     }
-    ],
-    "extras": [
-     {
-      "after": 2,
-      "message": "P1 004 P-M1 affected package tests and LOC (exit 0)"
-     },
-     {
-      "after": 6,
-      "message": "P1 009 P-M1 final affected tests and LOC (exit 0)"
      }
     ]
    },
@@ -2184,12 +1756,6 @@
       "via": "fs",
       "merged": null
      }
-    ],
-    "extras": [
-     {
-      "after": 3,
-      "message": "P1b 005 P-M2 affected server and web tests (exit 0)"
-     }
     ]
    },
    "people.3": {
@@ -2235,12 +1801,14 @@
      {
       "message": "P1b 017 P-M3 final build and syntax preparation (exit 0)",
       "via": "exec",
-      "merged": null
+      "merged": null,
+      "optional": true
      },
      {
       "message": "P1b 019 P-M3 Chromium HTTP CLI restart and registered-route audit (exit 1)",
       "via": "exec",
-      "merged": null
+      "merged": null,
+      "optional": true
      },
      {
       "message": "P1b 020 P-M3 inspect user-visible audit selector behavior (exit 0)",
@@ -2251,36 +1819,6 @@
       "message": "P1b 022 P-M3 wait for stable rerendered browser elements (exit 0)",
       "via": "fs",
       "merged": null
-     }
-    ],
-    "extras": [
-     {
-      "after": 4,
-      "message": "P1b 014 P-M3 all package tests (exit 0)"
-     },
-     {
-      "after": 7,
-      "message": "P1b 018 P-M3 final server permission security tests (exit 0)"
-     },
-     {
-      "after": 9,
-      "message": "P1b 021 P-M3 audit selector diagnostic browser proof (exit 1)"
-     },
-     {
-      "after": 10,
-      "message": "P1b 023 P-M3 bounded stable Chromium administration proof (exit 0)"
-     },
-     {
-      "after": 10,
-      "message": "P1b 024 P-M3 source census physical scope and process custody (exit 0)"
-     },
-     {
-      "after": 10,
-      "message": "P1b 025 P-M3 determine browser and build process states (exit 0)"
-     },
-     {
-      "after": 10,
-      "message": "P1b 026 P-M3 final maintained-source size and custody check (exit 0)"
      }
     ]
    },
@@ -2297,20 +1835,6 @@
       "via": "exec",
       "merged": null,
       "optional": true
-     }
-    ],
-    "extras": [
-     {
-      "after": 1,
-      "message": "P1c P-04 targeted deterministic credential and account security proof (exit 0)"
-     },
-     {
-      "after": 1,
-      "message": "P1c P-04 affected server package proof (exit 0)"
-     },
-     {
-      "after": 1,
-      "message": "P1c P-04 final owned-process census (exit 0)"
      }
     ]
    },
@@ -2374,72 +1898,6 @@
       "via": "exec",
       "merged": null,
       "optional": true
-     }
-    ],
-    "extras": [
-     {
-      "after": 1,
-      "message": "P1d 009 P-05 retained delivery revocation defect proof (exit 1)"
-     },
-     {
-      "after": 4,
-      "message": "P1d 013 P-05 focused final delivery and integration proof (exit 0)"
-     },
-     {
-      "after": 5,
-      "message": "P1d 016 P-05 CLI final syntax preparation (exit 0)"
-     },
-     {
-      "after": 5,
-      "message": "P1d 017 P-05 actual CLI boundary proof (exit 0)"
-     },
-     {
-      "after": 6,
-      "message": "P1d 019 P-05 final-prepare (exit 0)"
-     },
-     {
-      "after": 6,
-      "message": "P1d 020 P-05 server-package (exit 0)"
-     },
-     {
-      "after": 6,
-      "message": "P1d 021 P-05 cli-package (exit 0)"
-     },
-     {
-      "after": 6,
-      "message": "P1d 022 P-05 runtime registered route census (exit 0)"
-     },
-     {
-      "after": 7,
-      "message": "P1d 024 P-05 final audit syntax (exit 0)"
-     },
-     {
-      "after": 8,
-      "message": "P1d 028 P-05 retained cookie policy defect proof after syntax (exit 1)"
-     },
-     {
-      "after": 10,
-      "message": "P1d 031 P-05 actual HTTP cookie policy repaired proof (exit 0)"
-     },
-     {
-      "after": 10,
-      "message": "P1d 032 P-05 final source server package proof (exit 0)"
-     },
-     {
-      "after": 10,
-      "message": "P1d 033 P-05 final source CLI package proof (exit 0)"
-     },
-     {
-      "after": 10,
-      "message": "P1d 025 P-05 actual HTTP CLI restart and final route audit (exit 0)"
-     },
-     {
-      "after": 10,
-      "message": "P1d 034 P-05 frozen production source census (exit 0)"
-     },
-     {
-      "after": 10,
-      "message": "P1d 035 P-05 terminal owned process census (exit 0)"
      }
     ]
    },
@@ -2529,53 +1987,7 @@
       "merged": null,
       "optional": true
      }
-    ],
-    "extras": [
-     {
-      "after": 5,
-      "message": "P1e targeted HTTP and canonical work revision regression (exit 0)"
-     },
-     {
-      "after": 9,
-      "message": "P1e diagnostic retained Chromium DOM console failures (exit 1)"
-     },
-     {
-      "after": 10,
-      "message": "P1e corrected people HTTP Chromium state proof (exit 0)"
-     },
-     {
-      "after": 11,
-      "message": "P1e changed real route and later audit browser proof (exit 1)"
-     },
-     {
-      "after": 12,
-      "message": "P1e corrected real app accepted and opaque-link route abandonment (exit 0)"
-     },
-     {
-      "after": 15,
-      "message": "P1e final server package (exit 0)"
-     },
-     {
-      "after": 15,
-      "message": "P1e final CLI package regression (exit 0)"
-     },
-     {
-      "after": 15,
-      "message": "P1e final disjoint web scope excluding retained independent search browser failure (exit 0)"
-     },
-     {
-      "after": 15,
-      "message": "P1e final runtime routes frozen LOC hashes and physical source limits (exit 0)"
-     },
-     {
-      "after": 15,
-      "message": "P1e final owned process census (exit 0)"
-     }
     ]
-   },
-   "root.final-source.1": {
-    "forkedFrom": "L17",
-    "commits": []
    },
    "work-w04-w05-w06-checkpoint": {
     "forkedFrom": "work.5#29",
@@ -2645,16 +2057,6 @@
       "via": "exec",
       "merged": null,
       "optional": true
-     }
-    ],
-    "extras": [
-     {
-      "after": 10,
-      "message": "W1 005 W-M1 focused issue HTTP shared web and CLI tests (exit 0)"
-     },
-     {
-      "after": 10,
-      "message": "W1 006 W-M1 combined all package tests (exit 0)"
      }
     ]
    },
@@ -2748,16 +2150,6 @@
       "via": "exec",
       "merged": null,
       "optional": true
-     }
-    ],
-    "extras": [
-     {
-      "after": 8,
-      "message": "W1 010 W-M2 markdown comments and relation HTTP tests (exit 0)"
-     },
-     {
-      "after": 9,
-      "message": "W1 011 W-M2 complete package regression and source census (exit 1)"
      }
     ]
    },
@@ -2898,20 +2290,6 @@
       "via": "exec",
       "merged": null,
       "optional": true
-     }
-    ],
-    "extras": [
-     {
-      "after": 9,
-      "message": "W1 021 W-M3 all issue endpoint role permission HTTP audit (exit 0)"
-     },
-     {
-      "after": 24,
-      "message": "W2 124 W-M3 final changed web regression and frozen production census (exit 0)"
-     },
-     {
-      "after": 24,
-      "message": "W2 128 W-M3 final owned application browser process audit (exit 0)"
      }
     ]
    },
@@ -3145,116 +2523,6 @@
       "via": "fs",
       "merged": null
      }
-    ],
-    "extras": [
-     {
-      "after": 3,
-      "message": "W1b 051 W-04: focused later-page revision and stale-response proofs (exit 1)"
-     },
-     {
-      "after": 4,
-      "message": "W1b 059 W-04: focused issue depth state and CLI proofs (exit 0)"
-     },
-     {
-      "after": 7,
-      "message": "W1b 069 W-04: browser proof after diagnosed cookie bootstrap correction (exit 1)"
-     },
-     {
-      "after": 10,
-      "message": "W1b 081 W-04: full affected server CLI regression and production census (exit 0)"
-     },
-     {
-      "after": 10,
-      "message": "W1b 085 W-04: frozen counter identity and production file ceiling audit (exit 0)"
-     },
-     {
-      "after": 11,
-      "message": "W1b 091 W-04: shared regression and own sandbox process census (exit 0)"
-     },
-     {
-      "after": 12,
-      "message": "W1b 098 W-04: changed watched-delete and strengthened actual work browser proof (exit 1)"
-     },
-     {
-      "after": 13,
-      "message": "W1b 103 W-04: focused final deletion snapshot fallback and visibility proof (exit 1)"
-     },
-     {
-      "after": 14,
-      "message": "W1b 108 W-04: focused dual-endpoint deletion activity authorization proof (exit 0)"
-     },
-     {
-      "after": 15,
-      "message": "W1b 116 W-04: final frozen identity file ceiling and owned live process audit (exit 0)"
-     },
-     {
-      "after": 23,
-      "message": "W2b 058 W-05: targeted planning revision and browser proofs (exit 1)"
-     },
-     {
-      "after": 24,
-      "message": "W1b 132 W-04: canonical Markdown HTTP notification and actual preview checkpoint (exit 0)"
-     },
-     {
-      "after": 26,
-      "message": "W2b 067 W-05: verify repaired native board drag and pending planning navigation (exit 0)"
-     },
-     {
-      "after": 26,
-      "message": "W1b 136 W-06: canonical Markdown full affected package checkpoint (exit 1)"
-     },
-     {
-      "after": 26,
-      "message": "W2b 071 W-05: W05 affected package regression and production census (exit 1)"
-     },
-     {
-      "after": 27,
-      "message": "W2b 076 W-05: W05 final web CLI regression and counter (exit 1)"
-     },
-     {
-      "after": 28,
-      "message": "W2b 081 W-05: W05 final web CLI regression and counter (exit 1)"
-     },
-     {
-      "after": 28,
-      "message": "W1b 140 W-06: canonical Markdown CLI and frozen census checkpoint (exit 1)"
-     },
-     {
-      "after": 29,
-      "message": "W2b 087 W-05: verify restored sprint CLI compatibility and exact source count (exit 0)"
-     },
-     {
-      "after": 29,
-      "message": "W1b 144 W-06: canonical Markdown current production census without test gating (exit 0)"
-     },
-     {
-      "after": 35,
-      "message": "W1b 154 W-07: actual shared Markdown toolbar keyboard and selection browser proof (exit 0)"
-     },
-     {
-      "after": 35,
-      "message": "W2b 097 W-05: W08 workflow and attachment queue targeted proofs (exit 0)"
-     },
-     {
-      "after": 41,
-      "message": "W1b 163 W-07: final disjoint owned Markdown issue editing checkpoint and census (exit 0)"
-     },
-     {
-      "after": 41,
-      "message": "W2b 116 W-05: W08 final affected package verification (exit 0)"
-     },
-     {
-      "after": 41,
-      "message": "W2b 120 W-05: final production census file ceiling and process closure audit (exit 0)"
-     },
-     {
-      "after": 41,
-      "message": "W1b 167 W-07: final owned source hash ceiling and process custody after Markdown scopes (exit 0)"
-     },
-     {
-      "after": 42,
-      "message": "W2b 135 W-05: full web with authenticated initial navigation readiness (exit 0)"
-     }
     ]
    },
    "work.6": {
@@ -3333,48 +2601,6 @@
       "via": "exec",
       "merged": null,
       "optional": true
-     }
-    ],
-    "extras": [
-     {
-      "after": 3,
-      "message": "W1c 32 W09: prepare and focused hierarchy pure HTTP pinned browser proofs (exit 0)"
-     },
-     {
-      "after": 3,
-      "message": "W1c 36 W09: full affected server and web hierarchy checkpoint (exit 1)"
-     },
-     {
-      "after": 4,
-      "message": "W1c 41 W09: prepare changed browser fixture and full affected web checkpoint (exit 0)"
-     },
-     {
-      "after": 7,
-      "message": "W1c 51 W10: prepare W1 draft changes and focused pure and existing browser proofs (exit 1)"
-     },
-     {
-      "after": 11,
-      "message": "W1c 62 W10: prepare and corrected pure and same-timestamp HTTP field resolution proofs (exit 0)"
-     },
-     {
-      "after": 11,
-      "message": "W1c 66 W09/W10: final full affected server and web packages at completed draft and hierarchy source (exit 0)"
-     },
-     {
-      "after": 11,
-      "message": "W1c 70 W09/W10: final frozen counter source hashes and production file ceiling (exit 0)"
-     },
-     {
-      "after": 13,
-      "message": "W1c 82 W10: full affected web after inspection ownership repair (exit 0)"
-     },
-     {
-      "after": 13,
-      "message": "W1c 86 W09/W10: final frozen counter source hashes and production file ceiling (exit 0)"
-     },
-     {
-      "after": 13,
-      "message": "W1c 90 W09/W10: owned live versus defunct process audit before terminal cleanup (exit 0)"
      }
     ]
    }

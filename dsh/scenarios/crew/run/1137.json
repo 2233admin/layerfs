@@ -1,5 +1,5 @@
 {
- "step": "P1e-104 P1e final CLI package regression outcome",
+ "step": "P1e-105 P1e final CLI package regression unmount",
  "agent": "people",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 8,
+ "ms": 7,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "P1e:/workspaces/23",
-   "message": "P1e final CLI package regression (exit 0)",
-   "force": false,
-   "commit": "1267e38de0152c086bedca6a46fc96d07edeaeb844dca3ee87a6c0d36bf6931ad0",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

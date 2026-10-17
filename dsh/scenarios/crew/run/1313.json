@@ -1,20 +1,20 @@
 {
- "step": "I1d-170 I-13: changed actual Chromium copied-resource heading proofs unmount",
- "agent": "insight-a",
+ "step": "lead-388 L0: terminal unmount successful focus covering cycle",
+ "agent": "root",
  "kind": "history",
  "branch": null,
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 7,
+ "ms": 18,
  "expect": [
   "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
    "op": "unmount",
-   "ws": "I1d:/workspaces/29",
+   "ws": "lead:/workspaces/59",
    "discard": false,
    "expect": "sandbox.unmount:Unmounted"
   }

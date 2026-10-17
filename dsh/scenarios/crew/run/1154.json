@@ -1,22 +1,22 @@
 {
- "step": "lead-352 I11 I12: fresh saved-filter source from exact combined closed P1e I1b and L0 tooling; coherent final proof pending",
+ "step": "lead-353 P06 P07 P08 and I10: fresh combined-source qualification Workspace",
  "agent": "root",
  "kind": "history",
- "branch": null,
+ "branch": "int-depth-admin",
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 23,
+ "ms": 47,
  "expect": [
-  "branch.fork:Forked"
+  "sandbox.mount:Mounted"
  ],
  "calls": [
   {
-   "op": "fork",
-   "name": "insight.6",
-   "from": "int-depth-admin#0",
-   "expect": "branch.fork:Forked"
+   "op": "mount",
+   "branch": "int-depth-admin",
+   "ws": "lead:/workspaces/52",
+   "expect": "sandbox.mount:Mounted"
   }
  ]
 }

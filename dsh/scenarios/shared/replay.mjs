@@ -11,7 +11,9 @@
 // has as UpToDate may come back Committed only if it changes no tracked file
 // (a tool's own cache, such as cargo's last-use times, is all it holds). A
 // command whose recorded failures were only tests that fail by chance (`flaky`)
-// may exit 0 or as recorded, and a failure must be the recorded one. The first call that
+// may exit 0 or as recorded, and a failure must be the recorded one. A
+// verification-only command the scenario disables (`disabled`, with the run
+// file's `verification`, "off" or "no-browser") does not run; the step says so. The first call that
 // differs ends the step with exit code 1, which stops the demo there: a run
 // is never patched up. Nothing waits or retries; order between agents comes
 // from the scenario's own waits.
@@ -158,6 +160,11 @@ export async function step(scenario, number) {
           break;
         }
         case "exec": {
+          if (call.disabled && ["off", "no-browser"].includes(run.verification)) {
+            // a verification-only command, disabled for this scenario: nothing runs and nothing stands in for it
+            console.log(`verification disabled: ${call.command.slice(0, 120).replace(/\s+/g, " ")}… (recorded exit ${call.exit})`);
+            break;
+          }
           console.log(`$ ${call.command.length > 300 ? `${call.command.slice(0, 300)}…` : call.command}`);
           const r = await expectCall(call, "sandbox.exec", () => lf.sandbox.exec(ws.sandbox, ws.path, call.command, call.message ?? undefined));
           const out = tail(`${r.stdout ?? ""}${r.stderr ?? ""}`);

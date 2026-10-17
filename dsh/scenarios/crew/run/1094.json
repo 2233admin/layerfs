@@ -1,5 +1,5 @@
 {
- "step": "I1b-061 I-10: final frozen source census and live versus defunct process custody commit",
+ "step": "I1b-062 I-10: final frozen source census and live versus defunct process custody unmount",
  "agent": "insight-a",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 8,
+ "ms": 6,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "I1b:/workspaces/12",
-   "message": "I1b 061 I-10: final frozen source census and live versus defunct process custody (exit 0)",
-   "force": false,
-   "commit": "1267942825507b2816acc5344e7f4a5f4952641789c5e996708dabfd0c134cf554",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

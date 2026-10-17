@@ -1,26 +1,24 @@
 {
- "step": "P1e-089 P1e corrected real app accepted and opaque-link route abandonment exec",
+ "step": "P1e-090 P1e corrected real app accepted and opaque-link route abandonment outcome",
  "agent": "people",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'node --test --test-name-pattern='\\''administration routes'\\'' packages/web/test/people-admin-browser.test.js'",
- "exit": 0,
- "output": "  duration_ms: 2093.276876\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 2806.266626",
- "ms": 2908,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 11,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "P1e:/workspaces/18",
-   "command": "timeout 110 bash -c 'node --test --test-name-pattern='\\''administration routes'\\'' packages/web/test/people-admin-browser.test.js'",
-   "message": "P1e corrected real app accepted and opaque-link route abandonment",
-   "exit": 0,
-   "output": "  duration_ms: 2093.276876\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 2806.266626",
-   "ms": 2908,
-   "expect": "sandbox.exec:exit:0"
+   "message": "P1e corrected real app accepted and opaque-link route abandonment (exit 0)",
+   "force": false,
+   "commit": "12df3cc9cdb81734fe85881094b00976dd5ba88d743a953eccde7bd621be9d1db6",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

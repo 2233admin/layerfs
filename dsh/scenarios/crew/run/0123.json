@@ -9,7 +9,7 @@
  "output": null,
  "ms": 34,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "lead 074 W-M1: required new generation checks with 98 passing tests (exit 0)",
    "force": false,
    "commit": "12648949aaf2456e0475cb210c95cd7410c63092bb67adf494c75dd8caa2046659",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

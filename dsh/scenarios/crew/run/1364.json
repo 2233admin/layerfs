@@ -1,5 +1,5 @@
 {
- "step": "lead-416 Integration: terminal unmount candidate414 failure retained for exact people lifecycle diagnosis",
+ "step": "lead-421 P1f: isolate exact combined source for narrow People action unmount lifecycle repair",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,16 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 37,
+ "ms": 34,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "branch.fork:NameTaken"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "lead:/workspaces/68",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "fork",
+   "name": "people.6",
+   "from": "int-final.1",
+   "expect": "branch.fork:NameTaken"
   }
  ]
 }

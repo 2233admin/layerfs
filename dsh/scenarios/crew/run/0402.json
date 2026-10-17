@@ -9,7 +9,7 @@
  "output": null,
  "ms": 14,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,7 +18,7 @@
    "message": "I1 059 I-M3 shared HTTP web and actual token CLI search-filter proofs (exit 1)",
    "force": false,
    "commit": "12ad7b6be82c8a8532c9cd9c21c890bb52b0257a55e0fab572c230029f56040b89",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

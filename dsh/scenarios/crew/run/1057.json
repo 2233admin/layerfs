@@ -9,7 +9,7 @@
  "output": null,
  "ms": 10,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "I1b 034 I-10: diagnostic sink syntax preparation (exit 0)",
    "force": false,
    "commit": "12512a46b61c88b23bbc4c19356ef7cdd91015f859d989867c971014630ee0107c",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

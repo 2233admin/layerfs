@@ -1,26 +1,24 @@
 {
- "step": "I1d-192 I-13: final full web with stable suggestion geometry exec",
- "agent": "insight-a",
- "kind": "replay",
+ "step": "lead-397 Retain396 exit1: nine pure ownership and focus browser passed; native-tab test failed while signing out secondtab, currentfooter shows check completion; cause under review no session browser …",
+ "agent": "root",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'npm test --workspace packages/web'",
- "exit": 1,
- "output": "# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 34254.895058\nnpm error Lifecycle script `test` failed with error:\nnpm error code 1\nnpm error path /workspaces/36/packages/web\nnpm error workspace @crew/web@0.1.0\nnpm error location /workspaces/36/packages/web\nnpm error command failed\nnpm error command sh -c node --test test/*.test.js",
- "ms": 34485,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 64,
  "expect": [
-  "sandbox.exec:exit:1"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
-   "ws": "I1d:/workspaces/36",
-   "command": "timeout 110 bash -c 'npm test --workspace packages/web'",
-   "message": "final full web with stable suggestion geometry",
-   "exit": 1,
-   "output": "# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 34254.895058\nnpm error Lifecycle script `test` failed with error:\nnpm error code 1\nnpm error path /workspaces/36/packages/web\nnpm error workspace @crew/web@0.1.0\nnpm error location /workspaces/36/packages/web\nnpm error command failed\nnpm error command sh -c node --test test/*.test.js",
-   "ms": 34485,
-   "expect": "sandbox.exec:exit:1"
+   "op": "commit",
+   "ws": "lead:/workspaces/63",
+   "message": "lead 397 Retain396 exit1: nine pure ownership and focus browser passed; native-tab test failed while signing out secondtab, currentfooter shows check completion; cause under review no session browser PASS (exit 1)",
+   "force": false,
+   "commit": "127d25cd33d3ae67b4d86749ad15bbc09d72abd2f4b3f0836f45c7c7d70983650c",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

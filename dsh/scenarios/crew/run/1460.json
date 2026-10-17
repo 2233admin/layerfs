@@ -1,5 +1,5 @@
 {
- "step": "lead-497 A02 build: capture completed Bash including any failure",
+ "step": "lead-498 A02 build: terminal acceptance unmount",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,18 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 14,
+ "ms": 7,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/83",
-   "message": "lead A02 build frozen acceptance (exit 0)",
-   "force": false,
-   "commit": "12443ac3d7b43ac8d8fbabbf5f208446d2a4276ddbba3c6c9e77e3b9c1786603a6",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

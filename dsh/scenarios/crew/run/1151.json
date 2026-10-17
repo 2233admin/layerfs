@@ -1,20 +1,21 @@
 {
- "step": "P1e-126 P1e sole permanent terminal close after original daemon streams saved",
- "agent": "people",
+ "step": "lead-350 T1: serial create I1c Sandbox",
+ "agent": "root",
  "kind": "history",
  "branch": null,
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 1339,
+ "ms": 333,
  "expect": [
-  "sandbox.close:Closed"
+  "sandbox.create:Ready"
  ],
  "calls": [
   {
-   "op": "close",
-   "expect": "sandbox.close:Closed"
+   "op": "create",
+   "for": "insight-a",
+   "expect": "sandbox.create:Ready"
   }
  ]
 }

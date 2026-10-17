@@ -9,7 +9,7 @@
  "output": null,
  "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "W1 011 W-M2 complete package regression and source census (exit 1)",
    "force": false,
    "commit": "126d6b05abe1ba5e028f00eb615a2cfc455aa029d1cbd1972278c4ed3d3e5904a6",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

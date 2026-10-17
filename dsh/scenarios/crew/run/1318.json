@@ -1,5 +1,5 @@
 {
- "step": "lead-392 Retain native-tab session regression391 exit1: second tab signed out, first tab still renders protected issue and authenticated navigation; syntax255 passed",
+ "step": "lead-393 L0: terminal unmount initial native-tab session failure cycle",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -9,17 +9,14 @@
  "output": null,
  "ms": 39,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/61",
-   "message": "lead 392 Retain native-tab session regression391 exit1: second tab signed out, first tab still renders protected issue and authenticated navigation; syntax255 passed (exit 1)",
-   "force": false,
-   "commit": "12daf019732d600e5526aeea65934eb44971f70f79b681f56d9315c98f261adba7",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

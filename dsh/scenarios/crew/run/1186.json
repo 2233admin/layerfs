@@ -1,26 +1,24 @@
 {
- "step": "I1c-068 I-11 diagnosed custody browser with native valid form readiness exec",
+ "step": "I1c-069 I-11 diagnosed custody browser with native valid form readiness commit",
  "agent": "insight-a",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'node --test --test-name-pattern='\\''duplicate admission'\\'' packages/web/test/filter-browser.test.js'",
- "exit": 0,
- "output": "  duration_ms: 5649.122753\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 6022.251127",
- "ms": 6088,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 8,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "I1c:/workspaces/9",
-   "command": "timeout 110 bash -c 'node --test --test-name-pattern='\\''duplicate admission'\\'' packages/web/test/filter-browser.test.js'",
-   "message": "I-11 diagnosed custody browser with native valid form readiness",
-   "exit": 0,
-   "output": "  duration_ms: 5649.122753\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 6022.251127",
-   "ms": 6088,
-   "expect": "sandbox.exec:exit:0"
+   "message": "I1c I-11 diagnosed custody browser with native valid form readiness (exit 0)",
+   "force": false,
+   "commit": "12a02b01b23604b8d82b376e0f9cdf0e690ac5067423019ec9f0fdc22a1a9aa404",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

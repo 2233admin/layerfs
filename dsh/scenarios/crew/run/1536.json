@@ -1,5 +1,5 @@
 {
- "step": "lead-574 A13 audit: capture completed Bash including any failure",
+ "step": "lead-575 A13 audit: terminal acceptance unmount",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 8,
+ "ms": 7,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/102",
-   "message": "lead A13 audit frozen acceptance (exit 0)",
-   "force": false,
-   "commit": "121e9f34a917995a099b2269759a8fa0d6bcda94a364741f499bc123b91d531b43",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

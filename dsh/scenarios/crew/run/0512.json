@@ -9,7 +9,7 @@
  "output": null,
  "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "I1 135 I-M3 browser typed-builder search-filter controls and actual token CLI final proof (exit 1)",
    "force": false,
    "commit": "129f327b7bcfc26fb431c305b498b1a0cf6f7562fc0b8a3750014133a8448d15ee",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

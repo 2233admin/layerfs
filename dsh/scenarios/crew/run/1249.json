@@ -1,5 +1,5 @@
 {
- "step": "I1d-119 I-13: changed current result and canonical return Chromium proof commit",
+ "step": "I1d-120 I-13: changed current result and canonical return Chromium proof unmount",
  "agent": "insight-a",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 9,
+ "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "I1d:/workspaces/14",
-   "message": "I1d I-13: changed current result and canonical return Chromium proof (exit 1)",
-   "force": false,
-   "commit": "12106d620ce1d1f154a9091ecf3016d93008d0ed0a8d986cb1108216ac15bed4b5",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

@@ -1,26 +1,24 @@
 {
- "step": "I1d-100 I-13: actual Chromium saved-filter URL return and custody proof exec",
+ "step": "I1d-101 I-13: actual Chromium saved-filter URL return and custody proof commit",
  "agent": "insight-a",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'node --test packages/web/test/filter-view-browser.test.js'",
- "exit": 1,
- "output": "  duration_ms: 9094.916212\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 2\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 25184.011178",
- "ms": 25255,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 9,
  "expect": [
-  "sandbox.exec:exit:1"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "I1d:/workspaces/8",
-   "command": "timeout 110 bash -c 'node --test packages/web/test/filter-view-browser.test.js'",
-   "message": "actual Chromium saved-filter URL return and custody proof",
-   "exit": 1,
-   "output": "  duration_ms: 9094.916212\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 2\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 25184.011178",
-   "ms": 25255,
-   "expect": "sandbox.exec:exit:1"
+   "message": "I1d I-13: actual Chromium saved-filter URL return and custody proof (exit 1)",
+   "force": false,
+   "commit": "12daa47c360c6eb0d887cb74b054a98124bbedf87ef46edbbf1de33c852818b1c3",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

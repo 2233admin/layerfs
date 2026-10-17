@@ -1,6 +1,7 @@
 {
  "step": "I2-069 I-M2 live and CLI behavior checkpoint",
  "agent": "insight-b",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 1,
  "output": "  duration_ms: 125.031166\n  type: 'test'\n  ...\n1..8\n# tests 8\n# suites 0\n# pass 7\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 2121.335376",
  "ms": 5944,
- "expect": [
-  "sandbox.exec:exit:1"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,10 @@
    "exit": 1,
    "output": "  duration_ms: 125.031166\n  type: 'test'\n  ...\n1..8\n# tests 8\n# suites 0\n# pass 7\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 2121.335376",
    "ms": 5944,
-   "expect": "sandbox.exec:exit:1"
+   "expect": null,
+   "verification": true,
+   "browser": true,
+   "disabled": true
   }
  ]
 }

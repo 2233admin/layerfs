@@ -1,26 +1,24 @@
 {
- "step": "lead-504 A04 shared tests: frozen acceptance command",
+ "step": "lead-505 A04 shared tests: capture completed Bash including any failure",
  "agent": "root",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'acceptance.2'\"'\"' CREW_WORKSPACE='\"'\"'c40ef61344a0248f299214b8bf995db649214c633dc02e415b9bc9d9d163796f'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-504 A04 shared tests: frozen acceptance command'\"'\"'; npm test --workspace packages/shared'",
- "exit": 0,
- "output": "  duration_ms: 0.957208\n  type: 'test'\n  ...\n1..89\n# tests 89\n# suites 0\n# pass 89\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 152.69975",
- "ms": 322,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 7,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "lead:/workspaces/85",
-   "command": "timeout 110 bash -c 'export CREW_AGENT=lead CREW_LANE='\"'\"'acceptance.2'\"'\"' CREW_WORKSPACE='\"'\"'c40ef61344a0248f299214b8bf995db649214c633dc02e415b9bc9d9d163796f'\"'\"' CREW_INSTALL_TRACE_STEP='\"'\"'lead-504 A04 shared tests: frozen acceptance command'\"'\"'; npm test --workspace packages/shared'",
-   "message": "A04 shared tests: frozen acceptance command",
-   "exit": 0,
-   "output": "  duration_ms: 0.957208\n  type: 'test'\n  ...\n1..89\n# tests 89\n# suites 0\n# pass 89\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 152.69975",
-   "ms": 322,
-   "expect": "sandbox.exec:exit:0"
+   "message": "lead A04 shared tests frozen acceptance (exit 0)",
+   "force": false,
+   "commit": "12443ac3d7b43ac8d8fbabbf5f208446d2a4276ddbba3c6c9e77e3b9c1786603a6",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

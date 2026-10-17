@@ -1,6 +1,7 @@
 {
  "step": "lead-122 L0: validate syntax and actual process namespace audit",
  "agent": "root",
+ "verification": "off",
  "kind": "replay",
  "branch": null,
  "writes": null,
@@ -8,9 +9,7 @@
  "exit": 0,
  "output": "\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":125,\"ok\":true}\n{\"mode\":\"closed\",\"checks\":[{\"name\":\"No retained or live application/browser processes in selected Sandbox\",\"ok\":true}],\"pass\":1,\"fail\":0,\"ok\":true}",
  "ms": 2717,
- "expect": [
-  "sandbox.exec:exit:0"
- ],
+ "expect": [],
  "calls": [
   {
    "op": "exec",
@@ -20,7 +19,9 @@
    "exit": 0,
    "output": "\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":125,\"ok\":true}\n{\"mode\":\"closed\",\"checks\":[{\"name\":\"No retained or live application/browser processes in selected Sandbox\",\"ok\":true}],\"pass\":1,\"fail\":0,\"ok\":true}",
    "ms": 2717,
-   "expect": "sandbox.exec:exit:0"
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

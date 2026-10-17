@@ -1,22 +1,24 @@
 {
- "step": "lead-398 L0: terminal unmount session changed-source native-click failure396",
- "agent": "root",
+ "step": "I1d-193 I-13: final full web with stable suggestion geometry commit",
+ "agent": "insight-a",
  "kind": "history",
  "branch": null,
  "writes": null,
  "command": null,
  "exit": null,
  "output": null,
- "ms": 20,
+ "ms": 11,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "lead:/workspaces/63",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "commit",
+   "ws": "I1d:/workspaces/36",
+   "message": "I1d I-13: final full web with stable suggestion geometry (exit 1)",
+   "force": false,
+   "commit": "126ed15e7e474d31698e2b3efcdb9b32e01f21ad4864916a29a734b6270d7d6365",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

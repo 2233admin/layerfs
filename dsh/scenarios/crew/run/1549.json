@@ -1,5 +1,5 @@
 {
- "step": "lead-587 Final custody: terminal unmount last selected Workspace after explicit live/defunct process snapshot",
+ "step": "lead-589 FINAL: sole terminalclose of own selected lead Sandbox after all acceptance, unmounts and both original daemon streams; no further SDK/application work",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,16 +7,14 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 34,
+ "ms": 1453,
  "expect": [
-  "sandbox.unmount:Unmounted"
+  "sandbox.close:Closed"
  ],
  "calls": [
   {
-   "op": "unmount",
-   "ws": "lead:/workspaces/105",
-   "discard": false,
-   "expect": "sandbox.unmount:Unmounted"
+   "op": "close",
+   "expect": "sandbox.close:Closed"
   }
  ]
 }

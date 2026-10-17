@@ -9,7 +9,7 @@
  "output": null,
  "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "I1b 029 I-10: instrumented actual saved-filter browser diagnostic (exit 0)",
    "force": false,
    "commit": "129f8022f718ecf3503d6f726249d72c6bc367ded7f4b2322bc7bc17fbc04fefb3",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

@@ -1,5 +1,5 @@
 {
- "step": "lead-443 A02 build: capture completed Bash including any failure",
+ "step": "lead-444 A02 build: terminal acceptance unmount",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,18 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 15,
+ "ms": 7,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/71",
-   "message": "lead A02 build frozen acceptance (exit 0)",
-   "force": false,
-   "commit": "12535515b450b590a45aa2c1f34c9cd2462d87f0123b8e719815d289b9c6666e34",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

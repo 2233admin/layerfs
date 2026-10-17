@@ -1,26 +1,24 @@
 {
- "step": "P1e-099 P1e final server package exec",
+ "step": "P1e-100 P1e final server package outcome",
  "agent": "people",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'npm test --workspace packages/server'",
- "exit": 0,
- "output": "  duration_ms: 97.286667\n  type: 'test'\n  ...\n1..293\n# tests 293\n# suites 0\n# pass 293\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 11833.428797",
- "ms": 12018,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 12,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "P1e:/workspaces/22",
-   "command": "timeout 110 bash -c 'npm test --workspace packages/server'",
-   "message": "P1e final server package",
-   "exit": 0,
-   "output": "  duration_ms: 97.286667\n  type: 'test'\n  ...\n1..293\n# tests 293\n# suites 0\n# pass 293\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 11833.428797",
-   "ms": 12018,
-   "expect": "sandbox.exec:exit:0"
+   "message": "P1e final server package (exit 0)",
+   "force": false,
+   "commit": "1267e38de0152c086bedca6a46fc96d07edeaeb844dca3ee87a6c0d36bf6931ad0",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

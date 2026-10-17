@@ -1,5 +1,5 @@
 {
- "step": "lead-562 A10 smoke: capture completed Bash including any failure",
+ "step": "lead-563 A10 smoke: terminal acceptance unmount",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,18 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 32,
+ "ms": 7,
  "expect": [
-  "sandbox.commit:Committed|UpToDate"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/99",
-   "message": "lead A10 smoke frozen acceptance (exit 0)",
-   "force": false,
-   "commit": "125bb31a5b2e9f1cf6ada6be1e45d45ce06b337bef8c3a8ff59f7397e20f0668dc",
-   "expect": "sandbox.commit:Committed|UpToDate"
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }

@@ -9,7 +9,7 @@
  "output": null,
  "ms": 8,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "I2c I-09: pinned Chromium digest cadence and org custody (exit 1)",
    "force": false,
    "commit": "1253fdad8f9254ff7f33efefbf9d7d8fc44682908164a1ddf81fee697a8ded947c",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

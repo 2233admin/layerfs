@@ -1,26 +1,24 @@
 {
- "step": "P1e-084 P1e changed real route and later audit browser proof exec",
+ "step": "P1e-085 P1e changed real route and later audit browser proof outcome",
  "agent": "people",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'npm run prepare-tests && node --test --test-name-pattern='\\''administration routes|administration audit'\\'' packages/web/test/people-admin-browser.test.js'",
- "exit": 1,
- "output": "    async Test.run (node:internal/test_runner/test:1054:7)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 1\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 12854.588131",
- "ms": 18470,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 9,
  "expect": [
-  "sandbox.exec:exit:1"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "P1e:/workspaces/16",
-   "command": "timeout 110 bash -c 'npm run prepare-tests && node --test --test-name-pattern='\\''administration routes|administration audit'\\'' packages/web/test/people-admin-browser.test.js'",
-   "message": "P1e changed real route and later audit browser proof",
-   "exit": 1,
-   "output": "    async Test.run (node:internal/test_runner/test:1054:7)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 1\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 12854.588131",
-   "ms": 18470,
-   "expect": "sandbox.exec:exit:1"
+   "message": "P1e changed real route and later audit browser proof (exit 1)",
+   "force": false,
+   "commit": "1270cdfb9f938d496014bd7b9c187f3e850b229f2dd0117f7bf2de8d5da74f2c7f",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

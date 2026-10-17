@@ -1,26 +1,24 @@
 {
- "step": "I1d-123 I-13: prepare main-header saved-filter return proof exec",
+ "step": "I1d-124 I-13: prepare main-header saved-filter return proof commit",
  "agent": "insight-a",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'npm run prepare-tests && python3 -c \"import ast; ast.parse(open('\"'\"'packages/web/test/filter-view-browser.py'\"'\"').read())\"'",
- "exit": 0,
- "output": "\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":259,\"ok\":true}",
- "ms": 6495,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 6,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "I1d:/workspaces/16",
-   "command": "timeout 110 bash -c 'npm run prepare-tests && python3 -c \"import ast; ast.parse(open('\"'\"'packages/web/test/filter-view-browser.py'\"'\"').read())\"'",
-   "message": "prepare main-header saved-filter return proof",
-   "exit": 0,
-   "output": "\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":259,\"ok\":true}",
-   "ms": 6495,
-   "expect": "sandbox.exec:exit:0"
+   "message": "I1d I-13: prepare main-header saved-filter return proof (exit 0)",
+   "force": false,
+   "commit": "120b91f4bb4e33676824f3796f1ae8cc0f30ed978b9634994e929ad938309f3c8d",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

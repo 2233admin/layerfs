@@ -1,22 +1,27 @@
 {
- "step": "P1e-094 P1e final build and syntax mount",
+ "step": "P1e-095 P1e final build and syntax exec",
  "agent": "people",
- "kind": "history",
- "branch": "people.6",
+ "verification": "off",
+ "kind": "replay",
+ "branch": null,
  "writes": null,
- "command": null,
- "exit": null,
- "output": null,
- "ms": 30,
- "expect": [
-  "sandbox.mount:Mounted"
- ],
+ "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests'",
+ "exit": 0,
+ "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":251,\"ok\":true}",
+ "ms": 6146,
+ "expect": [],
  "calls": [
   {
-   "op": "mount",
-   "branch": "people.6",
+   "op": "exec",
    "ws": "P1e:/workspaces/21",
-   "expect": "sandbox.mount:Mounted"
+   "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests'",
+   "message": "P1e final build and syntax",
+   "exit": 0,
+   "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":251,\"ok\":true}",
+   "ms": 6146,
+   "expect": null,
+   "verification": true,
+   "disabled": true
   }
  ]
 }

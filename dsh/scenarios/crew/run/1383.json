@@ -1,26 +1,24 @@
 {
- "step": "P1f-028 people action lifetime: sandbox.exec",
+ "step": "P1f-029 people action lifetime: sandbox.commit",
  "agent": "people",
- "kind": "replay",
+ "kind": "history",
  "branch": null,
  "writes": null,
- "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests'",
- "exit": 0,
- "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":264,\"ok\":true}",
- "ms": 6745,
+ "command": null,
+ "exit": null,
+ "output": null,
+ "ms": 24,
  "expect": [
-  "sandbox.exec:exit:0"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
-   "op": "exec",
+   "op": "commit",
    "ws": "P1f:/workspaces/5",
-   "command": "timeout 110 bash -c 'npm run build && npm run prepare-tests'",
-   "message": "prepare changed lifetime source",
-   "exit": 0,
-   "output": "> crew@0.1.0 build\n> npm run build --workspace packages/web\n\n\n> @crew/web@0.1.0 build\n> node build.mjs\n\n\n> crew@0.1.0 prepare-tests\n> node scripts/prepare-tests.mjs\n\n{\"syntaxFiles\":264,\"ok\":true}",
-   "ms": 6745,
-   "expect": "sandbox.exec:exit:0"
+   "message": "P1f prepare changed lifetime source (exit 0)",
+   "force": false,
+   "commit": "1248927a2e829778bfa9fb12dfe25af5ac95a7eea05a850511aa1d41009e511d63",
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

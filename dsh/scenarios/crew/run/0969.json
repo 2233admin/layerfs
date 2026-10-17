@@ -9,7 +9,7 @@
  "output": null,
  "ms": 38,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.commit:UpToDate"
  ],
  "calls": [
   {
@@ -18,8 +18,7 @@
    "message": "lead 284 L0 browser startup and auth flows reached; delayed-login fixture inactive because second URL changed hash only; retain proof failure (exit 1)",
    "force": false,
    "commit": "125bcdfd1185c7e33a7fdaa875ef0987904f4a28667d89d84f41592414e66c9490",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "expect": "sandbox.commit:UpToDate"
   }
  ]
 }

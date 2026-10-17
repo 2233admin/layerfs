@@ -1,5 +1,5 @@
 {
- "step": "lead-447 A03 prepare tests: capture completed Bash including any failure",
+ "step": "lead-448 A03 prepare tests: terminal acceptance unmount",
  "agent": "root",
  "kind": "history",
  "branch": null,
@@ -7,19 +7,16 @@
  "command": null,
  "exit": null,
  "output": null,
- "ms": 8,
+ "ms": 7,
  "expect": [
-  "sandbox.commit:UpToDate|Committed"
+  "sandbox.unmount:Unmounted"
  ],
  "calls": [
   {
-   "op": "commit",
+   "op": "unmount",
    "ws": "lead:/workspaces/72",
-   "message": "lead A03 prepare tests frozen acceptance (exit 0)",
-   "force": false,
-   "commit": "12535515b450b590a45aa2c1f34c9cd2462d87f0123b8e719815d289b9c6666e34",
-   "expect": "sandbox.commit:UpToDate|Committed",
-   "generated": true
+   "discard": false,
+   "expect": "sandbox.unmount:Unmounted"
   }
  ]
 }
