@@ -76,7 +76,10 @@ export function buildBaseline(metrics) {
     }
     for (const [name, p] of Object.entries(m.probes || {})) (probes.get(name) || probes.set(name, []).get(name)).push(p.ms);
   }
+  const daemons = new Set(metrics.map((m) => m.binary?.daemon));
+  if (daemons.size > 1) throw new Error(`a baseline mixes daemons ${[...daemons].join(", ")}`);
   return {
+    daemon: metrics[0]?.binary?.daemon ?? null,
     ranges: metrics.map((m) => m.range),
     ops: Object.fromEntries([...ops].map(([k, v]) => [k, { p50: quantile(v.p50, 0.5), p95: quantile(v.p95, 0.5) }])),
     probes: Object.fromEntries([...probes].map(([k, v]) => [k, quantile(v, 0.5)])),
@@ -108,6 +111,12 @@ export function perInput(name, x, value, scoped) {
   return n > 0 ? value / n : null;
 }
 
+/** Same-binary filter: never a series across daemons (SPEC §6). A point without a daemon id matches only another without one. */
+export const sameBinary = (m) => (x) => (x.binary?.daemon ?? null) === (m.binary?.daemon ?? null);
+
+/** Points a depth fit needs; fewer is reported as insufficient, never as a pass. */
+export const MINIMUM_POINTS = 3;
+
 /** True when the last `n` values each rose over the one before. */
 export const rising = (series, n = THRESHOLDS.rising) =>
   series.length > n && series.slice(-n - 1).every((v, i, a) => i === 0 || (v != null && a[i - 1] != null && v > a[i - 1]));
@@ -116,9 +125,17 @@ const band = (v, t, high = "optimize") => (v == null ? "pass" : v > t.act ? high
 
 /**
  * The range's gate decision. `history` is the earlier ranges' metrics (last
- * attempt each, oldest first); `baseline` comes from buildBaseline.
+ * attempt each, oldest first); `baseline` comes from buildBaseline; `seeds`
+ * are probe points a fix measured with its new daemon on earlier snapshots
+ * (`probes-<daemon>.json`). Every series, fit and baseline uses only points
+ * measured with this attempt's daemon; a seed fills a range no measured
+ * same-binary attempt covers.
  */
-export function evaluate(m, history = [], baseline = null, t = THRESHOLDS) {
+export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, seeds = []) {
+  const own = sameBinary(m);
+  const history = allHistory.filter(own);
+  const short = (m.binary?.daemon ?? "unknown").slice(0, 12);
+  const insufficient = (n) => `insufficient same-binary points: ${n} of ${MINIMUM_POINTS} (daemon ${short})`;
   const rows = [];
   const add = (name, value, threshold, result) => rows.push({ name, value, threshold, result });
   const c = m.checks || {};
@@ -132,7 +149,9 @@ export function evaluate(m, history = [], baseline = null, t = THRESHOLDS) {
   add("Health", `${h.workspacesOpen ?? "?"} open, ${h.overlaysLeft ?? "?"} overlays${grow.length ? `; rising: ${grow.join(", ")}` : ""}`, "0, 0, flat",
     leaked ? "stop" : grow.length ? "optimize" : "pass");
   // Speed: worst ratio to the baseline per op and class; act only when it also keeps rising.
-  if (baseline) {
+  if (baseline && (baseline.daemon ?? null) !== (m.binary?.daemon ?? null)) {
+    add("Speed", `baseline measured with daemon ${(baseline.daemon ?? "unknown").slice(0, 12)}; ${insufficient(0)}`, `≤ ${t.speed.watch}×`, "watch");
+  } else if (baseline) {
     let worstRow = null;
     for (const r of m.ops || []) {
       const b = baseline.ops[`${r.op}\u0000${r.sizeClass}`];
@@ -151,7 +170,11 @@ export function evaluate(m, history = [], baseline = null, t = THRESHOLDS) {
     } else add("Speed", "no comparable operation", `≤ ${t.speed.watch}×`, "pass");
   } else add("Speed", "baseline not set (pilot)", "—", "pass");
   // Scaling: probes must stay flat with depth; counters are judged more strictly.
-  const all = [...history, m];
+  // Seeded probe points fill the ranges no same-binary attempt covers.
+  const covered = new Set([...history.map((x) => x.range), m.range]);
+  const seeded = seeds.filter(own).filter((p) => !covered.has(p.range));
+  const all = [...seeded, ...history, m].sort((a, b) => a.range - b.range);
+  const fitted = all.filter((x) => x.depth?.after > 0).length;
   // A probe with its own growing input is fitted per unit of that input, when this attempt recorded it.
   const scoped = m.inputs != null;
   const unit = (name) => (scoped && SCOPED[name] ? " per tree byte" : "");
@@ -166,12 +189,16 @@ export function evaluate(m, history = [], baseline = null, t = THRESHOLDS) {
     ? { ...fits.reduce((m2, f) => ((f.e ?? -Infinity) > (m2.e ?? -Infinity) ? f : m2)), result: worst(fits.map((f) => band(f.e, th))) }
     : { name: null, e: null, result: "pass" };
   const scale = top(probeFits, t.depthExponent), counter = top(counterFits, t.counterExponent);
-  add("Scaling", scale.name ? `${scale.name}: depth exponent ${scale.e ?? "n/a"}` : "no probes", `< ${t.depthExponent.watch}`, scale.result);
-  add("Counters", counter.name ? `${counter.name}: depth exponent ${counter.e ?? "n/a"}` : "no counters", `< ${t.counterExponent.watch}`, counter.result);
+  const fit = (f, what) => (fitted < MINIMUM_POINTS ? { value: insufficient(fitted), result: "watch" }
+    : { value: f.name ? `${f.name}: depth exponent ${f.e ?? "n/a"}${seeded.length ? ` (${seeded.length} seeded probe point${seeded.length > 1 ? "s" : ""})` : ""}` : `no ${what}`, result: f.result });
+  const sv = fit(scale, "probes"), cv = fit(counter, "counters");
+  add("Scaling", sv.value, `< ${t.depthExponent.watch}`, sv.result);
+  add("Counters", cv.value, `< ${t.counterExponent.watch}`, cv.result);
   const s = m.storage || {};
   add("Directory share", s.directoryShare ?? "n/a", `< ${t.directoryShare.watch}`, band(s.directoryShare, t.directoryShare));
   add("Reinstall growth", s.reinstallGrowth ?? "n/a", `≤ ${t.reinstallGrowth.watch}×`, band(s.reinstallGrowth, t.reinstallGrowth));
-  const eff = all.map((x) => (x.storage?.changedBytes ? x.storage.newStored / x.storage.changedBytes : null));
+  const measured = [...history, m];
+  const eff = measured.map((x) => (x.storage?.changedBytes ? x.storage.newStored / x.storage.changedBytes : null));
   const cap = s.delta?.atCap;
   add("Delta at cap", cap == null ? "n/a" : `${cap} (budget ${s.delta?.byBudget ?? "n/a"})`, `< ${t.deltaAtCap.watch}`,
     cap > t.deltaAtCap.act && rising(eff) ? "optimize" : cap > t.deltaAtCap.watch ? "watch" : "pass");
@@ -182,7 +209,7 @@ export function evaluate(m, history = [], baseline = null, t = THRESHOLDS) {
   add("Range growth", s.newStored == null ? "n/a" : `${(s.newStored / 2 ** 20).toFixed(1)} MiB${ratio != null ? `, ${ratio}× the median` : ""}`, `≤ ${t.growth.median}× median, ≤ 2 GiB`,
     s.newStored != null && (s.newStored > t.growth.bytes || (ratio != null && ratio > t.growth.median)) ? "optimize" : "pass");
   // Snapshot time per new byte must not grow with the Store's size (SPEC §5, §7)
-  const snaps = all.filter((x) => x.snapshot?.copyMs != null && x.snapshot?.size).map((x) => [x.snapshot.size, ((x.snapshot.sealMs ?? 0) + x.snapshot.copyMs) / Math.max(x.snapshot.newBytes, 1 << 20)]);
+  const snaps = measured.filter((x) => x.snapshot?.copyMs != null && x.snapshot?.size).map((x) => [x.snapshot.size, ((x.snapshot.sealMs ?? 0) + x.snapshot.copyMs) / Math.max(x.snapshot.newBytes, 1 << 20)]);
   const snapE = exponent(snaps);
   add("Snapshot time", m.snapshot ? `${m.snapshot.copyMs} ms for ${(m.snapshot.newBytes / 2 ** 20).toFixed(1)} MiB new; size exponent ${snapE ?? "n/a"}` : "no snapshot",
     `< ${t.depthExponent.watch}`, band(snapE, t.depthExponent));

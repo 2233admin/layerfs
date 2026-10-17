@@ -11,7 +11,7 @@
 // format), with `gh issue comment 352 --body-file <it>`.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { buildBaseline, evaluate } from "./gates.mjs";
+import { buildBaseline, evaluate, MINIMUM_POINTS } from "./gates.mjs";
 import { change, loadFindings } from "./findings.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
@@ -37,6 +37,19 @@ export function loadAttempts(dir) {
  * its oracle: attached in memory to earlier ranges' metrics that predate
  * `inputs`, never written back to a recorded file.
  */
+/**
+ * Probe points a fix measured with its new daemon on earlier snapshots
+ * (`probes-<daemon>.json`: { daemon, points: [{ range, depth, binary, cache, probes }] }),
+ * so the new binary's depth fits need not wait three ranges (gates.mjs evaluate).
+ */
+export function loadSeeds(dir) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).filter((f) => /^probes-[0-9a-f]{64}\.json$/.test(f)).flatMap((f) => {
+    const x = JSON.parse(readFileSync(join(dir, f), "utf8"));
+    return x.points.filter((p) => p.binary?.daemon === x.daemon);
+  });
+}
+
 export function withInputs(m, oracleDir) {
   if (m.inputs) return m;
   const file = join(oracleDir, `oracle-${pad(m.range)}.json`);
@@ -196,15 +209,20 @@ function main() {
   const attempts = loadAttempts(metricsDir), findings = loadFindings(metricsDir);
   const last = [...attempts.values()].map((xs) => xs.at(-1));
   const pilot = last.filter((m) => m.range < 5);
+  // The baseline is the complete pilot's ranges measured with its newest daemon (never a mix).
+  const pilotDaemon = pilot.at(-1)?.binary?.daemon;
+  const pilotOwn = pilot.filter((m) => m.binary?.daemon === pilotDaemon);
   const baselineFile = join(metricsDir, "baseline.json");
-  const baseline = existsSync(baselineFile) ? JSON.parse(readFileSync(baselineFile, "utf8")) : pilot.length === 5 ? buildBaseline(pilot) : null;
+  const baseline = existsSync(baselineFile) ? JSON.parse(readFileSync(baselineFile, "utf8"))
+    : pilot.length === 5 && pilotOwn.length >= MINIMUM_POINTS ? buildBaseline(pilotOwn) : null;
+  const seeds = loadSeeds(metricsDir).map((p) => withInputs(p, oracleDir));
   if (baseline && !existsSync(baselineFile)) writeFileSync(baselineFile, JSON.stringify(baseline, null, 1));
   mkdirSync(join(docs, "ranges"), { recursive: true });
   const rows = [];
   let verdict = "pass", comment = null;
   for (const [range, xs] of attempts) {
     const history = last.filter((m) => m.range < range).map((m) => withInputs(m, oracleDir));
-    const gates = xs.map((m) => evaluate(m, history, range < 5 ? null : baseline));
+    const gates = xs.map((m) => evaluate(m, history, range < 5 ? null : baseline, undefined, seeds));
     const file = join(docs, "ranges", `range-${pad(range)}.md`);
     const old = existsSync(file) ? readFileSync(file, "utf8") : "";
     const lead = old.includes(LEAD_START) ? old.slice(old.indexOf(LEAD_START), old.indexOf(LEAD_END)) : null;

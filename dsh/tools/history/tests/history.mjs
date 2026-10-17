@@ -224,6 +224,42 @@ test("a whole-tree grep is judged per tree byte when the attempt records its inp
   assert.equal(g.checks.find((c) => c.name === "Scaling").result, "optimize", "cost per byte that grows with depth is still a finding");
 });
 
+test("depth fits and baselines use only points measured with the attempt's own daemon", () => {
+  const bin = (daemon) => ({ binary: { daemon: daemon.repeat(64) } });
+  const steep = (i, daemon) => metrics(i, { ...bin(daemon), probes: { diff: { ms: 1, counters: { rows: 100 * (i + 1) } } } });
+  const flat = (i, daemon) => metrics(i, { ...bin(daemon), probes: { diff: { ms: 1, counters: { rows: 100 } } } });
+  // two ranges of the old binary grew with depth; the fixed binary's first range is flat
+  const g = evaluate(flat(2, "b"), [steep(0, "a"), steep(1, "a")]);
+  const counters = g.checks.find((c) => c.name === "Counters");
+  assert.equal(counters.result, "watch", "no series across binaries, and no silent pass");
+  assert.match(counters.value, /insufficient same-binary points: 1 of 3 \(daemon bbbbbbbbbbbb\)/);
+  // the same old points on the new binary's own series are judged
+  assert.equal(evaluate(steep(2, "a"), [steep(0, "a"), steep(1, "a")]).checks.find((c) => c.name === "Counters").result, "optimize");
+  // a baseline of another daemon is reported, not compared
+  const pilot = [0, 1, 2, 3, 4].map((i) => metrics(i, bin("a")));
+  const speed = evaluate(metrics(5, bin("b")), pilot, buildBaseline(pilot)).checks.find((c) => c.name === "Speed");
+  assert.equal(speed.result, "watch");
+  assert.match(speed.value, /baseline measured with daemon aaaaaaaaaaaa; insufficient same-binary points/);
+  assert.throws(() => buildBaseline([metrics(0, bin("a")), metrics(1, bin("b"))]), /mixes daemons/);
+});
+
+test("seeded probe points complete a fixed binary's series on the earlier snapshots", () => {
+  const bin = (daemon) => ({ binary: { daemon: daemon.repeat(64) } });
+  const point = (i, daemon, rows) => ({ range: i, depth: { after: (i + 1) * 1000 }, ...bin(daemon), cache: "fresh daemon, Store restored", probes: { diff: { ms: 1, counters: { rows } } } });
+  const m = metrics(2, { ...bin("b"), probes: { diff: { ms: 1, counters: { rows: 100 } } } });
+  const old = [0, 1].map((i) => metrics(i, { ...bin("a"), probes: { diff: { ms: 1, counters: { rows: 100 * (i + 1) } } } }));
+  const seeded = evaluate(m, old, null, undefined, [point(0, "b", 100), point(1, "b", 100), point(0, "a", 999)]);
+  const counters = seeded.checks.find((c) => c.name === "Counters");
+  assert.equal(counters.result, "pass", "flat on the fixed binary's own points");
+  assert.match(counters.value, /2 seeded probe points/);
+  const grows = evaluate(metrics(2, { ...bin("b"), probes: { diff: { ms: 1, counters: { rows: 300 } } } }), old, null, undefined, [point(0, "b", 100), point(1, "b", 200)]);
+  assert.equal(grows.checks.find((c) => c.name === "Counters").result, "optimize", "a seeded series still finds growth");
+  // a measured same-binary attempt replaces the seed of its range
+  const measured = metrics(1, { ...bin("b"), probes: { diff: { ms: 1, counters: { rows: 100 } } } });
+  const replaced = evaluate(m, [...old, measured], null, undefined, [point(0, "b", 100), point(1, "b", 5000)]);
+  assert.equal(replaced.checks.find((c) => c.name === "Counters").result, "pass");
+});
+
 test("aggregate groups calls by operation and size class", () => {
   const rows = aggregate([
     { method: "fs.write", ms: 3, size: { kind: "bytes", n: 500 } }, { method: "fs.write", ms: 9, size: { kind: "bytes", n: 700 }, phases: { construct: 7 } },
@@ -248,8 +284,10 @@ test("the report keeps the lead's section and the index links each range", () =>
 test("the issue comment has a fixed shape and names what happens next", () => {
   const { plan } = planAll()[0];
   const m = metrics(0);
+  // Range 0 has no earlier same-binary points: its fits say so and it is a watch, not a silent pass.
   const ok = renderComment({ plan, summary: summarize(plan), attempts: [m], gates: [evaluate(m)] });
-  assert.ok(ok.startsWith("### Range 000 · **pass** · attempt 1"));
+  assert.ok(ok.startsWith("### Range 000 · **watch** · attempt 1"));
+  assert.ok(ok.includes("insufficient same-binary points: 1 of 3"));
   for (const part of ["**Work:**", "**Slowest p95:**", "**Storage:**", "**Next:** Continues", "range-000.md)"]) assert.ok(ok.includes(part), part);
   const bad = { ...m, checks: { ...m.checks, tests: { equal: 3, run: 4 } } };
   const stop = renderComment({ plan, summary: summarize(plan), attempts: [bad], gates: [evaluate(bad)] });

@@ -275,3 +275,14 @@ differs from the text above:
   range another run already snapped writes `range-NNN.<run>.json`; manifests
   name their run, and `fork` and the runner read a run's own manifest first.
   A plain manifest that names no run (taken before this) serves its run.
+- **Gates use one binary's points** (finding 002, SPEC §6 "never merge series
+  across binaries"). `evaluate` keeps only earlier attempts measured with the
+  judged attempt's daemon for every series, fit and baseline; a baseline built
+  from another daemon is reported, not compared. Fewer than three same-binary
+  points make Scaling and Counters say `insufficient same-binary points: n of 3`
+  and count as watch, never as a silent pass (ranges 0 and 1 of `p1-pilot` now
+  read so; their verdicts were already watch). A fix seeds its new daemon's
+  series with the probe points it measured on the earlier snapshots:
+  `metrics/probes-<daemon>.json` `{ daemon, points: [{ range, depth, binary,
+  cache, probes }] }`, read by report.mjs (`loadSeeds`). A seed fills only a
+  range that no same-binary attempt covers.
