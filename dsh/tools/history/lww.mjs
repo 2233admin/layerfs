@@ -123,7 +123,7 @@ export function checkAgainstGit({ repo, checkpoint, image, volume, build = [] })
   const script = [`mkdir /w && tar -x -C /w && cd /w`, `(${closure.installCommand()}) > /dev/null 2>&1`, ...(build.length ? [`(${closure.buildCommand(build)}) > /dev/null 2>&1`] : []),
     `git init -q . && echo @@IGNORED && git ls-files --others --ignored --exclude-standard && echo @@KEPT && git ls-files --others --exclude-standard`].join("; ");
   const archive = execFileSync("git", ["--git-dir", repo, "archive", checkpoint], { maxBuffer: 1 << 30 });
-  const r = spawnSync("docker", ["run", "--rm", "-i", "--name", "layerfs-issue352-lwwcheck", "--network", "none", "-v", `${volume}:${closure.STORE_MOUNT}:ro`, "--entrypoint", "sh", image, "-c", script], { input: archive, encoding: "utf8", maxBuffer: 1 << 29 });
+  const r = spawnSync("docker", ["run", "--rm", "-i", "--name", `${process.env.LFS_RESOURCE_PREFIX ?? "layerfs-issue352"}-lwwcheck`, "--network", "none", "-v", `${volume}:${closure.STORE_MOUNT}:ro`, "--entrypoint", "sh", image, "-c", script], { input: archive, encoding: "utf8", maxBuffer: 1 << 29 });
   if (r.status !== 0) throw new Error(`lww check container exited ${r.status}: ${String(r.stderr).slice(-300)}`);
   const out = r.stdout.split("\n"), at = out.indexOf("@@IGNORED"), kept = out.indexOf("@@KEPT");
   const ignored = out.slice(at + 1, kept).filter(Boolean), notIgnored = out.slice(kept + 1).filter(Boolean);

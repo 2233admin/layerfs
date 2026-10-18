@@ -31,6 +31,8 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 export const REPO = resolve(here, "../../..");
 export const PNPM_STORE = "layerfs-issue352-pnpm-store";
+/** Prefix of the Docker resources a session creates (volumes, Sandbox and helper containers); another issue's session sets its own. */
+export const PREFIX = process.env.LFS_RESOURCE_PREFIX ?? "layerfs-issue352";
 export const HISTORY = process.env.LFS_HISTORY ?? join(process.env.HOME, "lfs-history");
 export class Mismatch extends Error {}
 
