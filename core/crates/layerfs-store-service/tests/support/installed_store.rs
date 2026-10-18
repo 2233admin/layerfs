@@ -65,7 +65,8 @@ impl Fixture {
                     stack: LayerStackId::from_authority([23; 16]),
                     name: HistoryName::new("installed").unwrap(),
                     scope_seed: [31; 32],
-                    deadline: Instant::now() + Duration::from_secs(10),
+                    // Large fixtures (#355: 70,000 files) need longer than 10 s on a busy host.
+                    deadline: Instant::now() + Duration::from_secs(60),
                 },
                 timing,
             )
