@@ -571,10 +571,15 @@ The figures below are estimates until the dev range measures them.
     throughout, so dedupe is partial.
 - **Wall time:**
   - Per lane step that changes tracked files: one more one-shot Workspace
-    and exec, about 60–100 ms today (mount + exec + Commit + unmount).
+    and exec. Estimated at 60–100 ms before the native baseline; revised
+    2026-10-19 to about 150–250 ms p50 (range 14's one-shot Workspace is
+    128 ms p50, and native git is 26.5 ms p50 per exec; GIT_RULE.md, Native
+    baseline).
   - Per range: lead execs that write every dsh commit, 122–360 (15–20), reads
     every loose object for the repack, and does two full stat walks of about
-    1,332 files over FUSE (corrected, A7), est. 3–10 s.
+    1,332 files over FUSE (corrected, A7), est. 3–10 s; revised 2026-10-19 to
+    10–20 s (native 5.7 s, plus the loose-object creates and the repack's
+    4,825 deletions over FUSE).
 - **Counts:** one more exec, Workspace and Commit per tracked-changing lane
   step, plus the lead's. P0 totals
   and the §5/§7 expectations are re-derived at the P3 re-baseline (SPEC §2
