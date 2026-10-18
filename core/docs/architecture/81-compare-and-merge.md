@@ -105,7 +105,7 @@ text) go through `construct_bytes` into the same consumer first.
    | a directory renamed differently on both sides | `type` conflict; `from`'s move is cancelled |
    | crossed moves that would put a directory inside itself | `type` conflict; `from`'s move is cancelled |
    | `from` deleted a directory below which `into` changed | the directory survives with what `into` keeps; a deleted file against an edit is `modify/delete` |
-   | `from` bound a serial `into` deleted | resurrected with `from`'s subtree |
+   | `from` bound a serial `into` deleted | resurrected with `from`'s subtree; a file `from` edited there is decided as a deletion against an edit (`modify/delete`), as in the case above |
    | `from` changed a serial `into` deleted | decided as a deletion against a change; a kept file is placed at `from`'s path, its missing parents revived |
    | a serial new on `from` that loses a collision | left unbound, with the new subtree below it |
 

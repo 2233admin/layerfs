@@ -228,6 +228,11 @@ impl Plan<'_, '_> {
         Ok(serial)
     }
 
+    /// True when the plan holds a final value for `serial`.
+    pub(super) fn valued(&self, serial: u64) -> ContentResult<bool> {
+        Ok(self.spill.get(VALUE, single(serial))?.is_some())
+    }
+
     /// True when a decision gave `source`'s entry a value.
     pub(super) fn assigned(&self, source: u64) -> ContentResult<bool> {
         Ok(self.assigned.may_hold(source) && self.spill.get(ASSIGNED, single(source))?.is_some())

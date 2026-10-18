@@ -188,6 +188,57 @@ fn a_deleted_directory_against_an_edit_below_conflicts() {
     fixture.cleanup();
 }
 
+fn delete_d1() -> Vec<SdkValue> {
+    vec![rm("/d1/a.txt"), rm("/d1/b.txt"), rm("/d1")]
+}
+
+fn move_and_edit_d1() -> Vec<SdkValue> {
+    vec![mv("/d1", "/moved"), write("/moved/a.txt", "edited\n")]
+}
+
+/// (b): a deletion against a move with an edit inside conflicts on the edited
+/// file, whichever side deleted, instead of silently keeping the moved copy.
+#[test]
+fn a_deleted_directory_against_a_move_and_edit_conflicts() {
+    for (name, left, right) in [
+        ("serial-delete-move-edit", delete_d1(), move_and_edit_d1()),
+        ("serial-move-edit-delete", move_and_edit_d1(), delete_d1()),
+    ] {
+        let fixture = seeded(name);
+        let (_, merged) = merge(&fixture, left, right);
+        let refusal = conflicted(merged);
+        assert!(refusal.contains("/moved/a.txt"), "{name}: {refusal}");
+        assert!(refusal.contains("modify"), "{name}: {refusal}");
+        fixture.cleanup();
+    }
+}
+
+/// A deletion against a move alone keeps the moved directory, whichever side
+/// deleted, as the merge by name did.
+#[test]
+fn a_deleted_directory_against_a_move_keeps_the_moved_directory() {
+    for (name, left, right) in [
+        ("serial-delete-move", delete_d1(), vec![mv("/d1", "/moved")]),
+        ("serial-move-delete", vec![mv("/d1", "/moved")], delete_d1()),
+    ] {
+        let fixture = seeded(name);
+        let (_, merged) = merge(&fixture, left, right);
+        let merged_view = merged_view(&fixture, merged);
+        assert_eq!(line(&merged_view, "/d1"), None, "{name}");
+        assert_eq!(
+            read(&fixture, "/moved/a.txt").as_deref(),
+            Some("a\n"),
+            "{name}"
+        );
+        assert_eq!(
+            read(&fixture, "/moved/b.txt").as_deref(),
+            Some("b\n"),
+            "{name}"
+        );
+        fixture.cleanup();
+    }
+}
+
 #[test]
 fn a_deleted_directory_against_an_add_below_keeps_only_the_add() {
     let fixture = seeded("serial-delete-add");

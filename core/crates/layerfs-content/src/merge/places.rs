@@ -365,7 +365,12 @@ impl Ctx<'_, '_> {
             let into = self.values(self.into, &serials)?;
             let from = self.values(self.from, &serials)?;
             for (((name, child), i), f) in batch.iter().zip(into).zip(from) {
-                if i.is_some() && is_directory(f) {
+                if (i.is_some() && is_directory(f))
+                    || self
+                        .spill
+                        .get(super::spill::DROP, single(*child))?
+                        .is_some()
+                {
                     continue;
                 }
                 writer.push(self.spill, name, Some(*child))?;
@@ -420,9 +425,15 @@ impl Ctx<'_, '_> {
                 if !self.done(serial)? {
                     self.emit_resurrected(serial, from)?;
                 }
-            } else {
+            } else if self
+                .spill
+                .get(super::spill::DROP, single(serial))?
+                .is_none()
+            {
                 self.plan.fresh(serial)?;
-                self.plan.value(serial, from)?;
+                if !self.plan.valued(serial)? {
+                    self.plan.value(serial, from)?;
+                }
             }
         }
         let mut revived = Vec::new();

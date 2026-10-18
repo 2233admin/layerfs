@@ -25,7 +25,7 @@ use super::build::{Plan, Writer};
 use super::codec::{put_entry, Cursor};
 use super::decide::{Decider, Pick, Resolver, BASE, OURS, THEIRS};
 use super::names::{Listing, Mode, PathSlot};
-use super::spill::{single, Run, RunReader, RunWriter, Spill, REVIVE, REVIVE_ALL, SURVIVE};
+use super::spill::{single, Run, RunReader, RunWriter, Spill, DROP, REVIVE, REVIVE_ALL, SURVIVE};
 use crate::compare::tree::{inode_changes, same_value, EntryFacts};
 use crate::compare::{BindingHints, DifferenceWork, NamingWork};
 use crate::error::{ContentError, ContentResult};
@@ -431,6 +431,16 @@ impl Ctx<'_, '_> {
     fn deferred_one(&mut self, b: EntryFacts, f: EntryFacts) -> ContentResult<()> {
         let s = f.serial;
         if self.spill.get(REVIVE_ALL, single(s))?.is_some() {
+            if f.value.kind != InodeKind::Directory {
+                // A file `from` edited in a subtree `into` deleted: decided
+                // as a deletion against an edit, as it is the other way.
+                let path = self.path(self.from, s)?;
+                match self.decide(&path, [Some(b), Some(f), None])? {
+                    Some(Ok(kept)) => self.plan.value(s, kept.value)?,
+                    Some(Err((_, value))) => self.plan.value(s, value)?,
+                    None => self.spill.insert(DROP, single(s), Vec::new())?,
+                }
+            }
             return Ok(());
         }
         if f.value.kind == InodeKind::Directory {
