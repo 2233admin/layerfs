@@ -102,6 +102,94 @@ if (stage === "prep") {
       log({ label: `facts ${b} ${f}`, prunedAt: /prunedAt[^,]*/.exec(text)?.[0] ?? null, lastValidated: /lastValidatedTimestamp[^,]*/.exec(text)?.[0] ?? null, roots: [...new Set(text.match(/\/workspaces\/\d+/g) ?? [])] });
     }
   }
+} else if (stage === "lww-prep") {
+  // owner 2026-10-18: the two-sided merge with /.lww built from every dsh .gitignore (gen-lww.mjs), committed on the base.
+  // The range-15 snapshot is gone, so the base is range 14's checkpoint (p2-main-f) taken to range 15's tree by fs.apply (gen-r15.mjs).
+  const { readFileSync } = await import("node:fs");
+  const { createHash } = await import("node:crypto");
+  const d = JSON.parse(readFileSync(join(DIR, "r15-changes.json"), "utf8"));
+  await attempt("fork s4l-base", () => lf.branch.fork("s4l-base", "main"));
+  for (let i = 0; i < d.changes.length; i += 100) {
+    await attempt(`apply r15 changes ${i}..${Math.min(i + 100, d.changes.length) - 1}`, () => lf.fs.apply("s4l-base", d.changes.slice(i, i + 100), `s4l base: range 15 tree ${i}`));
+  }
+  let same = 0, wrong = [];
+  for (const e of d.expect) {
+    let text = null;
+    try { const r = await lf.fs.read("s4l-base", e.path, 1, 1000000); if (r.truncated) { wrong.push({ path: e.path, why: "truncated read" }); continue; } text = r.text; } catch (err) { text = null; if (e.blob) { wrong.push({ path: e.path, why: err?.code }); continue; } }
+    if (!e.blob) { if (text === null) same++; else wrong.push({ path: e.path, why: "still present" }); continue; }
+    const b = Buffer.from(text, "utf8"), h = createHash("sha1").update(`blob ${b.length}\0`).update(b).digest("hex");
+    if (h.startsWith(e.blob)) same++; else wrong.push({ path: e.path, why: "blob differs" });
+  }
+  log({ label: "range 15 tree check (changed paths)", checked: d.expect.length, same, wrong: wrong.length, wrongSample: wrong.slice(0, 10) });
+} else if (stage === "lww-play") {
+  await attempt("fork s4l-c", () => lf.branch.fork("s4l-c", "s4l-base"));
+  await attempt("fork s4l-d", () => lf.branch.fork("s4l-d", "s4l-base"));
+  await attempt("create sandbox a", () => lf.sandbox.create("a", "dsh", process.env.LAYERFS_IMAGE, vol));
+  await attempt("create sandbox b", () => lf.sandbox.create("b", "dsh", process.env.LAYERFS_IMAGE, vol));
+  const hold = await attempt("mount a placeholder (s4l-base)", () => lf.sandbox.mount("a", "s4l-base"));
+  const wc = await attempt("mount c", () => lf.sandbox.mount("a", "s4l-c"));
+  const wd = await attempt("mount d", () => lf.sandbox.mount("b", "s4l-d"));
+  await Promise.all([exec("a", wc, "c install", install), exec("b", wd, "d install", install)]);
+  await Promise.all([attempt("commit c", () => lf.sandbox.commit("a", wc, "s4l c install")), attempt("commit d", () => lf.sandbox.commit("b", wd, "s4l d install"))]);
+  await attempt("unmount c", () => lf.sandbox.unmount("a", wc, false));
+  await attempt("unmount d", () => lf.sandbox.unmount("b", wd, false));
+  await attempt("unmount placeholder", () => lf.sandbox.unmount("a", hold, true));
+} else if (stage === "lww-merge") {
+  const v = await attempt("merge s4l-c with s4l-d (lww)", () => lf.branch.merge("s4l-c", "s4l-d", "s4l-m", "s4 two-sided install merge with /.lww"));
+  writeFileSync(join(DIR, "lww-merge-value.json"), JSON.stringify(v?.refused ? { code: v.refused.code, message: v.refused.message, detail: v.refused.detail ?? null } : v, null, 1));
+  // which side each state file took: compare the merged text with each side's
+  for (const f of ["/node_modules/.modules.yaml", "/node_modules/.pnpm-workspace-state-v1.json", "/node_modules/.bin/eslint", "/node_modules/.bin/tsc", "/node_modules/.bin/vitest"]) {
+    const t = {};
+    for (const b of ["s4l-c", "s4l-d", "s4l-m"]) { try { t[b] = (await lf.fs.read(b, f, 1, 100000)).text; } catch (e) { t[b] = `!${e?.code}`; } }
+    log({ label: `side ${f}`, mEqualsC: t["s4l-m"] === t["s4l-c"], mEqualsD: t["s4l-m"] === t["s4l-d"], cEqualsD: t["s4l-c"] === t["s4l-d"], roots: Object.fromEntries(Object.entries(t).map(([b, s]) => [b, [...new Set(String(s).match(/\/workspaces\/\d+/g) ?? [])]])) });
+  }
+} else if (stage === "lww-install") {
+  // the merged result: its tree as merged (lister vs the native oracle), then pnpm install, then the lister again
+  const { listerCommand, parseLister, compareInstalled } = await import(join(HIST, "closure.mjs"));
+  const { readFileSync } = await import("node:fs");
+  const oracle = JSON.parse(readFileSync("/Users/yifanxu/lfs-history/oracle/node_modules/4e0a2af98a4742c3f8d90756be62758db887d26f.json", "utf8"));
+  const ws = await attempt("mount s4l-m", () => lf.sandbox.mount("a", "s4l-m"));
+  await exec("a", ws, "pwd", "pwd");
+  for (const when of ["as merged", "after install"]) {
+    if (when === "after install") await exec("a", ws, "install in merged result", install);
+    const r = await lf.sandbox.exec("a", ws, listerCommand());
+    const p = parseLister(r.stdout);
+    const cmp = compareInstalled(oracle, p.groups ?? p);
+    log({ label: `lister ${when}`, exitCode: r.exitCode, truncated: r.truncated, normalized: p.normalized ?? null, ok: cmp.ok, groups: cmp.groups, missing: cmp.missing.length, extra: cmp.extra.length, differ: cmp.differ.length, differSample: cmp.differ.slice(0, 12) });
+  }
+  await attempt("commit merged-result install", () => lf.sandbox.commit("a", ws, "s4l install in merged result"));
+  await attempt("unmount s4l-m", () => lf.sandbox.unmount("a", ws, false));
+} else if (stage === "r15-check") {
+  const { readFileSync } = await import("node:fs");
+  const { createHash } = await import("node:crypto");
+  const d = JSON.parse(readFileSync(join(DIR, "r15-changes.json"), "utf8"));
+  let same = 0, wrong = [];
+  for (const e of d.expect) {
+    let text = null;
+    try { const r = await lf.fs.read("s4l-base", e.path, 1, 1000000); if (r.truncated) { wrong.push({ path: e.path, why: "truncated read" }); continue; } text = r.text; } catch (err) { text = null; if (e.blob) { wrong.push({ path: e.path, why: err?.code }); continue; } }
+    if (!e.blob) { if (text === null) same++; else wrong.push({ path: e.path, why: "still present" }); continue; }
+    const b = Buffer.from(text, "utf8"), h = createHash("sha1").update(`blob ${b.length}\0`).update(b).digest("hex");
+    if (h.startsWith(e.blob)) same++; else wrong.push({ path: e.path, why: "blob differs" });
+  }
+  log({ label: "range 15 tree check (changed paths)", checked: d.expect.length, same, wrong: wrong.length, wrongSample: wrong.slice(0, 10) });
+} else if (stage === "r15-sizes") {
+  const { readFileSync } = await import("node:fs");
+  const d = JSON.parse(readFileSync(join(DIR, "r15-changes.json"), "utf8"));
+  const out = [];
+  for (const e of d.expect.filter((x) => x.blob)) {
+    const r = await lf.fs.read("s4l-base", e.path, 1, 1000000);
+    if (!r.truncated) continue;
+    const st = await lf.fs.stat("s4l-base", e.path);
+    out.push({ path: e.path, size: st.size });
+  }
+  writeFileSync(join(DIR, "lww", "r15-truncated-sizes.json"), JSON.stringify(out, null, 1));
+  log({ label: "truncated-read sizes", n: out.length });
+} else if (stage === "read-diag") {
+  const r = await lf.fs.read("s4l-base", "/AGENTS.md", 1, 1000000);
+  const st = await lf.fs.stat("s4l-base", "/AGENTS.md").catch((e) => ({ refused: e?.code }));
+  const { createHash } = await import("node:crypto"); const b = Buffer.from(r.text, "utf8");
+  log({ label: "hash diag", bytes: b.length, sha: createHash("sha1").update(`blob ${b.length}\0`).update(b).digest("hex") });
+  log({ label: "read diag", keys: Object.keys(r), size: r.size, textLen: r.text.length, head: r.text.slice(0, 160), tail: JSON.stringify(r.text.slice(-60)), stat: st });
 } else if (stage === "close") {
   for (const s of ["a", "b"]) await attempt(`close sandbox ${s}`, () => lf.sandbox.close(s));
 } else { console.error("usage: s4.mjs prep|play|merge|play2|merge2|close"); process.exit(2); }

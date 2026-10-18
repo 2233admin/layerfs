@@ -18,6 +18,7 @@
 | S1c | Fork from a Commit 4,098 first-parent steps back | **Capacity**: `branch.fork` refused |
 | S3 | pnpm install while another daemon commits an install on the same Store | **No `EAGAIN`, no `EIO`**: both installs exit 0, both Commits Committed. Serial reservations and writer waits are not observable from the SDK |
 | S4 | Two Branches install the same lockfile, then `branch.merge` | **Conflict, nothing created.** Same install root: 2 files (both state files, timestamps only). Different roots: 252 files (the `.bin` shims and the workspace-state file) |
+| S4 + `/.lww` | The same merge with `/.lww` built from dsh's `.gitignore` | **Merged, 0 conflicts.** Every listed LWW pick takes the newer install (74 listed, about 253 in total, inferred). `pnpm install` in the merged result exits 0 but still differs from native in 48 of 1,452 groups: stale absolute install roots from mounting at a different path, not LWW. A first attempt with two concurrent first-install Commits hit **F-036** |
 
 S1 is the confirmation step for F-033 (BUGS.md, `98f8973b9`).
 
@@ -125,9 +126,83 @@ merged today:
 - The same listing between the same-root installs (`diff1`) reached the 120 s alarm after 142 pages and was stopped. Each page had a new cursor, so it was progressing, not looping. It was not rerun.
 - `diff1-paths.json` is empty because that run was stopped.
 
+## S4 with `/.lww` (owner, 2026-10-18)
+
+**Request.** The owner asked for the same two-sided install merge with the
+product's last-writer-wins rules file `/.lww`, built from every dsh
+`.gitignore`. The rule: root patterns as written; nested files' patterns
+prefixed by their folder; shallower folders first.
+- **The file:** [gen-lww.mjs](scale-experiments/gen-lww.mjs) generates it.
+- **What it contains:** dsh has only the root `.gitignore` at `b4ec4060a`, so `/.lww` is those 27 lines, sha256 `1932f2d6…`. It includes `node_modules/`.
+- **What it does:** `/.lww` rules (`layerfs-content/src/merge/lww.rs`) match a path or any of its parent folders. A path that both sides changed and a rule matches takes the side with the newer modification time, instead of a content merge.
+
+**Base.** The range-15 snapshot used above had been deleted in the meantime.
+So the base is p2-main-f's range-14 snapshot (dsh `6e5c908a1`), brought to
+range 15's tree by `fs.apply`:
+- [gen-r15.mjs](scale-experiments/gen-r15.mjs) produces 19 mkdirs, then the 789 changes `6e5c908a1` → `b4ec4060a`, then `/.lww`, applied in 9 calls.
+- **Checked:** 776 changed paths are byte-exact (git blob hash of `fs.read`). The 13 that `fs.read` truncates match git in size, and the 7 deletions are absent.
+- This Store held no `node_modules` content before the first install.
+
+**First attempt: F-036.** Driver `lww-play` on volume
+`layerfs-issue352-scale-s4`.
+- Two Sandboxes (two daemons, one Store) committed their first install at the same time. One Commit failed: `Failed: object e8775b32…ea37 is not stored`, phase `Commit Construct`. The other was Committed, with 88.4 MB new.
+- Not retried. The lead recorded it as **F-036** (`c0a853272`).
+- The state is kept frozen: container `layerfs-issue352-scale-s4-b`, its Dirty Workspace, the volume and `~/lfs-history/scale-experiments/s4/lww/`.
+- **Repro note:** [scale-experiments/F036-REPRO.md](scale-experiments/F036-REPRO.md), a copy of `~/lfs-history/scale-experiments/s4/REPRO-F036.md`.
+- **Store copy:** a read-only copy of the frozen Store (`store.sqlite`, `-wal`, `-shm`, with SHA256SUMS) is in `~/lfs-history/scale-experiments/s4/F036-store-copy/`, taken at about 07:15Z with the volume mounted `:ro`.
+- **Pending:** the `object_location` query on it waits for the lead's "release".
+
+**The LWW run.** A new volume, `layerfs-issue352-scale-s4l`, from the same
+base. Driver [s4l.mjs](scale-experiments/s4l.mjs) with
+[run-s4l.sh](scale-experiments/run-s4l.sh). Receipts are in
+`~/lfs-history/scale-experiments/s4l/`. Only one Sandbox was used (`a`), and
+the installs were committed one after the other:
+
+| Step | Outcome |
+| --- | --- |
+| `s4l-c` install at `/workspaces/2` | exit 0; Commit Committed (114.4 MB new, the first install in this Store) |
+| `s4l-d` install at `/workspaces/3` | exit 0; Commit Committed (7.0 MB new) |
+| `branch.merge(s4l-c, s4l-d)` | **`Merged`**, not a fast-forward, **0 conflicts**, 13.5 s |
+
+- **LWW picks.** The result lists 74 LWW decisions and sets `lwwTruncated: true`, so the total is not reported.
+  - All 74 have `kept: "theirs"` (s4l-d, the later and therefore newer install), `deleted: false` and rule `node_modules/`.
+  - They are 72 `.bin` shims, `.modules.yaml` and `.pnpm-workspace-state-v1.json`.
+  - The total is inferred at about **253**: the 252 files that conflicted without `/.lww` (251 shims plus the workspace-state file), plus `.modules.yaml`, whose `prunedAt` differs here. This is inferred from the counts, not reported by the product.
+  - **Spot check:** `.modules.yaml`, the workspace-state file and the `eslint`, `tsc` and `vitest` shims in the merged result are byte-identical to s4l-d's, and their install root is `/workspaces/3`.
+
+**Install in the merged result.** The merge head was mounted at
+`/workspaces/4`. Each column below is a `compareInstalled` against the
+native oracle for lockfile `4e0a2af9…` (1,452 groups), using the replay's own
+lister:
+
+| | As merged | After `pnpm install` | Control: `s4l-c` remounted at `/workspaces/5`, no install |
+| --- | --- | --- | --- |
+| Install | — | exit 0, "Already up to date", 2.4 s | — |
+| Groups differing | 131 | **48** | 131 |
+| Shim root substitutions (native 1,753) | 0 | 969 | 0 |
+| Workspace-state root substitutions (native 85) | 0 | 85 | 0 |
+
+- **The install succeeds but does not match native:** 48 of 1,452 groups still differ, `.modules.yaml` among them.
+- **The control explains most of it.** A plain single-side install, remounted at a different path, differs in the same 131 groups. pnpm writes the absolute install root into `.bin` shims and into the state files. A later mount gets a new `/workspaces/<N>`, so the committed tree carries the old root.
+- **pnpm's up-to-date install rewrites only part of it:** the top-level state files and part of the shims. 969 of native's 1,753 root occurrences are now under the new root, and the rest are left behind.
+- **So the remaining mismatch is not caused by LWW.** It comes from remounting at a different path than the install's.
+- **This matters beyond merges:** any `node_modules` committed in one mount and used in another carries stale absolute paths.
+- **Not done:** a direct listing of the stale-root files. A recursive grep over `node_modules` hit the 120 s alarm and was stopped. The mounted Workspace was unmounted afterwards with discard; it held no changes.
+
+**S4 with `/.lww` in short:**
+- The merge succeeds with 0 conflicts, and every listed pick takes the newer install, as the rule says.
+- The merged `node_modules` is a coherent single install (s4l-d's) at s4l-d's install root.
+- It matches native only when it is mounted at that same root. pnpm's up-to-date install in a different mount repairs only part of the paths.
+
 ## Resources
 
-All created by this session and removed by literal name after use
+The F-036 state is kept frozen until the lead releases it: volume
+`layerfs-issue352-scale-s4`, containers `layerfs-issue352-scale-s4-{a,b}`
+with the Dirty Workspace in `-b`, and `~/lfs-history/scale-experiments/s4/lww/`.
+The `/.lww` run's volume `layerfs-issue352-scale-s4l` and its Sandbox were
+removed (`~/lfs-history/scale-experiments/s4l/resources.log`).
+
+For the first S1–S4 runs, all created by this session and removed by literal name after use
 (`~/lfs-history/scale-experiments/s4/resources.log`):
 - volume `layerfs-issue352-scale-s4`;
 - Sandbox containers `layerfs-issue352-scale-s4-{base,a,b}`, closed through `sandbox.close`;
