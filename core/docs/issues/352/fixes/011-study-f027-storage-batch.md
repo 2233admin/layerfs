@@ -19,6 +19,7 @@
 | Regression tests | *pending*, per STORAGE_BATCH_SPEC §3–§5 |
 | Recovery | fork the newest good snapshot onto each new daemon; no rebuild; one P3 re-baseline after item 3 (the lead's call) |
 | Order | item 1 → item 2 → item 3, each proved, measured and merged before the next |
+| Owner decision 2026-10-18 | mtime-only changes are not a change; folded into item 2 (spec §4 design 8), with a `tsc -b` remount check in the P3 development run |
 
 ## Old design
 
@@ -38,7 +39,10 @@
 
 1. Pack versions with the directory sized to the group count at seal.
 2. An inline inode-value form carrying the portable attributes; row-level
-   form; semantic equality where forms meet; readers accept both.
+   form; semantic equality where forms meet; readers accept both. An
+   mtime-only change is not a change: unchanged inodes and directories keep
+   their base rows, and a Commit with nothing else returns UpToDate (owner
+   decision 2026-10-18, spec §4 design 8).
 3. Inode branches take the copy/insert delta that inode leaves use, within the
    chain cap of 8 and the per-chain budget, decoded once per call.
 

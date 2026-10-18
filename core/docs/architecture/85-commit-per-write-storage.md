@@ -121,6 +121,7 @@ without rewriting old data [decided, F-027,
 A rewrite of identical bytes **through the mount** updates mtime, and mtime is
 part of the root today, so it commits a new root although no byte changed
 [impl]. SDK `fs.write` does not have this gap (§3). The replay's Sandbox apply
-route hit it and is fixed in the harness (#352 F-028); whether an mtime-only
-change should count as a change in a Workspace Commit is an open owner
-question.
+route hit it and is fixed in the harness (#352 F-028). **Owner decision
+2026-10-18:** an mtime-only change is not a change; unchanged inodes keep
+their base rows and such a Commit returns UpToDate [decided, F-027 item 2,
+STORAGE_BATCH_SPEC §4 design 8].

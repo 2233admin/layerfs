@@ -128,6 +128,23 @@ waste this is ~16.5–19% of the Store. A stat walks four objects for one mtime.
 7. **Design note.** Replace the note in `attributes/value.rs` ("no ...
    metadata-specific file format is introduced") with this decision and its
    date; update the content format documentation.
+8. **An mtime-only change is not a change (owner decision 2026-10-18).** A
+   file, symlink or directory counts as changed only when its bytes (content
+   root), kind, mode, symlink target or directory entries change. When none
+   of these changed, construction keeps the inode's **base row exactly**
+   (mtime included) and a directory with unchanged entries keeps its base row
+   too; if nothing else changed, the Commit returns **UpToDate** and publishes
+   nothing. A real change carries its live mtime into the new row as today.
+   This covers a rewrite of identical bytes through the mount, `touch`, a temp
+   file created and deleted (the parent directory's mtime), and an SDK
+   `fs.apply` that changes a file and restores it in one call. The live
+   Workspace still shows its own mtime until unmount; after a remount the
+   committed mtime is what is seen. Merge never reports a conflict for an
+   mtime-only difference (there is none in history). Code: Workspace
+   construction `layerfs-workspace/src/construction/namespace/inodes.rs`
+   (`file()` and `metadata()`, about :130–180) and the directory equivalent;
+   the publish gate (`layerfs-persistence/src/history/commit.rs:119`, root
+   equality) stays as it is. Same files and compatibility test as item 2.
 
 ### Item 2 proofs
 - **Value equivalence:** for every inode of the newest snapshot, stat through
@@ -140,8 +157,17 @@ waste this is ~16.5–19% of the Store. A stat walks four objects for one mtime.
 - **Merge equivalence:** every merge recorded in r7a2–r11 (inputs from the
   traces), with one side rewritten in the new form, gives the same picks,
   conflicts and merged tree as the old daemon.
-- **Attribute-only change:** `chmod` and an mtime-only touch through a mounted
-  Workspace each produce exactly one changed inode and the right values.
+- **Attribute-only change:** `chmod` through a mounted Workspace produces
+  exactly one changed inode with the right mode and its live mtime.
+- **mtime-only is not a change (design 8):** through a mounted Workspace,
+  `touch` of a file, a rewrite of identical bytes, and a temp file created
+  and deleted each Commit as **UpToDate** with no new row, object or Commit;
+  the same three beside one real edit give exactly one changed inode; after a
+  remount the touched file shows its committed mtime.
+- **Builds across a remount (builder, P3 development run):** run `tsc -b` of
+  the changed packages, Commit, unmount, mount again and run `tsc -b` again;
+  the second run must report nothing to build (or exactly what a native
+  rerun reports). A difference is a finding against design 8.
 - Compatibility (`compat.mjs`) as for item 1.
 
 ## 5. Item 3 · Inode branches as deltas
