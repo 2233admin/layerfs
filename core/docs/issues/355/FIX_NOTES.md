@@ -145,6 +145,47 @@ merges compare roots). It is left as is, and it runs outside the lane.
 a 1,000-file Workspace Commit and a one-file Commit, each with one file
 landing before its lane, hold the lane for about the same statements.
 
+## Batched record jobs (before (d))
+
+The backed build asked its records one key or one guarded batch at a time,
+and each was its own Store job: about 12 reads and one write transaction per
+moved entry in A3. `MergeRecords` (`storage/merge_records.rs`) now:
+
+- applies guarded batches to a write-back buffer of at most `BUFFER_BYTES`
+  (256 KiB of keys and values). Guards are checked against the buffer, then
+  the file, so a batch still applies whole or not at all;
+- flushes the buffer in one owner-checked write transaction when it is full,
+  before every key window (`first_keys`, `keys_after`) and never inside the
+  lane; `end` drops the buffer and removes the file rows as before;
+- answers `get`, `contains` and `get_many` from the buffer first and the rest
+  of a window of up to 64 keys in one owner-checked statement (a `VALUES`
+  join), instead of one statement per key;
+- counts keys read, buffer hits, batches, changes and flushes in
+  `MergeRecordsWork`.
+
+Memory stays bounded by the buffer; nothing is held across merges. The
+ownership rules are unchanged: a flush or read of a removed owner fails
+`Missing`.
+
+**A3, 100,000 moved files, one diagnostic run each (macOS, not a window):**
+
+| | Before | After |
+| --- | --- | --- |
+| Record read statements | 1,206,308 | 228,312 (1,701,638 keys, 98,441 from the buffer) |
+| Record write transactions | 104,824 | 1,692 (1,641 flushes) |
+| Writer hold, total / longest | 5.16 s / 8.3 ms | 1.38–2.46 s / 9.8–93.6 ms |
+| Session statements | 2,676,603 | 790,750 |
+| SDK merge | 47.3 s | 30.8–42.8 s |
+
+The longest flush hold varied between runs (9.8 ms and 93.6 ms with the same
+buffer); a 256 KiB flush is about 300 changes. A temporary trace of one run
+split the 30.5 s `branch.merge` into `merge.paths` 0.36 s, deciding the
+200,000 candidate paths 20.9 s (about 105 µs a path: per-path lookups in three
+trees and a resident cache of every resolved path), revival 0.05 s, and the
+build 8.9 s of which `merge.update` 5.6 s. Deciding is now the main cost per
+entry; (d) replaces the per-path resolution with a sorted walk, which is also
+what bounds its memory.
+
 ## Measurements so far (one sample each, Disposable, macOS host, not quiet-window receipts)
 
 Lane holds are timed by the test's catalog wrapper from `publish_lane`

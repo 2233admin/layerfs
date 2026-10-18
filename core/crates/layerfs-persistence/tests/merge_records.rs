@@ -1,12 +1,13 @@
 //! #355: merge build records in the Store file. Each merge sees only its own
 //! records, guarded batches apply whole or not at all, `end` removes them,
 //! and a writable open removes only owners idle past the lease; a removed
-//! owner's later calls fail rather than read its records as absent.
+//! owner's later calls fail rather than read its records as absent. Batches
+//! wait in a bounded buffer until it is full or a key window is asked.
 mod support;
 use layerfs_content::{
     EditRecordApply, EditRecordChange, EditRecordExpected, EditRecordKey, IndexedEditBacking,
 };
-use layerfs_persistence::{Handles, PersistenceConfig, SqlitePersistenceProfile};
+use layerfs_persistence::{Handles, PersistenceConfig, SqlitePersistenceProfile, BUFFER_BYTES};
 use layerfs_storage::port::PersistenceError;
 use support::*;
 
@@ -92,6 +93,24 @@ fn records_are_private_guarded_and_removed() {
     assert_eq!(a.apply(many).unwrap(), EditRecordApply::Applied);
     assert_eq!(a.keys_after(1, None).unwrap().len(), 64, "one window");
     b.apply(vec![put(9, b"b")]).unwrap();
+    assert_eq!(
+        rows(&path).1,
+        73,
+        "a key window flushed a's buffer; b's is pending"
+    );
+    assert!(b.keys_after(1, None).unwrap().len() == 1);
+    // Past the buffer's bytes a batch flushes without a key window.
+    let mut c = scratch.begin().unwrap();
+    let big = vec![7; BUFFER_BYTES / 4];
+    for n in 0..4 {
+        c.apply(vec![put(n, &big)]).unwrap();
+    }
+    assert_eq!(rows(&path).1, 78);
+    assert_eq!(
+        c.get_many(&[key(1, 0), key(1, 9)]).unwrap(),
+        vec![Some(big), None]
+    );
+    c.end().unwrap();
     assert!(a.failure().is_none());
     let work = a.end().unwrap();
     assert!(
@@ -114,6 +133,9 @@ fn open_sweeps_only_idle_owners() {
     let mut live = scratch.begin().unwrap();
     idle.apply((1..=5).map(|n| put(n, b"x")).collect()).unwrap();
     live.apply(vec![put(1, b"live")]).unwrap();
+    // Key windows write each buffer to the file.
+    idle.keys_after(1, None).unwrap();
+    live.keys_after(1, None).unwrap();
     {
         let sql = rusqlite::Connection::open(&path).unwrap();
         // The first owner made no call for longer than the lease.
