@@ -633,8 +633,8 @@
     and runner processes hold no mount file. So F-046 cannot occur in the
     product. Forked copies of Store descriptors cannot affect SQLite
     `fcntl` locks or the writer-lane `flock`. One narrow product window
-    remains, reported and not fixed: the SDK discovery `flock` is released
-    by close, not by `LOCK_UN`.
+    remained: the SDK discovery `flock` was released by close, not by
+    `LOCK_UN`. It is filed and fixed as F-053.
 
   **Status: FIXED (test harness).** Tests in the same binary that spawn
   processes without a `Harness` are outside the gate. None of the
@@ -771,3 +771,25 @@
   `merge_metadata_only` (6 tests); 5 fail on the old code with `mode=644` or
   no conflict. The 35-merge corpus is unchanged (140/140).
   [fixes/035-f052-metadata-only-merge.md](fixes/035-f052-metadata-only-merge.md).
+
+- **F-053 · the SDK discovery lock outlives its Guard across a fork→exec
+  window (product; found by the F-046 RCA, filed by the owner 2026-10-19).**
+  - `sdk/js/native/src/discovery.rs` `os_lock` takes
+    `flock(LOCK_EX|LOCK_NB)` on `<project>/ownership.lock`. `Guard` released
+    it only by closing its file.
+  - A flock belongs to the open file description. A child forked by the
+    host process (Node `child_process`, or any other thread's spawn) while
+    a Guard is held shares that description until its exec. So after the
+    Guard dropped, the lock stayed held, and another process's discovery
+    mutation (project init, Sandbox create or close, exec records) was
+    refused `Busy` ("another process owns this discovery mutation"). Busy
+    is not retried.
+  - Regression test, written first:
+    `discovery::tests::a_dropped_guard_releases_the_lock_while_a_forked_child_holds_a_copy`
+    (`c8767ac5f`). On the old code it FAILED with exactly that `Busy`.
+
+  **Status: FIXED** (branch `claude/f053-discovery-flock`). The Guard's
+  drop now calls `flock(LOCK_UN)` before its file closes. No other flock in
+  `sdk/js/native` or `core/crates` relies on close alone: the writer lane
+  and the telemetry retention lock use nix `Flock`, whose drop unlocks.
+  [fixes/037-f053-discovery-lock-fork.md](fixes/037-f053-discovery-lock-fork.md).

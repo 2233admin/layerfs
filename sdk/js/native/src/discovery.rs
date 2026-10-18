@@ -28,6 +28,9 @@ extern "C" {
     fn geteuid() -> u32;
     fn flock(fd: i32, operation: i32) -> i32;
 }
+const LOCK_EX: i32 = 2;
+const LOCK_NB: i32 = 4;
+const LOCK_UN: i32 = 8;
 type Result<T> = std::result::Result<T, SdkRefusal>;
 
 pub(crate) fn home(args: &SdkValue) -> Result<PathBuf> {
@@ -133,11 +136,15 @@ static FREED: std::sync::Condvar = std::sync::Condvar::new();
 /// One discovery mutation's ownership of a directory: this process's turn and
 /// the OS lock. Dropping it releases both.
 pub(crate) struct Guard {
-    _file: File,
+    file: File,
     directory: PathBuf,
 }
 impl Drop for Guard {
     fn drop(&mut self) {
+        // The lock belongs to the open file description, which a child forked
+        // meanwhile shares until its exec: closing only this descriptor would
+        // leave it held (F-053). Unlock explicitly; the close follows.
+        unsafe { flock(self.file.as_raw_fd(), LOCK_UN) };
         let mut held = HELD.lock().unwrap_or_else(|error| error.into_inner());
         held.remove(&self.directory);
         FREED.notify_all();
@@ -166,7 +173,7 @@ pub(crate) fn guard(directory: &Path) -> Result<Guard> {
     drop(held);
     match os_lock(directory) {
         Ok(file) => Ok(Guard {
-            _file: file,
+            file,
             directory: directory.to_owned(),
         }),
         Err(refusal) => {
@@ -189,7 +196,7 @@ fn os_lock(directory: &Path) -> Result<File> {
         .open(&path)
         .map_err(failed)?;
     private(&path, false)?;
-    if unsafe { flock(file.as_raw_fd(), 2 | 4) } != 0 {
+    if unsafe { flock(file.as_raw_fd(), LOCK_EX | LOCK_NB) } != 0 {
         return Err(refused(
             "Busy",
             "another process owns this discovery mutation",
