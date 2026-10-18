@@ -157,7 +157,7 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
   out.push("## 2. Activity", "",
     `**${int(Object.values(m.calls).reduce((n, x) => n + x.n, 0))} calls** · **${int(o.steps)} steps** by **${o.agents.length - 1} agents + lead** on **${o.branches.length - 1} Branches + main** · **${int(w.workspaces)} Workspaces** (${Math.round((w.oneShotShare ?? 0) * 100)}% one-shot, ${int(m.health?.workspacesOpen)} open at end)`,
     `**File changes:** +${int(sumMu("added"))} added · ${int(sumMu("modified"))} modified · −${int(sumMu("deleted"))} deleted · ${bytes(sumMu("bytes"))} written · fs ${int(fsN)} : Sandbox ${int(sbN)} (**${sbN ? num(fsN / sbN, 0) : "—"} : 1**, target ~9 : 1)`,
-    `**Execs:** ${int(ex.total)} (JS ${int(ex.js)} · shell ${int(ex.shell)}) · ${int(ex.nonZero)} non-zero exits · install ${int(ex.installs)} · test runs ${int(ex.tests)}`, "",
+    `**Execs:** ${int(ex.total)} (JS ${int(ex.js)} · shell ${int(ex.shell)}) · ${int(ex.nonZero)} non-zero exits · install ${int(ex.installs)} · test runs ${int(ex.tests)}${ex.version != null ? ` · version figures ${int(ex.version)} (tooling)` : ""}`, "",
     activityTables(m));
   // 3. Storage
   const pv = prev?.version, median = (() => { const xs = history.map((x) => (x.storage?.changedBytes ? x.storage.newStored / x.storage.changedBytes : null)).filter((x) => x != null).sort((a, b) => a - b); return xs.length ? xs[Math.floor((xs.length - 1) / 2)] : null; })();
@@ -169,6 +169,7 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
   const headCost = sr ? (m.storeDisk?.sealed ? "— (needs a reachability walk of the sealed file; not built)" : "— (not at a snapshot)") : "—";
   out.push("## 3. Storage", "", "**3a. Overview**", "", table(["", `Previous${prev ? ` (r${pad(prev.range)})` : ""}`, "Now", "Change"], [
     ["Latest version (tracked / `node_modules` / build)", split(pv), split(v), pv && v ? signed(v.bytes - pv.bytes) : "—"],
+    ...(v?.how ? [["Version figures from", "", `${v.how}${v.how === "incremental" ? ` (${int(v.looked)} changed paths)` : ""}`, ""]] : []),
     ["Files / directories / symlinks", counts(pv), counts(v), pv && v ? `${signed(v.files - pv.files, int)} / ${signed(v.dirs - pv.dirs, int)} / ${signed(v.symlinks - pv.symlinks, int)}` : "—"],
     ["Largest file / largest directory", pv ? `${bytes(pv.largestFile.bytes)} / ${int(pv.largestDir.entries)} entries` : "—", v ? `${bytes(v.largestFile.bytes)} (\`${v.largestFile.path}\`) / ${int(v.largestDir.entries)} entries (\`${v.largestDir.path}\`)` : "—", ""],
     [`**Store on disk** (allocated${m.storeDisk?.sealed ? ", sealed" : ", live: file + WAL"})`, bytes(storeOnDisk(prev)), bytes(store), prev?.storeDisk ? signed(store - storeOnDisk(prev)) : "—"],

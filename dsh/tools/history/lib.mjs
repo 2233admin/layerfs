@@ -264,12 +264,15 @@ export async function placeCommands(run, files) {
  * a failed cleanup is appended to its message.
  */
 export async function execAll(run, sb, ws, commands, label, files = 0) {
+  const results = [];
   try {
     for (const command of commands) {
       run.rec.next = { kind: "files", n: files };
       const r = await expectCall(run, `${label} exec`, () => run.lf.sandbox.exec(sb, ws, command));
       if (r.exitCode !== 0) throw new Mismatch(`${label} exec exited ${r.exitCode}: ${String(r.stderr ?? "").slice(0, 300)}`);
+      results.push(r);
     }
+    return results;
   } catch (error) {
     if (commands.scratch) {
       try {
@@ -418,7 +421,7 @@ export async function verify(run, k, { prevHead, head, layer, prevCommit, full }
   const present = [...changes.filter((c) => !c.gitlink && c.mode !== "000000").map((c) => c.path), ...paths.metadataOnly];
   const ids = compareIds(present, present.length ? await readIds(run, layer, present, `r${pad(k)}-ids`) : new Map(), expected);
   const tree = full ? compareTree(expected, await readIds(run, layer, null, `r${pad(k)}-tree`), IGNORE, outputs) : null;
-  return { ok: paths.ok && ids.ok && (!tree || tree.ok), paths, ids, tree, changedDirs: changedDirs(items.map((i) => i.path)) };
+  return { ok: paths.ok && ids.ok && (!tree || tree.ok), paths, ids, tree, changedDirs: changedDirs(items.map((i) => i.path)), items };
 }
 
 /**
@@ -445,27 +448,6 @@ export async function closure(run, k, what, { layer }) {
     const r = await run.lf.sandbox.exec(sb, ws, vitestCommand(cal.run));
     const root = String((await run.lf.sandbox.exec(sb, ws, "pwd")).stdout).trim();
     return { ...compareResults(cal.run, parseVitestJson(String(r.stdout), root)), skipped: cal.skipped.length };
-  } finally {
-    await run.lf.sandbox.unmount(sb, ws, true);
-  }
-}
-
-// The latest version as LayerFS shows it (REPORT_FORMAT.md §4): every file,
-// folder and symlink under the Workspace (the probe fixture left out), their
-// raw bytes, the node_modules share, the largest file and the folder with the
-// most entries. lstat only: no file is read. One JSON line.
-export const VERSION_STATS = `const fs=require("fs"),P=require("path");const o={files:0,dirs:0,symlinks:0,bytes:0,nm:{files:0,dirs:0,symlinks:0,bytes:0},largestFile:{path:null,bytes:-1},largestDir:{path:".",entries:-1}};const walk=(d,nm)=>{const es=fs.readdirSync(d,{withFileTypes:true});if(es.length>o.largestDir.entries)o.largestDir={path:d,entries:es.length};for(const e of es){const p=d==="."?e.name:d+"/"+e.name;if(p===".lfs-probe")continue;const inNm=nm||e.name==="node_modules";const s=fs.lstatSync(p);const t=inNm?o.nm:null;if(s.isSymbolicLink()){o.symlinks++;o.bytes+=s.size;if(t){t.symlinks++;t.bytes+=s.size}}else if(s.isDirectory()){o.dirs++;if(t)t.dirs++;walk(p,inNm)}else{o.files++;o.bytes+=s.size;if(t){t.files++;t.bytes+=s.size}if(s.size>o.largestFile.bytes)o.largestFile={path:p,bytes:s.size}}}};walk(".",false);process.stdout.write(JSON.stringify(o)+"\\n")`;
-
-/** The latest version's figures (VERSION_STATS) of `layer`, read in a one-shot Workspace on a fork of it. */
-export async function versionStats(run, k, layer) {
-  const sb = await setup(run), branch = `ver-r${pad(k)}`, label = `r${pad(k)}.version`;
-  run.label(label);
-  await expectCall(run, `${label} fork`, () => run.lf.branch.fork(branch, layer), "Forked");
-  const ws = await expectCall(run, `${label} mount`, () => run.lf.sandbox.mount(sb, branch));
-  try {
-    const r = await run.lf.sandbox.exec(sb, ws, `node -e ${quote(VERSION_STATS)}`);
-    if (r.exitCode !== 0) throw new Mismatch(`${label} exited ${r.exitCode}: ${String(r.stderr ?? "").slice(0, 300)}`);
-    return JSON.parse(String(r.stdout).trim().split("\n").at(-1));
   } finally {
     await run.lf.sandbox.unmount(sb, ws, true);
   }

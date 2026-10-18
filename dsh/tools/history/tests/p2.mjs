@@ -355,6 +355,48 @@ test("lister v2 (dev352-p3c r015): the install root and pnpm's run times in .bin
   rmSync(dir, { recursive: true, force: true });
 });
 
+test("version figures (lead 2026-10-18): the incremental manifest from diff_commits paths equals a full walk; ties go to the smallest path", async () => {
+  const { VERSION_WALK, applyEntries, changedPaths, decodeEntries, lstatCommands, manifestDiff, statsOf } = await import("../version.mjs");
+  const { execFacts } = await import("../run.mjs");
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "lfs352-version-"))), ws = join(dir, "ws");
+  const put = (p, text) => { mkdirSync(join(ws, p, ".."), { recursive: true }); writeFileSync(join(ws, p), text); };
+  put(".lfs-probe/x", "probe"); put("a/one.txt", "12345"); put("a/two.txt", "12345"); put("b/sub/three.txt", "1");
+  put("node_modules/.pnpm/p@1/node_modules/p/index.js", "module.exports=1;\n"); symlinkSync(".pnpm/p@1/node_modules/p", join(ws, "node_modules/p"));
+  put("gone/inner/deep.txt", "x"); put("becomes-file/inside.txt", "y");
+  const walkSh = () => decodeEntries(execFileSync("node", ["-e", VERSION_WALK], { cwd: ws, encoding: "utf8" }));
+  const before = walkSh();
+  assert.equal(before.get(".lfs-probe")[0], "x");
+  assert.equal([...before.keys()].some((p) => p.startsWith(".lfs-probe/")), false, "the fixture is not descended");
+  const s0 = statsOf(before);
+  assert.deepEqual([s0.files, s0.symlinks, s0.nm.files, s0.nm.symlinks], [6, 1, 1, 1]);
+  assert.deepEqual(s0.largestFile, { path: "node_modules/.pnpm/p@1/node_modules/p/index.js", bytes: 18 });
+  assert.deepEqual(s0.largestDir, { path: ".", entries: 6 }, "root: a, b, becomes-file, gone, node_modules and the fixture");
+  // a range's changes: add, modify, delete a subtree, a directory replaced by a file, a symlink retargeted
+  put("a/three.txt", "123456789"); put("a/one.txt", "1"); rmSync(join(ws, "gone"), { recursive: true });
+  rmSync(join(ws, "becomes-file"), { recursive: true }); writeFileSync(join(ws, "becomes-file"), "now a file");
+  rmSync(join(ws, "node_modules/p")); symlinkSync(".pnpm/p@1/node_modules/p/", join(ws, "node_modules/p"));
+  // diff_commits lists every changed path, a deleted folder's files included, with a leading slash
+  const items = ["/a/three.txt", "/a/one.txt", "/gone", "/gone/inner", "/gone/inner/deep.txt", "/becomes-file", "/becomes-file/inside.txt", "/node_modules/p", "/.lfs-probe/x"].map((path) => ({ path }));
+  const paths = changedPaths(items);
+  assert.equal(paths.includes(".lfs-probe/x"), false);
+  const cmds = lstatCommands(paths, join(dir, "scratch"));
+  let out = "";
+  for (const c of cmds) out = execFileSync("sh", ["-c", c], { cwd: ws, encoding: "utf8" });
+  assert.equal(existsSync(join(dir, "scratch")), false, "the lstat script removes its scratch");
+  const updated = applyEntries(before, decodeEntries(out)), after = walkSh();
+  assert.deepEqual(manifestDiff(after, updated), []);
+  assert.deepEqual(statsOf(updated), statsOf(after));
+  assert.deepEqual(statsOf(after).largestFile, { path: "node_modules/.pnpm/p@1/node_modules/p/index.js", bytes: 18 });
+  // chunks: a long list travels in several commands
+  assert.ok(lstatCommands(Array.from({ length: 40000 }, (_, i) => `node_modules/.pnpm/pkg-${i}@${i}.0.0/node_modules/pkg-${i}/lib/file-${(i * 7919) % 104729}.js`), "/tmp/s").length > 3);
+  // a missed change is caught by the cross-check
+  assert.ok(manifestDiff(after, applyEntries(before, new Map())).length > 0);
+  // the version execs are counted as tooling inside the total
+  const ex = execFacts([{ method: "sandbox.exec", step: "r015.version#9", args: { command: "node -e x" }, ok: true }, { method: "sandbox.exec", step: "r015.s0001#1", args: { command: "ls" }, ok: true }]);
+  assert.deepEqual([ex.total, ex.version], [2, 1]);
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test("per-call scratch (lead 2026-10-18): distinct folders; removed on success and after a failed exec", async () => {
   const { execAll, scratchDir } = await import("../lib.mjs");
   assert.notEqual(scratchDir(), scratchDir());

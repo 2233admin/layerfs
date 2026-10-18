@@ -56,13 +56,14 @@ import { aggregate } from "./gates.mjs";
 import { PLAN_VERSION } from "./plan.mjs";
 import {
   binaries, closure, consolidate, expectCall, HISTORY, loadNow, median, Mismatch, probeFixture, probes, readTrace, REPO, Run,
-  sandboxHealth, setup, sha256, step, teardown, verify, versionStats, writeJson,
+  sandboxHealth, setup, sha256, step, teardown, verify, writeJson,
 } from "./lib.mjs";
 import { addDelta, checkpointDiff, deltaSummary, deltaWork, diskGuard, diskModel, EXIT, nextPhase, oneshotSplit, pad, poolSharing, PHASES, phaseOps, Tree } from "./steps.mjs";
 import { consolidateLanes, playAgents, pool, startRange } from "./agents.mjs";
 import { buildOverview, callTable } from "./stats.mjs";
 import { area } from "./plan-range.mjs";
 import { rangeClosure, studyMeasurements } from "./closure.mjs";
+import { versionStats } from "./version.mjs";
 import { addedBySource, changedGroupBytes, cumulative, liveParts, sealedParts, seedBySource, stepSource, storageFigures } from "./storage.mjs";
 
 const here = new URL(".", import.meta.url).pathname;
@@ -158,7 +159,9 @@ export function execFacts(lines) {
   const js = (c) => /^\s*(node|npm|pnpm|npx|yarn|vitest|corepack)\b/.test(String(c ?? ""));
   return { total: ex.length, js: ex.filter((l) => js(l.args?.command)).length, shell: ex.filter((l) => !js(l.args?.command)).length,
     nonZero: ex.filter((l) => l.ok && l.exitCode != null && l.exitCode !== 0).length, refused: ex.filter((l) => !l.ok).length,
-    installs: ex.filter((l) => /pnpm (install|i)\b/.test(String(l.args?.command ?? ""))).length, tests: ex.filter((l) => /vitest/.test(String(l.args?.command ?? ""))).length };
+    installs: ex.filter((l) => /pnpm (install|i)\b/.test(String(l.args?.command ?? ""))).length, tests: ex.filter((l) => /vitest/.test(String(l.args?.command ?? ""))).length,
+    // the version figures' own execs (version.mjs): tooling, inside the total
+    version: ex.filter((l) => /^r\d+\.version(#|$)/.test(String(l.step ?? ""))).length };
 }
 
 const q = (xs, p) => { const v = [...xs].sort((a, b) => a - b); return v.length ? v[Math.min(v.length - 1, Math.floor((v.length - 1) * p))] : null; };
@@ -384,7 +387,7 @@ async function playRange(run, k, mode) {
     if (!failure && phase.tests && !phase.closure && measured) { since = performance.now(); tests = await closure(run, k, "tests", { layer: published.publishedLayer.id }); lap("testsMs", since); }
     if (!failure && phase.probes && measured) { since = performance.now(); probeOut = await probes(run, k, { branch, tree: ctx.tree }); lap("probesMs", since); }
     // the latest version as LayerFS shows it (REPORT_FORMAT.md §4), every range
-    if (!failure && measured) { since = performance.now(); versionOut = await versionStats(run, k, published.publishedLayer.id); lap("versionMs", since); }
+    if (!failure && measured) { since = performance.now(); versionOut = await versionStats(run, k, published.publishedLayer.id, { items: proof?.items ?? null, crossCheck: snapshotDue || !!plan.milestone }); lap("versionMs", since); }
     m.snapshotDue = snapshotDue;
   } catch (error) {
     if (!(error instanceof Mismatch)) console.error(error.stack ?? error);
@@ -477,7 +480,7 @@ async function playRange(run, k, mode) {
   // the latest version: LayerFS's walk, split by git's tracked figures (the tree matched git) and node_modules
   if (versionOut) {
     const v = versionOut, nm = v.nm, tracked = { files: oracle.files, bytes: oracle.bytes };
-    m.version = { bytes: v.bytes, files: v.files, dirs: v.dirs, symlinks: v.symlinks, largestFile: v.largestFile, largestDir: v.largestDir,
+    m.version = { how: v.how, looked: v.looked, bytes: v.bytes, files: v.files, dirs: v.dirs, symlinks: v.symlinks, largestFile: v.largestFile, largestDir: v.largestDir,
       tracked, nodeModules: { files: nm.files, bytes: nm.bytes }, build: { files: Math.max(0, v.files - nm.files - tracked.files), bytes: Math.max(0, v.bytes - nm.bytes - tracked.bytes) } };
   }
   m.dsh = dshFacts(run.repo, plan, changes, sizes);
