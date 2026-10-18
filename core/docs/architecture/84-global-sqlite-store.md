@@ -8,7 +8,8 @@
 > decisions. Companion notes:
 > [Store concurrency model](83-store-concurrency-model.md),
 > [direct Store adapter](61-direct-store-adapter.md),
-> [shared Store foundation](60-shared-store-foundation.md).
+> [shared Store foundation](60-shared-store-foundation.md),
+> [one Commit per file write](85-commit-per-write-storage.md).
 
 ## 1. What it is
 
