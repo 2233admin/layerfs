@@ -7,6 +7,8 @@
 > profile" and the LayerFS mental model's target paragraph). Updating AGENTS.md
 > itself is left to the owner; until then this note is the record. Workspace
 > calls (mount, exec, Workspace commit, status, unmount) stay with the daemon.
+> Implementation: [DIRECT_STORE_IMPL.md](DIRECT_STORE_IMPL.md), tracked as fix
+> F-020.
 
 ## 1. Architecture
 

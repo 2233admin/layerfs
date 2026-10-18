@@ -166,3 +166,11 @@
   `c25119ac`, kind 1): lookups use the control reader's read-only session, and
   counters are read under the state lock alone;
   [fixes/007-a1-f018-reads-behind-publication-lane.md](fixes/007-a1-f018-reads-behind-publication-lane.md).
+- **F-020 · Store calls cross a Sandbox for no reason (product, owner direction
+  2026-10-18, after 007.a1 F-017/F-018).** Every fs, branch, project and
+  operator call takes a control round trip into a daemon in a Sandbox; on
+  range 4 (`c25119ac`/`5baa0f5d`) fs.read is 4.48 ms p50 at the client for
+  0.12 ms of traced work. Owner: the fixer, now (the builder keeps playing P2
+  on the current route until the switch). Kind 1. Spec:
+  [DIRECT_STORE_IMPL.md](DIRECT_STORE_IMPL.md); record:
+  [fixes/007-a1-f020-direct-store-access.md](fixes/007-a1-f020-direct-store-access.md).
