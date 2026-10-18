@@ -443,7 +443,9 @@
     flag is carried through, or the list is returned paged with no cap.
   - **F-037, F-038 and F-041 are grouped in GitHub #355 (merge at scale) with
     watch-out S2 risk 1, deferred by the owner as DEFER.md D-6.** F-039 and
-    F-040 stay unassigned.
+    F-040 stay unassigned. Reopened 2026-10-18 (owner): #355 is implemented
+    in the #353 worktree on #353's branch, separate commits, unmerged until
+    the owner calls integration.
 - **F-042 · exec over committed content is slow: vitest 3.7×, `tsc -b` 1.5×
   native; base reads grow with directory size (product, P3 dev range 15 and
   the #356 flatness probe, 2026-10-18).** RCA first (per-op counts and times,
