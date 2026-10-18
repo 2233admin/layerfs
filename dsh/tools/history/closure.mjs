@@ -519,20 +519,22 @@ export function nativeSequence({ repo, chain, final, image, volume, name = "laye
         if (!existsSync(join(stage, `${st.checkpoint}.tar`))) writeFileSync(join(stage, `${st.checkpoint}.tar`), execFileSync("git", ["--git-dir", repo, "archive", st.checkpoint], { maxBuffer: 1 << 30 }));
         script.push(`tar -x -C ${ORACLE_ROOT} -f /seq/${st.checkpoint}.tar`);
         if (prev) {
-          writeFileSync(join(stage, `${i}.del`), execFileSync("git", ["--git-dir", repo, "diff", "--name-only", "--diff-filter=D", prev, st.checkpoint], { encoding: "utf8" }));
+          writeFileSync(join(stage, `${i}.del`), execFileSync("git", ["--git-dir", repo, "diff", "--no-renames", "--name-only", "--diff-filter=D", prev, st.checkpoint], { encoding: "utf8" }));
+          // --no-renames: a renamed file's old path is a deletion too (dev352-p3k r016: 96 workspace projects natively, 92 in git)
           script.push(`while IFS= read -r f; do rm -f -- "$f"; done < /seq/${i}.del`);
         }
         prev = st.checkpoint;
       }
-      script.push(i < steps.length - 1 ? `(${st.command}) > /dev/null 2>&1; echo "@@step ${i} ${st.kind} $?"` : `(${st.command}) > /tmp/o 2>&1; echo "@@exit $?"; sed 's/^/@@out /' /tmp/o; ${listerCommand()}`);
+      script.push(i < steps.length - 1 ? `t=$(date +%s%N); (${st.command}) > /tmp/s${i} 2>&1; e=$?; echo "@@step ${i} ${st.kind} $e $(( ($(date +%s%N) - t) / 1000000 ))"` : `(${st.command}) > /tmp/o 2>&1; echo "@@exit $?"; sed 's/^/@@out /' /tmp/o; ${listerCommand()}`);
     });
     const input = execFileSync("tar", ["-c", "-C", stage, "."], { maxBuffer: 1 << 30 });
+    if (process.env.LFS352_SEQ_DEBUG) writeFileSync(process.env.LFS352_SEQ_DEBUG, script.join(";\n"));
     const t0 = Date.now();
     const r = spawnSync("docker", ["run", "--rm", "-i", "--name", name, "--network", "none", "-v", `${volume}:${STORE_MOUNT}:ro`, "--entrypoint", "sh", image, "-c", script.join("; ")], { input, encoding: "utf8", maxBuffer: 1 << 28 });
     if (r.status !== 0) throw new Error(`native sequence container exited ${r.status}: ${String(r.stderr).slice(-300)}`);
     const lines = r.stdout.split("\n");
     return {
-      steps: lines.filter((l) => l.startsWith("@@step ")).map((l) => { const [, i, kind, exit] = l.split(" "); return { i: Number(i), kind, exit: Number(exit) }; }),
+      steps: lines.filter((l) => l.startsWith("@@step ")).map((l) => { const [, i, kind, exit, ms] = l.split(" "); return { i: Number(i), kind, exit: Number(exit), ms: Number(ms) }; }),
       exit: Number(/^@@exit (\d+)/.exec(lines.find((l) => l.startsWith("@@exit")) ?? "")?.[1] ?? NaN),
       output: normalizeOutput(lines.filter((l) => l.startsWith("@@out ")).map((l) => l.slice(6)).join("\n")),
       ...parseLister(r.stdout),

@@ -986,6 +986,12 @@ test("closure development checks (owner 2026-10-18): a clean reinstall of the un
   assert.deepEqual([rows[0].kind, rows[0].states, rows[0].nothingToBuild, rows[0].commit], ["rebuild", ["packages/a/tsconfig.json built"], false, "Committed"]);
 });
 
+test("P3 removals take the file only (dev352-p3k r016): a folder may hold untracked closure output", () => {
+  const tree = new Tree(new Map([["a/b/c.txt", { mode: "100644", blob: "x" }], ["d.txt", { mode: "100644", blob: "y" }]]));
+  assert.equal(route([{ op: "rm", path: "a/b/c.txt" }], tree.clone ? tree.clone() : new Tree(new Map([["a/b/c.txt", { mode: "100644", blob: "x" }], ["d.txt", { mode: "100644", blob: "y" }]])), { all: true }).sandbox[0].target, "a", "P2: the highest folder it empties");
+  assert.equal(route([{ op: "rm", path: "a/b/c.txt" }], tree, { all: true, untracked: true }).sandbox[0].target, "a/b/c.txt", "P3: the file only, as git does");
+});
+
 test("devcheck (lead 2026-10-18, 120 s rule): dev checks after the publish; the verdicts; a native rerun equal to ours passes", async () => {
   const { devSteps } = await import("../devcheck.mjs");
   const { judgeDevChecks } = await import("../closure.mjs");

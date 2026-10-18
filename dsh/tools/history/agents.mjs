@@ -85,7 +85,7 @@ async function decoys(a, files, tree) {
 
 /** Plays one P2 step as agent view `a` (SCRIPTS.md §5). */
 async function playStep(a, k, s, ctx) {
-  const lane = s.lane, tree = ctx.trees.get(lane), opts = ctx.p2.options(lane), label = s.id, work = ctx.work;
+  const lane = s.lane, tree = ctx.trees.get(lane), opts = { ...ctx.p2.options(lane), untracked: !!ctx.untracked }, label = s.id, work = ctx.work;
   a.label(label);
   a.rec.tree = tree;
   const now = () => performance.now();
@@ -223,7 +223,7 @@ export function mergedTree(base, trees) {
 export async function startRange(run, k, plan, measured) {
   await pool(run, k, plan.agents.length);
   const base = lsTree(run.repo, run.state.prevCommit).files;
-  const ctx = { p2: p2Plan(plan, new Set(new Tree(base).dirs.keys())), base, trees: new Map(plan.lanes.map((l) => [l.name, new Tree(base)])), held: new Map(), events: [], measured,
+  const ctx = { untracked: !!PHASES[run.manifest.phase]?.closure, p2: p2Plan(plan, new Set(new Tree(base).dirs.keys())), base, trees: new Map(plan.lanes.map((l) => [l.name, new Tree(base)])), held: new Map(), events: [], measured,
     work: { fs: 0, sandbox: 0, commits: 0 }, lead: `r${pad(k)}-main`, leadSteps: [], merged: new Map(), tries: new Map(), published: new Set(), played: new Map() };
   run.label(`r${pad(k)}.fork`);
   await expectCall(run, `r${pad(k)} fork`, () => run.lf.branch.fork(ctx.lead, "main"), "Forked");
@@ -271,7 +271,7 @@ export async function consolidateLanes(run, k, plan, ctx, { beforePublish = null
       if (ctx.race?.again) { await merge(run, ctx.race.again); ctx.leadSteps.push({ op: "merge again", category: "branch" }); ctx.race.again = null; }
       ctx.mainTree = mergedTree(ctx.base, [...ctx.trees.values()]);
       run.label(`r${pad(k)}.reconcile`);
-      await writeOp(run, cur, ctx.p2.reconcile, ctx.mainTree, `r${pad(k)}.reconcile`, ctx.work);
+      await writeOp(run, cur, ctx.p2.reconcile, ctx.mainTree, `r${pad(k)}.reconcile`, ctx.work, { untracked: !!ctx.untracked });
       ctx.leadSteps.push({ op: "reconcile", category: "fs" });
     } else if (c.op === "publish") {
       if (ctx.race?.again) { await merge(run, ctx.race.again); ctx.leadSteps.push({ op: "merge again", category: "branch" }); ctx.race.again = null; }

@@ -204,12 +204,14 @@ export function consolidationSteps(consolidation) {
  * it empties), then, for files an fs call cannot write, one Sandbox step.
  * `tree` is the Branch's expected tree; it is updated as the calls would.
  */
-export function route(files, tree, { keep = null, mkdir = null, all = false } = {}) {
+export function route(files, tree, { keep = null, mkdir = null, all = false, untracked = false } = {}) {
   const calls = [], sandbox = [];
   for (const f of files) {
     if (f.op === "rm") {
       if (!tree.has(f.path)) continue;
-      const target = tree.removalTarget(f.path, keep);
+      // P3: folders may hold untracked closure output (node_modules, lib), which a removal of the folder would take
+      // with it; git removes the file only (dev352-p3k r016: packages/core/agent-core/node_modules lost)
+      const target = untracked ? f.path : tree.removalTarget(f.path, keep);
       (all ? sandbox : calls).push({ call: "rm", op: "rm", path: f.path, target, previous: tree.get(f.path), expect: f.expect ?? "Committed" });
       tree.delete(f.path);
     } else if (all || viaSandbox(f)) {
