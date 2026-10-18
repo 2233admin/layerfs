@@ -70,4 +70,9 @@
     cold reads and writes.
   - Accepted under AGENTS §3.9. The lead's p95 condition is not established
     from one sample per case, and the r011 storage gate was not run.
+  - Integrated (`01dc7eefa`, `a76b4ac33`): built on F-036 (bases found with
+    `base_location`) and F-043. Reference closure, chronology under two
+    concurrent Saves, and one chain per demanded branch page in a merge are
+    shown by test; M1 equivalence with a delta-form side passes on
+    `issue360-i3-m1-equiv`.
   - Record: [fixes/030-f027-item3-inode-branch-deltas.md](fixes/030-f027-item3-inode-branch-deltas.md).

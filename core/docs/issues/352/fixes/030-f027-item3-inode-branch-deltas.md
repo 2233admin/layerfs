@@ -8,9 +8,9 @@
 | Old Stores | read unchanged: their branches are `0 \| page`, the whole form, byte-identical to before |
 | Old data | not rewritten. A branch takes the new form only when a Commit rewrites it, so a chain may start from an old whole branch |
 | Binaries | old daemon `cc185d13` / addon `66d774c8` (source `46e17bdf3`, rebuilt from `git archive`; byte-identical to the sealed `cc185d13` / `66d774c8` from `2d84fe1bb`). New daemon `3dad6f79` / addon `43c96012` (source `7ac7343c7`). Both release `--locked --offline -j 6`, image `378b799ef433`, target volume `layerfs-issue360-i3-cargo-target`, under `core/target/issue360-i3/` |
-| Commits | `7ac7343c7` (implementation, tests, docs); this record's commit. Branch `claude/issue360-item3-branch-deltas-72ecad` |
+| Commits | `7ac7343c7` (implementation, tests, docs); `040f517c8` (this record); `01dc7eefa` (merge of `origin/claude/issue352-correctness-644bbc` at `5ae2b7034`: F-036, F-043, c01–c03); `a76b4ac33` (bases re-located per F-036; closure, chronology and merge-read proofs); `f3396ae0d` (four inherited persistence tests repaired); this record's update. Branch `claude/issue360-item3-branch-deltas-72ecad`. M1 equivalence: `32db594f2` + `383c5daa7` on branch `issue360-i3-m1-equiv` (item 3 cherry-picked onto `issue353-m1-360-equiv` `58329939b`) |
 | Compatibility test | `compat.mjs` range 14 with daemon `3dad6f79` on fork `i3-compat` of `p2-main-f`'s range-14 snapshot (written by `57141b57`; all branches whole): **ok**. 380 git paths, 366 ids, 1,261 files; nothing missing, extra or changed; 3,827 ms |
-| Regression test | `layerfs-storage/tests/inode_branch_deltas.rs` (4 tests, below) |
+| Regression test | `layerfs-storage/tests/inode_branch_deltas.rs` (4 tests), `layerfs-storage/tests/inode_branch_merge_reads.rs`, `layerfs-persistence/tests/inode_branch_delta_custody.rs` (2 tests); on the M1 branch, `merge_mixed_forms`'s delta-form case (below) |
 | Recovery | none needed: readers dispatch on the record tag under the role |
 
 ## Old design
@@ -87,9 +87,9 @@ Checks:
 - `layerfs-store-service`'s 24 binaries pass, including the diff, ancestry,
   list, merge and compare oracles.
 - `layerfs-workspace`: 28 binaries pass.
-- `layerfs-persistence`'s test `space_reclamation` does not compile
-  (`NewEntry.metadata_root`, item 2's rename). This predates item 3 and is
-  not from it.
+- `layerfs-persistence`'s test `space_reclamation` did not compile at
+  `7ac7343c7` (`NewEntry.metadata_root`, item 2's rename), predating item 3;
+  repaired in `f3396ae0d` (below).
 - Not run: the Linux daemon mount tests.
 
 ## Synthetic P3 check (spec §5, required)
@@ -217,6 +217,107 @@ mtime. The **decoded views** are proved by `tree-digest` (`s097`, `s099`):
 The new arm's Store is the mixed Store: old whole branches from the golden,
 with delta branches on top.
 
+## Integration and the extra checks (liaison, 2026-10-19)
+
+**Merge.** `origin/claude/issue352-correctness-644bbc` (`5ae2b7034`) was
+merged before item 3 was built further (`01dc7eefa`). Conflicts:
+- `read/objects.rs`: HEAD's `ReadState` kept, with F-043's `IDLE_DECODE`,
+  `Decoder` and `Decoder::new()` beside it; F-043's region list unchanged.
+- `read/provider.rs` (needed to build, not a textual conflict): `Reader` and
+  `ReadCache` hold a `Decoder`, as INTEGRATION_PLAN step 4 lays out.
+- `BUGS.md`: the F-043 continuation, then F-044 to F-047.
+
+**F-036.** The branch reconstruct finds every base a stored record names with
+`Source::base_location`, as `reconstruct_leaf` does: never a stale per-wave
+"absent" (`a76b4ac33`). F-036's `concurrent_winner_chain` passes, as do
+`encode_region_reuse` and `save_encoder_reuse` and the whole
+`layerfs-storage` suite (22 binaries).
+
+**1. Reference closure.** A delta branch names its base by id. The base
+stays readable as long as the branch is, for three reasons:
+- `pack` and `pack_unit` rows cannot be deleted or updated (abort
+  triggers in `objects.sql` and `objects_units.sql`);
+- reclamation (`reclaim_space`) only runs `incremental_vacuum` over free
+  pages;
+- no product statement deletes an `object_location` row.
+
+`inode_branch_delta_custody.rs` shows it on a real Disposable Store: after
+six branch-delta Saves on 20,000 inodes, DELETE and UPDATE of the first
+base's pack and pack-unit rows abort. Reclamation then runs to zero pages,
+and all seven tables read back value for value.
+
+**2. Chronology.** A base is a branch located below the Save's ceiling, so it
+was published before the Save that names it. A branch inside the same Save
+is pending, not located, and is refused (stored whole). The same test runs
+two Saves on two handles, both begun before either publishes, each choosing
+the same published root branch as its base:
+- with different changes, both store delta branches;
+- with an identical change, both finish (first wins).
+
+All four tables read back, and each dependent root is in a later pack than
+its base.
+
+**3. One chain per level, in merge and LOOKUP.** The only `InodeBranch`
+decode is `Resolver::resolve_charged` → `branch_canonical_with_caches`,
+shared by `Reader`, `ReadCache`/`KeptReads` (the daemon's base reader, which
+FUSE LOOKUP and GETATTR use) and the Save's own reads (where M1 runs inside a
+Commit). Each demanded branch page reconstructs one chain of at most 8 edges.
+- Lookup: the counter test above shows a lookup reconstructs 2 chains for
+  2 levels.
+- Merge: `inode_branch_merge_reads.rs` runs `merge_roots` over a Store reader
+  on a 20,000-file tree whose ours and theirs root branches are deltas.
+  42 branch pages are demanded and 42 chains reconstructed, with 16 edges.
+  The merged tree holds both changes.
+
+Gap: the Save's internal read counters (`save/state.rs`) and the daemon
+telemetry do not carry the branch counters, so the in-Commit M1 and live
+LOOKUP numbers rest on the shared resolver, not on their own counters.
+
+**Decoded-value comparison.** Item 3 changes only the stored form of a
+branch page. The canonical page and its id are byte-identical to before, so
+every identity check (UpToDate, no-change, same root) is unaffected. Merge
+and no-change checks compare decoded `InodeValue`s (`same_value`,
+`same_inode`), never stored record bytes.
+
+**M1 equivalence with a delta-form side.** Item 3 was cherry-picked onto
+`issue353-m1-360-equiv` (`58329939b`) as `32db594f2`. `merge_mixed_forms`
+gained `changes_merge_over_delta_form_inode_branches` (`383c5daa7`): the
+fixture's table is one leaf, so the case widens it to 400 files under `/w`
+and changes both sides in their own Commits. Reading every inode of each
+side applies at least one branch delta (the premise). Both merge
+orientations equal the decoded expectation, with no conflict. Run once:
+both cases pass (0.30 s). The first attempt failed in the test's own setup
+(`/w` not yet made, `NoSuchPath`) before any merge ran.
+
+**Found while writing the merge test (not item 3; whole branches behave the
+same).** On this branch, `merge::decide::same` compares only kind and
+content root. A metadata-only change on ours (an mtime or a chmod alone)
+against an unrelated change on theirs is dropped from the merge. The base
+behaves identically at metadata depth 0. The M1 merge by serial on
+`issue353-m1-360-equiv` merges metadata by value instead. Reported to the
+liaison; not fixed here.
+
+**Inherited persistence tests** (`f3396ae0d`; none from item 3):
+- `space_reclamation` and `immutable_reads_under_reclamation` did not
+  compile: item 2's rename of `NewEntry.metadata_root` to
+  `metadata: PortableMetadata`. Adapted mechanically.
+- `acquisition_reads` failed with Bounds: its fixture wrote symlinks with
+  mode 0o644, outside the portable grammar. Fixture fixed; no assertion
+  changed.
+- `acquisition_batching` failed with Bounds: a stale premise, because item 2
+  refuses the bad value at write. The test was renamed and now checks that
+  the write is refused and leaves no row, and that the read decode still
+  fails for a row changed out of band (both of the old cases).
+
+No test was deleted. All persistence binaries pass.
+
+**Not rerun after the merge.** The synthetic P3 and timing tables above are
+from `7ac7343c7` (pre-merge daemon `3dad6f79`). The only item-3 change since
+is the base lookup (`base_location` instead of `location`). It behaves
+differently only when a concurrent winner publishes a base, which never
+happens in the single-writer P3 replay. F-036 and F-043 are other lanes'
+changes, measured in their own records.
+
 ## Verdict
 
 - **Lookup cost bound: holds** (counter test above). A lookup reconstructs
@@ -259,7 +360,7 @@ with delta branches on top.
   counts above are identical.
 - Linux daemon mount tests (`layerfs-daemon` mounted_*).
 - Branch counters reach `Reader::pooled_read_counters`, but not the daemon's
-  reader telemetry. That needs `read/provider.rs` or the store-service
+  reader telemetry or the Save's own read counters. That needs `read/provider.rs` or the store-service
   telemetry, which belong to other lanes. The live table therefore shows
   statements, pack selections and group decodes, and the per-level bound
   rests on the counter test.
