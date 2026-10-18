@@ -13,7 +13,7 @@
 // outcome that differs from the plan throws Mismatch, which ends the range.
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BlobCache, diffTrees, lsTree } from "./git.mjs";
@@ -41,11 +41,27 @@ const docker = (args, opts = {}) => execFileSync("docker", args, { encoding: "ut
 /** The image's id as Docker has it, or null. */
 export const imageId = (image) => { try { return docker(["image", "inspect", "--format", "{{.Id}}", image]); } catch { return null; } };
 
+/**
+ * The SDK JavaScript a run loads, for the record: its folder and one SHA-256
+ * over its src/ and operator/ files (path and bytes, sorted), which needs no
+ * git (the runner mounts only the folder).
+ */
+export function sdkJsFacts(dir) {
+  const h = createHash("sha256");
+  const walk = (d) => readdirSync(d, { withFileTypes: true }).sort((x, y) => (x.name < y.name ? -1 : 1)).forEach((e) => {
+    const p = join(d, e.name);
+    if (e.isDirectory()) walk(p); else if (e.isFile()) h.update(`${p.slice(dir.length)}\0`).update(readFileSync(p));
+  });
+  for (const sub of ["src", "operator"]) if (existsSync(join(dir, sub))) walk(join(dir, sub));
+  return { dir, sha256: h.digest("hex") };
+}
+
 /** The binaries a run is pinned to: the daemon's and the native addon's SHA-256, the image id; and the source commit, for the record. */
 export function binaries(env) {
   return {
     daemon: sha256(env.LAYERFS_DAEMON),
     sdk: sha256(env.LAYERFS_NATIVE ?? join(REPO, "sdk/js/native/layerfs.node")),
+    sdkJs: sdkJsFacts(env.LAYERFS_SDK_JS ?? join(REPO, "sdk/js")),
     image: imageId(env.LAYERFS_IMAGE),
     source: execFileSync("git", ["-C", REPO, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
   };
@@ -76,10 +92,12 @@ export class Run {
   /** A fresh SDK client (after a seal, the old one's Sandboxes are closed). */
   async client() {
     Object.assign(process.env, this.manifest.env);
-    const { LayerFS } = await import(join(REPO, "sdk/js/src/index.js"));
-    const { LayerFSOperator } = await import(join(REPO, "sdk/js/operator/index.js"));
+    const sdk = this.manifest.env.LAYERFS_SDK_JS ?? join(REPO, "sdk/js");
+    const { LayerFS } = await import(join(sdk, "src/index.js"));
+    const { LayerFSOperator } = await import(join(sdk, "operator/index.js"));
     this.LayerFS = LayerFS;
     this.raw = new LayerFS(this.manifest.project, { trace: this.trace ?? undefined });
+    this.clients = [this.raw];
     this.rec = { label: undefined, next: null, tree: null, agent: "lead" };
     this.lf = record(this.raw, this.rec, this.sink);
     this.op = new LayerFSOperator(this.raw);
@@ -89,13 +107,14 @@ export class Run {
   }
   /**
    * Another actor's view of this run (P2): its own SDK client, so its trace
-   * labels never mix with a concurrent actor's, Store calls through the run's
-   * service Sandbox, Workspaces in `sandbox`; the call count and log shared.
+   * labels never mix with a concurrent actor's, Store calls in this process
+   * (the process's one Store, F-020), Workspaces in `sandbox`; the call count
+   * and log shared.
    */
   async agent(name, sandbox) {
-    const service = await this.raw.service();
     const a = Object.create(this);
-    a.raw = new this.LayerFS(this.manifest.project, { trace: this.trace ?? undefined, sandbox: service });
+    a.raw = new this.LayerFS(this.manifest.project, { trace: this.trace ?? undefined });
+    this.clients.push(a.raw);
     a.rec = { label: undefined, next: null, tree: null, agent: name };
     a.lf = record(a.raw, a.rec, this.sink);
     a.sandbox = sandbox;
@@ -456,6 +475,11 @@ export async function teardown(run) {
   for (const id of service) await close(id);
   run.sandbox = null;
   run.pool = [];
+  // then the Store: the process's last client closes it (a seal checkpoints the file next)
+  for (const c of run.clients ?? []) {
+    try { await c.close(); } catch (e) { problems.push(`close Store: ${e.code ?? ""} ${e.message}`); }
+  }
+  run.clients = [];
   return problems;
 }
 

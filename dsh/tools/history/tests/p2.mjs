@@ -21,8 +21,8 @@ import { baselineFor, leadNote, loadBaselines, probeSetupCommits, regate, writeB
 import { atHead } from "../frozen.mjs";
 import { laneChanges, mergedTree } from "../agents.mjs";
 import { measure, record } from "../lib.mjs";
-import { checkRoute, loadBudget, wallProjection } from "../run.mjs";
-import { runnerArgs } from "../runner.mjs";
+import { checkRunner, loadBudget, wallProjection } from "../run.mjs";
+import { runnerArgs, runOf } from "../runner.mjs";
 import { demux, parseRun } from "../runner/docker-shim.mjs";
 import {
   attributeFuse, callOf, diskGuard, diskModel, changedDirs, outcomeOf, checkpointDiff, consolidationSteps, withDirs, decoyBytes, nextPhase, p2Plan, route, sandboxCommands, STEP_KINDS, Tree,
@@ -578,16 +578,21 @@ test("F-021 follow-up: open issues are judged as of the latest attempt's start",
   assert.deepEqual(issuesAsOf(issues, opened, undefined), issues, "no start recorded: every open issue");
 });
 
-test("runner container: docker run arguments, the route guard, the shim's run parsing and stream split", () => {
-  const a = runnerArgs({ imageId: "sha256:abc", hostSocket: "/Users/u/.docker/run/docker.sock", route: "daemon", args: ["play", "--run", "x"], home: "/Users/u", repo: "/r", history: "/Users/u/lfs-history" });
+test("runner container: docker run arguments with the run's Store volume, the host refused, the shim's run parsing and stream split", () => {
+  const a = runnerArgs({ imageId: "sha256:abc", hostSocket: "/Users/u/.docker/run/docker.sock", args: ["play", "--run", "x"], sdk: "/w/f020/sdk/js", home: "/Users/u", repo: "/r", history: "/Users/u/lfs-history" });
   const s = a.join(" ");
-  for (const want of ["--name layerfs-issue352-runner", "-v /r:/r", "-v /Users/u/lfs-history:/Users/u/lfs-history", "-v /var/run/docker.sock:/var/run/docker.sock",
-    "-v /var/run/docker.sock:/Users/u/.docker/run/docker.sock", "LAYERFS_ROUTE=daemon", "LAYERFS_RUNNER_IMAGE=sha256:abc", "PATH=/r/dsh/tools/history/runner:"]) assert.ok(s.includes(want), want);
-  assert.deepEqual(a.slice(-4), ["/r/dsh/tools/history/run.mjs", "play", "--run", "x"]);
-  assert.equal(checkRoute({ route: "daemon" }, {}, true), null);
-  assert.match(checkRoute({ route: "daemon" }, { LAYERFS_ROUTE: "direct" }, true), /not available until F-020/);
-  assert.match(checkRoute({}, { LAYERFS_ROUTE: "other" }, true), /not the run's recorded route daemon/);
-  assert.equal(checkRoute({}, { LAYERFS_ROUTE: "other" }, false), null, "fast mode records no measurement");
+  for (const want of ["--name layerfs-issue352-runner --init --network host", "-v /r:/r", "-v /Users/u/lfs-history:/Users/u/lfs-history", "-v layerfs-issue352-x:/layerfs-store", "-v /w/f020/sdk/js:/w/f020/sdk/js:ro",
+    "-v /var/run/docker.sock:/Users/u/.docker/run/docker.sock", "LAYERFS_STORE_PATH=/layerfs-store/global/store.sqlite", "LAYERFS_RUNNER_IMAGE=sha256:abc", "PATH=/r/dsh/tools/history/runner:"]) assert.ok(s.includes(want), want);
+  assert.ok(!s.includes("ROUTE"), "one route: nothing to choose");
+  assert.ok(!runnerArgs({ imageId: "i", args: ["play", "--run", "x"], sdk: "/r/sdk/js", repo: "/r", history: "/h" }).join(" ").includes(":ro -v /var"), "an SDK inside the checkout is already mounted");
+  assert.equal(runOf(["phase", "--run", "y", "--phase", "p2"]), "y");
+  assert.equal(runOf(["play"]), null);
+  const env = { LAYERFS_RUNNER: "layerfs-issue352-runner", LAYERFS_STORE_PATH: "/layerfs-store/global/store.sqlite" };
+  assert.equal(checkRunner("play", env, "linux"), null);
+  assert.match(checkRunner("play", {}, "darwin"), /run it in the runner container/);
+  assert.match(checkRunner("fork", { ...env, LAYERFS_STORE_PATH: "/x" }, "linux"), /not \/layerfs-store\/global\/store\.sqlite/);
+  assert.equal(checkRunner("phase", {}, "darwin"), null, "phase touches no Store");
+  assert.equal(checkRunner("cleanup", {}, "darwin"), null, "cleanup removes the volume the runner would hold");
   const body = parseRun(["--rm", "--network", "none", "--user", "0", "-v", "vol:/v:ro", "--entrypoint", "python3", "img", "-c", "print(1)"]);
   assert.deepEqual([body.Image, body.Cmd, body.Entrypoint, body.User, body.HostConfig], ["img", ["-c", "print(1)"], ["python3"], "0", { Binds: ["vol:/v:ro"], NetworkMode: "none" }]);
   assert.throws(() => parseRun(["--privileged", "img"]), /not supported/);

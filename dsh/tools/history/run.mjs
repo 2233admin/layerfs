@@ -2,8 +2,12 @@
 // The headless player of the history replay (#352 SPEC §2, §3, §7; SCRIPTS.md §1):
 //   node dsh/tools/history/run.mjs new  --run <id> --phase p1 [--label measured|baseline|dev|control] [--policy default|control] [--daemon <path>]
 //   node dsh/tools/history/run.mjs play --run <id> --from N --to M [--mode measured|fast]
-//   node dsh/tools/history/run.mjs fork --run <new id> --from-run <id> --range N [--label …] [--daemon <path>] [--addon <path>]
+//   node dsh/tools/history/run.mjs fork --run <new id> --from-run <id> --range N [--label …] [--daemon <path>] [--addon <path>] [--sdk <dir>]
 //   node dsh/tools/history/run.mjs rebaseline --phase p2 --daemon <path> [--addon <path>] [--from-run <id>] [--run <id>]
+// Every command that touches the Store (new, play, fork, rebaseline) runs in the runner container (runner.mjs): Store calls run in
+// this process against the run's volume at /layerfs-store (F-020), Linux only.
+// --sdk <dir> picks the SDK's JavaScript (default sdk/js of this checkout);
+// it is recorded in the manifest (LAYERFS_SDK_JS) and its commit in binary.
 // --addon pins the SDK addon file the same way (default: sdk/js/native, or the
 // source run's for `fork`); the manifest records both binaries' SHA-256 and the
 // binary guard checks both before every range, measured or fast.
@@ -63,6 +67,8 @@ const here = new URL(".", import.meta.url).pathname;
 const IMAGE = "sha256:d3773b4eac6a7a644887b17e36956cd1553786d47103f0170a3bb2b0ff6988de";
 const DAEMON = join(REPO, "core/target/cluster2-linux/release/layerfs-daemon");
 const ADDON = join(REPO, "sdk/js/native/layerfs.node");
+/** The SDK the player loads (its JavaScript; the addon is ADDON) and the Store file as the runner and every Sandbox see it. */
+export const SDK_JS = join(REPO, "sdk/js"), STORE_PATH = "/layerfs-store/global/store.sqlite";
 /** SPEC §8's control arm: the old depths. */
 export const POLICIES = { default: null, control: { smallFileThreshold: 131072, wholeFileDepth: 8, chunkDepth: 4 } };
 /** The depth cap per role of a run's Store policy (the defaults of SPEC §8, or its override). */
@@ -189,8 +195,7 @@ export function nextAttempt(metrics, k) {
   return 1 + Math.max(0, ...readdirSync(metrics).map((f) => Number(re.exec(f)?.[1] ?? 0)));
 }
 
-function create({ id, phase, label, policy, image, daemon, addon = ADDON, route = "daemon", source }) {
-  if (!["daemon", "direct"].includes(route)) throw new Error(`route ${route}: daemon or direct`);
+function create({ id, phase, label, policy, image, daemon, addon = ADDON, sdk = SDK_JS, source }) {
   if (!RUN_ID.test(id)) throw new Error(`run id ${id}: lowercase letters, digits and -`);
   if (!PHASES[phase]) throw new Error(`phase ${phase} has no player yet (built: ${Object.keys(PHASES).join(", ")})`);
   const dir = join(HISTORY, "runs", id);
@@ -200,17 +205,17 @@ function create({ id, phase, label, policy, image, daemon, addon = ADDON, route 
   const env = {
     LAYERFS_HOME: join(dir, "home"), LAYERFS_DOCKER: host.replace(/^unix:\/\//, ""), LAYERFS_IMAGE: image, LAYERFS_VOLUME: volume,
     LAYERFS_DAEMON: daemon, LAYERFS_NATIVE: addon, LAYERFS_CONTAINER_PREFIX: `layerfs-issue352-${id}-`,
-    LAYERFS_CONSTRUCTION_WORKERS: "1",
+    LAYERFS_CONSTRUCTION_WORKERS: "1", LAYERFS_STORE_PATH: STORE_PATH, LAYERFS_SDK_JS: sdk,
   };
   return { dir, volume, env, manifest: {
     run: id, phase, label, policyName: policy, policy: POLICIES[policy], project: "dsh", volume, env,
     repo: join(HISTORY, "dsh.git"), plan: join(HISTORY, "plan"), oracle: join(HISTORY, "oracle"),
-    outputs: outputs(label, dir), created: new Date().toISOString(), source, route,
+    outputs: outputs(label, dir), created: new Date().toISOString(), source,
   } };
 }
 
 async function cmdNew(o) {
-  const { dir, volume, env, manifest } = create({ id: o.run, phase: o.phase ?? "p1", label: o.label ?? "measured", policy: o.policy ?? "default", image: o.image ?? IMAGE, daemon: resolve(o.daemon ?? DAEMON), addon: resolve(o.addon ?? ADDON), route: o.route ?? "daemon" });
+  const { dir, volume, env, manifest } = create({ id: o.run, phase: o.phase ?? "p1", label: o.label ?? "measured", policy: o.policy ?? "default", image: o.image ?? IMAGE, daemon: resolve(o.daemon ?? DAEMON), addon: resolve(o.addon ?? ADDON), sdk: resolve(o.sdk ?? SDK_JS) });
   const summary = JSON.parse(readFileSync(join(manifest.plan, "plan.json"), "utf8"));
   if (summary.version !== PLAN_VERSION) throw new Error(`the plan is v${summary.version}; regenerate it as v${PLAN_VERSION}`);
   manifest.binary = binaries(env);
@@ -227,7 +232,7 @@ async function cmdNew(o) {
   mkdirSync(src);
   execFileSync("sh", ["-c", `git --git-dir ${JSON.stringify(manifest.repo)} archive ${summary.init.commit} | tar -x -C ${JSON.stringify(src)}`]);
   Object.assign(process.env, env);
-  const { LayerFS } = await import(join(REPO, "sdk/js/src/index.js"));
+  const { LayerFS } = await import(join(env.LAYERFS_SDK_JS, "src/index.js"));
   const t0 = performance.now();
   const init = await new LayerFS(manifest.project, manifest.policy ? { storePolicy: manifest.policy } : {}).project.init(src);
   run.state = { next: 0, layer: init.layer, head: null, prevCommit: summary.init.commit, heads: {}, layers: { init: init.layer }, depth: { commits: 0, layers: 1, branches: 0 }, initMs: Math.round(performance.now() - t0), dirty: null, sinceMs: [], lastSnapshotMs: null, growth: [] };
@@ -236,14 +241,17 @@ async function cmdNew(o) {
 }
 
 /**
- * The route guard (DIRECT_STORE_IMPL.md step 4): the process's route
- * (LAYERFS_ROUTE, default daemon) must be the run's recorded route for a
- * measured range, and `direct` is refused until F-020 lands. Null when allowed.
+ * Store calls run in the player's process (F-020): only in the runner
+ * container (Linux, the Store volume at /layerfs-store, LAYERFS_RUNNER set).
+ * The host is refused here, before the SDK would refuse it `Unsupported`.
+ * `cleanup` stays on the host: it makes no Store call, and the runner itself
+ * holds the run's volume, which cleanup removes.
  */
-export function checkRoute(manifest, env, measured) {
-  const want = manifest.route ?? "daemon", have = env.LAYERFS_ROUTE ?? "daemon";
-  if (have === "direct" || want === "direct") return "the direct Store route is not available until F-020 lands";
-  if (measured && have !== want) return `route ${have} is not the run's recorded route ${want}`;
+export const IN_RUNNER = new Set(["new", "play", "fork", "rebaseline"]);
+export function checkRunner(cmd, env, platform = process.platform) {
+  if (!IN_RUNNER.has(cmd)) return null;
+  if (platform !== "linux" || !env.LAYERFS_RUNNER) return `run.mjs ${cmd} plays through the in-process Store: run it in the runner container (node dsh/tools/history/runner.mjs -- ${cmd} …)`;
+  if (env.LAYERFS_STORE_PATH !== STORE_PATH) return `LAYERFS_STORE_PATH is ${env.LAYERFS_STORE_PATH ?? "unset"}, not ${STORE_PATH}`;
   return null;
 }
 
@@ -301,8 +309,6 @@ async function playRange(run, k, mode) {
   // prepare: binaries, disk, calibration
   const binaryProblem = checkBinaries(run);
   if (binaryProblem) { console.error(`range ${k} refused: ${binaryProblem}`); return EXIT.guard; }
-  const routeProblem = checkRoute(run.manifest, process.env, measured);
-  if (routeProblem) { console.error(`range ${k} refused: ${routeProblem}`); return EXIT.guard; }
   const free = freeBytes(run);
   const growth = Math.max(0, ...run.state.growth);
   const guard = diskGuard({ storeBytes: run.state.storeBytes ?? 0, growthBytes: growth, installPeak: phase.tests ? 3 * 2 ** 30 : 0, ...free, rangesLeft: 202 - k });
@@ -318,7 +324,7 @@ async function playRange(run, k, mode) {
   run.traceTo(traceFile, `r${pad(k)}`);
   const m = { range: k, attempt, run: run.manifest.run, phase: run.manifest.phase, label: run.manifest.label, mode, started: new Date().toISOString(),
     binary: run.manifest.binary, plan: { version: run.manifest.planVersion, checkpoint: plan.checkpoint }, policy: run.manifest.policyName,
-    route: run.manifest.route ?? "daemon", runner: runnerFacts(process.env) };
+    runner: runnerFacts(process.env) };
   const before = measured ? await run.op.store.stats() : null;
   const { ops, reconcile, left } = p2 ? { ops: [], reconcile: [], left: {} } : phaseOps(plan, run.manifest.phase);
   let branch = `r${pad(k)}-lane`;
@@ -565,8 +571,8 @@ async function cmdRebaseline(o) {
   const from = o["from-run"] ?? REBASELINE_SOURCES.find((r) => existsSync(join(HISTORY, "runs", r, "run.json"))
     && existsSync(manifestPath(new Run(join(HISTORY, "runs", r)).manifest.outputs.snapshots, 1, r)));
   if (!from) { console.error(`no pilot range-1 snapshot in ${REBASELINE_SOURCES.join(", ")}`); return EXIT.usage; }
-  const id = o.run ?? `rb-${o.phase}-${sha256(daemon).slice(0, 8)}-${sha256(addon).slice(0, 8)}`;
-  await cmdFork({ run: id, "from-run": from, range: 1, label: "baseline", daemon, addon });
+  const id = o.run ?? rebaselineId(o);
+  await cmdFork({ run: id, "from-run": from, range: 1, label: "baseline", daemon, addon, sdk: o.sdk });
   const run = new Run(join(HISTORY, "runs", id));
   if (run.manifest.phase !== o.phase && cmdPhase({ run: id, phase: o.phase }) !== EXIT.done) return EXIT.usage;
   const code = await cmdPlay({ run: id, from: 2, to: 4, mode: "measured" });
@@ -579,13 +585,16 @@ async function cmdRebaseline(o) {
   return EXIT.done;
 }
 
+/** The run id `rebaseline` makes when none is given (the runner mounts its volume). */
+export const rebaselineId = (o) => `rb-${o.phase}-${sha256(resolve(o.daemon)).slice(0, 8)}-${sha256(resolve(o.addon ?? ADDON)).slice(0, 8)}`;
+
 /** A new run from run `from`'s snapshot of range N (SPEC §7, Forking): its file rebuilt into a new volume and home. */
 async function cmdFork(o) {
   const source = new Run(join(HISTORY, "runs", o["from-run"]));
   const k = Number(o.range);
   const manifest = JSON.parse(readFileSync(manifestPath(source.manifest.outputs.snapshots, k, source.manifest.run), "utf8"));
   if (!manifest.state) throw new Error(`snapshot ${k} carries no runner state`);
-  const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), addon: resolve(o.addon ?? source.manifest.env.LAYERFS_NATIVE ?? ADDON), route: o.route ?? source.manifest.route ?? "daemon", source: { run: source.manifest.run, range: k } });
+  const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), addon: resolve(o.addon ?? source.manifest.env.LAYERFS_NATIVE ?? ADDON), sdk: resolve(o.sdk ?? source.manifest.env.LAYERFS_SDK_JS ?? SDK_JS), source: { run: source.manifest.run, range: k } });
   runManifest.binary = binaries(env);
   runManifest.planVersion = source.manifest.planVersion;
   mkdirSync(dir, { recursive: true });
@@ -606,7 +615,7 @@ async function cmdFork(o) {
   run.state = { ...manifest.state, heads: {}, layers: {}, dirty: null, sinceMs: [], lastSnapshotMs: null, growth: [], storeBytes: manifest.size, probeFixture: true, forkedFrom: { run: source.manifest.run, range: k, sha256: manifest.sha256 } };
   run.save();
   // inspect.mjs reads the fork through this: its project, SDK, environment and rebuilt file
-  writeJson(join(dir, "store.json"), { project: runManifest.project, sdk: join(REPO, "sdk/js/src/index.js"), env, file: restored, range: k, fork: o.run });
+  writeJson(join(dir, "store.json"), { project: runManifest.project, sdk: join(env.LAYERFS_SDK_JS, "src/index.js"), env, file: restored, range: k, fork: o.run });
   console.log(JSON.stringify({ run: o.run, dir, volume, from: run.state.forkedFrom, next: run.state.next, store: join(dir, "store.json") }, null, 1));
 }
 
@@ -648,6 +657,8 @@ async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const o = options(rest);
   if (!o.run && cmd !== "rebaseline") process.exit(usage());
+  const outside = checkRunner(cmd, process.env);
+  if (outside) { console.error(outside); process.exit(EXIT.guard); }
   const code = cmd === "new" ? (await cmdNew(o), EXIT.done) : cmd === "play" ? await cmdPlay(o) : cmd === "phase" ? cmdPhase(o) : cmd === "fork" ? (await cmdFork(o), EXIT.done) : cmd === "cleanup" ? await cmdCleanup(o) : cmd === "rebaseline" ? await cmdRebaseline(o) : usage();
   process.exit(code);
 }

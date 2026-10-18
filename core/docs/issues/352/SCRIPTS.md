@@ -357,20 +357,26 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   under `probe-setup:<name>`; only the probed call is timed and counted under
   `probe:<name>`. `report.mjs regate --metrics <dir>` is the gates' dry run.
 - **The runner container** (DIRECT_STORE_IMPL.md step 4, builder
-  2026-10-18): `node dsh/tools/history/runner.mjs [--route daemon|direct] --
+  2026-10-18; one route since F-020): `node dsh/tools/history/runner.mjs --
   <run.mjs arguments>` runs `run.mjs` in `layerfs-issue352-runner` from
-  `layerfs-352-runtime:node24`, with the checkout and `~/lfs-history` mounted
-  at their host paths and the Docker socket mounted. The image has no Docker
-  CLI and the runner downloads nothing: `docker` inside is
-  `runner/docker-shim.mjs` over the Engine API (the subcommands the tools use;
-  anything else is refused). A run played there needs the Linux addon
-  (`core/target/issue352/sdk-linux-4fef3921/layerfs.node`, built from the
-  current core/sdk source in the pinned build image) pinned with `--addon` on
-  `new`/`fork`. The route is explicit: `--route` on `new`/`fork` records it in
-  the manifest (default `daemon`), `LAYERFS_ROUTE` names the process's; a
-  measured range refuses a mismatch, and `direct` is refused until F-020
-  lands. Every metrics file records `route` and `runner` (container, image id,
-  platform, Node) beside `binary` (daemon, addon, Sandbox image).
+  `layerfs-352-runtime:node24`. It mounts the checkout and `~/lfs-history` at
+  their host paths, the Docker socket, the run's Store volume
+  (`layerfs-issue352-<run>`) at `/layerfs-store` with
+  `LAYERFS_STORE_PATH=/layerfs-store/global/store.sqlite`, and an SDK folder
+  given with `--sdk` outside the checkout (read-only). It shares the Docker
+  VM's network (`--network host`). Store calls run in that process; `run.mjs`
+  refuses `new`, `play`, `fork` and `rebaseline` anywhere else (`checkRunner`;
+  `cleanup` stays on the host, since the runner holds the volume it removes).
+  There is no `--route` and no route field. `docker` inside is
+  `runner/docker-shim.mjs` over the Engine API (no Docker CLI, nothing
+  downloaded). A run needs a Linux addon pinned with `--addon`; `--sdk <dir>`
+  picks the SDK JavaScript (recorded as `LAYERFS_SDK_JS` and
+  `binary.sdkJs` {dir, sha256}). Every metrics file records `runner`
+  (container, image id, platform, Node) beside `binary` (daemon, addon, SDK
+  JavaScript, Sandbox image). **Open (2026-10-18):** a Sandbox's daemon
+  endpoint is `127.0.0.1:<published port>` (endpoint.rs), which a container
+  on Docker Desktop cannot reach, on the bridge or with `--network host`; the
+  dev range on F-020's binaries stopped at Sandbox create (ConnectionRefused).
 - **Phase-matched speed baselines** (lead decision 2026-10-18). From P2 on,
   the speed baseline is the pilot's ranges 2–4 replayed with the current
   phase's player on the current binaries: `run.mjs rebaseline --phase p2
