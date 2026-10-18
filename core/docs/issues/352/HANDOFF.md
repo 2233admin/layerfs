@@ -1,10 +1,11 @@
 # Handoff prompt — #352
 
-> **Status:** Current, 2026-10-18. P2 closed at range 14. Owner direction (later
-> the same day): the current lead continues with the crew on the eleven P3-entry
-> items (RESULTS.md, "the current lead continues"); measured range 15 waits for the
-> owner's go. [PROMPT.md](PROMPT.md) points
-> here. Read "State" and "Next" first; the rest is how the run works.
+> **Status:** STOPPED by the user, 2026-10-18 (~08:40Z), before measured range 15.
+> The open work is listed in the "unfinished tasks" GitHub issue ([#358](https://github.com/Ephemeral-AI-Lab/layerfs/issues/358)) and
+> below. Nothing is merged into `main`. Branches: `dsh-history-replay` (replay
+> tools and records), `dsh-352-f032-rm-rf` (#356 step 1 accepted; READDIRPLUS
+> committed as unbuilt WIP, do not merge). P2 closed at range 14. [PROMPT.md](PROMPT.md)
+> points here. Read "State" and "Next" first; the rest is how the run works.
 
 You own LayerFS issue [#352](https://github.com/Ephemeral-AI-Lab/layerfs/issues/352)
 (dsh history replay), in `/Users/yifanxu/Ephemeral-AI-Lab/layerfs` on branch
