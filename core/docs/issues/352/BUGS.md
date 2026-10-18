@@ -522,8 +522,31 @@
     (`Failure::Rejected` / `Failure::After`) racing that process, not a
     stale-share or build effect.
 
-  **Status: OPEN. Owner: unassigned.** Next step: capture the `Failure`
-  value, then diagnose it from the unmount drain source.
+  - **Third occurrence, error text captured** (`89a2aa480` test build,
+    2026-10-19, host load 4.6–5.6). `mounted_commit`
+    `r5_3_commit_captures_what_every_launch_published_whatever_became_of_the_process`:
+    `Kernel(KernelFailure { code: Busy, phase: "unmount:kernel", detail:
+    "kernel reported the mount busy; no terminal effect" })`. This is
+    `Detach::Busy` in `control/detach.rs`: the plain (not lazy) unmount got
+    EBUSY, and the mount was returned to the registry unchanged. So the
+    product refused correctly, and the kernel held a real reference into the
+    mount at that moment. It passed on one diagnostic rerun run alone (no
+    sibling test threads).
+  - **Candidate (inferred from source, not proven): a test-harness fork
+    race.** Every `bash` in the test is waited for before `unmount`. But
+    `support/mounted_commit.rs` `command()` sets `uid`/`gid`, so std's
+    `Command` forks rather than using `posix_spawn`. A fork in another test
+    thread of the same process copies the whole descriptor table, including
+    a mount file this test holds open for a moment (`fs::read`, the `host()`
+    walk). The child keeps the copy until its `exec`, which under load can
+    land after this test's unmount. Whether the same race explains the
+    two earlier occurrences is not known.
+
+  **Status: OPEN. Owner: unassigned.** Next step: confirm or rule out the
+  fork race. One way is to run each affected target with
+  `--test-threads=1` once. Another is to record `/proc/*/fd` of the test
+  process's children at the Busy reply. Do not weaken the unmount
+  assertion.
   [fixes/022-359-mtime-only-live-rows.md](fixes/022-359-mtime-only-live-rows.md).
 
 - **F-047 · `fp21_detach_stages` fails 0/2 after the A1 merge (test premise,
