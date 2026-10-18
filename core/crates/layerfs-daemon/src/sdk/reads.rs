@@ -8,6 +8,7 @@ use super::{
 use crate::store::Store;
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use layerfs_content::{
+    compare::memo::Memo,
     filesystem::{
         directory::read::{list_after, DirectoryReadWork},
         sorted::DirectoryRoot,
@@ -104,11 +105,14 @@ pub(crate) fn list(store: &Arc<Store>, args: &SdkValue) -> Answer {
         ));
     }
     let (limit, pos) = args::paging(args)?;
+    // One memo for the call (#352 011.a1): the entries' inode lookups share
+    // the inode table's upper pages, read once, so an entry costs its leaf.
+    let memo = Memo::new(reader.as_ref());
     let (mut after, mut skipped, mut items, mut spent, mut more) =
         (None, 0u64, Vec::new(), 0, false);
     'pages: loop {
         let page = list_after(
-            reader.as_ref(),
+            &memo,
             DirectoryRoot(dir.value.content_root),
             after.as_ref(),
             64,
@@ -116,22 +120,26 @@ pub(crate) fn list(store: &Arc<Store>, args: &SdkValue) -> Answer {
             &mut DirectoryReadWork::default(),
         )
         .map_err(args::content)?;
+        let mut taken = Vec::new();
         for (name, serial) in &page.entries {
             if skipped < pos {
                 skipped += 1;
                 continue;
             }
-            if items.len() == limit || spent + name.as_str().len() + path.len() + 160 > REPLY_BUDGET
+            if items.len() + taken.len() == limit
+                || spent + name.as_str().len() + path.len() + 160 > REPLY_BUDGET
             {
                 more = true;
-                break 'pages;
+                break;
             }
-            let value = snap
-                .tree
-                .value(reader.as_ref(), *serial)
-                .map_err(args::content)?
-                .ok_or_else(|| args::failed("missing bound inode"))?;
             spent += name.as_str().len() + path.len() + 160;
+            taken.push((name, *serial));
+        }
+        // The page's entries are looked up together, one descent per level.
+        let serials: Vec<u64> = taken.iter().map(|(_, serial)| *serial).collect();
+        let values = snap.tree.values(&memo, &serials).map_err(args::content)?;
+        for ((name, serial), value) in taken.into_iter().zip(values) {
+            let value = value.ok_or_else(|| args::failed("missing bound inode"))?;
             items.push(SdkValue::map([
                 ("name", SdkValue::text(name.as_str())),
                 (
@@ -139,8 +147,11 @@ pub(crate) fn list(store: &Arc<Store>, args: &SdkValue) -> Answer {
                     SdkValue::text(layerfs_content::compare::tree::join(&path, name)),
                 ),
                 ("type", SdkValue::text(kind_name(value.kind))),
-                ("inode", SdkValue::Int(*serial as i64)),
+                ("inode", SdkValue::Int(serial as i64)),
             ]));
+        }
+        if more {
+            break 'pages;
         }
         match page.continuation {
             Some(next) => after = Some(next),

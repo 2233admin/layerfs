@@ -199,3 +199,9 @@
   then lane narrowing, reads off the writer queue, and fixed per-call costs.
   Kind 1. The thin-baseline gate question goes to F-024 and does not close
   this. [fixes/007-a2-f025-merge-in-lane.md](fixes/007-a2-f025-merge-in-lane.md).
+- **F-026 · a listing re-read the inode table per entry (product, 011.a1,
+  2026-10-18).** `fs.list` looked each entry up separately from the inode
+  table's root, so the cost per entry grew with the table (`list_largest`
+  16.6 → 24.3 statements per entry, ranges 9 → 11). **Fixed** (daemon
+  `0cc2a732`, kind 1): one memo per call, and each page's entries looked up
+  together; [fixes/011-a1-list-entry-lookups.md](fixes/011-a1-list-entry-lookups.md).
