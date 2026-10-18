@@ -79,6 +79,11 @@ impl Default for KeptReads {
     }
 }
 impl Storage {
+    /// Makes this reader consult and fill its Store's shared tier of whole
+    /// pack bodies after its own caches miss (#359).
+    pub fn share_packs(&mut self, shared: std::sync::Arc<super::SharedPacks>) {
+        self.source.shared = Some(shared);
+    }
     /// [`Reader::read_objects`] through caller-kept caches.
     pub fn read_with(
         &self,

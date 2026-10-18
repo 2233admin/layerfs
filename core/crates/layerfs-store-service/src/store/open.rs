@@ -58,6 +58,10 @@ pub struct MergeCounters {
     pub fallbacks: u64,
     pub naming: layerfs_content::compare::NamingWork,
 }
+/// Byte budget of a Store's shared tier of whole pack bodies (#359 warm
+/// daemon, prototype b): daemon memory held while the Store is open.
+pub const SHARED_PACK_BYTES: usize = 32 * 1024 * 1024;
+
 /// One global Store binding, with mounted readers and a shared immutable cache.
 /// Opened providers must belong to the same validated authority. Application
 /// composition owns that selection; this adapter knows only the public ports.
@@ -76,17 +80,26 @@ pub struct Store {
     /// The write recognizer's fixed slots, shared by every Workspace.
     pub(super) recognizer: super::Recognizer,
     saves: Mutex<SaveCounters>,
+    /// Whole pack bodies every reader of this Store shares (#359).
+    shared: Arc<layerfs_storage::read::SharedPacks>,
     /// One idle producer handle any Workspace may take (#352 F-025 fix 4).
     pub(super) idle_producer: super::producer::Producer,
     /// Reserved, unhanded serials per scope, `(next, end)` (#352 F-025 fix 4).
     serial_pool: Mutex<std::collections::HashMap<ObjectId, (u64, u64)>>,
+}
+impl Drop for Store {
+    /// The shared tier empties when the Store closes, even while a reader
+    /// handle outlives it.
+    fn drop(&mut self) {
+        self.shared.close();
+    }
 }
 impl Store {
     /// Takes the control reader and a mount-time factory under explicit capacity.
     pub fn new(
         writer: Arc<dyn PackPersistence>,
         history: Arc<dyn HistoryCatalog>,
-        control: StoreReader,
+        mut control: StoreReader,
         factory: ReaderFactory,
         cache_bytes: usize,
         reservations: ReservationBlocks,
@@ -99,6 +112,15 @@ impl Store {
         }
         let counts = Arc::new(Counts::default());
         let cache = Arc::new(CanonicalCache::new(cache_bytes));
+        // Every reader, the control one included, consults and fills one tier.
+        let shared = layerfs_storage::read::SharedPacks::new(SHARED_PACK_BYTES);
+        control.storage.share_packs(shared.clone());
+        let tier = shared.clone();
+        let factory: ReaderFactory = Arc::new(move |index| {
+            let mut reader = factory(index)?;
+            reader.storage.share_packs(tier.clone());
+            Ok(reader)
+        });
         let readers = ReadSet::new(control, factory, counts.clone(), workspace_capacity, policy);
         Ok(Self {
             writer,
@@ -112,6 +134,7 @@ impl Store {
             serial_low_water: AtomicU64::new(0),
             recognizer: super::Recognizer::new(),
             saves: Mutex::default(),
+            shared,
             idle_producer: Default::default(),
             serial_pool: Mutex::default(),
         })
@@ -237,8 +260,13 @@ impl Store {
     pub fn reader_failures(&self) -> Vec<(usize, Arc<PortError>)> {
         self.readers.failures()
     }
+    /// The shared pack tier's work over this Store's lifetime.
+    pub fn shared_pack_work(&self) -> layerfs_storage::read::SharedPackWork {
+        self.shared.work()
+    }
     /// Whole-Store shutdown only. Workspace unmount must not stop other readers.
     pub fn stop_reads(&self) {
+        self.shared.close();
         self.readers.stop();
     }
 }
