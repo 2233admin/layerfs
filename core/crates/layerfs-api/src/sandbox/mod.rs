@@ -12,9 +12,9 @@ mod unmount;
 pub mod values;
 pub use commit::CommitReply;
 #[cfg(unix)]
-pub use create::{ManagedSandbox, SandboxApi};
+pub use create::{connect_address, SandboxCause, SandboxCreate, SandboxFailure, SandboxPhase};
 #[cfg(unix)]
-pub use create::{SandboxCause, SandboxCreate, SandboxFailure, SandboxPhase};
+pub use create::{ManagedSandbox, SandboxApi};
 pub use mount::BoundWorkspace;
 pub use mount::WorkspaceApi;
 pub use mount::{MountFailure, MountedWorkspace};

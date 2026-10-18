@@ -35,6 +35,10 @@ export class LayerFS {
    * settings read LAYERFS_HOME, _DOCKER, _IMAGE, _VOLUME and _DAEMON, each
    * else its DSH_LAYERFS_ twin; LAYERFS_CONTAINER_PREFIX, when set, names
    * every container this client creates `<prefix><Sandbox id>`.
+   * `options.daemonHost` (else LAYERFS_DAEMON_HOST) is the host this process
+   * dials for a daemon's port, published on the Docker host's 127.0.0.1 only;
+   * set it when the client runs in a container (`host.docker.internal` on
+   * Docker Desktop). Unset, the client dials 127.0.0.1.
    * `options.storePath` (else LAYERFS_STORE_PATH) is the installed Store
    * file this client's Store calls open in this process; it must be on a
    * local Linux filesystem the daemons share, or the calls fail
@@ -60,6 +64,7 @@ export class LayerFS {
         volume: env("VOLUME"),
         daemon: env("DAEMON"),
         ...(env("CONTAINER_PREFIX") ? { containerPrefix: env("CONTAINER_PREFIX") } : {}),
+        ...((options.daemonHost ?? env("DAEMON_HOST")) ? { daemonHost: options.daemonHost ?? env("DAEMON_HOST") } : {}),
       },
       storePolicy: options.storePolicy,
       storePath: options.storePath ?? env("STORE_PATH"),

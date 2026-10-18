@@ -204,6 +204,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 controller_private: keys.private,
                 daemon_peer: daemon.public,
                 startup_wait: Duration::from_secs(3),
+                connect_host: None,
             },
             &project,
         )

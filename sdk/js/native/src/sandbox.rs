@@ -217,6 +217,7 @@ fn create_claimed(
             controller_private: controller.private,
             daemon_peer: daemon.public,
             startup_wait: STARTUP,
+            connect_host: crate::pool::daemon_host(args),
         },
         &project.store,
         &project.manifest,
@@ -230,6 +231,7 @@ fn create_claimed(
     let (runtime, control, identity) = split(owner);
     let dial = crate::pool::Dial {
         endpoint: runtime.endpoint().map_err(failed)?,
+        host: crate::pool::daemon_host(args),
         secret: controller.private,
         peer: daemon.public,
         instance,

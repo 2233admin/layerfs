@@ -96,6 +96,7 @@ fn setup(
         controller_private: controller.private,
         daemon_peer: peer.public,
         startup_wait: Duration::from_secs(3),
+        connect_host: None,
     })
 }
 fn mounted(
