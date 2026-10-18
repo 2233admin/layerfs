@@ -59,6 +59,9 @@ fn upgraded() -> Vec<u8> {
     b"HTTP/1.1 101 UPGRADED\r\nContent-Type: application/vnd.docker.multiplexed-stream\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n".to_vec()
 }
 
+/// One scripted connection: its responses in order, and the signal that closes it.
+type Connection = (Vec<Vec<u8>>, Option<mpsc::Receiver<()>>);
+
 /// A scripted Engine: each entry is one accepted connection and the responses
 /// it serves in order, one per request read; after its last response the
 /// connection closes once `close` receives (or at once when `None`).
@@ -67,7 +70,7 @@ struct Engine {
     worker: Option<JoinHandle<Vec<Vec<String>>>>,
 }
 impl Engine {
-    fn new(script: Vec<(Vec<Vec<u8>>, Option<mpsc::Receiver<()>>)>) -> (Docker, Self) {
+    fn new(script: Vec<Connection>) -> (Docker, Self) {
         let directory = std::env::temp_dir().join(format!(
             "layerfs-keepalive-{}-{}",
             std::process::id(),

@@ -49,7 +49,7 @@ fn saves_in_turn_on_a_thread_pool_do_not_keep_a_workspace_per_thread() {
             }
         }));
     }
-    let mut round = |turn: u64| {
+    let round = |turn: u64| {
         for sender in &turns {
             sender.send(turn).unwrap();
             done_rx.recv_timeout(Duration::from_secs(20)).unwrap();
