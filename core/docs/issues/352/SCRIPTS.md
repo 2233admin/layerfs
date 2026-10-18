@@ -248,7 +248,10 @@ differs from the text above:
   script) and committed by unmount. Large regular files go through fs: since
   F-001 (daemon `71001f65`) an fs body streams, so size no longer routes a
   file (before, files over 60,000 bytes went through a Sandbox because one
-  request carried at most 65,519 bytes).
+  request carried at most 65,519 bytes). Since F-028 the script leaves alone a
+  regular file whose blob and mode already equal the lane's tree. Rewriting
+  it would set an mtime the root records. `check-apply.mjs --step <id>`
+  replays one planned apply's script on the plan's real files.
 - **The seal** checkpoints the WAL with `pragma wal_checkpoint(TRUNCATE)` in
   the runtime image after every daemon of the run is gone. Closing the
   Sandboxes alone leaves the WAL non-empty.

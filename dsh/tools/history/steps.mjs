@@ -228,10 +228,13 @@ export function route(files, tree, { keep = null, mkdir = null, all = false } = 
 /**
  * The exec commands of one Sandbox step: each file's bytes as base64, in
  * chunks appended to a scratch file outside the Workspace, then one script
- * that puts every file in place. A regular file is overwritten in place, so
- * equal bytes and mode leave the Workspace unchanged; a symlink is replaced
- * only when its target differs.
- * @param {{ path: string, mode: string, bytes: Buffer }[]} files
+ * that puts every file in place. Rewriting a regular file sets its mtime,
+ * which the root records, so equal bytes still change the Workspace: a
+ * regular file marked `same` (its blob and mode already match the lane's
+ * expected tree, sameAsTree) is neither sent nor rewritten nor chmodded
+ * (F-028). Every other regular file is overwritten in place; a symlink is
+ * replaced only when its target differs.
+ * @param {{ path: string, mode: string, bytes?: Buffer, same?: boolean }[]} files
  */
 export function sandboxCommands(files, scratch = "/tmp/lfs352") {
   const commands = [`rm -rf ${scratch} && mkdir -p ${scratch}`];
@@ -239,7 +242,7 @@ export function sandboxCommands(files, scratch = "/tmp/lfs352") {
   let size = 0;
   const flush = () => { if (batch.length) commands.push(batch.join(" && ")); batch = []; size = 0; };
   files.forEach((f, i) => {
-    if (f.op === "rm") return;
+    if (f.op === "rm" || f.same) return;
     const b64 = f.bytes.toString("base64");
     for (let at = 0; at < b64.length || at === 0; at += CHUNK) {
       const piece = b64.slice(at, at + CHUNK);
@@ -253,6 +256,7 @@ export function sandboxCommands(files, scratch = "/tmp/lfs352") {
   const script = ["set -e"];
   files.forEach((f, i) => {
     const p = quote(`./${f.path}`), dir = parentOf(f.path);
+    if (f.same) return;
     if (f.op === "rm") { script.push(`rm -rf -- ${quote(`./${f.target ?? f.path}`)}`); return; }
     if (dir) script.push(`mkdir -p ${quote(`./${dir}`)}`);
     if (f.mode === "120000") {
@@ -266,6 +270,19 @@ export function sandboxCommands(files, scratch = "/tmp/lfs352") {
   for (const c of commands) if (Buffer.byteLength(c) > 60_000) throw new Error(`a Sandbox command of ${Buffer.byteLength(c)} bytes is over one request`);
   return commands;
 }
+
+/**
+ * A regular file whose blob and mode equal the lane's expected tree entry
+ * (`previous`, route): the apply leaves it untouched (F-028).
+ */
+export const sameAsTree = (f) => f.op !== "rm" && f.mode !== "120000" && !!f.previous && f.previous.blob === f.blob && f.previous.mode === f.mode;
+
+/**
+ * sandboxCommands' entries for one Sandbox step's files, with `bytes[i]` the
+ * bytes of file i (unused for a removal or a file sameAsTree).
+ */
+export const placeEntries = (files, bytes) => files.map((f, i) => (f.op === "rm" ? { op: "rm", path: f.path, target: f.target }
+  : sameAsTree(f) ? { path: f.path, mode: f.mode, same: true } : { path: f.path, mode: f.mode, bytes: bytes[i] }));
 
 /** The outcome one Sandbox step's Commit should have: Committed when any file changes. */
 export const sandboxExpect = (files) => (files.some((f) => (f.expect ?? "Committed") === "Committed") ? "Committed" : "UpToDate");

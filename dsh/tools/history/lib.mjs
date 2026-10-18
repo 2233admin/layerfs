@@ -23,7 +23,7 @@ import { INSTALL } from "./calibrate-tests.mjs";
 import { CLOSURE_OUTPUT, sandboxVolumes } from "./closure.mjs";
 import {
   abs, attributeFuse, callOf, changedDirs, compareIds, comparePaths, idBatches, pad, parseTreePage, PHASES, phaseOps, PROBE_DIR, quote,
-  deltaWork, markContention, route, sandboxCommands, sandboxExpect, sqlCounters, traceLines, Tree, TREE_IDS, TREE_PAGE,
+  deltaWork, markContention, placeEntries, route, sameAsTree, sandboxCommands, sandboxExpect, sqlCounters, traceLines, Tree, TREE_IDS, TREE_PAGE,
 } from "./steps.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -246,8 +246,8 @@ export function countMutation(work, via, f) {
 
 /** The exec commands that put `files` (writes with blob ids, decoys with bytes, removals) in a Workspace. */
 export async function placeCommands(run, files) {
-  const bytes = await Promise.all(files.map((f) => (f.op === "rm" ? null : f.bytes ?? run.blobs().get(f.blob))));
-  return sandboxCommands(files.map((f, i) => (f.op === "rm" ? { op: "rm", path: f.path, target: f.target } : { path: f.path, mode: f.mode, bytes: bytes[i] })));
+  const bytes = await Promise.all(files.map((f) => (f.op === "rm" || sameAsTree(f) ? null : f.bytes ?? run.blobs().get(f.blob))));
+  return sandboxCommands(placeEntries(files, bytes));
 }
 
 /** Runs exec commands in a Workspace; each must exit 0. */

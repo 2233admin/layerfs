@@ -4,14 +4,15 @@
 //   node dsh/tools/history/tests/runner.mjs
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   CHUNK, compareIds, comparePaths, diskGuard, EXIT, idBatches, parseTreePage, phaseOps, route,
-  sandboxCommands, sandboxExpect, sqlCounters, callOf, traceLines, Tree, TREE_IDS, viaSandbox,
+  placeEntries, sameAsTree, sandboxCommands, sandboxExpect, sqlCounters, callOf, traceLines, Tree, TREE_IDS, viaSandbox,
   addDelta, deltaSummary, deltaWork,
 } from "../steps.mjs";
+import { blobId as blobOf } from "../git.mjs";
 import { caps, nextAttempt, options, outputs, POLICIES } from "../run.mjs";
 import { deltaLine, stageLine } from "../report.mjs";
 
@@ -98,6 +99,35 @@ test("sandboxCommands: chunks stay under one request and the script restores byt
   assert.equal(execFileSync("sh", ["-c", "./run.sh"], { cwd: ws, encoding: "utf8" }), "it's\n");
   assert.equal(execFileSync("readlink", ["d/link"], { cwd: ws, encoding: "utf8" }).trim(), "big.bin");
   assert.equal(execFileSync("wc", ["-c", "empty"], { cwd: ws, encoding: "utf8" }).trim().split(/\s+/)[0], "0");
+});
+
+test("F-028: an apply leaves a regular file equal to the lane's tree untouched, mtime included", () => {
+  const blob = (t) => blobOf(Buffer.from(t));
+  const tree = new Tree(new Map([["d/same.txt", file(blob("same\n"))], ["d/changed.txt", file(blob("old\n"))], ["x.sh", file(blob("run\n"))]]));
+  const files = [
+    { path: "d/same.txt", op: "write", mode: "100644", blob: blob("same\n"), size: 5, expect: "UpToDate" },
+    { path: "d/changed.txt", op: "write", mode: "100644", blob: blob("new\n"), size: 4 },
+    { path: "x.sh", op: "write", mode: "100755", blob: blob("run\n"), size: 4 },
+  ];
+  const { sandbox } = route(files, tree, { all: true });
+  assert.deepEqual(sandbox.map(sameAsTree), [true, false, false], "a mode change is not the same file");
+  assert.equal(sandboxExpect(sandbox), "Committed", "a mixed step still commits; sandboxExpect is unchanged");
+  assert.equal(sandboxExpect(sandbox.slice(0, 1)), "UpToDate");
+  const ws = join(dir, "f028");
+  mkdirSync(join(ws, "d"), { recursive: true });
+  const old = new Date("2000-01-01T00:00:00Z");
+  for (const [p, t] of [["d/same.txt", "same\n"], ["d/changed.txt", "old\n"], ["x.sh", "run\n"]]) { writeFileSync(join(ws, p), t); utimesSync(join(ws, p), old, old); }
+  const entries = placeEntries(sandbox, sandbox.map((f) => (sameAsTree(f) ? null : Buffer.from(f.path === "x.sh" ? "run\n" : "new\n"))));
+  assert.deepEqual(entries[0], { path: "d/same.txt", mode: "100644", same: true }, "no bytes are sent for it");
+  const cmds = sandboxCommands(entries, join(dir, "f028-scratch"));
+  assert.ok(!cmds.join("\n").includes("same.txt"), "the script never names the identical file");
+  for (const c of cmds) execFileSync("sh", ["-c", c], { cwd: ws });
+  assert.equal(statSync(join(ws, "d/same.txt")).mtimeMs, old.getTime(), "the identical file keeps its mtime");
+  assert.equal(readFileSync(join(ws, "d/changed.txt"), "utf8"), "new\n");
+  assert.equal(statSync(join(ws, "x.sh")).mode & 0o111, 0o111);
+  // the pre-F-028 script: the same file sent without `same` is rewritten, and its mtime moves (what made r012.s0021 Commit)
+  for (const c of sandboxCommands([{ path: "d/same.txt", mode: "100644", bytes: Buffer.from("same\n") }], join(dir, "f028-scratch"))) execFileSync("sh", ["-c", c], { cwd: ws });
+  assert.notEqual(statSync(join(ws, "d/same.txt")).mtimeMs, old.getTime());
 });
 
 test("idBatches: paths split by bytes, none empty", () => {

@@ -213,3 +213,11 @@
   16.6 → 24.3 statements per entry, ranges 9 → 11). **Fixed** (daemon
   `0cc2a732`, kind 1): one memo per call, and each page's entries looked up
   together; [fixes/011-a1-list-entry-lookups.md](fixes/011-a1-list-entry-lookups.md).
+- **F-028 · an apply step rewrote files it does not change (harness, lead,
+  2026-10-18).** The Sandbox apply script rewrote and chmodded every regular
+  file. That sets mtime, which the root records, so an all-identical apply
+  (first r012.s0021; 22 in plans 0–98) would Commit where UpToDate is
+  expected. **Fixed** (harness, owner-approved): a regular file whose blob and
+  mode equal the lane's tree is not sent, rewritten or chmodded. `sandboxExpect`
+  is unchanged. Whether mtime alone is a change stays with the owner;
+  [fixes/012-pre-f028-apply-identical-files.md](fixes/012-pre-f028-apply-identical-files.md).
