@@ -259,7 +259,7 @@ export function renderFindingFormat(range, a, gate, f, rerun) {
   if (!f) return [...lines, `Diagnosis pending: \`finding-${pad(range)}.a${a.attempt}.json\`.`].join("\n");
   const d = f.diagnosis;
   lines.push("**2. Fix context**", "", table(["", ""], [
-    ["Playbook step", d.step], ["Cause", d.cause ?? d.summary], ["Old design", f.design?.old], ["New design", f.design?.new],
+    ["Playbook step", d.step], ["Cause", d.cause ?? d.summary], ...(none ? [] : [["Old design", f.design?.old], ["New design", f.design?.new]]),
     ["Kind", none ? `${kindText(f.fix.kind)} · ${f.fix.summary}` : kindText(f.fix.kind)], ...(REBUILD_KINDS[f.fix.kind] ? [["Old Stores", f.fix.oldStores], ["Old data", f.fix.oldData],
       f.fix.kind < 3 ? ["Compatibility test", f.fix.compat] : ["Rebuild justification", Object.values(f.fix.justification ?? {}).join(" · ")]] : []),
     ...(none ? [] : [["Commits", `${String(f.fix.commit).split(/,\s*/).map((x) => `\`${x}\``).join(", ")}${f.fix.test ? ` · regression tests ${f.fix.test}` : ""}`]]), ["Recovery", f.recovery],
@@ -267,18 +267,20 @@ export function renderFindingFormat(range, a, gate, f, rerun) {
   none ? table(EVIDENCE_COLUMNS, f.evidence.map(evidenceRow))
     : table(["Measure", "Before", "After", "Change", "Old binary", "New binary", "Snapshot / checkpoint", "Cache"], f.improvement.map((r) => [r.measure, `${r.before}${r.unit ? ` ${r.unit}` : ""}`, `${r.after}${r.unit ? ` ${r.unit}` : ""}`, change(r.before, r.after), `\`${r.oldBinary}\``, `\`${r.newBinary}\``, r.snapshot, r.cache])), "",
   d.exponent ? `Counter \`${d.counter}\` depth exponent ${d.exponent.before} → ${d.exponent.after}.` : "", "",
-  "**4. With vs without the optimization, this range**", "", withWithout(a, rerun), "",
+  // no code change: the rerun ran the same binary, so the table is attempt vs rerun, not with vs without
+  none ? "**4. Attempt vs rerun, this range** (same binary; no code change)" : "**4. With vs without the optimization, this range**", "", withWithout(a, rerun, { none }), "",
   none ? "**5. Cost of the fix:** none: no code change." : `**5. Cost of the fix:** ${f.cost ?? "not recorded"}`, "",
   `**6. Records:** ${[...(f.records ?? []).map((r) => `[${r.path.replace(/^fixes\//, "fixes/")}](../${r.path})`), ...(f.ledger ?? []).map((l) => `[${l.file}](../${l.file}) (${l.entry})`)].join(" · ")} · finding \`~/lfs-history/metrics/finding-${pad(range)}.a${a.attempt}.json\``);
   return lines.join("\n");
 }
 
 /** The tripped attempt against its rerun on the headline numbers, each column under its binary; never one series. */
-export function withWithout(a, r) {
-  if (!r) return "Rerun pending: the next attempt of this range fills this table.";
+export function withWithout(a, r, { none = false } = {}) {
+  if (!r) return none ? "No rerun: no code change, and an unchanged treatment is not resampled." : "Rerun pending: the next attempt of this range fills this table.";
+  const [without, withIt] = none ? ["", ""] : [" (without)", " (with)"];
   const kk = (m, op, q) => m.key?.ops?.[op]?.[q];
   const row = (name, f, unit = "") => [name, `${f(a) ?? "—"}${unit}`, `${f(r) ?? "—"}${unit}`];
-  return [table(["Measure", `Attempt ${a.attempt} (without) · \`${id12(a.binary?.daemon)}\``, `Attempt ${r.attempt} (with) · \`${id12(r.binary?.daemon)}\``], [
+  return [table(["Measure", `Attempt ${a.attempt}${without} · \`${id12(a.binary?.daemon)}\``, `Attempt ${r.attempt}${withIt} · \`${id12(r.binary?.daemon)}\``], [
     row("Range time (tooling)", (m) => num((m.wall?.totalMs ?? 0) / 1000, 1), " s"),
     row("One-shot Commit p50 / p95", (m) => `${num(kk(m, "sandbox.commit", "p50"), 1)} / ${num(kk(m, "sandbox.commit", "p95"), 1)}`, " ms"),
     row("fs.write p50 / p95", (m) => `${num(kk(m, "fs.write", "p50"), 1)} / ${num(kk(m, "fs.write", "p95"), 1)}`, " ms"),
@@ -287,7 +289,7 @@ export function withWithout(a, r) {
     row("Store on disk", (m) => bytes(storeOnDisk(m))),
     row("Space amplification", (m) => num(spaceAmp(m)), "×"),
     row("Verdict", (m) => m.gate?.verdict ?? "—"),
-  ]), "", "The two columns are separate series under their own binaries; no fit or baseline mixes them."].join("\n");
+  ]), "", none ? "The same binary twice: the rerun repeats the measurement; nothing was changed between them." : "The two columns are separate series under their own binaries; no fit or baseline mixes them."].join("\n");
 }
 
 /**
@@ -315,8 +317,12 @@ export function checkFormat(text, m, issues = []) {
   if (blocks.length && five.includes(NONE_LINE)) p.push("§5 says none and has a Finding block");
   for (const b of blocks) {
     if (b.includes("Diagnosis pending")) { if (!b.includes("**1. Trigger**")) p.push("a pending Finding lacks its trigger"); continue; }
-    for (const part of ["**1. Trigger**", "**2. Fix context**", "**3. Before / after**", "**4. With vs without", "**5. Cost of the fix:**", "**6. Records:**"]) if (!b.includes(part)) p.push(`Finding ${b.slice(0, 7)} lacks ${part}`);
-    if (/\| Old design \| — \||\| New design \| — \|/.test(b)) p.push(`Finding ${b.slice(0, 7)} lacks its old or new design line`);
+    // a finding closed without a code change: its evidence, no design lines, the rerun under the same binary
+    const none = b.split("\n")[0].includes("→ closed without a code change");
+    const parts = none ? ["**1. Trigger**", "**2. Fix context**", "**3. Evidence**", "**4. Attempt vs rerun", "**5. Cost of the fix:**", "**6. Records:**"]
+      : ["**1. Trigger**", "**2. Fix context**", "**3. Before / after**", "**4. With vs without", "**5. Cost of the fix:**", "**6. Records:**"];
+    for (const part of parts) if (!b.includes(part)) p.push(`Finding ${b.slice(0, 7)} lacks ${part}`);
+    if (!none && /\| Old design \| — \||\| New design \| — \|/.test(b)) p.push(`Finding ${b.slice(0, 7)} lacks its old or new design line`);
     if (b.includes("Cost of the fix:** not recorded")) p.push(`Finding ${b.slice(0, 7)} lacks the cost of the fix`);
     const ww = /\| Measure \| Attempt \d+ \(without\) · `([0-9a-f]+)` \| Attempt \d+ \(with\) · `([0-9a-f]+)` \|/.exec(b);
     if (ww && ww[1] === ww[2]) p.push(`Finding ${b.slice(0, 7)}: with and without name the same binary ${ww[1]}`);

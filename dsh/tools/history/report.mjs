@@ -345,16 +345,21 @@ export function renderOptimization({ plan, attempts, gates, findings = [] }) {
   const tripped = g.checks.filter((x) => x.result === "optimize" || x.result === "stop");
   if (tripped.length) {
     const own = findings.find((f) => f.attempt === m.attempt);
-    if (own) return findingComment(own, g, `${own.verdict === "stop" ? "Bug" : "Optimization"} (attempt ${own.attempt})`);
+    // the earlier attempts' findings follow, so every recorded finding of the range is in the comment (F3)
+    const earlier = findings.filter((x) => x.attempt < m.attempt).map((f) => findingComment(f, g, earlierTitle(f)));
+    if (own) return [findingComment(own, g, closedWithoutChange(own) ? earlierTitle(own) : `${own.verdict === "stop" ? "Bug" : "Optimization"} (attempt ${own.attempt})`), ...earlier].join("\n\n");
     const lines = [`#### ${g.verdict === "stop" ? "Bug" : "Optimization"} needed`, ""];
     for (const x of tripped) lines.push(`- **Trigger:** ${x.name}: ${x.value} (threshold ${x.threshold})`);
     lines.push(`- **Diagnosis:** pending; the fixer records it in \`finding-${pad(plan.range)}.a${m.attempt}.json\`.`);
-    return lines.join("\n");
+    return [lines.join("\n"), ...earlier].join("\n\n");
   }
-  const f = findings.filter((x) => x.attempt < m.attempt).at(-1);
-  if (!f) return "**Optimization:** none.";
-  return findingComment(f, g, `${f.verdict === "stop" ? "Bug fixed" : "Optimization"} (from attempt ${f.attempt})`);
+  const fs = findings.filter((x) => x.attempt < m.attempt);
+  if (!fs.length) return "**Optimization:** none.";
+  return fs.map((f) => findingComment(f, g, earlierTitle(f))).reverse().join("\n\n");
 }
+
+/** The comment heading of an earlier attempt's finding. */
+const earlierTitle = (f) => (closedWithoutChange(f) ? `Attempt ${f.attempt}: closed without a code change` : `${f.verdict === "stop" ? "Bug fixed" : "Optimization"} (from attempt ${f.attempt})`);
 
 /** A finding in the issue comment, from the same record as the report's Finding block. */
 function findingComment(f, g, title) {

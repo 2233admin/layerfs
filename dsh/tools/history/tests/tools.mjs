@@ -304,6 +304,15 @@ test("a finding closed without a code change (kind none): evidence table, no com
   assert.ok(findingTableProblems(fmt)[0].includes("before/after columns"));
   const comment = renderOptimization({ plan: { range: 13 }, attempts: [{ attempt: 1 }, { attempt: 2 }], gates: [{ verdict: "optimize", checks: [] }, { verdict: "watch", checks: [] }], findings: [none] });
   assert.ok(comment.includes("**Closed without a code change:**") && comment.includes("| Evidence | Value |") && comment.includes("exec true 10x median"), comment);
+  // the block: no design lines, the rerun under the same binary (or none), and the format check takes it
+  assert.ok(!fmt.includes("| Old design |") && fmt.includes("**4. Attempt vs rerun") && fmt.includes("No rerun: no code change"), fmt);
+  const rerun = renderFindingFormat(13, { attempt: 1, binary: { daemon: "6d467539aa" } }, { verdict: "optimize", checks: [] }, none, { attempt: 2, binary: { daemon: "6d467539aa" } });
+  assert.ok(rerun.includes("| Measure | Attempt 1 · `6d467539aa` | Attempt 2 · `6d467539aa` |") && !rerun.includes("(without)"), rerun);
+  // a later attempt that trips again keeps the earlier finding's evidence in the comment (F3)
+  const again = renderOptimization({ plan: { range: 13 }, attempts: [{ attempt: 1 }, { attempt: 2 }], gates: [{ verdict: "optimize", checks: [] }, { verdict: "optimize", checks: [{ name: "Scaling", value: "fork 1.08", threshold: "< 0.15", result: "optimize" }] }], findings: [none] });
+  assert.ok(again.includes("Optimization needed") && again.includes("#### Attempt 1: closed without a code change") && again.includes("exec true 10x median"), again);
+  const both = renderOptimization({ plan: { range: 13 }, attempts: [{ attempt: 1 }, { attempt: 2 }], gates: [{ verdict: "optimize", checks: [] }, { verdict: "optimize", checks: [{ name: "Scaling", value: "x", threshold: "y", result: "optimize" }] }], findings: [none, { ...none, attempt: 2 }] });
+  assert.ok(both.indexOf("#### Attempt 2: closed") < both.indexOf("#### Attempt 1: closed"), both);
 });
 
 test("the comment's optimization part: none, pending, then trigger, diagnosis, fix and improvement", () => {
