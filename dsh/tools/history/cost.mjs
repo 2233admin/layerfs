@@ -446,6 +446,111 @@ export function table(label, binary) {
   return rows;
 }
 
+// ---------------------------------------------------------------- serial (#359 warm daemon, record 031)
+// One daemon, one Store clone, several cases one after another, each in its own fresh
+// Workspace (mount, run its non-steady steps once, RSS, unmount discarded). The Sandbox
+// outlives each command, so every case is its own command under the 2-minute rule:
+//   cost.mjs serial open --binary <id> --label <l>     (clone, home, Sandbox; prints the folder)
+//   cost.mjs serial case <id> --out <folder>           (one case in a fresh Workspace)
+//   cost.mjs serial close --out <folder>               (daemon log, close, decode, summary)
+// No case may Commit: a LayerFS Commit would move the base the later cases read.
+async function hostSerial([what, ...args]) {
+  if (what === "open") {
+    const binary = opt(args, "--binary"), label = opt(args, "--label"), ids = identities(binary), seq = nextSeq();
+    const name = `layerfs-issue359-warm-s${String(seq).padStart(3, "0")}`, out = join(ROOT, "samples", `${name.slice(17)}-serial-${label}`);
+    if (existsSync(out)) throw new Error(`${out} exists: outputs are append-only`);
+    mkdirSync(out, { recursive: true });
+    cloneVolume(PREPARED, name);
+    const home = freshHome(out);
+    writeFileSync(join(out, "serial.json"), JSON.stringify({ seq, label, volume: name, binary, home, cases: [] }, null, 1));
+    writeFileSync(join(out, "manifest.json"), JSON.stringify({ serial: true, label, seq, volume: name, from: PREPARED, ids, load: (await import("node:os")).loadavg(), at: new Date().toISOString() }, null, 1));
+    ledger({ seq, case: "serial", label, event: "start", volume: name, out });
+    const code = await runInner(`${name}-open`, name, home, binary, ["serial", "open"], out);
+    console.log(out);
+    return code;
+  }
+  const out = opt(args, "--out"), st = JSON.parse(readFileSync(join(out, "serial.json"), "utf8"));
+  if (what === "case") {
+    const id = args[0], pos = st.cases.length + 1;
+    if (!CASES[id] || CASES[id].kind || CASES[id].commit || CASES[id].commitAfter) throw new Error(`serial case ${id}: exec cases without a Commit only`);
+    st.cases.push({ id, pos, load: (await import("node:os")).loadavg(), at: new Date().toISOString() });
+    writeFileSync(join(out, "serial.json"), JSON.stringify(st, null, 1));
+    return runInner(`${st.volume}-c${pos}`, st.volume, st.home, st.binary, ["serial", "case", id, "--pos", String(pos)], out);
+  }
+  if (what === "close") {
+    const code = await runInner(`${st.volume}-close`, st.volume, st.home, st.binary, ["serial", "close"], out);
+    const traces = ["open", ...st.cases.map((c) => `${c.pos}`)].map((t) => join(out, `trace-${t}.jsonl`)).filter(existsSync);
+    writeFileSync(join(out, "trace.jsonl"), traces.map((f) => readFileSync(f, "utf8")).join(""));
+    const decoded = spawnSync("python3", [join(REPO, "tools/decode_observations.py"), join(out, "daemon.log"), "--trace", join(out, "trace.jsonl")], { encoding: "utf8", maxBuffer: 1 << 28 });
+    writeFileSync(join(out, "daemon.jsonl"), decoded.stdout ?? "");
+    let summary = null;
+    try { summary = summarizeSerial(out, st); writeFileSync(join(out, "sample.json"), JSON.stringify(summary, null, 1)); } catch (e) { writeFileSync(join(out, "summarize-error.txt"), String(e.stack ?? e)); }
+    docker(["volume", "rm", st.volume]);
+    ledger({ seq: st.seq, case: "serial", label: st.label, event: "end", exit: code, volume: st.volume, removed: true, out, order: st.cases.map((c) => c.id), verdict: summary?.verdict ?? "INCOMPLETE" });
+    return code;
+  }
+  throw new Error(`serial ${what}: open | case | close`);
+}
+
+async function innerSerial(args, out) {
+  const what = args[0], home = process.env.LAYERFS_HOME, pos = opt(args, "--pos");
+  const { LayerFS } = await import(join(REPO, "sdk/js/src/index.js"));
+  const lf = new LayerFS("dsh", { trace: join(out, `trace-${what === "case" ? pos : what}.jsonl`) });
+  const label = (step) => { lf.options.traceStep = step; };
+  const arms = [], record = (a) => { arms.push(a); writeFileSync(join(out, `arms-${what === "case" ? pos : what}.json`), JSON.stringify(arms, null, 1)); };
+  let sb = existsSync(join(out, "sandbox")) ? readFileSync(join(out, "sandbox"), "utf8").trim() : null, ws = null;
+  try {
+    if (what === "open") {
+      label("setup.create");
+      sb = await sandbox(lf, [{ volume: PNPM, target: STORE_MOUNT }]);
+      writeFileSync(join(out, "sandbox"), sb);
+    } else if (what === "case") {
+      const id = args[1], c = CASES[id];
+      label("fork"); const branch = `cost-${id}-p${pos}`; await lf.branch.fork(branch, c.ref);
+      label("lfs.mount"); ws = await lf.sandbox.mount(sb, branch);
+      const steps = (c.steps ?? (c.arms ?? ["cold", "steady"]).map((arm) => [arm, c.cmd()])).filter(([s]) => s !== "steady" && !s.endsWith("-steady"));
+      for (const [step, cmd] of steps) {
+        label(`lfs.${step}.before`); await lf.sandbox.status(sb, ws);
+        label(`lfs.${step}.exec`); const r = await lf.sandbox.exec(sb, ws, timed(".", cmd, c.cmp));
+        label(`lfs.${step}.after`); await lf.sandbox.status(sb, ws);
+        label(`lfs.${step}.rss`); const m = rssOf(await lf.sandbox.exec(sb, ws, RSS));
+        record({ arm: "serial", case: id, pos: Number(pos), step, ...parse(r), daemonMem: m });
+      }
+      label("lfs.unmount"); await lf.sandbox.unmount(sb, ws, true); ws = null;
+    } else if (what === "close") {
+      await saveLog(out, home, sb);
+      label("teardown.close"); await lf.sandbox.close(sb);
+    }
+  } catch (error) {
+    record({ error: String(error?.stack ?? error), code: error?.code ?? null });
+    if (ws) { try { label("teardown.unmount"); await lf.sandbox.unmount(sb, ws, true); } catch (e) { record({ teardown: String(e) }); } }
+    process.exitCode = 1;
+  } finally {
+    await lf.close();
+  }
+}
+
+/** Per case and step: the same before/after counter subtraction as `summarize`, within that case's trace. */
+export function summarizeSerial(out, st) {
+  const daemon = readFileSync(join(out, "daemon.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const byTrace = new Map(daemon.filter((g) => g.trace).map((g) => [g.trace, g]));
+  const rows = [];
+  for (const c of st.cases) {
+    const lines = existsSync(join(out, `trace-${c.pos}.jsonl`)) ? traceLines(join(out, `trace-${c.pos}.jsonl`)) : [];
+    const byStep = (s) => lines.filter((l) => String(l.step ?? "").replace(/#\d+$/, "") === s);
+    const arms = existsSync(join(out, `arms-${c.pos}.json`)) ? JSON.parse(readFileSync(join(out, `arms-${c.pos}.json`), "utf8")) : [{ error: "no arms" }];
+    for (const a of arms) {
+      if (!a.step) { rows.push({ case: c.id, pos: c.pos, ...a }); continue; }
+      const [b, f] = [byStep(`lfs.${a.step}.before`)[0], byStep(`lfs.${a.step}.after`)[0]];
+      const gb = b && byTrace.get(b.id), ga = f && byTrace.get(f.id);
+      const counters = gb && ga ? Object.fromEntries(Object.keys(view(ga)).map((k) => [k, sub(view(gb)[k], view(ga)[k])])) : null;
+      rows.push({ ...a, execMs: byStep(`lfs.${a.step}.exec`)[0]?.ms ?? null, mountMs: byStep("lfs.mount")[0]?.ms ?? null, cacheAfter: ga?.sections?.immutable_cache ?? null, counters });
+    }
+  }
+  const failed = rows.some((r) => r.error || (r.exit != null && r.exit !== 0));
+  return { out, order: st.cases.map((c) => c.id), cases: st.cases, rows, verdict: failed ? "FAILED" : rows.some((r) => r.step && !r.counters) ? "INCOMPLETE" : "COMPLETE" };
+}
+
 // ---------------------------------------------------------------- main
 async function main(argv) {
   const [cmd, ...args] = argv;
@@ -455,6 +560,8 @@ async function main(argv) {
   if (cmd === "case") return hostCase(args[0], args.slice(1));
   if (cmd === "table") { console.log(JSON.stringify(table(opt(args, "--label", "diagnostic"), opt(args, "--binary")), null, 1)); return 0; }
   if (cmd === "summarize") { console.log(JSON.stringify(summarize(args[0]), null, 1)); return 0; }
+  if (cmd === "serial") return hostSerial(args);
+  if (cmd === "inner" && args[0] === "serial") { await innerSerial(args.slice(1), opt(args, "--out")); return process.exitCode ?? 0; }
   if (cmd === "inner") { await inner(args); return process.exitCode ?? 0; }
   console.error("usage: cost.mjs list | prepare --binary <id> | native --binary <id> | case <id> --binary <id> [--label diagnostic|measured] | summarize <dir>");
   return 2;
