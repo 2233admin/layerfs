@@ -128,6 +128,19 @@ remains a separate MEMORY/OFF/EXCLUSIVE database file.
   retired, not extended. See the
   [integration contract](core/docs/issues/303/06-cluster-one-integration.md)
   and [direct Store access](core/docs/issues/352/DIRECT_STORE.md).
+- **One global database, one writer, short holds (owner decision 2026-10-18).**
+  All committed state lives in one SQLite Store file; no sharding, second
+  database, concurrent-writer engine or objects outside it. Writes go one at a
+  time: SQLite's single-writer rule, the Linux directory lock across writer
+  processes, the in-process admission queue and the publication lane (head
+  check, merge, publish as one step). These locks stay; they replace `Busy`
+  failures under the no-retry rule. Performance comes from short holds: heavy
+  work happens before the lane, only the atomic publish step holds it, reads
+  never take it. Agents' tool calls are separated by model latency, so
+  concurrent Commits are expected to be uncommon; optimize the uncontended
+  Commit and keep contention correct and bounded. Work that grows with tree
+  size, history or Branch count inside the lane is a defect. See the
+  [Store concurrency model](core/docs/architecture/83-store-concurrency-model.md).
   Immutable objects support reuse/distribution; authority, reference closure,
   mutable history, durability and safe GC still require exact contracts.
   Filesystem history is not a process, memory, socket or stdout/stderr

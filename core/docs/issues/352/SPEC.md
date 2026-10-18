@@ -563,6 +563,21 @@ for a ~5% storage gain. Report raw deltas for both.
 
 ## 5. Gates per range
 
+> **Uncontended vs contended (owner direction 2026-10-18).** The headless
+> player has no delays, so contention is far above real use (agents' tool
+> calls are seconds apart). Each operation's latency is reported in two
+> series: **uncontended** (no other Commit or merge overlaps the call in
+> time) and **contended** (one does). The speed gates (ratio to baseline,
+> scaling, counters) judge the uncontended series against the baseline's
+> uncontended series. The contended series is reported beside it and watched
+> for growth of the contended work itself (merge cost against tree size,
+> lane hold per Commit); it never trips on queueing that the compressed replay
+> creates. Merges are never removed from either series; overlap is a
+> classification of the input, like F-024's outcome classes, and it applies to
+> every operation alike. Baselines are re-derived into both series from their
+> stored traces; earlier reports keep their recorded verdicts. Design rule:
+> [Store concurrency model](../../architecture/83-store-concurrency-model.md).
+
 > **Reinstall gate unit (lead decision 2026-10-18).** Changed packages are
 > lockfile package entries whose resolution (name, version, integrity) or
 > workspace link target differs from the previous lockfile; a changed link is

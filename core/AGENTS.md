@@ -431,6 +431,13 @@ fixtures, examples and tools do not contribute to production LOC.
   [integration contract](docs/issues/303/06-cluster-one-integration.md) and its
   [deepest-file plan](docs/issues/307/SERVERLESS-STORE-PLAN-20261007.md); do not
   extend the host-mediated SDK runtime, Bridge data codec or daemon upstream.
+- Store concurrency (owner decision 2026-10-18): one global database and one
+  writer at a time are the design, not a limitation to engineer around. Keep
+  the existing admission, directory lock and publication lane; shorten what
+  runs inside the lane (only head check, merge and publish) instead of adding
+  writers or databases. Judge speed on uncontended calls; contention must stay
+  correct, bounded and exact. See the
+  [Store concurrency model](docs/architecture/83-store-concurrency-model.md).
 - The daemon overlay is a separate owner/profile from global persistence:
   one local database file per mounted Workspace, opened MEMORY/OFF/EXCLUSIVE by
   one connection behind that Workspace's lock. Workspaces share no overlay

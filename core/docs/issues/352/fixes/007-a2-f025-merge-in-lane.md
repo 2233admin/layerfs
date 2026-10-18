@@ -113,6 +113,28 @@ thin baseline): the fixer checks it with the same probe.
 - `sql` counters on overlapping calls are daemon-wide deltas over the call's
   window, so they include other calls' work; use them only on isolated calls.
 
+## Owner direction 2026-10-18: concurrency model and priorities
+
+One global database with one writer at a time is the design
+([Store concurrency model](../../../architecture/83-store-concurrency-model.md)).
+Real agents' tool calls are seconds apart, so concurrent Commits are expected
+to be uncommon; the replay's back-to-back play makes them frequent. Hence:
+
+| Fix | Status | Why |
+| --- | --- | --- |
+| 0 · timing | done (`de9d46d48`) | — |
+| 1 · merge path naming by change size | **first, required** | a scaling defect inside the lane that hurts every merge, real ones included; grows with tree size |
+| 4 · fixed per-call costs | **kept, small** | paid by every call, contended or not; built in F-020's code |
+| 2 · narrower lane | **deferred** | mainly a contention optimization; revisit only if the uncontended series or the lane hold per Commit needs it after fix 1 |
+| 3 · reads off the writer queue | **deferred** | same; F-018 already moved the important reads off |
+
+**Closing F-025:** fix 1's proof and old-vs-new table on the uncontended and
+contended series (SPEC §5 note of the same date): `merge.paths` flat against
+tree size, merged-Commit lane hold back to a few milliseconds, uncontended
+`fs.write`/`fs.rm` at baseline. The earlier `fs.write` ≤512 KiB 11.87× and
+`fs.rm` 9.69–11.84× watches are read on the uncontended series; their
+contended tail is this finding's, not a separate defect.
+
 ## Fixes
 
 ### Fix 0 · Timing coverage (diagnostic, before fix 1)

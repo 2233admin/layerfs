@@ -204,6 +204,9 @@
   writers, 161 of a write's ~208 ms p50 is `wait.writer`: 100 ms in
   construct, 29 ms in the private Workspace's serial reservation (the gap),
   31 ms in producer, begin and lane.
+  Owner 2026-10-18: one database, one writer, short holds is the design;
+  fix 1 and fix 4 go ahead, fixes 2–3 are deferred; judged on the uncontended
+  and contended series (SPEC §5).
 - **F-026 · a listing re-read the inode table per entry (product, 011.a1,
   2026-10-18).** `fs.list` looked each entry up separately from the inode
   table's root, so the cost per entry grew with the table (`list_largest`
