@@ -197,3 +197,77 @@ new (RANGES.md).
 - **Blobs no step wrote** (600 against 403 in range 15): this table counts
   every blob new in the range that no plan step writes. Part B's set was
   not recorded. The dev range's `missing` counter settles it.
+
+## Native baseline (range 15, measured 2026-10-19)
+
+Range 15's git work run natively in the replay's runtime image, without
+LayerFS. It is the floor for the FUSE ÷ native ratios of the dev range.
+Diagnostic only: one sample per phase, nothing rerun.
+
+- **Image and versions:** `layerfs-352-runtime:node24`, `sha256:d3773b4e…`
+  (the image the replay's runs use); git 2.39.5, node 24.21.0; aarch64,
+  8 CPUs.
+- **File system and cache:** the container's own overlay file system. The
+  page cache is warm, since each step's files were written just before its
+  git exec, as in the replay.
+- **Load:** host 1-minute load 8.1–8.5; the Docker VM's own load 2.4–2.7.
+- **Commands:** the replay's own generators (`laneCommands`, `leadJob`,
+  `LEAD_WRITER`, `finishScript`, `statusProbe`, at `9ec613e9e`, unchanged
+  from staging).
+- **Receipts:** `~/lfs-history/evidence/f031-native-baseline-r015-20261019/`
+  (results, `prep.mjs`, `driver.mjs`, `IDENTITY.txt`).
+
+Departures from the replay:
+- **Lanes run one after another**, each on its own copy of the seeded
+  repository, not concurrently on Branches.
+- **The lead's repository** gets the lanes' blobs by `unpack-objects`
+  (untimed: in the replay they arrive by the merges) but not the lane
+  commits and their trees, so its repack packs a little less.
+- **The "fresh" status** runs a second time in the same container, not
+  after a remount.
+
+| Stage | Count | Native time |
+| --- | --- | --- |
+| Seed index (`read-tree HEAD`, `update-index --refresh`, checks, status) | 1 | 116 ms (refresh 33 ms) |
+| Lane git exec, whole command list | 123 | sum 4.00 s · p50 26.5 ms · p90 60.8 ms · max 158.8 ms |
+| of which git (the script's own timer) | 123 | sum 2.54 s · p50 17 ms · p90 28 ms · max 151 ms |
+| Lane `git status --porcelain` (one in ten) | 13 | p50 29 ms · max 56 ms |
+| Per lane (42 / 39 / 42 execs) | 3 | 1.33 / 1.34 / 1.34 s |
+| Lead: `unpack-objects` of 600 blobs no step wrote | 1 | 311 ms |
+| Lead writer: 191 dsh commits (124 merges), 53 `read-tree`, one exec | 191 | 4.38 s (22.9 ms per commit) |
+| Lead finish: `update-ref`, index rebuild (refresh 39 ms), `repack -d` (800 ms), checks, status | 1 | 0.99 s |
+| Second `git status` | 1 | 14 ms (status 6 ms) |
+| **Lead total** | | **5.7 s** |
+
+Results:
+- **The proof held.** Every tree and commit the writer printed equalled
+  dsh's. HEAD = `b4ec4060a`, `rev-list --count` = 191, both statuses were
+  empty, and the lanes' private indexes ended at 158–162 KB.
+- **The repack** packed 4,825 loose objects into one 2.93 MB pack and a
+  0.14 MB index, leaving 0 loose.
+- **`.git/index`** is 165,931 B.
+
+### What to expect on LayerFS (estimate)
+
+- **A lane git exec** is one more one-shot Workspace. On range 14 that
+  costs 128 ms p50 (mount, exec, Commit, unmount), plus the native git
+  above times the FUSE factor. Expect about 150–250 ms p50 per exec,
+  about 20–30 s summed over range 15's 123 execs, and about 7–10 s per
+  lane, overlapping other agents' steps. Part B's 60–100 ms per exec was
+  too low.
+- **The lead writer** keeps its index in `/tmp`, but every tree and commit
+  it writes is a new loose file over FUSE. The repack then deletes 4,825
+  loose files and their fan-out folders over FUSE. That is the F-032
+  pattern: about 0.7 ms per entry before #356, so about 3–4 s for the
+  deletions alone. Expect the lead stage at about 10–20 s, against 5.7 s
+  native.
+
+### Finding: the stat probe under-counts lstat
+
+In git 2.39, `git status` stats the index entries in its preload threads,
+reported as `index/preload/sum_lstat` (1,261 at the seed). `refresh/sum_lstat`
+counts only what preload left: 1 after one `touch`, where git stat-ed 1,261.
+`statusProbe` reads only `refresh/sum_lstat`, so its `@@sumLstat` is too
+low. `refresh/sum_scan`, the count the fresh check judges, is correct: 1
+after a `touch`, 0 here. The builder should add `preload/sum_lstat` to
+`@@sumLstat` before the dev range. It changes no verdict.
