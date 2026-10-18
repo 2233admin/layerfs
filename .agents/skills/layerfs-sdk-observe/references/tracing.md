@@ -273,6 +273,7 @@ Each `daemon` entry:
 | `sandbox.mount.attach` › `kernel.attach` | `sandbox.mount` | |
 | `sdk.read`, `sdk.lines` | `fs.read`, line reads | `content.read` |
 | `branch.merge` | `branch.merge` | merge tree |
+| `branch.merge.publish` | `branch.merge`, a clean merge | the one history write that publishes it: the merge's writer hold |
 | `blame.compare` | `fs.blame` | |
 
 ## Reading it

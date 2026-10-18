@@ -12,6 +12,12 @@ pub struct StorageProvider {
     pub(crate) session: Arc<Session>,
 }
 impl StorageProvider {
+    /// Merge build records over this session (#355); writable sessions only.
+    pub fn merge_scratch(&self) -> crate::MergeScratch {
+        crate::MergeScratch {
+            session: self.session.clone(),
+        }
+    }
     /// Read-only counters from this already-open session, without a SQL query.
     /// Application observers need no history or acquisition capability.
     pub fn diagnostics(&self) -> Result<crate::SqlWork, PersistenceError> {

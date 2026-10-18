@@ -89,6 +89,45 @@ pub(crate) fn history(key: &str) -> Result<&'static str, BackendError> {
         "layerstack_stack_next_page" => Ok(include_str!(
             "../../../sql/sqlite/queries/history/layerstack_stack_next_page.sql"
         )),
+        "lineage_commit" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/lineage_commit.sql"
+        )),
+        "lineage_layer" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/lineage_layer.sql"
+        )),
+        "lineage_layers_above" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/lineage_layers_above.sql"
+        )),
+        "lineage_commit_at" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/lineage_commit_at.sql"
+        )),
+        "lineage_insert_commit" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/lineage_insert_commit.sql"
+        )),
+        "lineage_insert_layer" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/lineage_insert_layer.sql"
+        )),
+        "lineage_merges" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/lineage_merges.sql"
+        )),
+        "lineage_absorbed_below" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/lineage_absorbed_below.sql"
+        )),
+        "lineage_absorbed_height" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/lineage_absorbed_height.sql"
+        )),
+        "lineage_absorb" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/lineage_absorb.sql"
+        )),
+        "lineage_reach" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/lineage_reach.sql"
+        )),
+        "lineage_reach_prune" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/lineage_reach_prune.sql"
+        )),
+        "lineage_reach_insert" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/lineage_reach_insert.sql"
+        )),
         _ => Err(BackendError::Integrity),
     }
 }

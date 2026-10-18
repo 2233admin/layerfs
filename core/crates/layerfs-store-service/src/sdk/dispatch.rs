@@ -23,6 +23,7 @@ pub fn dispatch(
     }
     match call.method.as_str() {
         "project.list_branches" => branch::list(store, args),
+        "project.list_overwritten" => branch::list_overwritten(store, args),
         "branch.fork" => branch::fork(store, args),
         "branch.list_commits" => branch::list_commits(store, args),
         "branch.merge" => branch::merge(store, args),

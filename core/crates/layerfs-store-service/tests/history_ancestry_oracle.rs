@@ -1,6 +1,7 @@
-//! The bounded ancestry walks answer exactly what a walk over the whole
-//! history answers: reachability and merge base on random histories with
-//! forks, Commits, merges (main among the sides) and publishes.
+//! The lineage-based ancestry (#353) answers exactly what a walk over the
+//! whole history answers: reachability and merge base on random histories
+//! with forks, Commits, merges (main among the sides) and publishes. Among
+//! several maximal common ancestors both apply the #353 rank.
 #[path = "support/installed_store.rs"]
 #[allow(dead_code)]
 mod installed;
@@ -9,7 +10,8 @@ mod installed;
 mod support;
 
 use layerfs_bridge::control::SdkValue;
-use layerfs_history::{BranchId, HistoryCatalog, HistoryName, LayerStackId, NodeId};
+use layerfs_history::{BranchId, HistoryCatalog, HistoryName, LayerId, LayerStackId, NodeId};
+use std::cmp::Reverse;
 use std::collections::{HashSet, VecDeque};
 use std::fs;
 use support::{write, Fixture};
@@ -76,11 +78,41 @@ fn reference_is_ancestor(history: &dyn HistoryCatalog, ancestor: NodeId, node: N
     found
 }
 
+/// A Layer's position in its stack chain.
+fn height(history: &dyn HistoryCatalog, layer: LayerId) -> usize {
+    let mut steps = 0;
+    let mut current = history.layer(layer).unwrap().unwrap().parent;
+    while let Some(id) = current {
+        steps += 1;
+        current = history.layer(id).unwrap().unwrap().parent;
+    }
+    steps
+}
+
+/// The #353 order among maximal common ancestors: newest Layer in the
+/// node's ancestry, then deepest first parent, then smallest identity.
+fn rank(history: &dyn HistoryCatalog, node: NodeId) -> (usize, usize, Reverse<Vec<u8>>) {
+    let mut newest = 0;
+    walk(history, node, |n| {
+        if let NodeId::Layer(layer) = n {
+            newest = newest.max(height(history, layer));
+        }
+        false
+    });
+    let mut depth = 0;
+    let mut current = node;
+    while let NodeId::Commit(_) = current {
+        depth += 1;
+        current = parents(history, current)[0];
+    }
+    (newest, depth, Reverse(node.as_slice().to_vec()))
+}
+
 fn reference_merge_base(
     history: &dyn HistoryCatalog,
     left: NodeId,
     right: NodeId,
-) -> Option<NodeId> {
+) -> (Option<NodeId>, usize) {
     let mut reachable = HashSet::new();
     walk(history, left, |n| {
         reachable.insert(n);
@@ -94,16 +126,22 @@ fn reference_merge_base(
         }
         shared
     });
-    for (i, candidate) in common.iter().enumerate() {
-        let older = common
-            .iter()
-            .enumerate()
-            .any(|(j, other)| i != j && reference_is_ancestor(history, *candidate, *other));
-        if !older {
-            return Some(*candidate);
-        }
-    }
-    common.first().copied()
+    let maximal: Vec<NodeId> = common
+        .iter()
+        .enumerate()
+        .filter(|(i, candidate)| {
+            !common
+                .iter()
+                .enumerate()
+                .any(|(j, other)| *i != j && reference_is_ancestor(history, **candidate, *other))
+        })
+        .map(|(_, node)| *node)
+        .collect();
+    let best = maximal
+        .iter()
+        .copied()
+        .max_by_key(|node| rank(history, *node));
+    (best, maximal.len())
 }
 
 fn text(value: &str) -> SdkValue {
@@ -218,7 +256,7 @@ fn random_history(seed: u64) {
     let distinct: HashSet<NodeId> = nodes.iter().copied().collect();
     let mut nodes: Vec<NodeId> = distinct.into_iter().collect();
     nodes.sort_by_key(|n| format!("{n:?}"));
-    let (mut checked, mut related, mut commit_bases) = (0, 0, 0);
+    let (mut checked, mut related, mut commit_bases, mut criss_cross) = (0, 0, 0, 0);
     for _ in 0..1500 {
         let (a, b) = (
             &nodes[rng.below(nodes.len())],
@@ -232,15 +270,13 @@ fn random_history(seed: u64) {
         );
         related += usize::from(want && a != b);
         let base = history.merge_base(*a, *b).unwrap();
-        assert_eq!(
-            base,
-            reference_merge_base(history, *a, *b),
-            "merge_base({a:?}, {b:?})"
-        );
+        let (want, maximal) = reference_merge_base(history, *a, *b);
+        assert_eq!(base, want, "merge_base({a:?}, {b:?})");
+        criss_cross += usize::from(maximal > 1);
         commit_bases += usize::from(matches!(base, Some(NodeId::Commit(_))));
         checked += 1;
     }
-    println!("ANCESTRY_ORACLE seed={seed} branches={} nodes={} pairs={checked} related={related} commit_bases={commit_bases} merges={merges} publishes={publishes}", branches.len(), nodes.len());
+    println!("ANCESTRY_ORACLE seed={seed} branches={} nodes={} pairs={checked} related={related} commit_bases={commit_bases} criss_cross={criss_cross} merges={merges} publishes={publishes}", branches.len(), nodes.len());
     assert!(publishes > 5 && merges > 20 && related > 100 && commit_bases > 50);
     fixture.cleanup();
 }

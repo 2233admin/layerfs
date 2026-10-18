@@ -14,8 +14,10 @@
 //!   (`CommitSuccess.storage`) counts within one producer handle, so a second
 //!   producer would not appear in it; the observer counts `policy()` reads of
 //!   the shared writer, one per producer handle opened. A bound Workspace
-//!   keeps its handle between its Commits, so a Commit opens one handle when
-//!   it is its Workspace's first and none otherwise; never more than one.
+//!   keeps its handle between its Commits, and an unmounted Workspace hands
+//!   its handle to the Store's one idle slot, which the next Workspace takes
+//!   (#352 F-025 fix 4). So only the open Store's first Commit opens one;
+//!   never more than one.
 //! - The profile is read from the writable session itself
 //!   (`Handles::profile()`), not from a separate observer session. It is the
 //!   read-back that session made when it opened.
@@ -377,10 +379,11 @@ fn r5_10_each_mounted_commit_has_one_producer_on_the_one_open_disposable_writer_
             other => panic!("{name}: Commit {round}: {other:?}"),
         };
         // The public receipt of this Commit's one producer handle. A bound
-        // Workspace keeps its handle between its Commits (issue 320), so only
-        // a Workspace's first Commit opens one and reads the writer's policy:
-        // round 1 on the first mount and the last round on the second.
-        let opens = u64::from(round == 1 || round == ROUNDS.len());
+        // Workspace keeps its handle between its Commits (issue 320), and the
+        // first mount's unmount hands it to the Store's idle slot, which the
+        // second mount takes (#352 F-025 fix 4). So only round 1 opens one
+        // and reads the writer's policy.
+        let opens = u64::from(round == 1);
         let storage = commit.storage;
         assert_eq!(storage.policy, opens, "{storage:?}");
         assert_eq!(storage.initial_reservations, 1, "{storage:?}");

@@ -1,1 +1,1 @@
-SELECT layer_id, layer_stack_id, parent_layer_id, root_id, source_branch_id, source_commit_id, logical, overwrote FROM layer WHERE layer_id = $1;
+SELECT y.layer_id, y.layer_stack_id, y.parent_layer_id, y.root_id, y.source_branch_id, y.source_commit_id, y.logical, l.overwrote_count FROM layer y JOIN layer_lineage l ON l.layer_id = y.layer_id WHERE y.layer_id = $1;

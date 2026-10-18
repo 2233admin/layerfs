@@ -56,6 +56,11 @@ pub struct SaveCounters {
 pub struct MergeCounters {
     pub merges: u64,
     pub fallbacks: u64,
+    /// In-lane steps after the head moved again, the paths they decided,
+    /// and those refused as too large (#355).
+    pub lane_steps: u64,
+    pub lane_paths: u64,
+    pub lane_refused: u64,
     pub naming: layerfs_content::compare::NamingWork,
 }
 /// One global Store binding, with mounted readers and a shared immutable cache.
@@ -80,6 +85,11 @@ pub struct Store {
     pub(super) idle_producer: super::producer::Producer,
     /// Reserved, unhanded serials per scope, `(next, end)` (#352 F-025 fix 4).
     serial_pool: Mutex<std::collections::HashMap<ObjectId, (u64, u64)>>,
+    /// Merge build records in the Store file (#355); a Store without them
+    /// refuses merges.
+    merge_scratch: Option<layerfs_persistence::MergeScratch>,
+    /// Merge record work of every merge so far, including writer holds.
+    merge_work: Mutex<layerfs_persistence::MergeRecordsWork>,
 }
 impl Store {
     /// Takes the control reader and a mount-time factory under explicit capacity.
@@ -114,7 +124,15 @@ impl Store {
             saves: Mutex::default(),
             idle_producer: Default::default(),
             serial_pool: Mutex::default(),
+            merge_scratch: None,
+            merge_work: Mutex::default(),
         })
+    }
+    /// Merge build records over the Store's writable session (#355).
+    #[must_use]
+    pub fn with_merge_scratch(mut self, scratch: layerfs_persistence::MergeScratch) -> Self {
+        self.merge_scratch = Some(scratch);
+        self
     }
     /// Explicit configuration. Application assembly calls this once, before
     /// any Workspace is served; nothing else in the product calls it. Zero,
@@ -127,6 +145,35 @@ impl Store {
     pub fn producer(&self) -> StorageResult<Storage> {
         self.counts.producers.fetch_add(1, Ordering::Relaxed);
         Storage::with_reservations(self.writer.clone(), self.reservations)
+    }
+    /// Runs one merge over fresh build records in the Store file and removes
+    /// them when `body` returns. Returns the records' first failure with the
+    /// body's result, so a refused merge reports the persistence cause.
+    pub fn merge_records<T>(
+        &self,
+        body: impl FnOnce(&mut layerfs_persistence::MergeRecords) -> T,
+    ) -> Result<
+        (T, Option<layerfs_storage::port::PersistenceError>),
+        layerfs_storage::port::PersistenceError,
+    > {
+        let scratch = self
+            .merge_scratch
+            .as_ref()
+            .ok_or(layerfs_storage::port::PersistenceError::BackendUnavailable)?;
+        let mut records = scratch.begin()?;
+        let value = body(&mut records);
+        let failure = records.failure().cloned();
+        let work = records.end()?;
+        if let Ok(mut total) = self.merge_work.lock() {
+            total.add(work);
+        }
+        Ok((value, failure))
+    }
+    /// Merge record work of every merge so far: jobs and writer holds.
+    pub fn merge_record_work(&self) -> layerfs_persistence::MergeRecordsWork {
+        self.merge_work
+            .lock()
+            .map_or_else(|poison| *poison.into_inner(), |work| *work)
     }
     pub const fn policy(&self) -> StoragePolicy {
         self.policy
@@ -183,6 +230,18 @@ impl Store {
             saves.merge.merges += 1;
             saves.merge.fallbacks += u64::from(!merged.hinted);
             saves.merge.naming.add(&named);
+        }
+    }
+    /// Counts one in-lane merge step: its decided paths, or a refusal.
+    pub fn note_lane(&self, paths: Option<usize>) {
+        if let Ok(mut saves) = self.saves.lock() {
+            match paths {
+                Some(paths) => {
+                    saves.merge.lane_steps += 1;
+                    saves.merge.lane_paths += paths as u64;
+                }
+                None => saves.merge.lane_refused += 1,
+            }
         }
     }
     /// The selection counts of every Save this daemon finished.

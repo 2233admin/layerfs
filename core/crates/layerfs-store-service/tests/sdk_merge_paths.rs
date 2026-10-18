@@ -5,8 +5,9 @@
 //! shallower than the deepest change, so its cost grew with the tree (225,
 //! 852 and 7,584 statements at 20, 200 and 2,000 directories).
 //!
-//! Now the changed inodes are named from recorded bindings, climbed to the
-//! root: no directory is listed for naming. Each climb step still looks a
+//! Then the changed inodes were named from recorded bindings, climbed to the
+//! root: no directory listed for naming. Merged by serial (#355 M1), these
+//! one-sided changes name no path at all. Each climb step still looks a
 //! serial and a name up in B-trees that gain a level as the tree grows by
 //! about 10x, so the statements may grow by a fixed step per 10x
 //! (logarithmically), never with the directory count.
@@ -59,20 +60,13 @@ fn merge_work(bulk: usize) -> Work {
     );
     let work = fixture.since(before);
     assert_eq!(merged.get_text("kind"), Some("Merged"), "{merged:?}");
-    // The merge counters (#352): one merge, named from recorded bindings,
-    // climbing the changed inodes and their ancestors only, whatever the
-    // tree's size.
+    // The merge counters (#352): one merge. Merged by serial (#355 M1),
+    // changes only one side made name no path at all, whatever the tree's
+    // size; no breadth-first walk runs.
     let after = fixture.service.store.save_counters().merge;
     assert_eq!(after.merges - counted.merges, 1);
     assert_eq!(after.fallbacks - counted.fallbacks, 0);
-    let (inodes, climbed) = (
-        after.naming.inodes - counted.naming.inodes,
-        after.naming.climbed - counted.naming.climbed,
-    );
-    assert!(
-        inodes >= 1 && climbed >= inodes && climbed <= 16,
-        "{after:?}"
-    );
+    assert_eq!(after.naming.inodes - counted.naming.inodes, 0, "{after:?}");
     println!("SDK_MERGE_PATHS bulk={bulk} work={work:?}");
     fixture.cleanup();
     work
