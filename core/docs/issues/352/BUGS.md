@@ -248,3 +248,14 @@
   `true` calls that make no requests. Readers must take differences per
   Workspace. Owner: the builder checks the `oneshot_exec` probe split
   (08de4f038) before range 13's rerun.
+- **F-031 · the replay's Workspaces have no `.git` (harness coverage gap,
+  liaison observation, builder check, 2026-10-18).** `git.mjs` checks out
+  with `git --git-dir <bare> --work-tree`, so Init never saw a `.git`. The
+  player never runs git, and SPEC does not mention it. AGENTS says a Workspace
+  includes `.git` and its index. **Decision (lead): included from P3**, at the
+  phase boundary that already re-baselines. The fork is seeded with a depth-1
+  clone (~35–40 MiB of packs plus a ~1.6 MiB index). Each range runs one
+  `git add -A && git commit` exec and a `git status` in the closure. The proof
+  compares the tree without `.git` and checks `.git` by HEAD id with a clean
+  status. The STORAGE_STUDY P3 recalibration counts the index rewrites and the
+  zlib objects separately. Owner: the builder, after the P3 dev checks.
