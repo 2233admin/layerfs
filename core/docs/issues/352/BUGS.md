@@ -285,3 +285,14 @@
   builder, after the P3 dev checks, measuring Store growth per git commit
   (index, loose objects, packs) and the wall time added per range.
   **Design gate (owner, 2026-10-18): F-031 is not built until a short design is approved by the owner.** It must say (1) how lanes commit: which Workspace and Branch runs each `git commit`, and on which Git branch; (2) how a LayerFS merge of two Branches that both changed `.git` treats `.git/index`, `HEAD`, refs, `logs/`, `ORIG_HEAD` and packs written by auto-repack (conflict, rule or rebuild, with no retry or guessed resolution); (3) how dsh's merge commits are reproduced with their original parents (both parents' objects in one `.git`). The design names its proof and its expected Store and wall-time cost.
+- **F-032 · deleting a base tree over FUSE costs ~0.7 ms per entry (product,
+  builder, item 9 dev range, 2026-10-18).** On dev fork `dev352-p3f`, range 15,
+  the clean reinstall's `rm -rf node_modules` made 40,145 unlinks and 6,187
+  rmdirs, plus lookup +43,951, readdir +18,014, opendir +12,307 and forget
+  +45,966 against the first install. Inferred time is about 31.6 s, since the
+  install's own create and write counts are identical (38,155 and 42,483); there
+  is no per-op timing. The reinstall exec took 44.7 s against 13.0 s. A native
+  `rm -rf` of the same tree takes about a second. Clean installs run only at
+  milestones in measured ranges, but agents' `rm -rf` of large trees is
+  ordinary work. Owner: the fixer, after item 7, with per-op timing first
+  (D0). Not folded into F-027.
