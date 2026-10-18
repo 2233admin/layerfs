@@ -47,6 +47,23 @@ If any condition fails, the Commit continues on the unchanged full path.
 answer. `saved` and `storage` are zero. `namespace` is `None`, since no
 constructor ran.
 
+## Callers of `CommitSuccess.capture` (liaison condition 1)
+
+`capture` is `None` only for this answer. Every reader at `140951351` and
+later:
+
+| Reader | Handling |
+| --- | --- |
+| `store-service store/commit.rs` | Builds the value: `retained.capture`, which the shortcut leaves `None`. |
+| `store-service store/settle.rs` | Reads `CommitFailure.capture`, a different type that was already an `Option`. Unchanged. |
+| daemon control reply (`control/operations.rs`, `control/types.rs`) | Carries `CommitSuccess` whole and never reads `capture`. The reply is built from `history`. |
+| daemon telemetry and trace | Never read `capture`. Phases are timed by name (`uptodate.state` and `uptodate.head` are new). |
+| SDK (`sdk/js/native`), operator, `examples/store_accounting` | Never read `capture`. |
+| `daemon tests/mounted_commit_failures.rs` | An explicit `let Some(capture) = … else { panic!(…) }`: a Committed answer always captured. |
+| `daemon tests` `store_commit`, `mount_control`, `support/mounted_commit.rs` | `is_none()` / `is_some()` assertions. |
+
+No product code unwraps it.
+
 ## Why "no rows above the installed floor" is exact
 
 The dirty counters are the overlay's own count of rows in the active
@@ -62,6 +79,70 @@ size and mtime change. A failed capture's rows sit in a generation that is
 neither active nor installed until FOLD moves them back. The shortcut
 therefore requires `consolidating.is_none()` and `captured.is_none()`, so
 those rows can never be missed.
+
+## In-flight and orphan cases (liaison condition 2)
+
+The state is read by one owner job under the Workspace's lock, the same lock
+every overlay mutation job holds. There are three cases:
+
+- **A published mutation.** It is counted. Each namespace or data job writes
+  its rows, calls `put_inode` (so a data write always has an active inode
+  row), and calls `settle(…)` within one atomic job. `settle` updates the
+  dirty counters and issues the reply ticket together
+  (`overlay namespace/inode.rs` `settle`, `namespace/compound.rs`). So a
+  mutation whose reply has not been sent yet already has non-zero counters,
+  and the shortcut is refused.
+- **A mutation mid-job.** It cannot be observed half-done: the state job runs
+  wholly before or wholly after it.
+  - Before: it is a later mutation. The normal path treats it the same way,
+    because capture seals only published rows.
+  - After: it is counted, as in the first case.
+- **A request not yet at the owner** (in the kernel or the FUSE queue). It is
+  published after the state read, so it is a later mutation for this Commit,
+  exactly as for a capture.
+
+A mutation that changes no row leaves nothing to commit, so UpToDate is
+true.
+
+The shortcut does not check pending reply tickets directly. No owner call
+exposes them without editing the RCA agent's `store-service overlay/*`. They
+imply non-zero counters, as shown above. The full path's capture waits for
+tickets (`Readiness::Capture`) only to order replies, not to find changes.
+
+**Orphans** (unlinked, still-open files):
+- An orphan created since the installed floor keeps its active inode row
+  (`nlink` 0), so it is counted.
+- An orphan of an earlier generation is held only for its readers. It is not
+  a change to the namespace, and the full path would not commit it either.
+- `base_readers` counts readers, not changes.
+
+**Test:** `store_commit::a_mutation_racing_an_unchanged_commit_is_never_lost`.
+- Setup: 16 rounds. In each round a thread writes while the product
+  `commit_captured` runs, the two started together by a barrier.
+- Each round accepts only three outcomes:
+  - a shortcut UpToDate, after which the next Commit is `Committed`;
+  - a `Committed` that captured the write;
+  - an UpToDate that captured, after which the next Commit publishes the write.
+- After every round, a further Commit must be the shortcut. That proves
+  nothing is left uncommitted.
+- At the end, a fresh bind reads the last write.
+- Host result: pass. All 16 rounds took the shortcut, with the state read
+  before the write. The test does not sleep to force the other order; the
+  captured order is covered by
+  `captured_rows_or_a_moved_head_never_take_the_uptodate_shortcut`.
+
+## A moved head (liaison condition 3)
+
+**If the head moved, the full path runs.** The shortcut answers only when the
+head and base layer read outside the lane equal the bound ones. In that case:
+- the Workspace's base stays the bound H0, and H0 is the head at the read;
+- nothing is captured, saved, published or installed;
+- the binding does not change.
+
+When the head has moved, even a Workspace with no changes takes the normal
+path. It merges an empty candidate into the head and installs the head, so
+the Workspace follows it. Answering UpToDate there would leave the Workspace
+on H0 while reporting the new head as its state.
 
 ## Race argument
 
@@ -104,6 +185,7 @@ Nothing is retried, and no lock is added.
 | Test | Without the shortcut | With it |
 | --- | --- | --- |
 | `store_commit::an_unchanged_workspace_answers_uptodate_without_capture_or_save` (constructor `unreachable!()`; `UpToDate` with the bound head and root; no capture; zero Save; binding unchanged; the next change still Commits) | **FAIL** (the constructor ran) | pass |
+| `store_commit::a_mutation_racing_an_unchanged_commit_is_never_lost` (16 barrier-started rounds; see "In-flight and orphan cases") | pass (no shortcut exists) | pass |
 | `store_commit::captured_rows_or_a_moved_head_never_take_the_uptodate_shortcut` (rows give a constructor run, a capture and `Committed`; a clean Workspace whose head another Workspace moved still captures and follows the head) | pass | pass |
 
 Adapted tests, with the reason and what each now asserts:
@@ -127,7 +209,7 @@ No assertion was weakened, and no test was deleted.
 ### Linux results (pinned image `378b799ef433`)
 
 All of the following pass:
-- `store_commit`: 9/9;
+- `store_commit`: 10/10;
 - `mount_control`: 9/9;
 - `mounted_commit_failures`: 4/4;
 - `r5_1_actual_daemon_commit`: 1/1;

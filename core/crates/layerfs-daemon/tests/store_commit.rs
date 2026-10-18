@@ -452,6 +452,71 @@ fn captured_rows_or_a_moved_head_never_take_the_uptodate_shortcut() {
 }
 
 #[test]
+fn a_mutation_racing_an_unchanged_commit_is_never_lost() {
+    let (f, store, owner) = setup("commit-unchanged-race");
+    let workspace = bind(&store, &owner, &f, 1);
+    let mut shortcuts = 0;
+    for (round, tag) in (b'a'..=b'p').enumerate() {
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let racer = {
+            let (workspace, barrier) = (workspace.clone(), barrier.clone());
+            std::thread::spawn(move || {
+                barrier.wait();
+                write(&workspace, &bytes(tag));
+            })
+        };
+        barrier.wait();
+        let done = workspace
+            .commit_captured(&Default::default())
+            .unwrap_or_else(|failure| panic!("round {round}: {failure:?}"));
+        racer.join().unwrap();
+        let captured = done.capture.is_some();
+        match (&done.history, captured) {
+            // Answered before capture: the write is a later mutation, still
+            // dirty, and the next Commit publishes it.
+            (Some(CommitOutcome::UpToDate { .. }), false) => {
+                shortcuts += 1;
+                let next = workspace.commit_captured(&Default::default()).unwrap();
+                assert!(
+                    matches!(next.history, Some(CommitOutcome::Committed { .. })),
+                    "round {round}: {:?}",
+                    next.history
+                );
+            }
+            (Some(CommitOutcome::Committed { .. }), true) => {}
+            // Captured before the write was published: nothing to publish
+            // yet, and the next Commit publishes it.
+            (Some(CommitOutcome::UpToDate { .. }), true) => {
+                let next = workspace.commit_captured(&Default::default()).unwrap();
+                assert!(matches!(
+                    next.history,
+                    Some(CommitOutcome::Committed { .. })
+                ));
+            }
+            other => panic!("round {round}: {other:?}"),
+        }
+        // Whatever the order, the write is published and nothing is left:
+        // the next Commit is answered before capture.
+        assert_eq!(read(&workspace), bytes(tag), "round {round}");
+        let settled = workspace.commit_captured(&Default::default()).unwrap();
+        assert!(
+            matches!(settled.history, Some(CommitOutcome::UpToDate { .. }))
+                && settled.capture.is_none(),
+            "round {round}: {:?}",
+            settled.history
+        );
+    }
+    let fresh = bind(&store, &owner, &f, 2);
+    assert_eq!(read(&fresh), bytes(b'p'), "the Branch holds the last write");
+    close(&owner, &fresh);
+    println!("STORE_COMMIT_UNCHANGED_RACE rounds=16 shortcuts={shortcuts}");
+    close(&owner, &workspace);
+    drop((workspace, store));
+    owner.stop().unwrap();
+    f.cleanup();
+}
+
+#[test]
 fn later_mutation_survives_capture_publication_and_known_install() {
     let (f, store, owner) = setup("commit-later-mutation");
     let workspace = bind(&store, &owner, &f, 1);
