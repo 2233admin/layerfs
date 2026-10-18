@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Fills the pnpm store once from the lockfiles of all ranges (SPEC §2,
 // Speed-ups 4; INSTALLS.md §2): the one step that uses the network.
-//   node dsh/tools/history/fetch-store.mjs --repo <dsh.git> --plan <dir> --image I --volume V [--from i] [--to j] [--list] | --collect
+//   node dsh/tools/history/fetch-store.mjs --repo <dsh.git> --plan <dir> --image I --volume V [--from i] [--to j | --only blob,…] [--jobs n] [--note text] [--list] | --collect
 // The distinct pnpm lockfiles of the plan's checkpoints (by git blob id, in
 // first-range order; range 0 is yarn's and has none) are numbered 0..n-1;
 // `--list` prints them. For lockfiles [from, to) it writes each one's
@@ -46,7 +46,8 @@ export function lockfiles(repo, planDir) {
  * safe for concurrent writers; mostly-reused lockfiles spend their time in
  * resolution, so batches of one at a time ran about 25 s per lockfile). It
  * runs in a copy inside the container: pnpm fetch also links node_modules,
- * which was slow on the host bind mount.
+ * which was slow on the host bind mount. Four at a time ran out of memory in
+ * the 3.8 GiB Docker VM on large binary tarballs (exit 137); `--jobs` sets it.
  */
 export const fetchScript = (dirs, jobs = 4) => `printf '%s\\n' ${dirs.join(" ")} | xargs -P ${jobs} -I{} sh -c 'mkdir -p /tmp/{} && cp -R /f/{}/. /tmp/{}/ && rm -rf /tmp/{}/node_modules && cd /tmp/{} && ${FETCH} > /f/{}/fetch.log 2>&1; echo "{} $?"'`;
 
@@ -61,7 +62,8 @@ function main() {
   if (args.includes("--list")) { all.forEach((l, i) => console.log(`${i} ${l.blob} ranges ${l.ranges.join(",")}`)); return; }
   if (!image || !volume) process.exit(2);
   const from = Number(opt("--from", "0")), to = Number(opt("--to", String(all.length)));
-  const batch = all.slice(from, to), root = join(process.env.HOME, "lfs-history", "fetch");
+  const jobs = Number(opt("--jobs", "4")), only = opt("--only")?.split(",");
+  const batch = (only ? all.filter((l) => only.some((b) => l.blob.startsWith(b))) : all.slice(from, to)), root = join(process.env.HOME, "lfs-history", "fetch");
   for (const l of batch) {
     const dir = join(root, l.blob);
     mkdirSync(dir, { recursive: true });
@@ -76,8 +78,8 @@ function main() {
   if (existsSync(PENDING)) { console.error(`a fetch batch is pending (${PENDING}); collect it first`); process.exit(1); }
   const before = storeBytes(image, volume);
   const id = execFileSync("docker", ["run", "-d", "--name", NAME, "--network", "bridge", "-v", `${volume}:/pnpm-store`, "-v", `${root}:/f`,
-    "--entrypoint", "sh", image, "-c", fetchScript(batch.map((l) => l.blob))], { encoding: "utf8" }).trim();
-  writeFileSync(PENDING, JSON.stringify({ id, volume, image, from, to, lockfiles: batch.map((l) => ({ blob: l.blob, ranges: l.ranges })), storeBefore: before }));
+    "--entrypoint", "sh", image, "-c", fetchScript(batch.map((l) => l.blob), jobs)], { encoding: "utf8" }).trim();
+  writeFileSync(PENDING, JSON.stringify({ id, volume, image, from, to, jobs, only, note: opt("--note"), lockfiles: batch.map((l) => ({ blob: l.blob, ranges: l.ranges })), storeBefore: before }));
   console.log(JSON.stringify({ started: id.slice(0, 12), from, to }));
 }
 
