@@ -461,3 +461,12 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   probes (about 49 s) and the version figures are measured-mode stages. A
   dev step that can't fit 120 s is reported with its time, never run with a
   longer ceiling.
+
+- **Changed measured-step command (lead interim yes 2026-10-18, reported to
+  the owner).** From P3 on, the clean install (milestone `clean-install`
+  and the dev `reinstall-check`) runs `find . -name node_modules -type d
+  -prune -exec rm -rf {} +` before `pnpm install` instead of `rm -rf
+  node_modules`. Reason: a package that left the workspace keeps its
+  untracked `node_modules` (dev352-p3p r016: `packages/core/agent-core`).
+  P2 clean-install numbers keep the old command's label and are not compared
+  across the change (INSTALLS §1).

@@ -878,7 +878,7 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
   assert.deepEqual(kinds({ changed: ["docs/x.md"], installed: true, milestone: true }), ["clean-install"]);
   assert.equal(installInputsChanged(["node_modules/x/package.json"]), false, "installed files are not inputs");
   const steps = closureSteps({ packages, tsconfigs, changed: ["packages/b/src/y.ts", "packages/a/q.ts", "packages/c/z.ts"], installed: true, milestone: true, run: ["packages/a/tests/t.spec.ts"] });
-  assert.match(steps[0].command, /rm -rf node_modules && pnpm install --offline --frozen-lockfile --store-dir \/tmp\/pnpm-store --cache-dir \/tmp\/pnpm-cache --ignore-scripts$/);
+  assert.match(steps[0].command, /find \. -name node_modules -type d -prune -exec rm -rf \{\} \+ && pnpm install --offline --frozen-lockfile --store-dir \/tmp\/pnpm-store --cache-dir \/tmp\/pnpm-cache --ignore-scripts$/);
   // the private writable layer over the read-only store, built by the shell on a fake store
   const fakeStore = mkdtempSync(join(tmpdir(), "store-"));
   mkdirSync(join(fakeStore, ".cache/v11"), { recursive: true }); mkdirSync(join(fakeStore, "v11/files"), { recursive: true });
@@ -962,7 +962,7 @@ test("closure development checks (owner 2026-10-18): a clean reinstall of the un
   const packages = new Set(["packages/a", "packages/b"]), tsconfigs = new Set(["packages/a"]);
   const steps = closureSteps({ packages, tsconfigs, changed: ["packages/a/src/x.ts"], installed: false, milestone: false, run: ["packages/a/t.spec.ts"], checks: true });
   assert.deepEqual(steps.map((s) => s.kind), ["install", "reinstall-check", "build", "rebuild", "test"]);
-  assert.match(steps[1].command, /rm -rf node_modules && pnpm install --offline/);
+  assert.match(steps[1].command, /find \. -name node_modules -type d -prune -exec rm -rf \{\} \+ && pnpm install --offline/);
   assert.equal(steps[3].command, "./node_modules/.bin/tsc -b --verbose 'packages/a'");
   assert.deepEqual(closureSteps({ packages, tsconfigs, changed: ["docs/x.md"], installed: true, milestone: false, checks: true }).map((s) => s.kind), [], "nothing installed or built: no checks");
   assert.deepEqual(closureSteps({ packages, tsconfigs, changed: ["packages/a/src/x.ts"], installed: false, milestone: false }).map((s) => s.kind), ["install", "build"], "measured runs carry no checks");
@@ -1096,7 +1096,7 @@ test("devcheck (lead 2026-10-18, 120 s rule): dev checks after the publish; the 
   const { judgeDevChecks } = await import("../closure.mjs");
   const ds = devSteps({ steps: ["incremental-install", "build", "test"], rows: [{ kind: "build", packages: ["packages/a"] }] });
   assert.deepEqual(ds.map((x) => x.kind), ["reinstall-check", "rebuild"]);
-  assert.match(ds[0].command, /rm -rf node_modules && pnpm install --offline/);
+  assert.match(ds[0].command, /find \. -name node_modules -type d -prune -exec rm -rf \{\} \+ && pnpm install --offline/);
   assert.equal(ds[1].command, "./node_modules/.bin/tsc -b --verbose 'packages/a'");
   assert.deepEqual(devSteps({ steps: ["test"], rows: [] }), [], "nothing installed or built: no checks");
   const M = class extends Error {};

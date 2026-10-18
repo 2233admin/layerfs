@@ -53,9 +53,12 @@ export const storeSetup = (store = STORE_MOUNT) => [
   `for v in ${store}/v*/; do v=\${v%/}; n=\${v##*/}; mkdir -p /tmp/pnpm-store/$n && cp "$v/index.db" /tmp/pnpm-store/$n/ && ln -sfn "$v/files" /tmp/pnpm-store/$n/files; done`,
 ].join(" && ");
 /** The install (INSTALLS §1); `clean` at milestones removes node_modules first. */
+export const CLEAN_REMOVE = "find . -name node_modules -type d -prune -exec rm -rf {} +";
 export function installCommand({ store = STORE_MOUNT, clean = false } = {}) {
   const install = "pnpm install --offline --frozen-lockfile --store-dir /tmp/pnpm-store --cache-dir /tmp/pnpm-cache --ignore-scripts";
-  return `${storeSetup(store)} && ${clean ? "rm -rf node_modules && " : ""}${install}`;
+  // clean (lead interim yes 2026-10-18, from P3 on): every node_modules folder goes, not only the root's; a package
+  // that left the workspace keeps its untracked node_modules otherwise (dev352-p3p r016, packages/core/agent-core)
+  return `${storeSetup(store)} && ${clean ? `${CLEAN_REMOVE} && ` : ""}${install}`;
 }
 export const buildCommand = (packages) => `./node_modules/.bin/tsc -b ${packages.map(quote).join(" ")}`;
 /** The rebuild check's command: the same build again, reporting each project's state (owner 2026-10-18, design 8). */

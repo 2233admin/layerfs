@@ -13,8 +13,18 @@ their repository. This is option A, and it is the only install route.
 
 ```
 pnpm install --offline --frozen-lockfile        # incremental: ranges that change package.json or the lockfile
-rm -rf node_modules && pnpm install --offline --frozen-lockfile   # clean: milestones only
+find . -name node_modules -type d -prune -exec rm -rf {} + && pnpm install --offline --frozen-lockfile   # clean: milestones only (P3 on)
 ```
+
+**Changed clean command from P3 on (lead interim yes 2026-10-18, reported to
+the owner).** "Clean" removes every `node_modules` folder in the tree, not
+only the root's. A package that left the workspace keeps its untracked
+`node_modules` (git never removes untracked files), so the root-only `rm -rf
+node_modules` left `packages/core/agent-core/node_modules` behind and the
+clean reinstall differed from the clean oracle (dev352-p3p r016 devcheck).
+It applies to the milestone clean install and the dev reinstall check. P2
+clean-install numbers stay labelled with the old command (`rm -rf
+node_modules`) and are not compared across the change.
 
 ## 2. Why this is authentic
 
