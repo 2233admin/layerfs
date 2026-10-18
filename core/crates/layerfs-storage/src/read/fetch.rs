@@ -23,9 +23,6 @@ pub(crate) struct Fetch {
     descriptors: RefCell<BTreeMap<i64, PackInfo>>,
     signatures: RefCell<Option<Vec<SignatureRow>>>,
     counters: Cell<Diagnostics>,
-    /// The Store's whole bodies shared by its readers, consulted after this
-    /// reader's own caches miss (#359).
-    pub(crate) shared: Option<Arc<super::SharedPacks>>,
 }
 impl Fetch {
     pub(crate) fn new(metadata: Arc<dyn PackPersistence>) -> Self {
@@ -36,22 +33,6 @@ impl Fetch {
             descriptors: RefCell::new(BTreeMap::new()),
             signatures: RefCell::new(None),
             counters: Cell::new(Diagnostics::default()),
-            shared: None,
-        }
-    }
-    /// A shared whole body of pack `id`, bound to this reader's descriptor.
-    fn shared_body(&self, id: i64) -> StorageResult<Option<(PackInfo, Vec<u8>)>> {
-        let Some((info, body)) = self.shared.as_ref().and_then(|shared| shared.get(id)) else {
-            return Ok(None);
-        };
-        self.remember_pack(info)?;
-        Ok(Some((info, body.to_vec())))
-    }
-    /// Offers one validated whole body to the shared tier.
-    fn share(&self, info: PackInfo, body: &[u8]) -> StorageResult<()> {
-        match &self.shared {
-            Some(shared) => shared.insert(info, body),
-            None => Ok(()),
         }
     }
     pub(crate) fn note(&self, change: impl FnOnce(&mut Diagnostics)) {
@@ -158,14 +139,6 @@ impl Fetch {
         ids: &[i64],
         packs: &mut crate::encoding::PackCache,
     ) -> StorageResult<()> {
-        let mut wanted = Vec::with_capacity(ids.len());
-        for &id in ids {
-            match self.shared_body(id)? {
-                Some((_, body)) => packs.insert(id, body)?,
-                None => wanted.push(id),
-            }
-        }
-        let ids = &wanted[..];
         if ids.is_empty() {
             return Ok(());
         }
@@ -191,18 +164,11 @@ impl Fetch {
             validate_frame(info, &body)?;
             self.remember_pack(info)?;
             self.note(|c| c.pack_read_bytes += body.len() as u64);
-            self.share(info, &body)?;
             packs.insert(info.pack_id, body)?;
         }
         Ok(())
     }
     fn payload(&self, info: PackInfo) -> StorageResult<Vec<u8>> {
-        if let Some((kept, body)) = self.shared_body(info.pack_id)? {
-            if kept != info {
-                return Err(StorageError::Integrity("shared payload descriptor"));
-            }
-            return Ok(body);
-        }
         self.note(|c| {
             c.payload_reads += 1;
             c.pack_misses += 1;
@@ -216,7 +182,6 @@ impl Fetch {
         let (_, body) = row.into_parts();
         self.note(|c| c.payload_read_bytes += body.len() as u64);
         validate_frame(info, &body)?;
-        self.share(info, &body)?;
         Ok(body)
     }
 }
@@ -252,12 +217,6 @@ impl Source for Fetch {
         groups: &[usize],
         whole_for_reuse: bool,
     ) -> StorageResult<crate::encoding::PackAcquisition> {
-        if let Some((info, body)) = self.shared_body(id)? {
-            return Ok(crate::encoding::PackAcquisition::Whole {
-                info: Some(info),
-                body,
-            });
-        }
         self.note(|c| {
             c.read_pack_selections += 1;
             c.pack_misses += 1;
@@ -295,7 +254,6 @@ impl Source for Fetch {
                 }
                 self.remember_pack(info)?;
                 validate_frame(info, &body)?;
-                self.share(info, &body)?;
                 self.note(|c| {
                     c.whole_selected += 1;
                     match plan.whole_reason {

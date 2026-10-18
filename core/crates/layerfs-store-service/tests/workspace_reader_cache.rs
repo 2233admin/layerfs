@@ -1,9 +1,8 @@
 //! A Workspace reader keeps its storage caches across demands (#354 A1): a
 //! repeated object or length demand is answered from the pack bodies and
 //! decoded groups an earlier demand read, with no statement and identical
-//! bytes. The Store's control reader, which serves SDK calls, keeps none of
-//! its own (it takes bodies from the Store's shared tier, #359), and a reader
-//! closed and mounted again starts with empty caches of its own.
+//! bytes. The Store's control reader, which serves SDK calls, keeps none, and
+//! a reader closed and mounted again starts empty.
 #[path = "support/installed_store.rs"]
 #[allow(dead_code)]
 mod installed;
@@ -52,14 +51,10 @@ fn a_workspace_reader_keeps_its_caches_until_it_is_closed() {
     let lengths = control.file_lengths(&roots).unwrap();
     let statements = || fixture.work().statements;
 
-    // The control reader keeps no caches of its own: the same demand takes
-    // its pack bodies again, now from the Store's shared tier (#359).
-    let hits = store.shared_pack_work().hits;
+    // The control reader keeps nothing: the same demand reads packs again.
+    let before = statements();
     assert_eq!(control.read_canonical_batch(&roots).unwrap(), expected);
-    assert!(
-        store.shared_pack_work().hits > hits,
-        "the control reader took bodies again"
-    );
+    assert!(statements() > before, "the control reader read again");
 
     let workspace = WorkspaceId::from_authority([7; 32]).unwrap();
     store.mount_reader(workspace).unwrap();
