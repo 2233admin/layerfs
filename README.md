@@ -15,16 +15,13 @@
 </p>
 
 <p align="center">
-  <a href="docs/assets/demo/layerfs-demo.mp4">
-    <img src="docs/assets/demo/layerfs-demo-poster.png" alt="LayerFS demo: five agents, two Branches, a merge and a publish to main" width="860">
-  </a>
-  <br>
-  <a href="docs/assets/demo/layerfs-demo.mp4"><strong>▶ Watch the demo (1:37)</strong></a>
+  <img src="docs/assets/demo/layerfs-dsh.gif" alt="The LayerFS tab in DeepSeek Harness: agents mount Workspaces, Commit and merge while the History graph grows" width="860">
 </p>
 
-*Five agents build on two Branches in the v0.1.7 live UI. Every tool call
-mounts its own Workspace and becomes a Commit; a conflict is resolved, the
-Branches merge, and the result is published to `main`.*
+*The LayerFS tab in DeepSeek Harness: a crew of agents fork Branches, mount
+Workspaces, Commit and merge, and the History graph draws every call. The
+[full v0.1.7 walkthrough](docs/assets/demo/layerfs-demo.mp4) (1:37) shows five
+agents taking two Branches through a conflict, a merge and a publish to `main`.*
 
 > **v0.1.7 Developer Preview:** [release](https://github.com/Ephemeral-AI-Lab/layerfs/releases/tag/v0.1.7),
 > [manual](docs/versioned/0.1.7/README.md) and
