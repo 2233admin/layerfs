@@ -47,8 +47,8 @@ pub(crate) fn value(
     SdkValue::Map(fields)
 }
 
-/// The Workspace's kernel opcode counts, frame dispositions and largest
-/// request sizes since attach.
+/// The Workspace's kernel opcode counts, frame dispositions, largest request
+/// sizes and per-opcode callback nanoseconds (`ns`) since attach.
 #[cfg(target_os = "linux")]
 pub(crate) fn fuse(w: &layerfs_fuse::request::OpcodeWork) -> SdkValue {
     use layerfs_fuse::request::Opcode;
@@ -61,16 +61,44 @@ pub(crate) fn fuse(w: &layerfs_fuse::request::OpcodeWork) -> SdkValue {
         ("store_units", w.store_units),
         ("largest_read", w.largest_read),
         ("largest_write", w.largest_write),
+        ("lookup_missing", w.lookup_missing),
+        ("served_ns", w.served_ns),
     ];
-    SdkValue::Map(
-        Opcode::NAMES
-            .iter()
-            .copied()
-            .zip(w.opcodes)
-            .chain(extra)
-            .map(|(name, value)| (name.to_owned(), SdkValue::Int(value as i64)))
-            .collect(),
-    )
+    let int = |(name, value): (&str, u64)| (name.to_owned(), SdkValue::Int(value as i64));
+    // Callback wall time per opcode (#352 F-032), only for opcodes that ran.
+    let nanos = Opcode::NAMES
+        .iter()
+        .copied()
+        .zip(w.nanos)
+        .filter(|(_, value)| *value > 0)
+        .map(int)
+        .collect();
+    let mut fields: Vec<_> = Opcode::NAMES
+        .iter()
+        .copied()
+        .zip(w.opcodes)
+        .chain(extra)
+        .map(int)
+        .collect();
+    fields.push(("ns".to_owned(), SdkValue::Map(nanos)));
+    // Steps inside the callbacks: [count, ns] for the steps that ran.
+    use layerfs_fuse::request::Phase;
+    let phases = Phase::NAMES
+        .iter()
+        .zip(w.phase_counts.iter().zip(w.phase_nanos))
+        .filter(|(_, (count, _))| **count > 0)
+        .map(|(name, (count, nanos))| {
+            (
+                (*name).to_owned(),
+                SdkValue::List(vec![
+                    SdkValue::Int(*count as i64),
+                    SdkValue::Int(nanos as i64),
+                ]),
+            )
+        })
+        .collect();
+    fields.push(("phases".to_owned(), SdkValue::Map(phases)));
+    SdkValue::Map(fields)
 }
 
 /// Telemetry that did not fit the reply frame beside the reply.
@@ -141,7 +169,7 @@ pub(crate) const STORAGE_FIELDS: [&str; 42] = [
 ];
 
 /// The Commit captured namespace work, in observation section 15 order.
-pub(crate) const NAMESPACE_FIELDS: [&str; 31] = [
+pub(crate) const NAMESPACE_FIELDS: [&str; 47] = [
     "inode_rows",
     "entry_rows",
     "inode_pages",
@@ -173,4 +201,20 @@ pub(crate) const NAMESPACE_FIELDS: [&str; 31] = [
     "fresh_opens",
     "fresh_rows",
     "fresh_points",
+    "window_jobs",
+    "normalize_ns",
+    "values_ns",
+    "update_ns",
+    "inode_page_ns",
+    "file_ns",
+    "file_bind_ns",
+    "file_source_ns",
+    "values_emit_ns",
+    "values_record_ns",
+    "update_record_ns",
+    "update_capture_ns",
+    "update_emit_ns",
+    "backing_calls",
+    "backing_keys",
+    "backing_ns",
 ];

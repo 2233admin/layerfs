@@ -2,6 +2,7 @@
 //!
 //! Entry module: declarations and re-exports only.
 
+pub mod branch;
 pub mod counters;
 pub mod delta;
 pub mod leaf;

@@ -23,6 +23,9 @@ pub enum ConflictKind {
     Binary,
     /// A file still holds an unresolved marker block.
     Markers,
+    /// Both changed a file's mode, to different modes; the decided entry's
+    /// mode is kept (#352 F-052).
+    Mode,
 }
 
 impl ConflictKind {
@@ -36,6 +39,7 @@ impl ConflictKind {
             Self::Type => "type",
             Self::Binary => "binary",
             Self::Markers => "markers",
+            Self::Mode => "mode",
         }
     }
 }
@@ -73,13 +77,22 @@ pub enum RulesFrom {
     Theirs,
 }
 
+/// One side of a merge.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Side {
+    /// Ours.
+    Ours,
+    /// Theirs.
+    Theirs,
+}
+
 /// One merge request.
 pub struct MergeInput<'a> {
     /// Common ancestor root.
     pub base: FilesystemRootId,
     /// Our root.
     pub ours: FilesystemRootId,
-    /// Their root; the result is built on it.
+    /// Their root.
     pub theirs: FilesystemRootId,
     /// Marker labels of ours and theirs.
     pub labels: [&'a str; 2],
@@ -92,6 +105,13 @@ pub struct MergeInput<'a> {
     /// Recorded name bindings that name the changed inodes top down; without
     /// them, or when they cannot name every one, a breadth-first walk does.
     pub hints: Option<&'a dyn BindingHints>,
+    /// The side whose changes from the base name the paths to decide. Every
+    /// other path keeps that side's opposite, on which the result is built.
+    /// The decision at each path follows the same rules either way.
+    pub decide_from: Side,
+    /// When set, a merge with more paths to decide is refused
+    /// `BoundedCapacityExceeded { what: "merge.bound" }` before any decision.
+    pub bound: Option<usize>,
 }
 
 /// One completed merge.

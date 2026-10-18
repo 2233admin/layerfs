@@ -69,7 +69,7 @@ pub use port::OverlayCapturedNamespace;
 pub use port::{FileLengths, OverlayCapturedRuns, OverlayFileRead, OverlayJobs, OverlayRead};
 pub use port::{
     OperationRecordApply, OperationRecordCopies, OperationRecordInputRefusal,
-    OperationRecordRefusal, OperationRecordReply, OverlayOperationRecords,
+    OperationRecordRefusal, OperationRecordReply, OperationRecordWindow, OverlayOperationRecords,
 };
 pub use serials::{InodeSerials, SERIAL_REFILL};
 pub use view::{SourceView, ViewStat};

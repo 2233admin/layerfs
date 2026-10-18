@@ -262,8 +262,9 @@ fn typed_singleton_matches_batch_results_missing_ids_and_statement_boundary() {
                     .unwrap()
             );
             let after = h.diagnostics().unwrap();
-            assert_eq!(after.statements - before.statements, 3);
-            assert_eq!(after.transactions - before.transactions, 1);
+            // One SELECT, no BEGIN/COMMIT: a locate reads immutable rows.
+            assert_eq!(after.statements - before.statements, 1);
+            assert_eq!(after.transactions - before.transactions, 0);
             assert_eq!(after.blob_open_calls, before.blob_open_calls);
             h.storage
                 .locate(

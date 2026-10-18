@@ -168,6 +168,7 @@ fn scan(
         .unwrap_or_default();
     let mut base = Walker::new(op.ports(), &snap, "/")?;
     let mut live = Live::new(view, op);
+    let mut work = layerfs_content::filesystem::attributes::AttributeReadWork::default();
     let (mut a, mut b) = (base.next()?, live.next()?);
     while a.is_some() || b.is_some() {
         let order = match (&a, &b) {
@@ -214,10 +215,13 @@ fn scan(
                     .map_err(args::content)?,
                     &path,
                 )? {
-                    Some(e) => {
-                        e.value.content_root != old.value.content_root
-                            || e.value.metadata_root != old.value.metadata_root
-                    }
+                    Some(e) => !layerfs_content::compare::tree::same_inode(
+                        op.ports(),
+                        &e.value,
+                        &old.value,
+                        &mut work,
+                    )
+                    .map_err(args::content)?,
                     None => true,
                 };
                 if old.serial == new.serial

@@ -331,6 +331,9 @@ fn known_publication_survives_an_unattempted_local_install() {
 fn a_held_producer_does_not_hold_workspace_metadata_or_read_capacity() {
     let (f, store, owner) = setup("commit-admission");
     let workspace = bind(&store, &owner, &f, 1);
+    // A changed Workspace, so the Commit runs its producer (an unchanged one
+    // answers UpToDate before capture).
+    write(&workspace, &bytes(b'A'));
     let (ready, entered) = mpsc::channel();
     let (release, proceed) = mpsc::channel();
     let active = workspace.clone();
@@ -353,11 +356,160 @@ fn a_held_producer_does_not_hold_workspace_metadata_or_read_capacity() {
             .error,
         CommitError::InFlight
     ));
-    assert_eq!(read(&workspace), support::bytes(0));
+    assert_eq!(read(&workspace), bytes(b'A'));
     release.send(()).unwrap();
     let done = worker.join().unwrap().unwrap();
     assert!(matches!(done.history, Some(CommitOutcome::UpToDate { .. })));
     drop(done);
+    close(&owner, &workspace);
+    drop((workspace, store));
+    owner.stop().unwrap();
+    f.cleanup();
+}
+
+#[test]
+fn an_unchanged_workspace_answers_uptodate_without_capture_or_save() {
+    let (f, store, owner) = setup("commit-unchanged");
+    let workspace = bind(&store, &owner, &f, 1);
+    let original = workspace.snapshot().unwrap();
+    let done = workspace.commit(|_, _, _| unreachable!()).unwrap();
+    assert!(
+        matches!(done.history, Some(CommitOutcome::UpToDate { head, root })
+            if head == original.branch.head_commit && root == original.effective_root),
+        "{:?}",
+        done.history
+    );
+    assert!(done.capture.is_none() && done.merge.is_none());
+    assert_eq!(done.saved, Default::default());
+    assert_eq!(workspace.snapshot().unwrap(), original);
+    // The Workspace still captures and publishes its next change.
+    write(&workspace, &bytes(b'U'));
+    let next = workspace
+        .commit(|save, _, snapshot| {
+            construct(save, snapshot, &bytes(b'U'), store.policy().construction())
+        })
+        .unwrap();
+    assert!(matches!(
+        next.history,
+        Some(CommitOutcome::Committed { .. })
+    ));
+    assert!(next.capture.is_some());
+    drop((done, next));
+    close(&owner, &workspace);
+    drop((workspace, store));
+    owner.stop().unwrap();
+    f.cleanup();
+}
+
+#[test]
+fn captured_rows_or_a_moved_head_never_take_the_uptodate_shortcut() {
+    let (f, store, owner) = setup("commit-unchanged-refused");
+    let workspace = bind(&store, &owner, &f, 1);
+    // Rows in the active generation: the producer runs over a capture.
+    write(&workspace, &bytes(b'R'));
+    let called = Cell::new(false);
+    let done = workspace
+        .commit(|save, _, snapshot| {
+            called.set(true);
+            construct(save, snapshot, &bytes(b'R'), store.policy().construction())
+        })
+        .unwrap();
+    assert!(called.get() && done.capture.is_some());
+    assert!(matches!(
+        done.history,
+        Some(CommitOutcome::Committed { .. })
+    ));
+    drop(done);
+    // Unchanged, but another Workspace moved the head: the shortcut is not
+    // taken; the Commit captures and follows the head.
+    let other = bind(&store, &owner, &f, 2);
+    write(&other, &bytes(b'S'));
+    let moved = other
+        .commit(|save, _, snapshot| {
+            construct(save, snapshot, &bytes(b'S'), store.policy().construction())
+        })
+        .unwrap();
+    assert!(matches!(
+        moved.history,
+        Some(CommitOutcome::Committed { .. })
+    ));
+    called.set(false);
+    let followed = workspace
+        .commit(|_, _, snapshot| {
+            called.set(true);
+            Ok(FilesystemRootId(snapshot.effective_root))
+        })
+        .unwrap();
+    assert!(called.get() && followed.capture.is_some());
+    assert_eq!(read(&workspace), bytes(b'S'));
+    drop((moved, followed));
+    for view in [&workspace, &other] {
+        close(&owner, view);
+    }
+    drop((workspace, other, store));
+    owner.stop().unwrap();
+    f.cleanup();
+}
+
+#[test]
+fn a_mutation_racing_an_unchanged_commit_is_never_lost() {
+    let (f, store, owner) = setup("commit-unchanged-race");
+    let workspace = bind(&store, &owner, &f, 1);
+    let mut shortcuts = 0;
+    for (round, tag) in (b'a'..=b'p').enumerate() {
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let racer = {
+            let (workspace, barrier) = (workspace.clone(), barrier.clone());
+            std::thread::spawn(move || {
+                barrier.wait();
+                write(&workspace, &bytes(tag));
+            })
+        };
+        barrier.wait();
+        let done = workspace
+            .commit_captured(&Default::default())
+            .unwrap_or_else(|failure| panic!("round {round}: {failure:?}"));
+        racer.join().unwrap();
+        let captured = done.capture.is_some();
+        match (&done.history, captured) {
+            // Answered before capture: the write is a later mutation, still
+            // dirty, and the next Commit publishes it.
+            (Some(CommitOutcome::UpToDate { .. }), false) => {
+                shortcuts += 1;
+                let next = workspace.commit_captured(&Default::default()).unwrap();
+                assert!(
+                    matches!(next.history, Some(CommitOutcome::Committed { .. })),
+                    "round {round}: {:?}",
+                    next.history
+                );
+            }
+            (Some(CommitOutcome::Committed { .. }), true) => {}
+            // Captured before the write was published: nothing to publish
+            // yet, and the next Commit publishes it.
+            (Some(CommitOutcome::UpToDate { .. }), true) => {
+                let next = workspace.commit_captured(&Default::default()).unwrap();
+                assert!(matches!(
+                    next.history,
+                    Some(CommitOutcome::Committed { .. })
+                ));
+            }
+            other => panic!("round {round}: {other:?}"),
+        }
+        // Whatever the order, the write is published and nothing is left:
+        // the next Commit is answered before capture.
+        assert_eq!(read(&workspace), bytes(tag), "round {round}");
+        let settled = workspace.commit_captured(&Default::default()).unwrap();
+        assert!(
+            matches!(settled.history, Some(CommitOutcome::UpToDate { .. }))
+                && settled.capture.is_none(),
+            "round {round}: {:?}",
+            settled.history
+        );
+    }
+    let fresh = bind(&store, &owner, &f, 2);
+    assert_eq!(read(&fresh), bytes(b'p'), "the Branch holds the last write");
+    close(&owner, &fresh);
+    println!("STORE_COMMIT_UNCHANGED_RACE rounds=16 shortcuts={shortcuts}");
     close(&owner, &workspace);
     drop((workspace, store));
     owner.stop().unwrap();

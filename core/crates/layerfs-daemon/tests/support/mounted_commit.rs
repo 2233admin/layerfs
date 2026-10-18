@@ -139,7 +139,15 @@ impl Rig {
         let done = self
             .commit(token)
             .unwrap_or_else(|failure| panic!("{what}: {failure:?}"));
-        receipt(&done, what);
+        // An unchanged Workspace is answered before capture (#352 c04): no
+        // constructor ran and nothing was saved. A capture keeps its receipt.
+        let commit = done.commit.as_ref().expect("Commit receipt");
+        if commit.capture.is_some() {
+            receipt(&done, what);
+        } else {
+            assert!(commit.namespace.is_none(), "{what}: {commit:?}");
+            assert_eq!(commit.saved, Default::default(), "{what}");
+        }
         match &done.reply {
             Reply::Committed(CommitOutcome::UpToDate { head, root }) => (*head, *root),
             other => panic!("{what}: {other:?}"),
@@ -178,17 +186,34 @@ impl Rig {
         assert_eq!(closed.reply, Reply::Unmounted(token));
         flat
     }
-    /// The newest page of the Branch's Commit ancestry, head first.
+    /// The newest `HISTORY` records of the Branch's Commit ancestry, head
+    /// first. A page is byte-bounded (16 KiB over a 4,510-byte widest
+    /// record: 3 records), so this follows continuations like any caller.
     pub fn history(&self) -> PageResult<CommitRecord> {
-        self.store
-            .history()
-            .commit_history(&CommitHistoryRequest {
-                branch: self.harness.branch,
-                start: None,
-                cursor: None,
-                limit: HISTORY,
-            })
-            .unwrap()
+        let mut records = Vec::new();
+        let mut cursor = None;
+        loop {
+            let page = self
+                .store
+                .history()
+                .commit_history(&CommitHistoryRequest {
+                    branch: self.harness.branch,
+                    start: None,
+                    cursor,
+                    limit: HISTORY,
+                })
+                .unwrap();
+            records.extend(page.records);
+            match page.continuation {
+                Some(next) if records.len() < usize::from(HISTORY) => cursor = Some(next),
+                continuation => {
+                    return PageResult {
+                        records,
+                        continuation,
+                    }
+                }
+            }
+        }
     }
     /// A plain kernel copy of the base tree, made by running the builder
     /// again, owned by the command identity. Never read by the daemon.

@@ -7,10 +7,13 @@ mod catalog;
 mod commit;
 mod hints;
 mod layerstack;
+mod lineage;
+mod lineage_backfill;
 mod merge;
 mod provider;
 mod rows;
 mod transaction;
+pub(crate) use lineage_backfill::backfill_lineage;
 pub use provider::HistoryProvider;
 
 use bindings::params;

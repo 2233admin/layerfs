@@ -13,22 +13,64 @@ use std::{
     fs,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
-    sync::Arc,
+    cell::Cell,
+    sync::{Arc, Condvar, Mutex},
     time::{Duration, Instant},
 };
 
 /// Runtime command identity: every inode's owner, never the mount owner.
 pub const COMMAND: u32 = 65534;
 pub const READ_HANDLES: usize = 4;
+/// F-046: a process forked by any thread of the test process copies the
+/// whole descriptor table and, until its exec closes the copies, holds every
+/// mount file another thread had open at that moment. A plain unmount in that
+/// window is the kernel's correct EBUSY. So a test process runs one mounted
+/// test at a time: a Harness holds this gate for its whole life, and nested
+/// Harnesses on the same thread share it.
+static GATE: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
+thread_local!(static HELD: Cell<bool> = const { Cell::new(false) });
+/// Owns the gate only when it took it; a nested take on the holding thread
+/// owns nothing.
+pub struct Serial(bool);
+impl Serial {
+    /// Bounded: a gate held beyond the test ceiling is a leaked Harness.
+    pub fn take() -> Self {
+        if HELD.with(Cell::get) {
+            return Self(false);
+        }
+        let (lock, free) = &GATE;
+        let taken = lock.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut taken, wait) = free
+            .wait_timeout_while(taken, Duration::from_secs(110), |taken| *taken)
+            .unwrap_or_else(|e| e.into_inner());
+        assert!(!wait.timed_out(), "mounted test gate held for 110 s");
+        *taken = true;
+        HELD.with(|held| held.set(true));
+        Self(true)
+    }
+}
+impl Drop for Serial {
+    fn drop(&mut self) {
+        if self.0 {
+            HELD.with(|held| held.set(false));
+            let (lock, free) = &GATE;
+            *lock.lock().unwrap_or_else(|e| e.into_inner()) = false;
+            free.notify_one();
+        }
+    }
+}
 pub struct Harness {
     pub owner: Owner,
     pub serving: Arc<KernelServing>,
     pub service: Arc<Service>,
     pub mounts: PathBuf,
     pub branch: BranchId,
+    /// Dropped last, after the service and serving it outlives.
+    _serial: Serial,
 }
 impl Harness {
     pub fn new(store: Arc<Store>, directory: &Path, branch: BranchId) -> Self {
+        let serial = Serial::take();
         let owner = Owner::start(
             &directory.join("overlay.sqlite"),
             layerfs_overlay::ProfileConfig::default(),
@@ -57,6 +99,7 @@ impl Harness {
             service,
             mounts,
             branch,
+            _serial: serial,
         }
     }
     pub fn bind(&self, tag: u8) -> WorkspaceToken {

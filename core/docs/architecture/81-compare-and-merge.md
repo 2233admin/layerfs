@@ -56,23 +56,33 @@ splits them.
 
 ## Merge
 
-`merge_roots(reader, consumer, input, fresh, timing)` merges `ours` into
-`theirs` against `base`. The result is built on `theirs` with one
-`update_filesystem` call, the same canonical producer as every other root. File
-bytes it writes (merged text or marker text) go through `construct_bytes` into
-the same consumer first.
+`merge_roots(reader, consumer, input, fresh, records, timing)` merges `ours`
+and `theirs` against `base` by inode serial (#355 M1). It walks one side's
+changes, `from`, and builds the result on the other, `into`, with one
+`update_filesystem_streamed_backed` call, the same canonical producer as every
+other root. `from` is ours for a Branch merge and for a Workspace Commit's
+first stage, and theirs for the in-lane step, so that step walks only what
+landed after the first stage. File bytes it writes (merged text or marker
+text) go through `construct_bytes` into the same consumer first.
 
-1. **Candidates.** Only a path whose entry ours changed can differ from theirs
-   in the result. They come from `inode_changes(base, ours)`: a directory
-   changed in place contributes its changed names, with the whole subtree below
-   any name it bound or unbound; a file changed in place contributes its path.
-   The paths are named with `locate` in both base and ours. At most
-   `MAXIMUM_MERGE_PATHS` paths are decided; more is `BoundedCapacityExceeded`,
-   never a partial merge.
-2. **Decisions.** Each candidate is resolved by path in all three trees and
-   decided with the simulator's rules. An entry is its kind plus, for a file or
-   symlink, its content. Two directories are the same entry, and their children
-   decide.
+1. **Changes by serial.** `inode_changes(base, from)` lists each serial whose
+   value `from` changed. `into`'s value for each is read by point lookup, 256
+   at a time. A serial `into` holds as `from` does needs nothing. A serial
+   `into` holds as the base does takes `from`'s value, metadata included. The
+   rest changed on both sides. There is no cap on their number; a caller's
+   `bound` (the in-lane Commit step) refuses past it, never as a partial
+   merge.
+2. **Names.** A directory `from` changed is merged by name.
+   `binding_changes` of its base and `from` listings gives each name whose
+   binding `from` changed, and `into`'s listing gives the third binding. A
+   name `into` binds as `from` does needs nothing. A name `into` left as in
+   the base takes `from`'s binding: an add, a move away, a deletion or a
+   replacement. Two different bindings collide. Two new directories at one
+   name are merged by name into `into`'s. Otherwise the entries decide.
+3. **Decisions.** A file changed on both sides, or two entries colliding at
+   a name, is decided with the simulator's rules. An entry is its kind plus,
+   for a file or symlink, its content. Two directories are the same entry,
+   and their children decide.
 
    | Case | Result |
    | --- | --- |
@@ -84,16 +94,45 @@ the same consumer first.
    | one side deleted a file | the kept text inside a deletion marker block (`modify/delete`, `delete/modify`) |
    | anything else | ours if present, else theirs (`type`) |
 
-3. **Revival.** A kept path needs directory parents. A parent decided absent
-   comes back from theirs when theirs holds a directory there, else from ours.
-   A path below a parent that stays a file is dropped.
-4. **Build.** A directory taken from ours that theirs does not hold at that
-   path is built from nothing: its bindings are exactly the kept paths below
-   it. A file value keeps its serial in three cases: the serial is new to
-   theirs, theirs already holds that value, or the value changes in place at
+   Metadata merges by value, mode and mtime separately (#352 F-052): a field
+   only one side changed takes that side's value, so a chmod survives an edit
+   of the same file on the other side. A field both sides changed takes the
+   decided entry's (theirs for a directory). Modes changed differently on
+   both sides of a file are a `mode` conflict; the decided entry's mode is
+   kept.
+4. **Structure.** Moves follow the serial, so an edit inside a directory the
+   other side moved lands at the new path.
+
+   | Case | Result |
+   | --- | --- |
+   | a file renamed differently on both sides | both names, bound to the one serial (two links) |
+   | a directory renamed differently on both sides | `type` conflict; `from`'s move is cancelled |
+   | crossed moves that would put a directory inside itself | `type` conflict; `from`'s move is cancelled |
+   | `from` deleted a directory below which `into` changed | the directory survives with what `into` keeps; a deleted file against an edit is `modify/delete` |
+   | `from` bound a serial `into` deleted | resurrected with `from`'s subtree; a file `from` edited there is decided as a deletion against an edit (`modify/delete`), as in the case above |
+   | `from` changed a serial `into` deleted | decided as a deletion against a change; a kept file is placed at `from`'s path, its missing parents revived |
+   | a serial new on `from` that loses a collision | left unbound, with the new subtree below it |
+
+5. **Paths.** Only a serial that needs a path is named: a decision (for its
+   conflict report and `/.lww` matching), a deletion against a change below
+   it, and a revived parent. Paths come from recorded bindings when the
+   Catalog has them, else from `locate`.
+6. **Build.** Every directory whose bindings change gets its whole listing
+   rewritten; link counts are derived from the changed bindings, and a serial
+   left with none is released. A directory new to `into` is built from its
+   bindings. A file value keeps its serial in three cases: the serial is new to
+   `into`, `into` already holds that value, or the value changes in place at
    the serial's only binding. Otherwise the caller's `fresh` allocator supplies
-   a new serial, so one serial never carries two values. A directory serial
-   theirs already holds is always given a fresh serial.
+   a new serial, so one serial never carries two values.
+
+**Working state (#355 (d), M1).** Memory does not grow with the merge. The
+serials deferred until moves are known are one run of 60 KiB chunks read once;
+the subtree stacks, the point marks of the structural cases and the build's
+plan rows (changed names per parent, values, fresh and assigned serials) are
+records in the caller's `IndexedConstructionBacking`, the global Store's merge
+scratch rows. Up to 8 MiB of them is held in memory first, and a consumed
+chunk is released at once. Without records (the in-lane step) the same state
+is a resident map, and the caller's `bound` limits it.
 
 The `/.lww` rules are gitignore-style, with `%include <file>`. They are read
 from the side `RulesFrom` names: theirs for a Workspace Commit, ours for a
@@ -111,11 +150,12 @@ paths are text files that still hold a complete marker block (an opening
 
 ## Limits
 
-- Locating paths lists directories breadth-first from the root. Its cost grows
-  with the directories above the deepest change, not only with the change.
-- A hard-linked file changed in place is located at its first path only.
+- Locating a path without recorded bindings lists directories breadth-first
+  from the root. Its cost grows with the directories above the serial, not
+  only with the change. Only the serials that need a path pay it.
+- A hard-linked file is reported at its first path only.
 - Merged text and marker files take the kind and metadata of the side they
-  came from. Directory metadata follows theirs.
+  came from, with each one-sided metadata change applied.
 
 ## Merge-on-commit
 

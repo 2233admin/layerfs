@@ -458,6 +458,7 @@ fn retained_descriptors_and_kernel_caches_are_unchanged_by_install() {
     let mount = root(&ready);
     let bound = rig.harness.status(ready.token).binding;
     let mut findings = Findings::default();
+    let base_inodes = model::inode_numbers(mount);
     passed(
         &bash_in(COMMAND, mount, BEFORE_INSTALL),
         "changes before the Commit",
@@ -550,6 +551,7 @@ fn retained_descriptors_and_kernel_caches_are_unchanged_by_install() {
     // The tree before the Commit. Reading the model reads every file once
     // through the page cache.
     let expected = host(mount);
+    let expected_inodes = model::inode_numbers(mount);
     same_bytes(
         file(&expected, "docs/guide.md"),
         &kept[2].bytes,
@@ -636,9 +638,20 @@ fn retained_descriptors_and_kernel_caches_are_unchanged_by_install() {
         &removed,
         &forced_open(&reference),
     );
+    // §4.8: the same mount keeps its own times; history keeps the base's
+    // for the two mtime-only edits (`touch -d`).
     let same_mount = findings.flat("install: the same mount", &expected, &host(mount));
-    let published = rig.published(record.root);
-    let fresh_bind = findings.flat("the published root, fresh bind", &expected, &published);
+    let first = rig.published(record.root);
+    let fresh_bind = findings.flat(
+        "the published root, fresh bind",
+        &model::committed_view(
+            &expected,
+            &expected_inodes,
+            &stored(&rig, 11, bound.effective_root),
+            &base_inodes,
+        ),
+        &first,
+    );
     println!(
         "R5-5a install paths={} lstat_changes={cached_changes} forced_stat_changes={forced_changes} same_mount_model_differences={same_mount} published_model_differences={fresh_bind} descriptors={} unlinked={} cached_read_requests={cached_requests} direct_read_requests={direct_requests} background_pid={} removed_directory={removed:?}",
         before_forced.len(),
@@ -671,6 +684,7 @@ fn retained_descriptors_and_kernel_caches_are_unchanged_by_install() {
     // The next Commit captures the later writes, and installs again under
     // the same descriptors.
     let later = host(mount);
+    let later_inodes = model::inode_numbers(mount);
     for descriptor in kept.iter().filter(|descriptor| descriptor.linked) {
         findings.bytes(
             &format!("live view: {}", descriptor.what),
@@ -704,7 +718,12 @@ fn retained_descriptors_and_kernel_caches_are_unchanged_by_install() {
     }
     findings.flat("second install: the same mount", &later, &host(mount));
     let published = rig.published(second.root);
-    findings.flat("the second published root, fresh bind", &later, &published);
+    let committed = model::committed_view(&later, &later_inodes, &first, &expected_inodes);
+    findings.flat(
+        "the second published root, fresh bind",
+        &committed,
+        &published,
+    );
     println!(
         "R5-5a second install paths={} lstat_changes={cached_changes} forced_stat_changes={forced_changes} published_paths={}",
         before_forced.len(),
@@ -721,12 +740,12 @@ fn retained_descriptors_and_kernel_caches_are_unchanged_by_install() {
         second.root
     );
     let again = host(root(&fresh));
-    findings.flat("the fresh mount", &later, &again);
+    findings.flat("the fresh mount", &committed, &again);
     let table = kernel(root(&fresh));
     rig.unmount(&fresh);
     rig.finish();
     findings.finish("R5-5a");
-    assert_kernel(&later, &table, "R5-5a fresh mount");
+    assert_kernel(&committed, &table, "R5-5a fresh mount");
 }
 
 const BULK: usize = 300;
@@ -1247,7 +1266,20 @@ fn live_writer(layout: Layout) {
     assert_eq!(sequence(&all, layout, "the last published root"), n);
     assert!(n >= second.at_return);
     assert_eq!(log_lines(&all, "the last published root"), n);
-    findings.flat("the last published root", &live, &all);
+    // §4.8: a directory whose names this capture left as they were (the
+    // writer's pending file made and removed) keeps its base time in
+    // history; the same mount keeps its own.
+    // Both inode maps are this mount's now: the base's paths that still
+    // exist name the same inodes unless replaced, and a replaced one
+    // differs in its bytes.
+    let inodes = model::inode_numbers(mount);
+    let committed = model::committed_view(
+        &live,
+        &inodes,
+        &stored(&rig, 11, second.record.root),
+        &inodes,
+    );
+    findings.flat("the last published root", &committed, &all);
     findings.flat("the same mount after the last install", &live, &host(mount));
     println!(
         "{what} last commit files={n} paths={} lstat_changes={cached_changes} forced_stat_changes={forced_changes}",
@@ -1260,12 +1292,12 @@ fn live_writer(layout: Layout) {
         rig.harness.status(fresh.token).binding.effective_root,
         last.root
     );
-    findings.flat("the fresh mount", &live, &host(root(&fresh)));
+    findings.flat("the fresh mount", &committed, &host(root(&fresh)));
     let table = kernel(root(&fresh));
     rig.unmount(&fresh);
     rig.finish();
     findings.finish(what);
-    assert_kernel(&live, &table, &format!("{what} fresh mount"));
+    assert_kernel(&committed, &table, &format!("{what} fresh mount"));
 }
 
 /// R5-5, the live writer, as the row states it: numbered files in one

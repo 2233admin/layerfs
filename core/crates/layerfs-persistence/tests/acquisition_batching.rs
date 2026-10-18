@@ -9,6 +9,14 @@ use layerfs_persistence::{
 use layerfs_storage::{port::acquisition::*, StoragePolicy};
 use support::Temp;
 
+fn meta(mode: u32) -> layerfs_content::filesystem::attributes::PortableMetadata {
+    layerfs_content::filesystem::attributes::PortableMetadata {
+        mode,
+        mtime_seconds: 0,
+        mtime_nanoseconds: 0,
+    }
+}
+
 fn object(label: &[u8]) -> ObjectId {
     ObjectId::for_bytes(label)
 }
@@ -45,7 +53,7 @@ fn directory(parent: Option<u64>, name: &[u8], position: u64) -> NewEntry {
         },
         position: Some(position),
         kind: InodeKind::Directory,
-        metadata_root: object(b"metadata"),
+        metadata: meta(0o644),
         target_root: None,
         host_path: Some(b"/source".to_vec()),
         host: None,
@@ -59,7 +67,7 @@ fn file(position: u64, identity: u64) -> NewEntry {
         },
         position: Some(position),
         kind: InodeKind::RegularFile,
-        metadata_root: object(b"metadata"),
+        metadata: meta(0o644),
         target_root: None,
         host_path: Some(format!("/source/f{position:04}").into_bytes()),
         host: Some(HostIdentity {
@@ -78,7 +86,7 @@ fn symlink(position: u64) -> NewEntry {
         },
         position: Some(position),
         kind: InodeKind::Symlink,
-        metadata_root: object(b"link-metadata"),
+        metadata: meta(0o777),
         target_root: Some(object(b"opaque-link-target")),
         host_path: None,
         host: None,
@@ -103,7 +111,7 @@ fn non_host_windows_skip_the_host_insert_without_losing_targets_or_charges() {
     assert_eq!(rows.len(), 33);
     for row in rows.iter().skip(1) {
         assert_eq!(row.kind, InodeKind::Symlink);
-        assert_eq!(row.metadata_root, object(b"link-metadata"));
+        assert_eq!(row.metadata, meta(0o777));
         assert_eq!(row.content_root, Some(object(b"opaque-link-target")));
         assert_eq!(row.canonical, None);
     }
@@ -179,7 +187,7 @@ fn narrow_bindings_preserve_mixed_payloads_after_an_existing_alias_boundary() {
         let regular = rows.iter().find(|row| row.key.name == b"f0019").unwrap();
         assert_eq!((regular.position, regular.canonical), (19, Some(19)));
         for row in rows.iter().filter(|row| row.kind == InodeKind::Symlink) {
-            assert_eq!(row.metadata_root, object(b"link-metadata"));
+            assert_eq!(row.metadata, meta(0o777));
             assert_eq!(row.content_root, Some(object(b"opaque-link-target")));
         }
         let after_placement = port.work(owner).unwrap();
@@ -547,3 +555,54 @@ fn entry_refusal_order_and_full_unit_rollback_survive_execution_windows() {
 /// deferred by owner for Disposable-only development. Durable support and its
 /// retained historical receipts are unchanged.
 const DEVELOPMENT_PROFILES: [SqlitePersistenceProfile; 1] = [SqlitePersistenceProfile::Disposable];
+
+#[test]
+fn a_metadata_value_outside_the_portable_grammar_is_refused_and_never_read() {
+    // Since #360 item 2 (683666d45) the write checks the portable grammar
+    // (`well_formed`): a symlink whose mode is not 0o777 is refused before any
+    // row exists. The read decode (`metadata_parse`) still rejects a stored blob
+    // outside the grammar or with nonzero padding; that is checked by changing
+    // a stored row out of band.
+    let temp = Temp::new("acquisition-metadata-refusal");
+    let handles = create(&temp, SqlitePersistenceProfile::Disposable);
+    let owner = begin(&handles);
+    let mut bad = symlink(1);
+    bad.metadata.mode = 0o644;
+    assert!(handles.acquisition.put_entries(owner, &[bad]).is_err());
+    assert!(handles
+        .acquisition
+        .entries(owner, None, Limits::MAXIMUM)
+        .unwrap()
+        .is_empty());
+    handles
+        .acquisition
+        .put_entries(owner, &[symlink(1)])
+        .unwrap();
+    assert_eq!(
+        handles
+            .acquisition
+            .entries(owner, None, Limits::MAXIMUM)
+            .unwrap()
+            .len(),
+        1
+    );
+    for blob in [
+        // mode 0o644 for a symlink
+        [&0o644_u32.to_be_bytes()[..], &[0; 28]].concat(),
+        // a valid mode with nonzero padding
+        [&0o777_u32.to_be_bytes()[..], &[0; 27], &[1]].concat(),
+    ] {
+        let connection = rusqlite::Connection::open(temp.join("store.sqlite")).unwrap();
+        assert_eq!(
+            connection
+                .execute("UPDATE init_entry SET metadata_root=?1", [blob])
+                .unwrap(),
+            1
+        );
+        drop(connection);
+        assert!(handles
+            .acquisition
+            .entries(owner, None, Limits::MAXIMUM)
+            .is_err());
+    }
+}

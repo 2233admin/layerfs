@@ -92,7 +92,8 @@ pub(super) fn decode_references(
                         value.validate(
                             value.kind == InodeKind::Directory && value.namespace_ref_count == 0,
                         )?;
-                        refs.extend([value.content_root, value.metadata_root]);
+                        refs.push(value.content_root);
+                        refs.extend(value.metadata_root.root());
                     }
                     Ok(refs)
                 }

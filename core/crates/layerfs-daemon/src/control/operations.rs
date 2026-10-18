@@ -40,7 +40,7 @@ fn committed(commit: &CommitSuccess) -> Reply {
                 .as_ref()
                 .map(|m| m.written.clone())
                 .unwrap_or_default(),
-            truncated: false,
+            truncated: merge.as_ref().is_some_and(|m| m.written_truncated),
         })),
     }
 }

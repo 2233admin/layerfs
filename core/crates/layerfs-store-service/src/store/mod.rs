@@ -16,7 +16,7 @@ pub mod settle;
 pub mod statistics;
 pub mod types;
 pub use bind::checked_base;
-pub use commit_merge::{Stale, StaleError};
+pub use commit_merge::{Stale, StaleError, LANE_MERGE_PATHS};
 pub use hints::record_new_bindings;
 pub use hints::CatalogHints;
 

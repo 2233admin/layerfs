@@ -41,7 +41,7 @@ pub struct PoolReader {
     values: BTreeMap<u32, [u8; INODE_VALUE_BYTES]>,
     chain_encoded: u64,
     chain_canonical: u64,
-    counters: PoolReadCounters,
+    pub(super) counters: PoolReadCounters,
 }
 
 impl PoolReader {
@@ -170,7 +170,7 @@ impl PoolReader {
                 return Err(StorageError::Integrity("pooled chain depth"));
             }
             let location = connection
-                .location(base, ceiling)?
+                .base_location(base, ceiling)?
                 .ok_or(StorageError::ObjectMissing(base))?;
             if location.role != root.role {
                 return Err(StorageError::Integrity("pooled chain role"));
@@ -287,7 +287,7 @@ impl PoolReader {
         pooled_base(&record)
     }
 
-    fn record(
+    pub(super) fn record(
         &mut self,
         connection: &dyn Source,
         workspace: &mut DecompressionWorkspace,

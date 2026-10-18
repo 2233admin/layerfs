@@ -22,7 +22,35 @@
 > parent, a Commit or a Layer (`NodeId`, one 33-byte tagged `second_parent_id`
 > column), which extends its derived identity only when present. `merge_base` and
 > `is_ancestor` walk Commit parents (or the base Layer), second parents, Layer
-> parents and each Layer's source Commit, bounded by `MAXIMUM_LINEAGE_ROWS`.
+> parents and each Layer's source Commit (the `MAXIMUM_LINEAGE_ROWS` bound
+> named here was deleted by #353).
+
+> **Lineage records replace the walk bound, 2026-10-18 (#353):** history walks
+> have no count limit; `MAXIMUM_LINEAGE_ROWS` is deleted. Four tables hold
+> lineage: `layer_lineage` (a Layer's height in its stack chain and
+> `overwrote_count`), `commit_lineage` (a Commit's run, a first-parent path
+> named by its first Commit; its depth above the base Layer; the height of the
+> newest Layer in its ancestry; its Commit second parent), `absorbed(run,
+> depth, height)` (the first Layer whose ancestry holds that run prefix) and
+> `reach(key, x, height)` (frontiers of Layers published from a source, by
+> run and depth, and for late sources by stack and absorbed height). Layer
+> order and Layer/Commit ancestry are height and absorption reads; Commit
+> ancestry and `merge_base` explore only the run segments and merges no Layer
+> absorbed; fork-from-Commit hops runs. **Behaviour change, criss-cross
+> merges only (owner, 2026-10-18):** among several maximal common ancestors
+> `merge_base` picks the one with the newest Layer in its ancestry, then the
+> deepest first parent, then the smallest identity (it was breadth-first
+> order from the right side); a unique merge base is unchanged. A publication
+> computes its skipped Layers from heights and records only their count: they
+> are the chain's heights `(covered, H]`, so `LayerRecord.overwrote` is
+> replaced by `overwrote_count`, and `overwritten(layer, position, limit)`
+> (SDK `project.list_overwritten`) pages the full list. **Breaking API
+> change:** `LayerRecord.overwrote` and `AddLayerOutcome::Added { overwrote }`
+> are gone; the SDK layer value drops `overwrote`/`overwroteTruncated` for
+> `overwroteCount`, and `branch.publish` returns `overwroteCount`,
+> `overwrote` (first 50) and `overwroteHasMore`. It then records what
+> it absorbs. A Store written before the tables is backfilled at open (REBUILD
+> kind 2). See the [design note](../issues/353/DESIGN.md).
 
 > **#352 lookups, ancestry and binding hints, 2026-10-18:** `branch_named(stack,
 > name)` and `layer_stack_named(name)` read one row through the existing unique

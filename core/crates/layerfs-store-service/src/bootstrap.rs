@@ -168,7 +168,8 @@ pub fn open_store_observed(
         cache_bytes,
         reservations,
         workspace_capacity,
-    )?);
+    )?
+    .with_merge_scratch(writer.storage.merge_scratch()));
     Ok(OpenedStore {
         store,
         sqlite_version,

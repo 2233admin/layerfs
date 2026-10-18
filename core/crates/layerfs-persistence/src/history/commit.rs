@@ -12,7 +12,6 @@ use layerfs_history::error::{HistoryError, HistoryResult, Missing, MovedState};
 use layerfs_history::identity::{BranchId, CatalogId, CommitId, LayerId, LayerStackId, NodeId};
 use layerfs_history::records::{
     CommitHistoryRequest, CommitMeta, CommitOutcome, CommitRecord, CommitRequest, PageResult,
-    MAXIMUM_LINEAGE_ROWS,
 };
 
 use super::query::{self, Context, Cursor, Range};
@@ -52,29 +51,34 @@ pub(crate) fn verify_commit(tx: &Transaction<'_>, record: &CommitRecord) -> Hist
     }
 }
 
-/// True when `target` is reachable from `head` through recorded ancestry.
+/// True when `target` is on `head`'s first-parent chain.
 ///
-/// The walk is bounded by [`MAXIMUM_LINEAGE_ROWS`]. Exhausting the bound is
-/// `Capacity`, never a negative answer: an over-budget walk is unproven.
+/// A run is a first-parent path, so `target` is on the chain when it is in
+/// one of the runs the chain passes through, no deeper than where the chain
+/// leaves that run. Work follows the runs (the forks from Commits on the
+/// chain), not its length.
 pub(crate) fn ancestry_contains(
     tx: &Transaction<'_>,
     head: Option<CommitId>,
     target: CommitId,
 ) -> HistoryResult<bool> {
-    let mut current = head;
-    let mut examined = 0u64;
-    while let Some(id) = current {
-        examined += 1;
-        if examined > MAXIMUM_LINEAGE_ROWS {
-            return Err(HistoryError::Capacity("lineage work"));
+    let Some(head) = head else {
+        return Ok(false);
+    };
+    let target = super::lineage::commit_line(tx, target)?;
+    let mut current = super::lineage::commit_line(tx, head)?;
+    loop {
+        if current.depth < target.depth {
+            return Ok(false);
         }
-        if id == target {
+        if current.run == target.run {
             return Ok(true);
         }
-        let record = commit(tx, id)?.ok_or(HistoryError::Integrity("Commit chain"))?;
-        current = record.parent;
+        match super::lineage::commit_line(tx, current.run)?.parent {
+            Some(parent) => current = super::lineage::commit_line(tx, parent)?,
+            None => return Ok(false),
+        }
     }
-    Ok(false)
 }
 
 /// Publishes one candidate against the expected Branch head.
@@ -220,6 +224,7 @@ pub(crate) fn new_commit(
             ],
         )
         .map_err(sql)?;
+        super::lineage::record_commit(tx, &record)?;
         return Ok(record);
     }
     // An identical Commit already exists: it keeps its own recorded time.

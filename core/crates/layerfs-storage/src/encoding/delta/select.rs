@@ -53,6 +53,8 @@ pub struct DeltaCounters {
     pub whole_file_depths: DepthHistogram,
     /// Chunk objects stored, by chain depth (FULL is 0).
     pub chunk_depths: DepthHistogram,
+    /// Inode-table branch selection, apart from the payload counts above.
+    pub branch: super::branch::BranchCounters,
 }
 
 /// Stored objects by dependency-chain depth: slot `d` counts depth `d`, and the
@@ -79,6 +81,7 @@ impl DeltaCounters {
         }
         add_depths(&mut self.whole_file_depths, &other.whole_file_depths);
         add_depths(&mut self.chunk_depths, &other.chunk_depths);
+        self.branch.accumulate(&other.branch);
     }
 
     /// Counts one stored payload object of `role` at chain `depth`.
@@ -192,7 +195,13 @@ impl DepthCache {
                 cached_edge = 1;
                 break cost;
             }
-            let Some(location) = connection.location(current, i64::MAX)? else {
+            // Past the first element `current` is a base a stored record names.
+            let location = if path.is_empty() {
+                connection.location(current, i64::MAX)?
+            } else {
+                connection.base_location(current, i64::MAX)?
+            };
+            let Some(location) = location else {
                 return Ok(None);
             };
             path.push((current, location.canonical_length as u64));
@@ -338,13 +347,18 @@ pub fn select(
     ) {
         // Tree roles are ordinary framed bytes: they are stored whole inside their
         // group and never choose a payload delta base. The advisory predecessor an
-        // unchanged subtree carries stays a physical placement hint, not a
-        // representation this route may act on.
+        // unchanged subtree carries stays a physical placement hint, except for an
+        // inode-table branch, which may take a COPY/INSERT program against it
+        // (#360 item 3, `branch`); that program never competes with payload
+        // deltas, whose counts above it does not touch.
         let started = Instant::now();
         let record = encode_full(canonical, role, input.capacities, encode, input.profile);
         SaveProfile::charge(&mut input.profile.full_ns, started);
         let record = record?;
         note_stored(input.profile, &record);
+        if role == ObjectRole::InodeBranch {
+            return super::branch::select(input, canonical, advisory, record);
+        }
         return Ok(record);
     }
     if role == ObjectRole::InodeLeaf {
@@ -369,6 +383,7 @@ pub fn select(
         if lane == PackLane::WholeFile {
             let raw = raw_payload(canonical, role)?;
             let sig = prehashed.unwrap_or_else(|| signature(raw));
+            input.candidates.ensure_loaded(input.connection)?;
             input.candidates.insert(id, sig);
         }
         input.counters.note_depth(role, 0);
@@ -391,6 +406,7 @@ pub fn select(
             Some(id) => Some(id),
             None => {
                 let sig = prehashed.unwrap_or_else(|| signature(raw));
+                input.candidates.ensure_loaded(input.connection)?;
                 let found = input.candidates.find(id, &sig);
                 match found {
                     Some(id) => match probe(input, id, role, depth_cap)? {
@@ -406,6 +422,7 @@ pub fn select(
         input.counters.no_candidate = input.counters.no_candidate.saturating_add(1);
         if lane == PackLane::WholeFile {
             let sig = prehashed.unwrap_or_else(|| signature(raw));
+            input.candidates.ensure_loaded(input.connection)?;
             input.candidates.insert(id, sig);
         }
         input.counters.note_depth(role, 0);
@@ -432,6 +449,7 @@ pub fn select(
         input.counters.work_exceeded = input.counters.work_exceeded.saturating_add(1);
         if lane == PackLane::WholeFile {
             let sig = prehashed.unwrap_or_else(|| signature(raw));
+            input.candidates.ensure_loaded(input.connection)?;
             input.candidates.insert(id, sig);
         }
         input.counters.note_depth(role, 0);
@@ -479,6 +497,7 @@ pub fn select(
     } else {
         input.counters.full_losses = input.counters.full_losses.saturating_add(1);
         if lane == PackLane::WholeFile {
+            input.candidates.ensure_loaded(input.connection)?;
             input.candidates.insert(id, signature(raw));
         }
         input.counters.note_depth(role, 0);

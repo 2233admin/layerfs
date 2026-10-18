@@ -751,7 +751,12 @@ impl Case {
             }
         };
         let commit = done.commit.as_ref().expect("Commit receipt");
-        let _request = u64::try_from(commit.capture.generation.number()).unwrap();
+        // A Committed answer always captured; only an unchanged Workspace's
+        // UpToDate has no capture (#352 c04).
+        let Some(capture) = commit.capture else {
+            panic!("{name}: a Committed Commit has no capture")
+        };
+        let _request = u64::try_from(capture.generation.number()).unwrap();
         let owners = commit.namespace.as_ref().map(Owners::of);
         drop(done);
         expect!(

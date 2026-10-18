@@ -3,7 +3,7 @@ use crate::{WorkspaceError, WorkspaceResult};
 use layerfs_overlay::{
     indexed_operation_record_changes_bytes, IndexedOperationRecordApply,
     IndexedOperationRecordChange, IndexedOperationRecordKey, IndexedOperationRecordScope, Overlay,
-    OverlayError, OPERATION_RECORD_BYTES,
+    OverlayError, OPERATION_RECORD_BYTES, PAGE_ROWS,
 };
 use std::fmt;
 
@@ -137,7 +137,38 @@ pub trait OverlayOperationRecords {
         }
         .into())
     }
+    /// Keys after `after` with their values, in key order: at most 64 rows,
+    /// stopped before the row that would pass one record envelope, never
+    /// empty while rows remain. The flag says no row follows the window.
+    /// The default is a key window and one point read per key.
+    fn operation_record_entries_after(
+        &self,
+        scope: IndexedOperationRecordScope,
+        kind: u32,
+        after: Option<[u8; 32]>,
+    ) -> WorkspaceResult<OperationRecordReply<OperationRecordWindow>> {
+        let keys = self.operation_record_keys_after(scope, kind, after)?.value;
+        let mut ended = keys.len() < PAGE_ROWS;
+        let (mut entries, mut bytes) = (Vec::with_capacity(keys.len()), 0_usize);
+        for key in keys {
+            let value = self
+                .operation_record_get(scope, IndexedOperationRecordKey { kind, key })?
+                .value
+                .ok_or(layerfs_content::ContentError::InvalidRecord(
+                    "indexed record window",
+                ))?;
+            if bytes != 0 && bytes.saturating_add(value.len()) > OPERATION_RECORD_BYTES {
+                ended = false;
+                break;
+            }
+            bytes = bytes.saturating_add(value.len());
+            entries.push((key, value));
+        }
+        Ok(OperationRecordReply::owned((entries, ended)))
+    }
 }
+/// One key-ordered window of (key, value) rows and whether the kind ends there.
+pub type OperationRecordWindow = (Vec<([u8; 32], Vec<u8>)>, bool);
 
 impl OverlayOperationRecords for Overlay {
     fn operation_record_contains(
@@ -242,6 +273,16 @@ impl OverlayOperationRecords for Overlay {
         after: Option<[u8; 32]>,
     ) -> WorkspaceResult<OperationRecordReply<Vec<[u8; 32]>>> {
         self.indexed_operation_record_keys_after(scope, kind, after)
+            .map(OperationRecordReply::owned)
+            .map_err(Into::into)
+    }
+    fn operation_record_entries_after(
+        &self,
+        scope: IndexedOperationRecordScope,
+        kind: u32,
+        after: Option<[u8; 32]>,
+    ) -> WorkspaceResult<OperationRecordReply<OperationRecordWindow>> {
+        self.indexed_operation_record_entries_after(scope, kind, after)
             .map(OperationRecordReply::owned)
             .map_err(Into::into)
     }

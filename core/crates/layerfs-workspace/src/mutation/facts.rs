@@ -174,14 +174,21 @@ impl BaseView {
                             .position(|step| *step == name)
                             .map(|at| &path[at + 1..])
                     });
-                    facts
-                        .directory_entries
-                        .push((parent, name, child.map(|found| found.serial)));
+                    facts.directory_entries.push((
+                        parent,
+                        name.clone(),
+                        child.map(|found| found.serial),
+                    ));
                     let Some(child) = child else {
                         continue;
                     };
                     let mut current = child.serial;
                     if facts.inode(current).is_none() {
+                        if child.value.kind == BaseKind::RegularFile
+                            && !self.client().remembers_length(child.value.content_root)
+                        {
+                            self.provide_sibling_lengths(parent, &name, child.value.content_root)?;
+                        }
                         let stat = self.stat_resolved_with_lengths(child, self.client().as_ref());
                         facts
                             .inodes

@@ -404,6 +404,14 @@
   (2026-10-18):** the fixer takes F-036 right after F-032; until then it only
   reads source, logs and REPRO-F036.md, with no product change; frozen-volume
   access goes through the lead. Measured P3 waits for it.
+  **Fixed (correctness lane, 2026-10-18, branch
+  `claude/issue352-correctness-644bbc`, unmerged):** cause proved. A Save's
+  per-wave "absent" cache answered a delta base that the other writer
+  published after the negative was taken, while that writer's PREFIX chain was
+  walked: `ObjectMissing(base)`. e8775b32 is a base of 11 of daemon a's chains;
+  daemon b's 1,610 sealed packs are the other block. Base lookups now re-ask.
+  A deterministic test fails without the fix. Record:
+  [fixes/c01-f036-stale-negative-base.md](fixes/c01-f036-stale-negative-base.md).
 - **Limits audit findings (owner decision 2026-10-18).** From the limits audit
   (branch `dsh-352-limits-audit`, `core/docs/issues/352/LIMITS_AUDIT.md` §1,
   `17148cacd`). The F-033 rule applies to each: no `Capacity` or `Busy` on a
@@ -465,3 +473,323 @@
   Next diagnosis: a heap profile of the native addon (which allocator, which
   caches, whether it grows with calls or Stores). No owner assigned; the
   owner assigns.
+  **Split recorded (correctness lane, 2026-10-18, before the fix):** in-process
+  probe of the runner's call mix on a range-14 Store copy, base addon
+  `413ae60d`: RSS 1,246 MB = anonymous 1,198 MB + file-backed 48 MB (binaries;
+  the Store has `mmap_size=0`, so no SQLite file or WAL mapping); JS heap 6 MB.
+  It plateaus per process (1,222 MB at range 0, 1,437 MB at p3p), so it does
+  not grow per range. **Cause:** each Save allocates a zero-filled 16 MiB zstd
+  encode arena, which glibc keeps in the arena of each pool thread (dynamic mmap
+  threshold). **Fixed** (branch `claude/issue352-correctness-644bbc`, unmerged):
+  arenas are reused: 281 MB, flat over 3,600 writes. Diagnostics, not the
+  fix: `MALLOC_ARENA_MAX=1` cuts per-write growth from 21 MB to 0.4 MB, and a
+  fixed `MALLOC_MMAP_THRESHOLD_` cuts it to 2 MB.
+
+  **Reworked to the liaison ruling** (`926543b10`): plain encode regions,
+  bounded to one per CPU, no new `unsafe`, decode reuse held. Real fast dev
+  ranges (c43, base → fix, runner peak):
+  - r15: 1,444 → 445 MB and 1,287 → 274 MB;
+  - r16: 1,398 → 462 MB;
+  - file-backed 44–49 MB throughout.
+
+  **Decode regions as well** (liaison approval): reused regions are zeroed
+  on hand-out, because zstd's static decoder init does not clear its own
+  struct. Range-14 probe: 286 / 238 MB, against encode-only 363 / 315 MB.
+
+  **Follow-up:** release the idle regions when the Store closes. Wire it after
+  integration, once `store/handle.rs` is free.
+
+  Record:
+  [fixes/c03-f043-runner-memory.md](fixes/c03-f043-runner-memory.md).
+
+- **F-044 · a kernel reply computed before a merged install can land after
+  its invalidation (product, FUSE coherence; #359 D-9 sizing, 2026-10-18).**
+  - A merged install sends `inval_inode` / `inval_entry` for what changed
+    (store-service `commit_merge.rs`, `stale_after_install`).
+  - A LOOKUP, GETATTR or READDIR reply computed from the old view, but
+    delivered after that invalidation, is not fenced. The kernel caches the
+    stale answer.
+  - Entry and attribute replies carry a TTL, so their staleness is bounded by
+    it.
+  - A listing cached with `FOPEN_CACHE_DIR` (owner decision D-9) has no TTL.
+    The kernel's `iversion` check covers only changes made through the
+    mount, not installs. So after D-9 a stale listing could last until the
+    directory's next change, `inval_inode` or page reclaim.
+
+  Not observed in any sample or test; found by reading the order of reply
+  and invalidation. Needs a fence before D-9 is called exact: for example, a
+  per-mount install epoch checked before a listing reply is sent, with the
+  invalidation sent again when the epoch moved.
+  **Owner: #359** (D-9 lane).
+  [fixes/021-359-d9-sizing.md](fixes/021-359-d9-sizing.md).
+
+- **F-045 · hard-linked files are never entry-cached on the pinned image's
+  kernel (host behaviour, not LayerFS; #359 batch 4, 2026-10-18).**
+  - On `6.12.76-linuxkit` (Docker Desktop), a non-directory with
+    `nlink > 1` gets dentry time 0 on every LOOKUP reply, whatever entry TTL
+    is sent (7 s, 60 s and 300 s were tried).
+  - So every path resolution of a hard-linked file is a FUSE LOOKUP.
+  - Vanilla 6.12.76 `fs/fuse` has no such rule, and fuser 0.18 forwards the
+    TTL unchanged.
+  - Traced with a private ftrace instance and kprobes, removed afterwards
+    (`~/lfs-history/runs/issue359/batch4/trace*.sh`).
+
+  It matters for hard-link-heavy workloads (pnpm's store). Confirm or exclude
+  it on a vanilla kernel before attributing pnpm costs to LayerFS. No product
+  change.
+  [fixes/018-359-b4-readdirplus.md](fixes/018-359-b4-readdirplus.md).
+
+- **F-046 · a terminal unmount in two mount tests fails intermittently
+  (test harness; #359 §4.8 test runs, 2026-10-18; fixed 2026-10-19).**
+  - `tests/support/mounted.rs:133` (`unmount`, `try_unmount(..).unwrap()`)
+    panicked twice, in different targets. Both runs were on `4db0ceb9e`'s
+    test build in the pinned image, at host load 4.7–8:
+    - `mounted_commit`
+      `r5_9_stores_through_shared_mappings_are_committed_once_written_back`,
+      in a run where `r5_8` panicked in the same process;
+    - `mounted_cycles`
+      `a_caller_blocked_on_a_full_pipe_neither_blocks_commit_nor_is_touched_by_unmount`.
+  - **The error text was not captured.** The run script kept only the panic
+    line, and it now keeps the two lines after it.
+  - Each test passed on one diagnostic rerun, and the next full runs of both
+    targets passed. That does not close the finding and is not a pass.
+  - Both tests leave a process or a dirty shared mapping alive across the
+    unmount. The candidate is a refused or after-failure unmount
+    (`Failure::Rejected` / `Failure::After`) racing that process, not a
+    stale-share or build effect.
+
+  - **Third occurrence, error text captured** (`89a2aa480` test build,
+    2026-10-19, host load 4.6–5.6). `mounted_commit`
+    `r5_3_commit_captures_what_every_launch_published_whatever_became_of_the_process`:
+    `Kernel(KernelFailure { code: Busy, phase: "unmount:kernel", detail:
+    "kernel reported the mount busy; no terminal effect" })`. This is
+    `Detach::Busy` in `control/detach.rs`: the plain (not lazy) unmount got
+    EBUSY, and the mount was returned to the registry unchanged. So the
+    product refused correctly, and the kernel held a real reference into the
+    mount at that moment. It passed on one diagnostic rerun run alone (no
+    sibling test threads).
+  - **Candidate (inferred from source, not proven): a test-harness fork
+    race.** Every `bash` in the test is waited for before `unmount`. But
+    `support/mounted_commit.rs` `command()` sets `uid`/`gid`, so std's
+    `Command` forks rather than using `posix_spawn`. A fork in another test
+    thread of the same process copies the whole descriptor table, including
+    a mount file this test holds open for a moment (`fs::read`, the `host()`
+    walk). The child keeps the copy until its `exec`, which under load can
+    land after this test's unmount. Whether the same race explains the
+    two earlier occurrences is not known.
+  - **Fourth occurrence** (2026-10-19, scratch build `75bfde677`, record
+    029): `mounted_commit`
+    `r5_9_stores_through_shared_mappings_are_committed_once_written_back`,
+    with the same `Busy` / `unmount:kernel` text. Not rerun as a pass. The
+    liaison (2026-10-19) finds the fork race plausible and leaves the
+    finding with its owner, still unassigned.
+  - **Fifth and sixth occurrences** (2026-10-19, `issue359-facts-window`,
+    record 032), both with the same `Busy` / `unmount:kernel` text at
+    `mounted.rs:133`. Neither was rerun as a pass.
+    - `mounted_install` `a_directory_of_more_than_one_name_window_is_listed`,
+      on `dce9aea51`'s test build. This is the first occurrence outside
+      `mounted_commit` and `mounted_cycles`.
+    - `mounted_commit` `r5_3`, again, on `1c0cf4b0d`'s test build.
+
+
+  - **Seventh occurrence** (staging step 8): `kernel_coherence`
+    `mutations_racing_the_unmount_probe_keep_normal_results_and_persist`,
+    at its final normal unmount, with the same text.
+  - **Eighth occurrence** (integration step 11, staging `b2c43386d`, pinned
+    image, one container per binary, load 11.1): `mounted_install`
+    `a_directory_of_more_than_one_name_window_is_listed`, with the same text
+    at `mounted.rs:133`, after all three listings matched (65/64/65). Not
+    rerun. That build predates the gate below.
+  - **Root cause (test harness, reproduced deterministically 2026-10-19).**
+    A fork from any thread of the test process copies the whole descriptor
+    table. That holds both for std's fork path (`uid`/`gid` or `pre_exec`)
+    and for glibc `posix_spawn`. Until the child's exec closes its
+    close-on-exec copies, the child holds every mount file another test
+    thread had open at that instant. Libtest runs a binary's tests on
+    parallel threads, and every affected binary spawns `bash`, `sh` or
+    `sleep` from several tests. So one test's plain unmount can land while
+    another test's child still holds this test's file. The kernel's EBUSY is
+    then correct, and so is the product's single attempt (`Detach::Busy`).
+    The product and the FUSE session open no path in the mount.
+  - **Reproduction:** `tests/f046_fork_reference.rs`. Thread A opens a
+    mount file. Thread B spawns `true`, whose `pre_exec` waits on a pipe.
+    A closes its descriptor and unmounts. One run in the pinned image at
+    load 14: `Busy` / `unmount:kernel`, and `/proc/<child>/fd` names
+    `mounts/1/held`. After the child is released to exec, the same mount
+    unmounts with `Drained`.
+  - **Fix (harness only, no product change):** `support/mounted.rs` gets a
+    process-wide gate that every `Harness` holds for its whole life, so the
+    mounted tests of one binary run one at a time. Nested Harnesses on one
+    thread share the gate, and the wait is bounded at 110 s. A test's own
+    children are waited for or killed before its unmount. No retry was
+    added, and the unmount assertion is unchanged.
+  - **Checked once each after the fix** (pinned image, load 21–32):
+    `mounted_commit` 9/9 (2 s), `mounted_install` 4/4 (2 s),
+    `mounted_cycles` 4/4 (5 s), `kernel_coherence` 6/6 (1 s). One run of
+    each is not proof that the intermittent failure is gone. The
+    reproduction is the evidence for the cause.
+
+  - **Outside tests** (fix record 036): the daemon never forks, and the SDK
+    and runner processes hold no mount file. So F-046 cannot occur in the
+    product. Forked copies of Store descriptors cannot affect SQLite
+    `fcntl` locks or the writer-lane `flock`. One narrow product window
+    remained: the SDK discovery `flock` was released by close, not by
+    `LOCK_UN`. It is filed and fixed as F-053.
+
+  **Status: FIXED (test harness).** Tests in the same binary that spawn
+  processes without a `Harness` are outside the gate. None of the
+  affected binaries has one that runs alongside a mount.
+  [fixes/036-f046-fork-copied-mount-file.md](fixes/036-f046-fork-copied-mount-file.md)
+  (cause and fix); [fixes/022-359-mtime-only-live-rows.md](fixes/022-359-mtime-only-live-rows.md)
+  (first occurrences).
+
+- **F-047 · `fp21_detach_stages` fails 0/2 after the A1 merge (test premise,
+  likely; #359 head run, 2026-10-18).**
+  - Both cases expire at "the request is inside its Store read"
+    (`fp21_detach_stages.rs:95`).
+  - The test stages a request inside a provider read by gating the Store
+    after a lookup. Under #354 A1, the Workspace reader keeps that lookup's
+    objects (`KeptReads`), so the later `open` or listing is served without
+    a provider call and never enters the gate.
+  - It passed 2/2 before the merge (record 018).
+  - The cause is inferred from source, not re-run on a pre-A1 build.
+    Product detach behaviour is not shown to be wrong.
+
+  Needs a stage that misses `KeptReads` (a test change). **Owner:
+  unassigned** (A1 owner #354 or the lead).
+  [fixes/026-359-head-full-sample.md](fixes/026-359-head-full-sample.md).
+
+- **F-048 · an Unmount without `discard` is refused after an mtime-only
+  Commit (product; #359 E10, 2026-10-19).**
+  - `keep_live_row` (§4.8 option A, record 022, `4db0ceb9e`) counted the
+    row it carries into the active generation as one dirty inode.
+  - So after a Commit whose only change to a file was its mtime,
+    `control/dirty.rs` reported the Workspace dirty. `Unmount { discard:
+    false }` answered `Dirty { paths: ["/src/main.rs"], inodes: 1 }`
+    although nothing uncommitted remained. §4.8's live time ends at
+    unmount.
+  - The same count kept c04's UpToDate shortcut from ever applying after
+    such a Commit.
+
+  **Status: FIXED** in `9bee52d27` (`issue359-impl`, not pushed): a
+  journaled `kept_live` set replaces the count, and every writer of a kept
+  serial counts it. Regression test: `mounted_commit`
+  `an_unmount_without_discard_succeeds_after_an_mtime_only_commit`. It fails
+  on the old code with the `Dirty` reply above.
+  [fixes/029-359-e10-kept-live-rows.md](fixes/029-359-e10-kept-live-rows.md).
+
+- **F-049 · `fp31` TooSmall's staged premise races an early kernel FORGET
+  (test premise, likely; #359 F-A2 test runs, 2026-10-19).**
+  - `fp31_forget_underflow`
+    `fp31_a_kernel_forget_of_two_against_a_row_of_one_underflows_and_the_row_keeps_exactly_one`
+    failed once on `dace472a3`'s test build (pre-reword `24910c806`). The first of
+    two failed expectations was: "the kernel's unit was not retained:
+    MountWork { .. retained: 1, completed: 3, served: 4, .. forget_units: 1 }
+    -> MountWork { ..identical.. }". The run script did not keep the second
+    one.
+  - The snapshot taken at staging already counts the FORGET unit as served
+    and retained. So the counts the test compares after the refusal cannot
+    rise by one. The kernel delivered its FORGET before the test took the
+    snapshot that should precede it.
+  - Inferred from the two identical snapshots and the source, not proven.
+    No product behaviour is shown wrong: the unit was retained and served
+    once. It passed on one diagnostic run alone, which is not a pass. The
+    other `fp31` case passed in the same run.
+
+  - **Recurrences and candidate cause** (2026-10-19): the TooSmall case
+    failed again on `0efe2b772`'s test build, and the Absent case failed
+    once on `50b04e1ab`'s, with the same identical-snapshot text. Each
+    passed alone or in other runs.
+  - **Candidate (inferred from source, not proven):** the two cases run as
+    parallel test threads in one container, and each calls
+    `reclaim.request()`, which reclaims across the whole cgroup. One case's
+    reclaim can therefore make the kernel FORGET the other case's inode
+    before that case stages its snapshot.
+
+  **Status: OPEN. Owner: unassigned.** Next step: stage the snapshot before
+  the kernel can deliver the FORGET, or wait for the unit by its own count;
+  or run the two cases serially. Do not weaken the retained assertion.
+  [fixes/032-359-fa2-facts-window.md](fixes/032-359-fa2-facts-window.md).
+
+- **F-050 · a full-case `cost.mjs` run warms the daemon cache for its
+  LayerFS arm (harness; #359 F-A2 controls, 2026-10-19).**
+  - Without `--part`, a case runs `native.mount` and `native.copy` before
+    the `lfs` arm, through the same daemon and Store open. The native copy
+    reads the tree through the daemon's `CanonicalCache` (one allowance per
+    Store open, `store/open.rs`), so the LayerFS arm starts with a warmed
+    and churned cache. A `--part lfs` arm starts cold.
+  - Evidence: git commit reads 223 Store readers in the head full run (seq
+    349's case set) and **371** in every `--part lfs` arm, including the
+    no-window control (seq 585, `caa59784`). Head's status-cold shows 7,488
+    evictions; every `--part lfs` arm shows 0.
+  - AGENTS §1: an earlier phase's warmth credits a measured phase. Small
+    trees are affected most. rm-rf-nm counts per entry are unchanged
+    (38.16 hits, 4.21 misses in both), so its LOOKUP counts are not
+    confounded, but its timings are not like-for-like.
+  - Affected: record 026's head table, which is used as the head arm in
+    records 025–032, and #362's baseline comparisons wherever they compare
+    a full run against an `lfs`-only run.
+  - Harness and run selection only. No product change, and no historical
+    verdict is changed.
+
+  **Status: OPEN. Owner: unassigned** (the cost harness owner, or #362).
+  Until fixed, compare `--part lfs` arms only with `--part lfs` arms. Next
+  step: give each arm its own daemon, or declare the shared cache state per
+  arm.
+  [fixes/032-359-fa2-facts-window.md](fixes/032-359-fa2-facts-window.md).
+
+- **F-051 · `kernel_coherence` `size_never_shrinks_under_concurrent_append_and_refusals_stay_refused`
+  failed once (not yet diagnosed; #359 F-A2 test run, 2026-10-19).**
+  - On `51133cdcf`'s test build at host load 15–19, the reader thread
+    panicked at `kernel_coherence.rs:459` with "read length: 0 after 1000".
+    An `fs::read` of the growing file returned no bytes after a size of
+    1000 had been seen.
+  - The file is created in the overlay, so its LOOKUP asks no base facts,
+    and the read-ahead and window code under test there does not run for
+    it. Not attributed to that change.
+  - It passed on one diagnostic run alone, which is not a pass. There is no
+    earlier recorded failure.
+
+  **Status: OPEN. Owner: unassigned.** Next step: record the reader's
+  OPEN/READ replies and the kernel's cached size at the failing step.
+  Do not weaken the assertion.
+  [fixes/032-359-fa2-facts-window.md](fixes/032-359-fa2-facts-window.md).
+
+- **F-052 · a chmod is lost when the other side edits the same file
+  (product; owner, 2026-10-19).**
+  - A merge kept the decided entry's metadata whole when both sides' metadata
+    differed from the base. A content edit always moves the mtime, so a chmod
+    on one side and an edit on the other both "changed the metadata". The
+    edit was decided and its base mode won. The chmod was dropped without a
+    conflict, on the SDK merge and the Commit merge, for root-form,
+    inline-form and hard-linked files.
+  - Modes changed differently on both sides were merged silently.
+
+  **Status: FIXED** in `6c66519aa` (`claude/issue353-metadata-merge`, off
+  staging `d679c84ee`). Mode and mtime now merge three-way each, and modes
+  changed differently on both sides are a `mode` conflict. Regression test:
+  `merge_metadata_only` (6 tests); 5 fail on the old code with `mode=644` or
+  no conflict. The 35-merge corpus is unchanged (140/140).
+  [fixes/035-f052-metadata-only-merge.md](fixes/035-f052-metadata-only-merge.md).
+
+- **F-053 · the SDK discovery lock outlives its Guard across a fork→exec
+  window (product; found by the F-046 RCA, filed by the owner 2026-10-19).**
+  - `sdk/js/native/src/discovery.rs` `os_lock` takes
+    `flock(LOCK_EX|LOCK_NB)` on `<project>/ownership.lock`. `Guard` released
+    it only by closing its file.
+  - A flock belongs to the open file description. A child forked by the
+    host process (Node `child_process`, or any other thread's spawn) while
+    a Guard is held shares that description until its exec. So after the
+    Guard dropped, the lock stayed held, and another process's discovery
+    mutation (project init, Sandbox create or close, exec records) was
+    refused `Busy` ("another process owns this discovery mutation"). Busy
+    is not retried.
+  - Regression test, written first:
+    `discovery::tests::a_dropped_guard_releases_the_lock_while_a_forked_child_holds_a_copy`
+    (`c8767ac5f`). On the old code it FAILED with exactly that `Busy`.
+
+  **Status: FIXED** (branch `claude/f053-discovery-flock`). The Guard's
+  drop now calls `flock(LOCK_UN)` before its file closes. No other flock in
+  `sdk/js/native` or `core/crates` relies on close alone: the writer lane
+  and the telemetry retention lock use nix `Flock`, whose drop unlocks.
+  [fixes/037-f053-discovery-lock-fork.md](fixes/037-f053-discovery-lock-fork.md).

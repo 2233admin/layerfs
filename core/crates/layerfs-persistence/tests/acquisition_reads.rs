@@ -151,7 +151,13 @@ fn entry(parent: Option<u64>, name: Vec<u8>, position: u64, kind: InodeKind) -> 
         key: EntryKey { parent, name },
         position: Some(position),
         kind,
-        metadata_root: ObjectId::for_bytes(&position.to_be_bytes()),
+        // The portable grammar (checked at write since #360 item 2): a
+        // symlink's mode is 0o777.
+        metadata: layerfs_content::filesystem::attributes::PortableMetadata {
+            mode: if kind == InodeKind::Symlink { 0o777 } else { 0o644 },
+            mtime_seconds: position as i64,
+            mtime_nanoseconds: 0,
+        },
         target_root: (kind == InodeKind::Symlink).then(|| ObjectId::for_bytes(b"target")),
         host_path: match kind {
             InodeKind::Symlink => None,

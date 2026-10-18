@@ -148,6 +148,17 @@ impl StorePorts {
         })
     }
 }
+impl StorePorts {
+    /// One object demand through caches the caller keeps across its demands,
+    /// under this operation's custody (#352 F-035).
+    pub fn objects_with(
+        &self,
+        cache: &mut layerfs_storage::ReadCache,
+        ids: &[ObjectId],
+    ) -> Result<Vec<Vec<u8>>, Arc<PortError>> {
+        self.attempt(|| self.reader()?.objects_with(cache, ids))
+    }
+}
 impl AuthenticatedObjects for StorePorts {
     fn read_canonical_batch(&self, ids: &[ObjectId]) -> ContentResult<Vec<Vec<u8>>> {
         self.attempt(|| {
@@ -176,6 +187,18 @@ impl FileLengths for StorePorts {
             .into());
         }
         Ok(values[0])
+    }
+    fn file_lengths(&self, ids: &[ObjectId]) -> WorkspaceResult<Vec<u64>> {
+        let values = StorePorts::file_lengths(self, ids)
+            .map_err(|e| WorkspaceError::Service(Box::new(e)))?;
+        if values.len() != ids.len() {
+            return Err(ContentError::BatchCardinality {
+                requested: ids.len(),
+                returned: values.len(),
+            }
+            .into());
+        }
+        Ok(values)
     }
 }
 impl InodeSerials for StorePorts {

@@ -11,6 +11,6 @@ pub use files::OverlayFileRead;
 pub use lengths::FileLengths;
 pub use operation_record::{
     OperationRecordApply, OperationRecordCopies, OperationRecordInputRefusal,
-    OperationRecordRefusal, OperationRecordReply, OverlayOperationRecords,
+    OperationRecordRefusal, OperationRecordReply, OperationRecordWindow, OverlayOperationRecords,
 };
 pub use overlay::{OverlayJobs, OverlayRead};

@@ -4,6 +4,7 @@ use super::{
     source::{Backing, Complete, Input},
     state::{Shared, State},
 };
+use crate::construction::outcome::nanos;
 use crate::{
     BaseView, ConstructionBackingCustody, IndexedConstructionRecords, OverlayCapturedRuns,
     OverlayOperationRecords, Workspace, WorkspaceError,
@@ -16,7 +17,7 @@ use layerfs_content::{
 };
 use layerfs_overlay::{CapturedReader, IndexedOperationRecordScope, InodeKind, OverlayError};
 use layerfs_telemetry::timer::TimingScope;
-use std::fmt;
+use std::{fmt, time::Instant};
 
 /// Actual adapter visits only; not whole-operation I/O, copies or residency.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -47,6 +48,10 @@ pub struct CapturedFileWork {
     pub edge_read_bytes: u64,
     /// Bytes whose unchanged base mapping survived authenticated edge trimming.
     pub edge_retained_bytes: u64,
+    /// Nanoseconds binding the file (captured inode and base file lookups)
+    /// and reading its runs (payload and committed bytes). Observations only.
+    pub bind_ns: u64,
+    pub source_ns: u64,
 }
 /// Exact retained reader, record scope and first-original errors for caller fences.
 /// This value and its Drop perform no reader/operation release or retry.
@@ -156,7 +161,106 @@ impl<'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> CapturedFile
             }
         }
     }
+    /// A file the immutable base does not hold, constructed straight from its
+    /// captured runs with no normalized-edit records. The binding is the one
+    /// `prepare` makes, and it must find no base file. A base-less file's
+    /// only edit is one insert of its whole final length, and the run
+    /// construction never reads that edit, so no edit or context record is
+    /// written, read or reclaimed. The caller's attempt guards that each
+    /// serial is constructed once. Failed binding or construction returns the
+    /// original custody, as `construct` does.
+    #[allow(clippy::too_many_arguments)]
+    pub fn construct_new(
+        workspace: &Workspace,
+        provider: &'a P,
+        reader: CapturedReader,
+        serial: u64,
+        records_scope: IndexedOperationRecordScope,
+        policy: ConstructionPolicy,
+        capacities: &ConstructionCapacities,
+        consumer: &mut dyn FinalizedConsumer,
+        scope: TimingScope<'_>,
+    ) -> CapturedFileAttempt {
+        let mut owner = Self {
+            provider,
+            shared: Shared::new(State {
+                records: IndexedConstructionRecords::new(provider, records_scope),
+                failure: None,
+                work: CapturedFileWork::default(),
+                cache: None,
+            }),
+            base: None,
+            file: None,
+            reader,
+            serial,
+            facts: None,
+            count: 0,
+            context: Vec::new(),
+        };
+        let bound = owner.bind(workspace, records_scope).and_then(|facts| {
+            if facts.file_root.is_some() {
+                return Err(ContentError::InvalidRecord("captured new file has a base").into());
+            }
+            Ok(facts)
+        });
+        let result = match bound {
+            Ok(facts) => {
+                owner.facts = Some(facts);
+                owner.run_new(policy, capacities, consumer, scope)
+            }
+            Err(original) => Err(owner.shared.borrow_mut().original(original)),
+        };
+        if let Err(original) = &result {
+            owner.shared.borrow_mut().content(original.clone());
+        }
+        CapturedFileAttempt {
+            result,
+            custody: owner.into_custody(),
+        }
+    }
+    fn run_new(
+        &self,
+        policy: ConstructionPolicy,
+        capacities: &ConstructionCapacities,
+        consumer: &mut dyn FinalizedConsumer,
+        scope: TimingScope<'_>,
+    ) -> ContentResult<ConstructedFile> {
+        self.shared.borrow().ready()?;
+        policy.validated()?;
+        if *capacities != policy.capacities() {
+            return Err(ContentError::InvalidRecord(
+                "captured file policy capacities",
+            ));
+        }
+        let facts = self
+            .facts
+            .ok_or(ContentError::InvalidRecord("unbound captured plan"))?;
+        let input = Input::new(
+            self.provider,
+            &self.shared,
+            facts,
+            0,
+            &[],
+            self.base.as_ref(),
+        )?;
+        let mut runs = Complete {
+            input,
+            position: 0,
+            sealed: false,
+        };
+        construct_runs(policy, capacities, &mut runs, consumer, scope).map(|result| result.file)
+    }
     fn bind(
+        &mut self,
+        workspace: &Workspace,
+        records_scope: IndexedOperationRecordScope,
+    ) -> Result<Facts, WorkspaceError> {
+        let started = Instant::now();
+        let facts = self.bound(workspace, records_scope);
+        self.shared.borrow_mut().work.bind_ns = nanos(started);
+        facts
+    }
+    fn bound(
         &mut self,
         workspace: &Workspace,
         records_scope: IndexedOperationRecordScope,
@@ -278,7 +382,11 @@ impl<'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> CapturedFile
             construct_runs(
                 policy,
                 capacities,
-                &mut Complete { input, position: 0 },
+                &mut Complete {
+                    input,
+                    position: 0,
+                    sealed: true,
+                },
                 consumer,
                 scope,
             )

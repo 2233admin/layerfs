@@ -110,6 +110,42 @@ impl BoundWorkspace {
             retained.binding = Some(snapshot.clone());
             let local = self.local_root(&snapshot)?;
             let original_base = self.workspace.base().map_err(CommitError::Workspace)?;
+            // Nothing above the installed floor and the head where the
+            // Workspace bound it: UpToDate with no capture, Save, lane or
+            // install (#352 c04 records why the answer stays exact).
+            let state = phase(timing, "uptodate.state", || {
+                self.job(|job_client: &crate::OwnerClient, job_route| job_client.state(job_route))
+                    .map_err(CommitError::Owner)
+            })?;
+            if state.dirty_inodes == 0
+                && state.dirty_directory_entries == 0
+                && state.captured.is_none()
+                && state.consolidating.is_none()
+                && state.base_root == local.to_bytes()
+                && self
+                    .pending_conflicts()
+                    .map_err(CommitError::Workspace)?
+                    .is_none()
+            {
+                let current = phase(timing, "uptodate.head", || {
+                    self.store
+                        .history
+                        .branch_snapshot(snapshot.branch.id)
+                        .map_err(CommitError::History)?
+                        .ok_or(CommitError::Context("bound Branch is absent"))
+                })?;
+                if current.branch.head_commit == snapshot.branch.head_commit
+                    && current.branch.base_layer == snapshot.branch.base_layer
+                {
+                    retained.published = Some(CommitOutcome::UpToDate {
+                        head: current.branch.head_commit,
+                        root: current.effective_root,
+                    });
+                    retained.saved = Some(Default::default());
+                    retained.storage = Some(Default::default());
+                    return Ok(());
+                }
+            }
             retained.phase = CommitPhase::Capture;
             let capture = phase(timing, "capture", || {
                 self.job(|job_client: &crate::OwnerClient, job_route| job_client.capture(job_route))
@@ -145,16 +181,11 @@ impl BoundWorkspace {
                             })
                         }
                     };
-                // The head is read, merged with and published against inside
-                // the Store's publication lane: no other publication lands
-                // between them, so a stale Commit merges once with the head
-                // current at its publication and never meets a moved head.
-                let lane = phase(timing, "lane", || {
-                    self.store
-                        .history
-                        .publish_lane()
-                        .map_err(CommitError::History)
-                })?;
+                // Two-stage merge (#355). The head is read and merged with
+                // before the publication lane, so the merge's records and its
+                // whole build stay outside it. In the lane the head is read
+                // again: if it moved meanwhile, only what landed in between
+                // is merged into the result, in memory, then published.
                 let current = phase(timing, "head", || {
                     self.refuse_markers(&save, candidate)?;
                     self.store
@@ -174,6 +205,8 @@ impl BoundWorkspace {
                 } else {
                     candidate
                 };
+                // Everything that grows with the Commit runs before the lane:
+                // the Save's finish, the logical count and the binding hints.
                 let node = current
                     .branch
                     .head_commit
@@ -191,17 +224,7 @@ impl BoundWorkspace {
                 // Count only after finish has proved the root's references
                 // closed, so a missing dependency stays a Storage refusal.
                 let logical = phase(timing, "logical.count", || {
-                    let reader = storage.reader().map_err(CommitError::Storage)?;
-                    layerfs_content::filesystem::statistics::logical_size_after(
-                        &reader,
-                        FilesystemRootId(current.effective_root),
-                        root,
-                        known,
-                    )
-                    .map_err(|error| CommitError::Content {
-                        error,
-                        provider: None,
-                    })
+                    self.logical_after(&storage, current.effective_root, root, known)
                 })?;
                 phase(timing, "bindings", || {
                     let reader = storage.reader().map_err(CommitError::Storage)?;
@@ -212,6 +235,68 @@ impl BoundWorkspace {
                         root,
                     )
                 })?;
+                let lane = phase(timing, "lane", || {
+                    self.store
+                        .history
+                        .publish_lane()
+                        .map_err(CommitError::History)
+                })?;
+                let conflicted = merge
+                    .as_ref()
+                    .is_some_and(|report: &MergeReport| !report.conflicts.is_empty());
+                let (current, root, moved, logical) = if force || conflicted {
+                    (current, root, moved, logical)
+                } else {
+                    let now = phase(timing, "head.lane", || {
+                        self.store
+                            .history
+                            .branch_snapshot(snapshot.branch.id)
+                            .map_err(CommitError::History)?
+                            .ok_or(CommitError::Context("bound Branch is absent"))
+                    })?;
+                    if now.branch.head_commit == current.branch.head_commit
+                        && now.branch.base_layer == current.branch.base_layer
+                    {
+                        (current, root, moved, logical)
+                    } else {
+                        // The in-lane step has its own Save; its count and
+                        // hints cover only what it changed in the result.
+                        let step_save = storage.begin_save().map_err(CommitError::Storage)?;
+                        let (stepped, step) = phase(timing, "merge.lane", || {
+                            self.merge_in_lane(&step_save, &current, &now, root, candidate)
+                        })?;
+                        let step_saved = phase(timing, "finish.lane", || {
+                            step_save.finish().map_err(CommitError::Storage)
+                        })?;
+                        self.store.note_save(&step_saved);
+                        if let Some(saved) = retained.saved.as_mut() {
+                            saved.canonical_bytes += step_saved.canonical_bytes;
+                            saved.stored_bytes += step_saved.stored_bytes;
+                            saved.metadata_bytes += step_saved.metadata_bytes;
+                        }
+                        let logical = phase(timing, "logical.lane", || {
+                            self.logical_after(&storage, root.0, stepped, logical)
+                        })?;
+                        phase(timing, "bindings.lane", || {
+                            let reader = storage.reader().map_err(CommitError::Storage)?;
+                            super::hints::record_new_bindings(
+                                &reader,
+                                &*self.store.history,
+                                Some(root),
+                                stepped,
+                            )
+                        })?;
+                        merge = Some(match merge.take() {
+                            Some(first) => MergeReport {
+                                from: first.from,
+                                lww: first.lww.into_iter().chain(step.lww).collect(),
+                                ..step
+                            },
+                            None => step,
+                        });
+                        (now, stepped, true, logical)
+                    }
+                };
                 Ok((root, candidate, current, moved, logical, lane))
             })();
             retained.storage = Some(super::producer::since(storage.diagnostics(), before));
@@ -362,9 +447,44 @@ impl BoundWorkspace {
             merge,
             saved: retained.saved.expect("known Save"),
             storage: retained.storage.expect("producer observations"),
-            capture: retained.capture.expect("known capture"),
+            capture: retained.capture,
             namespace: None,
             replaced,
         })
+    }
+
+    /// Logical size of `after`, from `before`'s known size and the change
+    /// between them. File lengths come from the Store catalogue a window at
+    /// a time (`Reader::file_lengths`), never from reading file payloads; a
+    /// Storage refusal keeps its original error.
+    fn logical_after(
+        &self,
+        storage: &layerfs_storage::Storage,
+        before: layerfs_content::ObjectId,
+        after: FilesystemRootId,
+        known: u64,
+    ) -> Result<u64, CommitError> {
+        let reader = storage.reader().map_err(CommitError::Storage)?;
+        let mut refused = None;
+        let counted = layerfs_content::filesystem::statistics::logical_size_after_with(
+            &reader,
+            FilesystemRootId(before),
+            after,
+            known,
+            &mut |roots| {
+                reader.file_lengths(roots).map_err(|error| {
+                    refused = Some(error);
+                    layerfs_content::ContentError::OutputRejected
+                })
+            },
+        );
+        match (counted, refused) {
+            (Ok(size), _) => Ok(size),
+            (Err(_), Some(error)) => Err(CommitError::Storage(error)),
+            (Err(error), None) => Err(CommitError::Content {
+                error,
+                provider: None,
+            }),
+        }
     }
 }

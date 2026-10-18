@@ -16,12 +16,6 @@ pub const MAXIMUM_PAGE_RECORDS: u16 = 128;
 pub const MAXIMUM_RESULT_BYTES: usize = 16 * 1024;
 /// Largest continuation value any history query accepts or returns.
 pub const MAXIMUM_CURSOR_BYTES: usize = 160;
-/// Rows one lineage walk may examine before it reports exhaustion.
-///
-/// This is a work ceiling independent of every C1 traversal budget. Reaching it
-/// is `Capacity`, never an empty result: an over-budget walk is unproven, and
-/// reporting absence for it would be a false negative.
-pub const MAXIMUM_LINEAGE_ROWS: u64 = 4096;
 
 /// One LayerStack: a named linear Layer publication timeline.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -186,8 +180,10 @@ impl CommitMeta {
 /// One immutable Layer publication.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LayerRecord {
-    /// Earlier main Layers displaced by this publication, recorded atomically.
-    pub overwrote: Vec<LayerId>,
+    /// How many earlier main Layers this publication displaced, recorded
+    /// atomically. They are the newest `overwrote_count` Layers below it in
+    /// the stack chain; `HistoryCatalog::overwritten` pages them.
+    pub overwrote_count: u64,
     /// Layer identity.
     pub id: LayerId,
     /// Owning stack.
@@ -463,14 +459,13 @@ pub enum CommitOutcome {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AddLayerOutcome {
     /// A new immutable Layer was inserted on the stack head and the stack
-    /// advanced. Publication is overwrite-only: `overwrote` lists, newest
-    /// first, the stack's Layers since the Branch's base that the published
-    /// Commit does not contain; they stay in history.
+    /// advanced. Publication is overwrite-only: the Layer's
+    /// `overwrote_count` counts the stack's Layers since the Branch's base
+    /// that the published Commit does not contain; they stay in history and
+    /// `HistoryCatalog::overwritten` lists them.
     Added {
         /// The new Layer.
         layer: LayerRecord,
-        /// Skipped Layers, newest first.
-        overwrote: Vec<LayerId>,
     },
     /// The selected source Commit already published in this stack.
     UpToDate {

@@ -6,24 +6,37 @@ pub(crate) fn read(
     tx: &Transaction<'_>,
     out: &mut Vec<SignatureRow>,
 ) -> Result<(), PersistenceError> {
-    for r in tx.query(
-        "SELECT slot,stamp,object_id,signature FROM content_signature ORDER BY stamp LIMIT 8193",
-        vec![],
-    )? {
-        out.push(SignatureRow {
-            slot: usize::try_from(r.get::<i64>(0)?).map_err(|_| BackendError::Integrity)?,
-            stamp: u64::try_from(r.get::<i64>(1)?).map_err(|_| BackendError::Integrity)?,
-            object_id: ObjectId::from_bytes(&r.get::<Vec<u8>>(2)?)
-                .map_err(|_| BackendError::Integrity)?,
-            signature: r
-                .get::<Vec<u8>>(3)?
-                .try_into()
-                .map_err(|_| BackendError::Integrity)?,
-        });
-    }
-    if out.len() > 8192 {
+    // Slot order is the primary key's: no temporary sort over the ring
+    // (#352 record 034 S1-a). Rows are put in insertion (stamp) order here;
+    // the schema ties each stamp to its slot, and the reader still refuses a
+    // stamp that does not rise.
+    let rows = tx.mapped(
+        "SELECT slot,stamp,object_id,signature FROM content_signature ORDER BY slot LIMIT 8193",
+        &[],
+        0,
+        8193,
+        |r| {
+            let number = |index| {
+                r.get::<_, i64>(index)
+                    .map_err(super::rows::error)
+                    .and_then(|value| u64::try_from(value).map_err(|_| BackendError::Integrity))
+            };
+            Ok(SignatureRow {
+                slot: usize::try_from(number(0)?).map_err(|_| BackendError::Integrity)?,
+                stamp: number(1)?,
+                object_id: ObjectId::from_bytes(super::rows::blob(r, 2)?)
+                    .map_err(|_| BackendError::Integrity)?,
+                signature: super::rows::blob(r, 3)?
+                    .try_into()
+                    .map_err(|_| BackendError::Integrity)?,
+            })
+        },
+    )?;
+    if rows.len() > 8192 {
         return Err(PersistenceError::Malformed);
     }
+    out.extend(rows);
+    out.sort_unstable_by_key(|row| row.stamp);
     Ok(())
 }
 

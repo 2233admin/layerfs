@@ -75,4 +75,12 @@ impl OverlayCapturedNamespace for OwnerClient {
         })?;
         Ok(done)
     }
+
+    fn keep_live_row(&self, reader: CapturedReader, serial: u64) -> WorkspaceResult<bool> {
+        self.captured_namespace_job(|job_client: &crate::OwnerClient, route| {
+            job_client.call(route, crate::ServiceClass::General, None, move |db| {
+                db.keep_live_row(reader, serial)
+            })
+        })
+    }
 }

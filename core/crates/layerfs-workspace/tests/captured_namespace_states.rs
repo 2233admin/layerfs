@@ -11,7 +11,11 @@ mod harness;
 mod oracle;
 mod producer;
 use harness::Bench;
-use layerfs_overlay::Inode;
+use layerfs_content::filesystem::attributes::{read_portable, AttributeReadWork};
+use layerfs_content::{object::inode_leaf::decode_inode_value, ConstructionPolicy, ContentError};
+use layerfs_overlay::{IndexedOperationRecordScope, Inode};
+use layerfs_telemetry::timer::Timing;
+use layerfs_workspace::CapturedFileEdits;
 use oracle::{absent, value};
 use producer::{
     build_over, drain, evidence, record, Built, Call, Drive, Log, Recording, FRESH, HEADER, VALUE,
@@ -89,6 +93,9 @@ fn a_removed_base_directory_keeps_its_whiteouts_and_has_no_value() {
 fn inodes_created_and_removed_inside_the_capture_are_never_constructed() {
     let b = Bench::new("cs-transient");
     let mut d = Drive::new(&b);
+    // Create-and-delete under the root nets to no change: the root row - and
+    // so the whole root - is kept, and the pre-op model is what to check.
+    let quiet = d.model.clone();
     let file = d.create("temp", 0o644);
     d.write("temp", 0, &[3; 90_000]);
     let link = d.symlink("temp-link", b"temp");
@@ -98,7 +105,7 @@ fn inodes_created_and_removed_inside_the_capture_are_never_constructed() {
     d.remove("temp-dir");
 
     let recording = Recording::new(&b.overlay);
-    let built = build_over(&b, &recording, &d.model, "transient");
+    let built = build_over(&b, &recording, &quiet, "transient");
     let log = recording.log.borrow();
     let work = built.work;
     assert_eq!((work.fresh_serials, work.files_constructed), (0, 0));
@@ -114,8 +121,9 @@ fn inodes_created_and_removed_inside_the_capture_are_never_constructed() {
             assert_eq!(row.nlink, 0, "serial {serial}");
         }
     }
-    // Only the touched root has a value: its time changed, its names did not.
+    // The kept stored value is still written once - the base root is kept.
     assert_eq!(work.values_written, 1);
+    assert_eq!(built.root, b.fixture.root);
     drop(log);
     built.release(&b);
 }
@@ -228,15 +236,43 @@ fn a_fresh_file_is_constructed_from_its_captured_runs() {
         assert_eq!(record(&b, &built.taken, FRESH, serial), number(rank as u64));
         assert!(record(&b, &built.taken, VALUE, serial).is_some());
     }
-    // Every file's own records live under its serial as file scope.
+    // A fresh file has no base: it is built from its captured runs with no
+    // file-scoped record job (record 033 F2).
     let log = recording.log.borrow();
     for serial in fresh {
-        assert!(
-            log.applies.iter().any(|job| job.file_scope == serial),
-            "serial {serial} has no file-scoped record job"
-        );
+        assert_eq!(log.scoped(serial), 0, "serial {serial} wrote file records");
     }
     drop(log);
+    // The committed tree takes each sealed value's content root. The record
+    // route over the same capture builds the same root for every one of
+    // these files, so the tree's objects are the same with or without F2.
+    for serial in fresh {
+        let sealed = record(&b, &built.taken, VALUE, serial).unwrap();
+        let value = decode_inode_value(&sealed).unwrap();
+        let scope = IndexedOperationRecordScope {
+            owner: built.taken.operation,
+            file_scope: 10_000 + serial,
+        };
+        let prepared =
+            CapturedFileEdits::prepare(&b.workspace, &b.overlay, built.taken.reader, serial, scope)
+                .unwrap();
+        let policy = ConstructionPolicy::frozen_default();
+        let attempt = Timing::disabled("record-route", |timing| {
+            Ok::<_, ContentError>(prepared.construct(
+                policy,
+                &policy.capacities(),
+                &mut b.fixture.store.clone(),
+                timing.child("construct"),
+            ))
+        })
+        .0
+        .unwrap();
+        assert_eq!(
+            attempt.result.as_ref().unwrap().root,
+            value.content_root,
+            "serial {serial}: the record route builds another root"
+        );
+    }
     built.release(&b);
 }
 
@@ -291,22 +327,26 @@ fn a_base_file_with_only_metadata_changes_keeps_its_content_root() {
     let b = Bench::new("cs-base-meta");
     let mut d = Drive::new(&b);
     d.chmod("file", 0o400);
+    // An mtime-only capture is not a change: serial 8 keeps its whole base row.
+    let quiet = d.model.clone();
     d.utimens(".git/index", (5, 6));
     let recording = Recording::new(&b.overlay);
-    let built = build_over(&b, &recording, &d.model, "base metadata");
+    let built = build_over(&b, &recording, &quiet, "base metadata");
     let store = &b.fixture.store;
-    for serial in [2, 8] {
-        let (old, new) = (
-            value(store, b.fixture.root, serial),
-            value(store, built.root, serial),
-        );
-        assert_eq!(new.content_root, old.content_root, "serial {serial}");
-        assert_ne!(new.metadata_root, old.metadata_root, "serial {serial}");
+    {
+        let (old, new) = (value(store, b.fixture.root, 2), value(store, built.root, 2));
+        assert_eq!(new.content_root, old.content_root);
+        assert_ne!(new.metadata_root, old.metadata_root);
         assert_eq!(new.namespace_ref_count, old.namespace_ref_count);
     }
+    assert_eq!(
+        value(store, built.root, 8),
+        value(store, b.fixture.root, 8),
+        "serial 8: the base row is kept exactly"
+    );
     let work = built.work;
     assert_eq!((work.files_constructed, work.files_unchanged), (2, 2));
-    assert_eq!((work.metadata_patched, work.metadata_built), (2, 0));
+    assert_eq!((work.metadata_patched, work.metadata_built), (1, 0));
     // No name changed anywhere: no header, no name cursor, no name point.
     assert_eq!(work.headers_written, 0);
     let log = recording.log.borrow();
@@ -341,22 +381,26 @@ fn a_base_directory_and_symlink_keep_their_content_roots_under_new_metadata() {
     let b = Bench::new("cs-base-nonfile");
     let mut d = Drive::new(&b);
     d.chmod("output", 0o1700);
+    // A symlink has no mode to change and its time is not a change either.
+    let quiet = d.model.clone();
     d.utimens("symlink", (0, 0));
     let recording = Recording::new(&b.overlay);
-    let built = build_over(&b, &recording, &d.model, "base non-files");
+    let built = build_over(&b, &recording, &quiet, "base non-files");
     let store = &b.fixture.store;
-    for serial in [3, 7] {
-        let (old, new) = (
-            value(store, b.fixture.root, serial),
-            value(store, built.root, serial),
-        );
-        assert_eq!(new.content_root, old.content_root, "serial {serial}");
-        assert_ne!(new.metadata_root, old.metadata_root, "serial {serial}");
+    {
+        let (old, new) = (value(store, b.fixture.root, 7), value(store, built.root, 7));
+        assert_eq!(new.content_root, old.content_root);
+        assert_ne!(new.metadata_root, old.metadata_root);
     }
+    assert_eq!(
+        value(store, built.root, 3),
+        value(store, b.fixture.root, 3),
+        "serial 3: the base row is kept exactly"
+    );
     // A stored symlink's target is never read from the capture.
     assert_eq!(recording.log.borrow().count(Call::Symlink), 0);
     assert_eq!(built.work.symlinks, 0);
-    assert_eq!(built.work.metadata_patched, 2);
+    assert_eq!(built.work.metadata_patched, 1);
     built.release(&b);
 }
 
@@ -387,9 +431,25 @@ fn link_count_changes_alone_keep_content_and_metadata_roots() {
             value(store, b.fixture.root, serial),
             value(store, built.root, serial),
         );
-        // The same mode and time patched again are the same canonical tree.
+        // The same mode and time in a new row: the inline form now carries
+        // them, so compare the decoded portable values.
         assert_eq!(new.content_root, old.content_root);
-        assert_eq!(new.metadata_root, old.metadata_root);
+        assert_eq!(
+            read_portable(
+                store,
+                new.metadata_root,
+                new.kind,
+                &mut AttributeReadWork::default()
+            )
+            .unwrap(),
+            read_portable(
+                store,
+                old.metadata_root,
+                old.kind,
+                &mut AttributeReadWork::default()
+            )
+            .unwrap()
+        );
     }
     assert_eq!(
         (built.work.files_constructed, built.work.files_unchanged),

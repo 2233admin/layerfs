@@ -2,6 +2,7 @@
 //!
 //! Entry module: declarations and re-exports only.
 
+pub mod branch;
 pub mod candidates;
 pub mod read;
 pub mod record;

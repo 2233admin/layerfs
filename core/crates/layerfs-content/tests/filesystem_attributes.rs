@@ -223,7 +223,12 @@ fn portable_fields_round_trip_and_are_checked() {
     let reader = store.clone();
     let mut work = AttributeReadWork::default();
     let observed =
-        read_portable(&reader, root, InodeKind::RegularFile, &mut work).expect("reads portable");
+        read_portable(
+            &reader,
+            layerfs_content::object::inode_leaf::InodeMetadata::Root(root),
+            InodeKind::RegularFile,
+            &mut work,
+        ).expect("reads portable");
     assert_eq!(observed, metadata);
     assert_eq!(work.values_read, 2);
     // The value ropes stay extent-only: each is a file state over an extent leaf.
@@ -403,7 +408,7 @@ fn a_missing_or_foreign_attribute_tree_fails_explicitly() {
     let mut work = AttributeReadWork::default();
     let outcome = read_portable(
         &store,
-        synthetic("absent"),
+        layerfs_content::object::inode_leaf::InodeMetadata::Root(synthetic("absent")),
         InodeKind::RegularFile,
         &mut work,
     );
@@ -513,7 +518,7 @@ fn an_inode_attribute_tree_is_read_through_a_path() {
                 kind: InodeKind::Directory,
                 namespace_ref_count: 0,
                 content_root: synthetic("root-content"),
-                metadata_root: synthetic("root-meta"),
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(synthetic("root-meta")),
             },
         },
         InodeUpdate {
@@ -522,7 +527,7 @@ fn an_inode_attribute_tree_is_read_through_a_path() {
                 kind: InodeKind::RegularFile,
                 namespace_ref_count: 0,
                 content_root: synthetic("file-content"),
-                metadata_root: attribute_root,
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(attribute_root),
             },
         },
     ];
@@ -552,7 +557,7 @@ fn an_inode_attribute_tree_is_read_through_a_path() {
         "resolving a path must charge the directory pages it read"
     );
     assert_eq!(stat.kind, InodeKind::RegularFile);
-    assert_eq!(stat.metadata_root, attribute_root);
+    assert_eq!(stat.metadata_root.root().unwrap(), attribute_root);
     let _ = read.stat(&path).expect("second stat");
     assert!(
         read.work().directory.pages_read > after_first,
@@ -620,7 +625,7 @@ fn an_inode_attribute_tree_is_read_through_a_path() {
         InodeUpdate {
             serial: 2,
             value: InodeValue {
-                metadata_root: wide_root,
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(wide_root),
                 ..inodes[1].value
             },
         },
@@ -869,4 +874,77 @@ fn every_attribute_descent_rejects_same_or_skipped_child_levels() {
             "invalid first edge emits nothing"
         );
     }
+}
+
+/// `same_metadata` and `same_inode` compare by decoded portable value, not
+/// form: a root-form row and an inline row of the same mode and mtime are
+/// equal, while a differing mtime or content root is a change.
+#[test]
+fn the_metadata_forms_compare_by_value() {
+    use layerfs_content::compare::tree::{same_inode, same_metadata};
+    use layerfs_content::object::inode_leaf::{InodeMetadata, InodeValue};
+    let mut store = TreeStore::new();
+    let portable = PortableMetadata {
+        mode: 0o644,
+        mtime_seconds: 7,
+        mtime_nanoseconds: 9,
+    };
+    let root = with_objects(&mut store, |objects| {
+        let mode = emit_value(objects, &portable.mode_bytes(InodeKind::RegularFile).unwrap()).unwrap();
+        let time = emit_value(objects, &portable.mtime_bytes().unwrap()).unwrap();
+        build_attribute_tree(
+            objects,
+            [
+                Ok(AttributeEntry {
+                    key: AttributeKey::new("portable".into(), b"mode".to_vec()).unwrap(),
+                    value_root: mode,
+                }),
+                Ok(AttributeEntry {
+                    key: AttributeKey::new("portable".into(), b"mtime".to_vec()).unwrap(),
+                    value_root: time,
+                }),
+            ]
+            .into_iter(),
+        )
+        .map(|(root, _)| root)
+    })
+    .unwrap();
+    let (rooted, inlined) = (
+        InodeMetadata::Root(root),
+        InodeMetadata::Inline(portable),
+    );
+    let mut work = AttributeReadWork::default();
+    assert!(same_metadata(
+        &store,
+        InodeKind::RegularFile,
+        rooted,
+        inlined,
+        &mut work
+    )
+    .unwrap());
+    let content = ObjectId::for_bytes(b"content");
+    let (a, b) = (
+        InodeValue {
+            kind: InodeKind::RegularFile,
+            namespace_ref_count: 1,
+            content_root: content,
+            metadata_root: rooted,
+        },
+        InodeValue {
+            metadata_root: inlined,
+            ..InodeValue {
+                kind: InodeKind::RegularFile,
+                namespace_ref_count: 1,
+                content_root: content,
+                metadata_root: rooted,
+            }
+        },
+    );
+    assert!(same_inode(&store, &a, &b, &mut work).unwrap());
+    let mut earlier = b;
+    earlier.metadata_root = InodeMetadata::Inline(PortableMetadata {
+        mtime_seconds: 6,
+        ..portable
+    });
+    assert!(!same_inode(&store, &a, &earlier, &mut work).unwrap());
 }

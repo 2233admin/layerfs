@@ -24,6 +24,7 @@ Each entry of `conflicts` is `{ path, kind, blocks, hunks }`:
 | `add/add` | Both sides created the same path with different text | As `content`, with no common base |
 | `modify/delete`, `delete/modify` | One side changed a file the other deleted | The changed text inside one marker block |
 | `binary` | Both changed a file that isn't text (or is too large to merge as text) | Your version, without markers |
+| `mode` | Both changed a file's mode, to different modes | The merged file, with your mode |
 | `type` | A file on one side, a folder or symlink on the other | Your version if present, else theirs |
 
 `lww` lists the paths that [`/.lww`](lww.md) decided instead of conflicting.

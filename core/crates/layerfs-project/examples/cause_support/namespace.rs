@@ -237,7 +237,7 @@ fn prerequisites(
                         kind,
                         namespace_ref_count: 0,
                         content_root,
-                        metadata_root,
+                        metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(metadata_root),
                     },
                 });
             }

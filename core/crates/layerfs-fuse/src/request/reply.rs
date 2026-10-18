@@ -1,5 +1,5 @@
 //! Pinned fuser consumes replies once; send/delivery outcomes are unavailable.
-use super::terminal;
+use super::{accounting::Accounting, terminal};
 use crate::{
     attributes::{refusal, Identity},
     operations::{KernelData, KernelRead, ReadDataInput},
@@ -7,11 +7,15 @@ use crate::{
     RequestDisposition,
 };
 use fuser::{
-    Errno, FileHandle, FopenFlags, Generation, ReplyAttr, ReplyData, ReplyEntry, ReplyOpen,
+    Errno, FileAttr, FileHandle, FileType, FopenFlags, Generation, INodeNo, ReplyAttr, ReplyData,
+    ReplyEntry, ReplyOpen,
 };
 use layerfs_overlay::KernelMount;
-use layerfs_workspace::KernelReadOperation;
-use std::{sync::Arc, time::Duration};
+use layerfs_workspace::{KernelReadOperation, Refusal};
+use std::{
+    sync::Arc,
+    time::{Duration, UNIX_EPOCH},
+};
 /// Entry and attribute lifetime of every reply. It bounds how long the kernel
 /// may answer without asking; it is never what makes an answer correct.
 pub(super) const TTL: Duration = Duration::from_secs(60);
@@ -53,6 +57,7 @@ impl ReadReply {
         handle: Option<u64>,
         operation: KernelReadOperation,
         identity: Identity,
+        accounting: Arc<Accounting>,
     ) -> RequestDisposition {
         let (reply, input) = match self {
             Self::Data(reply, offset, length) => (reply, ReadDataInput::File { offset, length }),
@@ -61,6 +66,7 @@ impl ReadReply {
                 return reply
                     .attributes(
                         services, fence, mount, request, protected, handle, operation, identity,
+                        accounting,
                     )
                     .await
             }
@@ -93,6 +99,7 @@ impl ReadReply {
         handle: Option<u64>,
         operation: KernelReadOperation,
         identity: Identity,
+        accounting: Arc<Accounting>,
     ) -> RequestDisposition {
         let answer =
             match KernelRead::prepare(services, mount, request, protected, handle, operation).await
@@ -106,7 +113,18 @@ impl ReadReply {
         let value = match answer.value() {
             Ok(value) => value,
             Err(reason) => {
-                self.error(refusal(reason));
+                match self {
+                    // A missing name is a negative entry the kernel keeps for
+                    // TTL. It takes no lookup reference. Every create, link,
+                    // mkdir, symlink and rename through the mount replaces it
+                    // in the kernel, and a merged install invalidates every
+                    // added name (`control/invalidate.rs`).
+                    Self::Entry(reply) if reason == Refusal::Missing => {
+                        accounting.lookup_missing();
+                        reply.entry_with_ttls(&Duration::ZERO, &TTL, &missing(), Generation(0));
+                    }
+                    reply => reply.error(refusal(reason)),
+                }
                 return dispose(answer).await;
             }
         };
@@ -146,6 +164,27 @@ impl ReadReply {
             }
         }
         dispose(answer).await
+    }
+}
+/// The entry of a name that does not exist: node id 0, which the kernel
+/// treats as ENOENT with a valid entry lifetime. No attribute is read.
+fn missing() -> FileAttr {
+    FileAttr {
+        ino: INodeNo(0),
+        size: 0,
+        blocks: 0,
+        atime: UNIX_EPOCH,
+        mtime: UNIX_EPOCH,
+        ctime: UNIX_EPOCH,
+        crtime: UNIX_EPOCH,
+        kind: FileType::RegularFile,
+        perm: 0,
+        nlink: 0,
+        uid: 0,
+        gid: 0,
+        rdev: 0,
+        blksize: 4096,
+        flags: 0,
     }
 }
 async fn dispose(answer: KernelRead) -> RequestDisposition {

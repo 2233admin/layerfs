@@ -1,5 +1,5 @@
 //! Combined schema identity and deterministic definition validation.
-use super::{connection::SqlWork, query};
+use super::{connection::SqlWork, query, transaction::Transaction};
 use crate::backend::records::{BackendError, Param, Record};
 use rusqlite::Connection;
 use std::cell::RefCell;
@@ -7,6 +7,10 @@ pub(crate) const APPLICATION_ID: i64 = 1279677264;
 pub(crate) const OBJECTS: &str = include_str!("../../../sql/sqlite/objects.sql");
 pub(crate) const METADATA: &str = include_str!("../../../sql/sqlite/metadata.sql");
 pub(crate) const HISTORY: &str = include_str!("../../../sql/sqlite/history.sql");
+/// Lineage tables (#353); a Store written before them gains them at open.
+pub(crate) const LINEAGE: &str = include_str!("../../../sql/sqlite/lineage.sql");
+/// Merge build records (#355); a Store written before them gains them at open.
+pub(crate) const SCRATCH: &str = include_str!("../../../sql/sqlite/merge_scratch.sql");
 const UNIT_INDEX: &str = include_str!("../../../sql/sqlite/objects_units_index.sql");
 const UNITS: &str = include_str!("../../../sql/sqlite/objects_units.sql");
 const ACQUISITION: &str = include_str!("../../../sql/sqlite/acquisition/schema.sql");
@@ -23,6 +27,8 @@ fn scripts((layout, acquisition): Selection) -> Vec<String> {
         objects,
         METADATA.replace("schema_version=1", &version),
         HISTORY.replace("schema_version=1", &version),
+        LINEAGE.to_owned(),
+        SCRATCH.to_owned(),
     ];
     if acquisition == crate::SqliteAcquisitionSchema::Tables {
         scripts.push(ACQUISITION.to_owned());
@@ -73,16 +79,22 @@ pub(crate) fn check(
     )?;
     let actual: Vec<String> = rows.iter().map(|r| r.get(0)).collect::<Result<_, _>>()?;
     let mut expected = vec![
+        "absorbed",
         "binding_hint",
         "branch",
         "commit",
+        "commit_lineage",
         "content_signature",
         "history_meta",
         "inode_value",
         "layer",
+        "layer_lineage",
         "layer_stack",
+        "merge_operation",
+        "merge_record",
         "object_location",
         "pack",
+        "reach",
         "scope_allocator",
         "store_policy",
         "store_totals",
@@ -149,7 +161,11 @@ impl super::connection::Session {
             let Some(row) = rows.first() else {
                 return Ok(());
             };
-            let current = source((self.layout, self.acquisition));
+            // The schema this migration records is the one before the
+            // lineage and merge tables; later migrations add those.
+            let current = source((self.layout, self.acquisition))
+                .replacen(SCRATCH, "", 1)
+                .replacen(LINEAGE, "", 1);
             let table = HISTORY
                 .find("CREATE TABLE binding_hint (")
                 .and_then(|start| Some((start, start + HISTORY[start..].find(";\n")? + 2)))
@@ -162,6 +178,79 @@ impl super::connection::Session {
                 return Ok(());
             }
             tx.bootstrap(table)?;
+            let definition = definition(tx.connection, tx.work)?;
+            tx.query(
+                "UPDATE history_meta SET schema_source=?1,schema_definition=?2 WHERE id=1",
+                vec![Param::Text(current), Param::Text(definition)],
+            )?;
+            Ok(())
+        })
+    }
+    /// Adds the lineage tables (#353) to a Store written before them, fills
+    /// them with `backfill` in the same write transaction and records the
+    /// current schema: an additive migration (REBUILD.md kind 2) under the
+    /// same conditions as [`Self::add_binding_hints`].
+    pub(crate) fn add_lineage(
+        &self,
+        backfill: impl FnOnce(&Transaction<'_>) -> Result<(), BackendError>,
+    ) -> Result<(), BackendError> {
+        self.run::<_, BackendError>(true, |tx| {
+            let present = tx.query(
+                "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='commit_lineage'",
+                vec![],
+            )?;
+            if !present.is_empty() {
+                return Ok(());
+            }
+            let rows = tx.query(
+                "SELECT schema_source,schema_definition FROM history_meta WHERE id=1",
+                vec![],
+            )?;
+            let Some(row) = rows.first() else {
+                return Ok(());
+            };
+            let current = source((self.layout, self.acquisition)).replacen(SCRATCH, "", 1);
+            if row.get::<String>(0)? != current.replacen(LINEAGE, "", 1)
+                || row.get::<String>(1)? != definition(tx.connection, tx.work)?
+            {
+                return Ok(());
+            }
+            tx.bootstrap(LINEAGE)?;
+            backfill(tx)?;
+            let definition = definition(tx.connection, tx.work)?;
+            tx.query(
+                "UPDATE history_meta SET schema_source=?1,schema_definition=?2 WHERE id=1",
+                vec![Param::Text(current), Param::Text(definition)],
+            )?;
+            Ok(())
+        })
+    }
+    /// Adds the merge build tables (#355) to a Store written before them and
+    /// records the current schema: an additive migration (REBUILD.md kind 2)
+    /// under the same conditions as [`Self::add_binding_hints`].
+    pub(crate) fn add_merge_scratch(&self) -> Result<(), BackendError> {
+        self.run::<_, BackendError>(true, |tx| {
+            let present = tx.query(
+                "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='merge_record'",
+                vec![],
+            )?;
+            if !present.is_empty() {
+                return Ok(());
+            }
+            let rows = tx.query(
+                "SELECT schema_source,schema_definition FROM history_meta WHERE id=1",
+                vec![],
+            )?;
+            let Some(row) = rows.first() else {
+                return Ok(());
+            };
+            let current = source((self.layout, self.acquisition));
+            if row.get::<String>(0)? != current.replacen(SCRATCH, "", 1)
+                || row.get::<String>(1)? != definition(tx.connection, tx.work)?
+            {
+                return Ok(());
+            }
+            tx.bootstrap(SCRATCH)?;
             let definition = definition(tx.connection, tx.work)?;
             tx.query(
                 "UPDATE history_meta SET schema_source=?1,schema_definition=?2 WHERE id=1",

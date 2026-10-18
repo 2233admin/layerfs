@@ -13,6 +13,12 @@ pub trait Source {
     }
     /// Eligible location under the caller's retained ceiling.
     fn location(&self, id: ObjectId, ceiling: i64) -> StorageResult<Option<ObjectLocation>>;
+    /// Location of a base that a stored record names. Such a base is always
+    /// stored, so a source that caches negative answers re-asks here: its
+    /// "absent" may predate another writer's publication of the base (F-036).
+    fn base_location(&self, id: ObjectId, ceiling: i64) -> StorageResult<Option<ObjectLocation>> {
+        self.location(id, ceiling)
+    }
     /// Complete declared pack bytes, without capacity padding.
     fn pack_bytes(&self, pack_id: i64) -> StorageResult<Vec<u8>>;
     /// Acquires the complete encoded groups needed by this bounded physical

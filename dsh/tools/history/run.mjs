@@ -59,7 +59,7 @@ import { due, manifestPath, rebuild } from "./snapshot.mjs";
 import { aggregate } from "./gates.mjs";
 import { PLAN_VERSION } from "./plan.mjs";
 import {
-  binaries, closure, consolidate, expectCall, HISTORY, loadNow, median, Mismatch, probeFixture, probes, readTrace, REPO, Run,
+  binaries, closure, consolidate, expectCall, HISTORY, loadNow, median, Mismatch, PREFIX, probeFixture, probes, readTrace, REPO, Run,
   sandboxHealth, setup, sha256, step, teardown, verify, writeJson,
 } from "./lib.mjs";
 import { addDelta, checkpointDiff, deltaSummary, deltaWork, diskGuard, diskModel, EXIT, nextPhase, oneshotSplit, p2Plan, pad, poolSharing, PHASES, phaseOps, Tree } from "./steps.mjs";
@@ -214,11 +214,11 @@ function create({ id, phase, label, policy, image, daemon, addon = ADDON, sdk = 
   if (!PHASES[phase]) throw new Error(`phase ${phase} has no player yet (built: ${Object.keys(PHASES).join(", ")})`);
   const dir = join(HISTORY, "runs", id);
   if (existsSync(dir)) throw new Error(`${dir} exists`);
-  const volume = `layerfs-issue352-${id}`;
+  const volume = `${PREFIX}-${id}`;
   const host = docker(["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"]);
   const env = {
     LAYERFS_HOME: join(dir, "home"), LAYERFS_DOCKER: host.replace(/^unix:\/\//, ""), LAYERFS_IMAGE: image, LAYERFS_VOLUME: volume,
-    LAYERFS_DAEMON: daemon, LAYERFS_NATIVE: addon, LAYERFS_CONTAINER_PREFIX: `layerfs-issue352-${id}-`,
+    LAYERFS_DAEMON: daemon, LAYERFS_NATIVE: addon, LAYERFS_CONTAINER_PREFIX: `${PREFIX}-${id}-`,
     LAYERFS_CONSTRUCTION_WORKERS: "1", LAYERFS_STORE_PATH: STORE_PATH, LAYERFS_SDK_JS: sdk,
   };
   return { dir, volume, env, manifest: {

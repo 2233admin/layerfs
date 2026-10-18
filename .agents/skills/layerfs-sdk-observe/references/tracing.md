@@ -258,7 +258,7 @@ Each `daemon` entry:
 | `timing` | Phase trees `{ name, ms, children }` (`outcome`, `incomplete` only when they apply), at most 256 nodes; `omitted` counts the rest |
 | `sql` | Every exchange: Store SQL work as `writer` and `readers` deltas of 27 `SqlWork` counters (`statements`, `vm_steps`, `fullscan_steps`, `sorts`, `autoindex_rows`, …); includes concurrent calls' work on the same sessions |
 | `delta` | On calls that finished a Save: delta selection work after minus before; `payload` (whole-file and chunk counts, `depth_capped`, `work_exceeded`, `whole_file_depths`, `chunk_depths`) and `metadata` (pooled leaves, `depths`); slot d of a histogram = objects stored at chain depth d |
-| `fuse` | On `sandbox.status` / `sandbox.unmount` of an attached Workspace: its kernel opcode counts since attach (`lookup`, `getattr`, `read`, `write`, …, `served`, `largest_read`) |
+| `fuse` | On `sandbox.status` / `sandbox.unmount` of an attached Workspace: its kernel opcode counts since attach (`lookup`, `getattr`, `read`, `write`, …, `served`, `largest_read`), plus `lookup_missing` (ENOENT lookups) and `served_ns` (request-service wall time) |
 | `storage` | On a committing exchange: 42 Save storage counters (`pack_write_bytes`, `locator_hits`, `pack_misses`, …) |
 | `construction` | On a committing exchange: 31 captured-namespace construction counters (`files_constructed`, `inode_rows`, …) |
 | `diagnosticError` | `{ kind, message }` if the daemon couldn't write its records or the telemetry didn't fit (`Oversized`); the call is unaffected |
@@ -273,6 +273,7 @@ Each `daemon` entry:
 | `sandbox.mount.attach` › `kernel.attach` | `sandbox.mount` | |
 | `sdk.read`, `sdk.lines` | `fs.read`, line reads | `content.read` |
 | `branch.merge` | `branch.merge` | merge tree |
+| `branch.merge.publish` | `branch.merge`, a clean merge | the one history write that publishes it: the merge's writer hold |
 | `blame.compare` | `fs.blame` | |
 
 ## Reading it

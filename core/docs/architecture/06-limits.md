@@ -475,6 +475,47 @@ slice (`04-filesystem.md` §5.8).
 | sessions per Store | budget + 2, +1 refusal slot | `session_capacity` |
 | delta depth (whole-file / chunk / metadata) | 8 / 4 / 8 defaults, ≤ 50 | policy validation |
 
+### C5 — history walks (#353, 2026-10-18)
+
+History has no count limit. `MAXIMUM_LINEAGE_ROWS` (4,096), which refused
+`is_ancestor`, `merge_base`, publish's skipped-Layer walk and fork-from-Commit
+with `Capacity("lineage work")` past 4,096 rows, is deleted (#352 F-033). The
+walks read lineage records instead
+([16-history](16-history.md), [#353 design](../issues/353/DESIGN.md)):
+
+| Limit | Value | Enforced by |
+| --- | ---: | --- |
+| Commits since a Branch's base Layer | none | `lineage.rs` runs and absorption |
+| Layers between two sides | none | `layer_lineage.height` |
+| first-parent depth of a fork or history start | none | `commit_lineage` run and depth |
+| overwritten Layers per publication | none; paged, 128 per catalog page | `overwritten`, `MAXIMUM_PAGE_RECORDS` |
+
+What a walk still costs: a run segment and a merge at a time over the local
+Commits no Layer has absorbed; a fork from a Commit, one step per run on the
+chain. Disk and memory as admitted are the only bounds.
+
+### C1 — merge (#355, 2026-10-18)
+
+A merge has no count limit. The in-memory build budget (65,536 topology
+entries) and `MAXIMUM_MERGE_PATHS` (262,144 decided paths), which refused a
+merge past them with `BoundedCapacityExceeded`, are deleted. The merge's
+working state lives in the global Store's merge scratch rows
+([81-compare-and-merge](81-compare-and-merge.md)). Since M1 the merge walks
+changed serials, not candidate paths:
+
+| Limit | Value | Enforced by |
+| --- | ---: | --- |
+| changed serials per merge | none | a run and point records in `merge_record` |
+| merge state held in memory before it spills | 8 MiB | `merge/spill.rs` `HELD_BYTES` |
+| run chunk | 60 KiB | `CHUNK_BYTES` |
+| record write-back buffer | 256 KiB | `storage/merge_records.rs` `BUFFER_BYTES` |
+| changed serials the in-lane Commit step decides | 1,024; more refuses the Commit `LaneMerge` | `LANE_MERGE_PATHS` |
+| written paths a conflicted Commit lists | 4,096, `truncated` when cut | `WRITTEN_PATHS` |
+
+The in-lane bound keeps the lane's work independent of the tree; it is a
+refusal of that Commit, never a partial merge. Disk as admitted is the only
+other bound.
+
 ### Service/Bridge — final file save (#252)
 
 | Limit | Value | Enforced by |

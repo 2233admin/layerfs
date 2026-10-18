@@ -56,3 +56,38 @@
   Old packs keep 11.6% of the Store as reserved bytes. Speed within 1.1×
   except p95 watches on fs.read, fs.list and sandbox.mount (1.14–1.15, flat
   counters, load ~13). [fixes/014-f027-item1-sized-pack-directories.md](fixes/014-f027-item1-sized-pack-directories.md).
+  **Item 3 done** (`7ac7343c7`, daemon `3dad6f79`, addon `43c96012`, on
+  branch `claude/issue360-item3-branch-deltas-72ecad`):
+  - Change: an `InodeBranch` is stored as a COPY/INSERT program against its
+    predecessor, under the metadata cap of 8 and the chain budgets; a refused
+    base stores whole. Old Stores read unchanged (compat range 14 ok).
+  - Synthetic P3, 100 `fs.write` Commits on a 53k-entry tree: InodeBranch
+    2,894 → 338 B per Commit (−88%), pack bytes −80%, Store growth −20%.
+    Decoded views are identical.
+  - Lookup bound holds (one chain per branch level).
+  - Speed, cache state enforced: 0.85–1.04× on FUSE operations, Commit and
+    merge; SDK `fs.read` cold 1.25× (single sample). Statements +5–30% on
+    cold reads and writes.
+  - Accepted under AGENTS §3.9. The lead's p95 condition is not established
+    from one sample per case, and the r011 storage gate was not run.
+  - Integrated (`01dc7eefa`, `a76b4ac33`): built on F-036 (bases found with
+    `base_location`) and F-043. Reference closure, chronology under two
+    concurrent Saves, and one chain per demanded branch page in a merge are
+    shown by test; M1 equivalence with a delta-form side passes on
+    `issue360-i3-m1-equiv`.
+  - Record: [fixes/030-f027-item3-inode-branch-deltas.md](fixes/030-f027-item3-inode-branch-deltas.md).
+- **Record 034 · S1 and O1 (owner via the liaison, 2026-10-19).** Three
+  commits on `claude/issue352-s1-o1-034`, one sample each, no format change:
+  - O1-a `13522bf39`: a Commit's logical size comes from catalogue lengths.
+    On pnpm-first, writer statements went 103,770 → 66,173, locates
+    44,159 → 9,759, payload reads −45 MB, and Commit minus construct
+    1.74 → 0.60 s.
+  - S1-a `6b47dbd26`: the candidate ring is read in slot order and sorted
+    in memory. On small-commit, `begin` went 6.76 → 3.26 ms and the sort
+    is gone.
+  - S1-b `4469e20a7`: the ring loads at its first use. On small-commit,
+    `begin` went 3.26 → 0.11 ms, the ring read is gone, and daemon
+    Commit went 13.78 → 6.41 ms over the three fixes.
+  - O1-b (bindings, −0.1 to −0.2 s) and O1-c (Save-internal, under
+    −0.1 s) were skipped by approval.
+  - Record: [fixes/034-s1-o1-commit-begin-and-logical-count.md](fixes/034-s1-o1-commit-begin-and-logical-count.md).

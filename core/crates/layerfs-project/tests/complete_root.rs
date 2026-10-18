@@ -114,6 +114,14 @@ fn acquire_and_verify(
         seen += 1;
         let logical = LogicalPath::new(&path).unwrap();
         let inode = view.resolve(&logical).unwrap();
+        // Project Init writes the inline form: no row names an attribute root.
+        assert!(
+            matches!(
+                inode.value.metadata_root,
+                layerfs_content::object::inode_leaf::InodeMetadata::Inline(_)
+            ),
+            "{path}: Init must write the inline metadata form"
+        );
         match inode.value.kind {
             InodeKind::Directory => {
                 let mut after = None;

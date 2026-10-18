@@ -142,7 +142,13 @@ impl Overlay {
             .find(|layer| layer.gen == item.target)
             .ok_or(OverlayError::Stale)?;
         let top = match layers.first().filter(|layer| layer.gen == state.active.0) {
-            Some(layer) => *layer,
+            Some(layer) => {
+                // Folding into a kept row writes it: it is counted now.
+                if self.unkeep(serial) {
+                    self.dirty_counts(1, 0)?;
+                }
+                *layer
+            }
             None => {
                 let (_, layer) = self.put_inode(&state, &lower)?;
                 self.dirty_counts(1, 0)?;

@@ -1,7 +1,7 @@
 //! Authenticated canonical acquisition and exact immutable cache keys.
 use crate::cache::CanonicalCache;
 use layerfs_content::filesystem::attributes::{read_portable, AttributeReadWork, PortableMetadata};
-use layerfs_content::object::inode_leaf::InodeKind;
+use layerfs_content::object::inode_leaf::{InodeKind, InodeMetadata};
 use layerfs_content::{AuthenticatedObjects, ContentError, ContentResult, ObjectId};
 use std::sync::Arc;
 
@@ -122,6 +122,47 @@ impl CanonicalClient {
             .ok_or(crate::WorkspaceError::MissingLengthProvider)?
             .file_length(id)
     }
+    /// Whether the length of `id` is remembered, without a demand.
+    pub(crate) fn remembers_length(&self, id: ObjectId) -> bool {
+        self.state()
+            .is_ok_and(|mut state| state.cache.length(id).is_some())
+    }
+    /// Remembers the lengths of those `ids` not remembered yet, asked of the
+    /// provider in one demand (#356 F-032). A memory-only client, or one
+    /// without a length provider, asks nothing.
+    pub(crate) fn provide_lengths(&self, ids: &[ObjectId]) -> crate::WorkspaceResult<()> {
+        let Some(provider) = self.lengths.as_ref().filter(|_| !self.resident) else {
+            return Ok(());
+        };
+        let wanted: Vec<ObjectId> = {
+            let mut state = self.state()?;
+            let mut wanted: Vec<ObjectId> = ids
+                .iter()
+                .copied()
+                .filter(|id| state.cache.length(*id).is_none())
+                .collect();
+            wanted.sort_unstable();
+            wanted.dedup();
+            wanted
+        };
+        if wanted.is_empty() {
+            return Ok(());
+        }
+        let values = provider.file_lengths(&wanted)?;
+        if values.len() != wanted.len() {
+            return Err(ContentError::BatchCardinality {
+                requested: wanted.len(),
+                returned: values.len(),
+            }
+            .into());
+        }
+        let mut state = self.state()?;
+        for (id, length) in wanted.into_iter().zip(values) {
+            let evictions = state.cache.remember_length(id, length).unwrap_or(0);
+            state.work.evictions = state.work.evictions.saturating_add(evictions);
+        }
+        Ok(())
+    }
     /// Bounded cumulative acquisition counters and logical cache charge.
     pub fn diagnostics(&self) -> ContentResult<ClientWork> {
         self.cache.diagnostics()
@@ -146,13 +187,21 @@ impl CanonicalClient {
     /// same reads again and nothing else; a failed read remembers nothing.
     pub(crate) fn portable(
         &self,
-        root: ObjectId,
+        root: InodeMetadata,
         kind: InodeKind,
     ) -> ContentResult<PortableMetadata> {
+        let Some(root) = root.root() else {
+            return read_portable(self, root, kind, &mut AttributeReadWork::default());
+        };
         if let Some(remembered) = self.state()?.cache.portable(root, kind) {
             return Ok(remembered);
         }
-        let metadata = read_portable(self, root, kind, &mut AttributeReadWork::default())?;
+        let metadata = read_portable(
+            self,
+            InodeMetadata::Root(root),
+            kind,
+            &mut AttributeReadWork::default(),
+        )?;
         let mut state = self.state()?;
         let evictions = state.cache.remember_portable(root, kind, metadata);
         state.work.evictions = state.work.evictions.saturating_add(evictions);

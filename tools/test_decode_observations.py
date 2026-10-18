@@ -60,9 +60,47 @@ class DecoderTests(unittest.TestCase):
         self.assertFalse(decoded[2]["complete"], "no footer means incomplete")
 
     def test_every_named_section_matches_its_source_width(self):
-        widths = {1: 15, 2: 17, 13: 55, 15: 31, 16: 42, 22: 20, 26: 45, 28: 28, 29: 42, 30: 34, 32: 11}
+        widths = {1: 15, 2: 17, 13: 55, 15: 47, 16: 42, 22: 20, 26: 47, 28: 28, 29: 42, 30: 34, 32: 11}
         for section, width in widths.items():
             self.assertEqual(len(decode_observations.SECTIONS[section][1]), width, section)
+
+    def test_kernel_opcodes_decodes_old_and_current_lengths(self):
+        # The 45-value layout predates lookup_missing/served_ns (#359); both
+        # stay decodable, with old records simply lacking the two new names.
+        old = list(range(45))
+        new = list(range(47))
+        lines = [*group(5), row(5, 26, 0, old), *group(6), row(6, 26, 0, new)]
+        decoded = {g["call"]: g["sections"]["kernel_opcodes"] for g in
+                   decode_observations.decode(lines, {})}
+        self.assertEqual(decoded[5]["store_units"], 44)
+        self.assertNotIn("lookup_missing", decoded[5])
+        self.assertNotIn("served_ns", decoded[5])
+        self.assertEqual(decoded[6]["lookup_missing"], 45)
+        self.assertEqual(decoded[6]["served_ns"], 46)
+
+    def test_commit_namespace_decodes_old_and_current_lengths(self):
+        # The 31-value layout predates window_jobs and the phase times, the
+        # 35-value one the values and update splits (#352 record 033); all stay
+        # decodable, older records lacking the newer names.
+        old = list(range(31))
+        new = list(range(35))
+        split = list(range(47))
+        lines = [*group(7), row(7, 15, 0, old), *group(8), row(8, 15, 0, new),
+                 *group(9), row(9, 15, 0, split)]
+        decoded = {g["call"]: g["sections"]["commit_namespace"] for g in
+                   decode_observations.decode(lines, {})}
+        self.assertEqual(decoded[7]["fresh_points"], 30)
+        for name in ["window_jobs", "normalize_ns", "values_ns", "update_ns"]:
+            self.assertNotIn(name, decoded[7])
+        self.assertNotIn("unnamed", decoded[7])
+        self.assertEqual(decoded[8]["fresh_points"], 30)
+        self.assertEqual(decoded[8]["window_jobs"], 31)
+        self.assertEqual(decoded[8]["update_ns"], 34)
+        self.assertNotIn("inode_page_ns", decoded[8])
+        self.assertNotIn("unnamed", decoded[8])
+        self.assertEqual(decoded[9]["inode_page_ns"], 35)
+        self.assertEqual(decoded[9]["backing_ns"], 46)
+        self.assertNotIn("unnamed", decoded[9])
 
 
 if __name__ == "__main__":

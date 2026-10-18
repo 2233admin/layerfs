@@ -32,9 +32,10 @@ needs no Workspace, branch, commit, mount or daemon.
 | Groups per pack | `<= 256`; `1` in the singleton lane |
 | Chain budgets | `512 KiB` canonical and `256 KiB` encoded per chain, independent of the accepted depths |
 | Metadata pooling | implemented: supplied canonical inode leaves are stored pooled; each 73-byte inode value is one stored row under its ordinal (issue 320 design B, 2026-10-13), 100 rows per leaf page; a row keeps the ordinal its value has in a named base leaf, a new value takes the next ordinal of the Save's reserved block |
-| Pooled record grammar | `0 | physical body` (FULL) or `1 | base id | output length | instruction count | program` (COPY/INSERT), the ordinary lane's tags read under the `InodeLeaf` role |
+| Pooled record grammar | `0 | physical body` (FULL) or `1 | base id | output length | instruction count | program` (COPY/INSERT), the ordinary lane's tags read under the `InodeLeaf` role; an `InodeBranch` uses the same program against its canonical predecessor page (#360 item 3) |
 | Pooled chain budgets | depth `0..=50` (own persisted field); 64 KiB canonical and 139 KiB encoded per chain; 8 KiB per pooled record; match budget 128 KiB per trial |
 | Value memo | per Save only: `BTreeMap<fingerprint, ordinal>` of the values this Save assigned, at most 131,072 entries, dropped whole at the bound; the fingerprint filters candidates and full value bytes decide. Nothing is rebuilt from history; a value neither in a named base leaf nor in the memo is stored again |
+| Exact reuse (integrity policy, owner 2026-10-19, #352 record 034 A-1) | an offered object whose id is already stored under the same role and canonical length is accepted **without reading the stored copy back**. A role or length mismatch is refused at Save (`Collision`). A corrupt stored copy surfaces at its first read, where every read authenticates bytes against the id (`Integrity`) |
 | Lookup page | `128` identifiers |
 | Pending batch | `512` objects and `512 KiB` canonical bytes |
 | Write transaction | `8191` rows and `4 MiB - 1` canonical bytes, shared across batches |
@@ -159,7 +160,12 @@ Admission now accepts the Stage 5 tree roles as ordinary framed objects: one
 directory leaf, directory branch, inode branch, filesystem root, attribute leaf,
 attribute branch and symlink target per canonical page. They are stored whole in
 the ordinary lane and never choose a payload delta. The pooled inode leaf keeps
-role 6 and its own lane, locators and reader.
+role 6 and its own lane, locators and reader. An inode branch (since #360 item 3)
+may instead be stored as `1 | base id | output length | count | program`, the
+pooled COPY/INSERT grammar against its predecessor branch, under the pooled
+depth cap and chain budgets; `0 | page` stays its whole form, so older Stores
+and mixed chains read unchanged (`encoding/pool/branch.rs`,
+`encoding/delta/branch.rs`).
 
 The persisted role range is 1–13. A Store created by an earlier revision keeps
 its narrower `CHECK (object_role BETWEEN 1 AND 6)` and therefore rejects the new

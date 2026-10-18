@@ -96,6 +96,51 @@ pub fn same_value(left: &InodeValue, right: &InodeValue) -> bool {
         && left.metadata_root == right.metadata_root
 }
 
+/// Semantic equality of two values: the strict [`same_value`] check, then —
+/// when only the metadata forms differ — the decoded portable values, so a
+/// root-form row and an inline row of the same logical metadata compare equal.
+pub fn same_inode(
+    reader: &dyn AuthenticatedObjects,
+    left: &InodeValue,
+    right: &InodeValue,
+    work: &mut crate::filesystem::attributes::AttributeReadWork,
+) -> ContentResult<bool> {
+    if same_value(left, right) {
+        return Ok(true);
+    }
+    if left.kind != right.kind || left.content_root != right.content_root {
+        return Ok(false);
+    }
+    Ok(crate::filesystem::attributes::read_portable(
+        reader,
+        left.metadata_root,
+        left.kind,
+        work,
+    )? == crate::filesystem::attributes::read_portable(
+        reader,
+        right.metadata_root,
+        right.kind,
+        work,
+    )?)
+}
+
+/// Whether two metadata fields decode to the same portable value, with the
+/// strict byte fast path first. Use where the form may differ but the value
+/// must mean the same thing.
+pub fn same_metadata(
+    reader: &dyn AuthenticatedObjects,
+    kind: crate::object::inode_leaf::InodeKind,
+    left: crate::object::inode_leaf::InodeMetadata,
+    right: crate::object::inode_leaf::InodeMetadata,
+    work: &mut crate::filesystem::attributes::AttributeReadWork,
+) -> ContentResult<bool> {
+    if left == right {
+        return Ok(true);
+    }
+    Ok(crate::filesystem::attributes::read_portable(reader, left, kind, work)?
+        == crate::filesystem::attributes::read_portable(reader, right, kind, work)?)
+}
+
 /// Every inode whose value differs between two roots, in serial order.
 pub fn inode_changes(
     reader: &dyn AuthenticatedObjects,
@@ -104,13 +149,14 @@ pub fn inode_changes(
     work: &mut DifferenceWork,
     mut visit: impl FnMut(u64, Option<&InodeValue>, Option<&InodeValue>) -> ContentResult<()>,
 ) -> ContentResult<()> {
+    let mut metadata = crate::filesystem::attributes::AttributeReadWork::default();
     difference::<CompactInodes>(
         reader,
         Some(left.table.root),
         Some(right.table.root),
         work,
         |serial, before, after| match (before, after) {
-            (Some(a), Some(b)) if same_value(a, b) => Ok(()),
+            (Some(a), Some(b)) if same_inode(reader, a, b, &mut metadata)? => Ok(()),
             _ => visit(*serial, before, after),
         },
     )
@@ -459,14 +505,21 @@ pub fn root_changes(
             );
         }
     }
-    out.entries = entries
-        .into_values()
-        .filter(|entry| match (entry.left, entry.right) {
-            (Some(a), Some(b)) => a.serial != b.serial || !same_value(&a.value, &b.value),
+    let mut metadata = crate::filesystem::attributes::AttributeReadWork::default();
+    let mut kept = Vec::new();
+    for entry in entries.into_values() {
+        let keep = match (entry.left, entry.right) {
+            (Some(a), Some(b)) => {
+                a.serial != b.serial
+                    || !same_inode(reader, &a.value, &b.value, &mut metadata)?
+            }
             _ => true,
-        })
-        .take(limit)
-        .collect();
+        };
+        if keep {
+            kept.push(entry);
+        }
+    }
+    out.entries = kept.into_iter().take(limit).collect();
     if out.entries.len() >= limit {
         out.truncated = true;
     }

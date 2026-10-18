@@ -45,7 +45,11 @@ fn file(position: u64, path_bytes: usize) -> NewEntry {
         },
         position: Some(position),
         kind: InodeKind::RegularFile,
-        metadata_root: ObjectId::for_bytes(b"metadata"),
+        metadata: layerfs_content::filesystem::attributes::portable::PortableMetadata {
+            mode: 0o644,
+            mtime_seconds: 1_700_000_000,
+            mtime_nanoseconds: 0,
+        },
         target_root: None,
         host_path: Some(vec![b'p'; path_bytes]),
         host: Some(HostIdentity {

@@ -106,6 +106,8 @@ pub(super) fn emit<W: Write>(
             w.terminal,
             w.forget_units,
             w.store_units,
+            w.lookup_missing,
+            w.served_ns,
         ]),
     )?;
     match facts.aborted {

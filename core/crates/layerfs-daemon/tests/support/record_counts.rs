@@ -386,4 +386,7 @@ impl OverlayCapturedNamespace for Counting<'_> {
         self.read("captured_symlink");
         self.read_call(|| self.inner.captured_symlink(reader, serial))
     }
+    fn keep_live_row(&self, reader: CapturedReader, serial: u64) -> WorkspaceResult<bool> {
+        self.inner.keep_live_row(reader, serial)
+    }
 }

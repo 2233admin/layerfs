@@ -5,7 +5,10 @@ use layerfs_history::HistoryResult;
 pub(crate) struct Transaction<'a> {
     backend: &'a BackendTransaction<'a>,
 }
-impl Transaction<'_> {
+impl<'a> Transaction<'a> {
+    pub(crate) fn new(backend: &'a BackendTransaction<'a>) -> Self {
+        Self { backend }
+    }
     pub(crate) fn query(&self, key: &str, params: impl Parameters) -> HistoryResult<Vec<Record>> {
         self.backend
             .history(key, params.into_params())

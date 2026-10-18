@@ -20,6 +20,7 @@ mod installed;
 mod support;
 
 use layerfs_bridge::control::SdkValue;
+use layerfs_content::compare::tree::{same_inode, same_metadata};
 use layerfs_content::compare::{
     inode_changes, list_directory, locate, name_from_hints, DifferenceWork, EntryFacts, TreeTable,
 };
@@ -188,6 +189,7 @@ fn entries(reader: &dyn AuthenticatedObjects, root: ObjectId) -> Vec<(String, En
 /// The full walk's listing: every path whose entries differ, except a
 /// directory whose only change is its children.
 fn walked(reader: &dyn AuthenticatedObjects, from: ObjectId, to: ObjectId) -> Vec<String> {
+    let mut work = layerfs_content::filesystem::attributes::AttributeReadWork::default();
     let (left, right) = (entries(reader, from), entries(reader, to));
     let (mut l, mut r) = (left.into_iter().peekable(), right.into_iter().peekable());
     let mut out = Vec::new();
@@ -213,14 +215,29 @@ fn walked(reader: &dyn AuthenticatedObjects, from: ObjectId, to: ObjectId) -> Ve
                 (p, Some(a), Some(b))
             }
         };
-        if before == after {
+        // The SDK diff compares same-serial inodes semantically: a form-only
+        // metadata difference is no change, and a directory whose decoded
+        // portable metadata matches lists only its children.
+        if match (before, after) {
+            (Some(x), Some(y)) if x.serial == y.serial => {
+                same_inode(reader, &x.value, &y.value, &mut work).unwrap()
+            }
+            _ => before == after,
+        } {
             continue;
         }
         if let (Some(x), Some(y)) = (before, after) {
             if x.serial == y.serial
                 && x.value.kind == InodeKind::Directory
                 && y.value.kind == InodeKind::Directory
-                && x.value.metadata_root == y.value.metadata_root
+                && same_metadata(
+                    reader,
+                    x.value.kind,
+                    x.value.metadata_root,
+                    y.value.metadata_root,
+                    &mut work,
+                )
+                .unwrap()
             {
                 continue;
             }

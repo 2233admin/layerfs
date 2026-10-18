@@ -65,7 +65,8 @@ impl Fixture {
                     stack: LayerStackId::from_authority([23; 16]),
                     name: HistoryName::new("installed").unwrap(),
                     scope_seed: [31; 32],
-                    deadline: Instant::now() + Duration::from_secs(10),
+                    // Large fixtures (#355: 70,000 files) need longer than 10 s on a busy host.
+                    deadline: Instant::now() + Duration::from_secs(60),
                 },
                 timing,
             )
@@ -97,6 +98,24 @@ impl Fixture {
                 ..config
             },
             branch,
+            count,
+        }
+    }
+    /// An independent writable copy of a closed installed Store (setup
+    /// reuse, AGENTS section 2): the copy is new to this process and removed
+    /// with it.
+    pub fn cloned(label: &str, store: &std::path::Path, count: usize) -> Self {
+        let directory =
+            std::env::temp_dir().join(format!("layerfs-installed-{}-{label}", std::process::id()));
+        std::fs::create_dir(&directory).unwrap();
+        let installed = directory.join("store.sqlite");
+        std::fs::copy(store, &installed).unwrap();
+        Self {
+            directory,
+            config: PersistenceConfig::sqlite(&installed)
+                .with_sqlite_profile(SqlitePersistenceProfile::Disposable)
+                .with_sqlite_acquisition(SqliteAcquisitionSchema::Tables),
+            branch: BranchId::from_authority([24; 16]),
             count,
         }
     }

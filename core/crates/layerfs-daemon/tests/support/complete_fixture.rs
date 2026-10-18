@@ -72,6 +72,8 @@ pub struct Fixture {
     pub file_metadata: PortableMetadata,
     pub root_metadata: PortableMetadata,
     pub shape: Shape,
+    /// The CanonicalCache budget the fixture's Store was opened with.
+    pub cache_bytes: usize,
 }
 pub fn metadata(path: &Path) -> PortableMetadata {
     let m = fs::symlink_metadata(path).unwrap();
@@ -239,9 +241,10 @@ impl Fixture {
             .unwrap();
         }
 
-        let (mut channel, worker) = support::pair(move |channel| {
-            receive_install(channel, &destination, StoreSettings::default())
-        });
+        let settings = StoreSettings::default();
+        let cache_bytes = settings.cache_bytes;
+        let (mut channel, worker) =
+            support::pair(move |channel| receive_install(channel, &destination, settings));
         let ack = layerfs_api::internal::install(&project, &mut channel).unwrap();
         let installed = worker.join().unwrap();
         fs::remove_file(project.store.path).unwrap();
@@ -260,6 +263,7 @@ impl Fixture {
             file_metadata,
             root_metadata,
             shape,
+            cache_bytes,
         }
     }
     pub fn prepared_wide(prepared: &Path) -> Self {
@@ -307,13 +311,14 @@ impl Fixture {
         drop((source, target));
         assert_eq!(copied, manifest.bytes);
         manifest.locator = database.to_str().unwrap().into();
+        let cache_bytes = 8 * 1024 * 1024;
         let opened = open_store_observed(
             PersistenceConfig::sqlite(&database)
                 .with_sqlite_profile(SqlitePersistenceProfile::Disposable),
             &manifest.binding,
             manifest.cursor_key,
             4,
-            8 * 1024 * 1024,
+            cache_bytes,
             layerfs_storage::ReservationBlocks::default(),
         )
         .unwrap();
@@ -326,6 +331,7 @@ impl Fixture {
             file_metadata,
             root_metadata,
             shape: Shape::Wide,
+            cache_bytes,
         }
     }
     pub fn cleanup(self) {

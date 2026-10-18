@@ -12,6 +12,7 @@ use super::reads::REPLY_BUDGET;
 use super::snapshot::{self, answer, existing, kind_name, Kind, Snap};
 use crate::store::{CatalogHints, Store, StorePorts};
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
+use layerfs_content::compare::tree::{same_inode, same_metadata};
 use layerfs_content::compare::{
     line_diff, ChangeKind, ChangeWalk, DiffLine, EntryFacts, LineOp, Memo, PathChange, Plan,
 };
@@ -67,7 +68,7 @@ pub fn diff_files(store: &Arc<Store>, args: &SdkValue) -> Answer {
             &reader,
             selector.get_text("commit").unwrap_or(branch),
         )?;
-        let entry = existing(&reader, &snap, &path)?;
+        let entry = existing(reader.as_ref(), &snap, &path)?;
         if entry.value.kind == InodeKind::Directory {
             return Err(refuse(
                 "IsDirectory",
@@ -137,11 +138,19 @@ fn change(
     let shown = change.right.or(change.left).map(|entry| entry.value.kind);
     let (mut content, mut identity, mut metadata, mut lines) =
         (false, false, false, SdkValue::Null);
+    let mut work = layerfs_content::filesystem::attributes::AttributeReadWork::default();
     let mut omitted = false;
     if let (Some(l), Some(r)) = (change.left, change.right) {
         let directories = l.value.kind == InodeKind::Directory && l.value.kind == r.value.kind;
         identity = l.serial != r.serial;
-        metadata = l.value.metadata_root != r.value.metadata_root;
+        metadata = !same_metadata(
+            reader,
+            l.value.kind,
+            l.value.metadata_root,
+            r.value.metadata_root,
+            &mut work,
+        )
+        .map_err(args::content)?;
         if directories && !identity && !metadata {
             return Ok(None);
         }
@@ -296,6 +305,7 @@ fn emit(
     let (limit, pos) = (request.limit, request.pos);
     let skip = if request.cursor.is_some() { 0 } else { pos };
     let (mut items, mut seen, mut budget, mut more) = (Vec::new(), 0u64, REPLY_BUDGET, false);
+    let mut work = layerfs_content::filesystem::attributes::AttributeReadWork::default();
     let mut last = None;
     while let Some(pair) = walk.next_pair().map_err(args::content)? {
         let (path, before, after) = &pair;
@@ -313,12 +323,30 @@ fn emit(
                 continue;
             }
         }
-        let children_only = matches!((before, after), (Some(x), Some(y))
-            if x.serial == y.serial
-                && x.value.kind == InodeKind::Directory
-                && y.value.kind == InodeKind::Directory
-                && x.value.metadata_root == y.value.metadata_root);
-        if before != after && !children_only {
+        let children_only = match (before, after) {
+            (Some(x), Some(y))
+                if x.serial == y.serial
+                    && x.value.kind == InodeKind::Directory
+                    && y.value.kind == InodeKind::Directory =>
+            {
+                same_metadata(
+                    reader,
+                    x.value.kind,
+                    x.value.metadata_root,
+                    y.value.metadata_root,
+                    &mut work,
+                )
+                .map_err(args::content)?
+            }
+            _ => false,
+        };
+        let pair_differs = match (before, after) {
+            (Some(x), Some(y)) if x.serial == y.serial => {
+                !same_inode(reader, &x.value, &y.value, &mut work).map_err(args::content)?
+            }
+            _ => before != after,
+        };
+        if pair_differs && !children_only {
             if seen < skip {
                 seen += 1;
             } else {

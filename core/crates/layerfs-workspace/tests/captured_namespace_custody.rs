@@ -515,9 +515,10 @@ fn a_consumer_that_rejects_namespace_output_is_the_namespace_failure() {
         ("cu-reject-root", ObjectRole::FilesystemRoot, true),
         ("cu-reject-directory", ObjectRole::DirectoryLeaf, true),
         ("cu-reject-inodes", ObjectRole::InodeLeaf, true),
-        ("cu-reject-metadata", ObjectRole::AttributeLeaf, false),
-        // The first file-state object is the root's own metadata value.
-        ("cu-reject-value", ObjectRole::FileState, false),
+        // No `AttributeLeaf` or metadata `FileState` row: since #360 F-027
+        // item 2 a captured inode with only mode and mtime keeps them inline,
+        // so the namespace emits neither. A refused file state is a file's
+        // own, covered by `a_consumer_that_rejects_a_file_root_leaves_the_file_custody`.
         ("cu-reject-symlink", ObjectRole::Symlink, false),
     ] {
         let b = Bench::new(tag);

@@ -37,7 +37,13 @@ impl State<'_> {
         let mut physical_candidates = advisory.clone();
         let sig = if PackLane::for_role(object.role()) == PackLane::WholeFile {
             let sig = signature(raw_payload(object.canonical(), object.role())?);
-            let proposed = self.candidates.find(object.id(), &sig);
+            // An unloaded ring means this Save has inserted nothing, so what it
+            // would propose is no object pending here; selection loads it if
+            // its fallback needs it (#352 record 034, S1-b).
+            let proposed = match self.candidates.needs_load() {
+                true => None,
+                false => self.candidates.find(object.id(), &sig),
+            };
             let mut needed = advisory.clone();
             needed.extend(proposed);
             physical_candidates.extend(proposed);

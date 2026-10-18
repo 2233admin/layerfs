@@ -28,10 +28,12 @@ impl Overlay {
     pub(crate) fn orphan_holds(&self, serial: i64, gen: i64) -> OverlayResult<bool> {
         Ok(self.orphan(serial)?.is_some_and(|o| o.holds(gen)))
     }
-    /// The orphan-domain row of one serial. This engine holds no orphan
-    /// while `orphan_seen` is false, so nothing is read then.
+    /// The orphan-domain row of one serial. A serial has such a row only
+    /// while the journaled orphan map holds it: the row is written after the
+    /// map entry (`detach_orphan`, `put_inode_domain`) and deleted before it
+    /// (`reclaim_orphan`). Nothing is read for any other serial (#359 F-B2).
     pub(crate) fn orphan_inode(&self, serial: i64) -> OverlayResult<Option<Inode>> {
-        if !self.orphan_seen.get() {
+        if !self.orphan_seen.get() || self.orphan(serial)?.is_none() {
             return Ok(None);
         }
         self.query(StatementKind::Inode,"SELECT inode,kind,mode,mtime_seconds,mtime_nanoseconds,nlink,size,inherited_cutoff,born,entries,subdirs

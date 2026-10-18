@@ -211,6 +211,9 @@ fn commit(error: &CommitError) -> (ControlCode, Option<MovedState>, String) {
         CommitError::Context(reason) => (*reason).into(),
         CommitError::History(error) => error.to_string(),
         CommitError::Markers(paths) => format!("{} files still hold conflict markers", paths.len()),
+        CommitError::LaneMerge { paths, limit } => {
+            format!("the head moved again by more than {limit} paths ({paths}) after the merge")
+        }
     };
     (code, None, detail)
 }

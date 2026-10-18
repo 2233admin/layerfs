@@ -1,6 +1,6 @@
 //! Merge and publish work follows the Commits since the merge base, not the
 //! whole history (#352 range 002: a two-file merge's SQL statements grew with
-//! history depth, and every ancestry walk is bounded by MAXIMUM_LINEAGE_ROWS).
+//! history depth; #353 removed the walks' 4,096-row bound).
 #[path = "support/installed_store.rs"]
 #[allow(dead_code)]
 mod installed;

@@ -1,21 +1,24 @@
-//! Bounded text scanning and depth-first namespace traversal at immutable roots.
-use super::{args, snapshot};
-use crate::store::StorePorts;
+//! Bounded text scanning at immutable roots: a file's text arrives in whole
+//! blocks, checked as before, and a buffer-wide line scanner splits it.
+use super::args;
 use layerfs_bridge::control::SdkRefusal;
 use layerfs_content::{
-    compare::EntryFacts,
-    filesystem::{
-        directory::read::{list_after, DirectoryReadWork},
-        path::PathName,
-        sorted::DirectoryRoot,
-    },
-    object::inode_leaf::{InodeKind, InodeValue},
+    compare::EntryFacts, file::FileView, object::inode_leaf::InodeKind, AuthenticatedObjects,
 };
+
+pub use super::walk::{walk, Walker};
 
 pub const BYTES: usize = 48 * 1024;
 pub const LINES: usize = 2000;
 
+/// The window a NUL or invalid UTF-8 is found in: the scan stops at the same
+/// window boundary as the window-at-a-time scan it replaced (#352 F-035).
+const WINDOW: u64 = 16 * 1024;
+/// Bytes of text handed on at once from a chunked file's read pass.
+const BLOCK: u64 = 16 * WINDOW;
+
 /// One logical LF-delimited line. A final LF belongs to this line, not a new one.
+#[derive(Clone)]
 pub struct Line {
     pub text: String,
     pub bytes: u64,
@@ -23,13 +26,87 @@ pub struct Line {
     pub matched: bool,
 }
 
-/// Scans with bounded buffers, including huge lines. A literal match may cross chunks.
-pub fn lines(
-    reader: &StorePorts,
+/// The line being scanned: its number, shown prefix and length so far.
+pub(super) struct Open {
+    pub number: u64,
+    head: Vec<u8>,
+    pub length: usize,
+}
+impl Open {
+    pub fn new() -> Self {
+        Self {
+            number: 1,
+            head: Vec::new(),
+            length: 0,
+        }
+    }
+    /// Appends a part of the line, keeping its first `prefix` bytes.
+    pub fn take(&mut self, part: &[u8], prefix: usize) {
+        let room = prefix.saturating_sub(self.head.len()).min(part.len());
+        self.head.extend_from_slice(&part[..room]);
+        self.length += part.len();
+    }
+    /// Forgets the line's parts: it ended unreported.
+    pub fn clear(&mut self) {
+        self.head.clear();
+        self.length = 0;
+    }
+    /// The finished line; the next one starts empty.
+    pub fn finish(&mut self, matched: bool) -> Line {
+        let line = line(&mut self.head, self.length, matched);
+        self.length = 0;
+        line
+    }
+}
+
+/// LF bytes in `bytes`, counted over the whole slice at once.
+pub(super) fn newlines(bytes: &[u8]) -> u64 {
+    bytes.iter().filter(|&&byte| byte == b'\n').count() as u64
+}
+
+/// The position just after the last LF in `bytes`, if any.
+pub(super) fn after_last_newline(bytes: &[u8]) -> Option<usize> {
+    bytes.iter().rposition(|&byte| byte == b'\n').map(|i| i + 1)
+}
+
+/// The position after the `count`th LF in `bytes`, or `None` with the LFs it
+/// holds when it has fewer.
+fn skip(bytes: &[u8], count: u64) -> Result<usize, u64> {
+    let (mut seen, mut done) = (0, 0);
+    for part in bytes.chunks(4096) {
+        let here = newlines(part);
+        if seen + here < count {
+            seen += here;
+            done += part.len();
+            continue;
+        }
+        for (i, &byte) in part.iter().enumerate() {
+            if byte == b'\n' {
+                seen += 1;
+                if seen == count {
+                    return Ok(done + i + 1);
+                }
+            }
+        }
+    }
+    Err(seen)
+}
+
+/// Calls `visit` with the file's text, in order, as whole valid UTF-8 parts.
+/// A NUL or invalid UTF-8 ends the text at the start of the window it is
+/// found in, as the window-at-a-time scan did, and the scan then fails
+/// `Binary` unless `visit` stopped it first. A part may end inside a line.
+///
+/// A chunked file is read in one pass, so each chunk is decoded once and
+/// the mapping walked once; its text is handed on in parts of about
+/// [`BLOCK`] bytes as the pass delivers it, and stopping ends the pass.
+///
+/// `view` is the file's root when the caller read it already, as a batch.
+pub(super) fn texts(
+    reader: &dyn AuthenticatedObjects,
     entry: &EntryFacts,
-    prefix: usize,
-    pattern: Option<&str>,
-    mut visit: impl FnMut(u64, Line) -> Result<bool, SdkRefusal>,
+    view: Option<FileView>,
+    mut visit: impl FnMut(&str) -> Result<bool, SdkRefusal>,
 ) -> Result<(), SdkRefusal> {
     if entry.value.kind != InodeKind::RegularFile {
         return Err(args::refuse(
@@ -42,85 +119,210 @@ pub fn lines(
             layerfs_bridge::control::SdkValue::Null,
         ));
     }
-    // The root is read and classified once; each window reads only its part.
-    let view = crate::telemetry::timed("sdk.lines", |timing| {
-        layerfs_content::file::FileView::open(
-            reader,
-            entry.value.content_root,
-            timing.child("content.read"),
-        )
-    })
-    .map_err(args::content)?;
+    // The root is read and classified once.
+    let view = match view {
+        Some(view) => view,
+        None => crate::telemetry::timed("sdk.lines", |timing| {
+            FileView::open(
+                reader,
+                entry.value.content_root,
+                timing.child("content.read"),
+            )
+        })
+        .map_err(args::content)?,
+    };
     let size = view.logical_len();
-    let pattern = pattern.unwrap_or("").as_bytes();
-    let mut failure = vec![0; pattern.len()];
-    for i in 1..pattern.len() {
-        let mut j = failure[i - 1];
-        while j > 0 && pattern[i] != pattern[j] {
-            j = failure[j - 1];
-        }
-        if pattern[i] == pattern[j] {
-            j += 1;
-        }
-        failure[i] = j;
-    }
-    let (mut offset, mut number, mut length) = (0, 1, 0usize);
-    let (mut shown, mut utf8) = (Vec::new(), Vec::new());
-    let (mut matched, mut state) = (pattern.is_empty(), 0);
-    while offset < size {
-        let end = size.min(offset + 16384);
-        let mut bytes = Vec::new();
-        let read = crate::telemetry::timed("sdk.lines", |timing| {
-            timing
-                .child("content.read")
-                .run(|scope| view.read_range(reader, offset..end, &mut bytes, scope))
-        });
-        read.map_err(args::content)?;
-        utf8.extend_from_slice(&bytes);
-        if utf8.contains(&0) {
-            return Err(binary());
-        }
-        let valid = match std::str::from_utf8(&utf8) {
-            Ok(_) => utf8.len(),
-            Err(error) if error.error_len().is_none() && end < size => error.valid_up_to(),
-            Err(_) => return Err(binary()),
+    // A whole-file payload is already in memory: one part, nothing copied.
+    if let Some(payload) = view.whole_file_bytes().map_err(args::content)? {
+        let (text, bad) = checked(payload, 0, size, true);
+        return if !visit(text)? || !bad {
+            Ok(())
+        } else {
+            Err(binary())
         };
-        utf8.drain(..valid);
-        for byte in bytes {
-            length += 1;
-            if shown.len() < prefix {
-                shown.push(byte);
-            }
-            if !matched && !pattern.is_empty() {
-                while state > 0 && byte != pattern[state] {
-                    state = failure[state - 1];
-                }
-                if byte == pattern[state] {
-                    state += 1;
-                }
-                if state == pattern.len() {
-                    matched = true;
-                }
-            }
-            if byte == b'\n' {
-                if !visit(number, line(&mut shown, length, matched))? {
-                    return Ok(());
-                }
-                number += 1;
-                length = 0;
-                state = 0;
-                matched = pattern.is_empty();
+    }
+    let mut feed = Feed {
+        pending: Vec::new(),
+        from: 0,
+        size,
+        visit: &mut visit,
+        end: None,
+    };
+    // The pass's time includes the scan of what it delivers.
+    let read = crate::telemetry::timed("sdk.lines", |timing| {
+        timing
+            .child("content.read")
+            .run(|scope| view.read_range(reader, 0..size, &mut feed, scope))
+    });
+    if let Some(end) = feed.end.take() {
+        return end;
+    }
+    read.map_err(args::content)?;
+    feed.deliver(true);
+    feed.end.unwrap_or(Ok(()))
+}
+
+/// The sink of a file's single read pass: bytes not yet handed on, from file
+/// offset `from`, and how the scan ended when it ended early.
+struct Feed<'v> {
+    pending: Vec<u8>,
+    from: u64,
+    size: u64,
+    visit: &'v mut dyn FnMut(&str) -> Result<bool, SdkRefusal>,
+    end: Option<Result<(), SdkRefusal>>,
+}
+
+impl Feed<'_> {
+    /// Hands on the checked text; false, with `end` set, when the scan ends.
+    fn deliver(&mut self, last: bool) -> bool {
+        let (text, bad) = checked(&self.pending, self.from, self.size, last);
+        let length = text.len();
+        match (self.visit)(text) {
+            Err(refusal) => self.end = Some(Err(refusal)),
+            Ok(false) => self.end = Some(Ok(())),
+            Ok(true) if bad => self.end = Some(Err(binary())),
+            Ok(true) => {
+                self.pending.drain(..length);
+                self.from += length as u64;
+                return true;
             }
         }
-        offset = end;
+        false
     }
-    if length > 0 {
-        visit(number, line(&mut shown, length, matched))?;
+}
+
+impl std::io::Write for Feed<'_> {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.pending.extend_from_slice(bytes);
+        if self.pending.len() as u64 >= BLOCK && !self.deliver(false) {
+            // Ends the read pass; `end` says why.
+            return Err(std::io::Error::other("scan ended"));
+        }
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// The text of `bytes`, which start at file offset `from` on a character
+/// boundary, that may be handed on, and whether a NUL or invalid UTF-8 ends
+/// the scan after it. `last` when `bytes` reach the file's end.
+///
+/// The window-at-a-time scan failed in the first window holding a NUL, or
+/// whose text so far was decisively invalid UTF-8, or, for a character left
+/// incomplete, the file's last window; the text ends where that window
+/// starts. Otherwise text is handed on only through the last whole window,
+/// since a NUL later in a window fails it.
+fn checked(bytes: &[u8], from: u64, size: u64, last: bool) -> (&str, bool) {
+    let window = |at: usize| (from + at as u64) / WINDOW;
+    let start = |w: u64| (w * WINDOW).saturating_sub(from) as usize;
+    // `contains` searches a whole slice at once; most text has no NUL.
+    let mut bad = bytes
+        .contains(&0)
+        .then(|| bytes.iter().position(|&byte| byte == 0))
+        .flatten()
+        .map(window);
+    let (text, valid) = match std::str::from_utf8(bytes) {
+        Ok(text) => (Some(text), bytes.len()),
+        Err(error) => {
+            let at = error.valid_up_to();
+            let found = match error.error_len() {
+                None if !last => None,
+                None => Some((size - 1) / WINDOW),
+                // Decided in the window holding the sequence's start, or else
+                // by its next byte, the first of the next window.
+                Some(_) => {
+                    let w = window(at);
+                    let end = start(w + 1).min(bytes.len());
+                    match std::str::from_utf8(&bytes[at..end]) {
+                        Err(error) if error.error_len().is_some() => Some(w),
+                        _ => Some(w + 1),
+                    }
+                }
+            };
+            if let Some(found) = found {
+                bad = Some(bad.map_or(found, |nul| nul.min(found)));
+            }
+            (None, at)
+        }
+    };
+    let end = match bad {
+        Some(w) => start(w),
+        None if last => bytes.len(),
+        None => start(window(bytes.len())),
+    }
+    .min(valid);
+    // The text stops at a character boundary; what lies past it up to the
+    // failing window holds no LF, so no reported line is lost.
+    let text = match text {
+        Some(text) => {
+            let mut end = end;
+            while !text.is_char_boundary(end) {
+                end -= 1;
+            }
+            &text[..end]
+        }
+        None => match std::str::from_utf8(&bytes[..end]) {
+            Ok(text) => text,
+            Err(error) => std::str::from_utf8(&bytes[..error.valid_up_to()]).unwrap_or_default(),
+        },
+    };
+    (text, bad.is_some())
+}
+
+/// Scans with bounded buffers, including huge lines: every line from line
+/// `from` on, in order, until `visit` stops. Earlier lines are only counted.
+pub fn lines(
+    reader: &dyn AuthenticatedObjects,
+    entry: &EntryFacts,
+    prefix: usize,
+    from: u64,
+    mut visit: impl FnMut(u64, Line) -> Result<bool, SdkRefusal>,
+) -> Result<(), SdkRefusal> {
+    let (mut open, mut stopped) = (Open::new(), false);
+    texts(reader, entry, None, |text| {
+        let bytes = text.as_bytes();
+        let mut at = 0;
+        while at < bytes.len() {
+            if open.number < from {
+                match skip(&bytes[at..], from - open.number) {
+                    Ok(next) => {
+                        open.number = from;
+                        at += next;
+                    }
+                    Err(seen) => {
+                        open.number += seen;
+                        at = bytes.len();
+                    }
+                }
+                continue;
+            }
+            match text[at..].find('\n') {
+                Some(i) => {
+                    open.take(&bytes[at..at + i + 1], prefix);
+                    if !visit(open.number, open.finish(true))? {
+                        stopped = true;
+                        return Ok(false);
+                    }
+                    open.number += 1;
+                    at += i + 1;
+                }
+                None => {
+                    open.take(&bytes[at..], prefix);
+                    at = bytes.len();
+                }
+            }
+        }
+        Ok(true)
+    })?;
+    if !stopped && open.length > 0 {
+        visit(open.number, open.finish(true))?;
     }
     Ok(())
 }
 
-fn binary() -> SdkRefusal {
+pub(super) fn binary() -> SdkRefusal {
     args::refuse(
         "Binary",
         "text contains NUL or invalid UTF-8",
@@ -141,121 +343,4 @@ fn line(bytes: &mut Vec<u8>, length: usize, matched: bool) -> Line {
         truncated: end < length,
         matched,
     }
-}
-
-/// Names and inode demands acquired together, bounded independently of the tree.
-const DIRECTORY_WINDOW: usize = 64;
-const DIRECTORY_BYTES: usize = 8192;
-type Child = (PathName, u64, Option<InodeValue>);
-
-/// One directory frame retains one bounded window and its next-name boundary.
-struct Frame {
-    path: String,
-    entry: EntryFacts,
-    after: Option<PathName>,
-    pending: std::vec::IntoIter<Child>,
-    exhausted: bool,
-}
-impl Frame {
-    fn new(path: String, entry: EntryFacts) -> Self {
-        Self {
-            path,
-            entry,
-            after: None,
-            pending: Vec::new().into_iter(),
-            exhausted: false,
-        }
-    }
-}
-
-pub struct Walker<'a> {
-    reader: &'a StorePorts,
-    snap: &'a snapshot::Snap,
-    stack: Vec<Frame>,
-    top: Option<(String, EntryFacts)>,
-}
-impl<'a> Walker<'a> {
-    pub fn new(
-        reader: &'a StorePorts,
-        snap: &'a snapshot::Snap,
-        path: &str,
-    ) -> Result<Self, SdkRefusal> {
-        let entry = snapshot::existing(reader, snap, path)?;
-        let (stack, top) = if entry.value.kind == InodeKind::Directory {
-            (vec![Frame::new(path.to_owned(), entry)], None)
-        } else {
-            (Vec::new(), Some((path.to_owned(), entry)))
-        };
-        Ok(Self {
-            reader,
-            snap,
-            stack,
-            top,
-        })
-    }
-    #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> Result<Option<(String, EntryFacts)>, SdkRefusal> {
-        if let Some(top) = self.top.take() {
-            return Ok(Some(top));
-        }
-        while let Some(frame) = self.stack.last_mut() {
-            if frame.pending.len() == 0 && !frame.exhausted {
-                let page = list_after(
-                    self.reader,
-                    DirectoryRoot(frame.entry.value.content_root),
-                    frame.after.as_ref(),
-                    DIRECTORY_WINDOW,
-                    DIRECTORY_BYTES,
-                    &mut DirectoryReadWork::default(),
-                )
-                .map_err(args::content)?;
-                frame.exhausted = page.continuation.is_none();
-                frame.after = page.continuation;
-                let serials = page
-                    .entries
-                    .iter()
-                    .map(|(_, serial)| *serial)
-                    .collect::<Vec<_>>();
-                let values = self
-                    .snap
-                    .tree
-                    .values(self.reader, &serials)
-                    .map_err(args::content)?;
-                frame.pending = page
-                    .entries
-                    .into_iter()
-                    .zip(values)
-                    .map(|((name, serial), value)| (name, serial, value))
-                    .collect::<Vec<_>>()
-                    .into_iter();
-            }
-            let Some((name, serial, value)) = frame.pending.next() else {
-                self.stack.pop();
-                continue;
-            };
-            let path = layerfs_content::compare::tree::join(&frame.path, &name);
-            let value = value.ok_or_else(|| args::failed("missing bound inode"))?;
-            let entry = EntryFacts { serial, value };
-            if value.kind == InodeKind::Directory {
-                self.stack.push(Frame::new(path.clone(), entry));
-            }
-            return Ok(Some((path, entry)));
-        }
-        Ok(None)
-    }
-}
-
-pub fn walk(
-    reader: &StorePorts,
-    snap: &snapshot::Snap,
-    path: &str,
-    mut visit: impl FnMut(&str, EntryFacts) -> Result<bool, SdkRefusal>,
-) -> Result<(), SdkRefusal> {
-    let mut walker = Walker::new(reader, snap, path)?;
-    while let Some((path, entry)) = walker.next()? {
-        if !visit(&path, entry)? {
-            break;
-        }
-    }
-    Ok(())
 }

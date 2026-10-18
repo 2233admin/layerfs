@@ -101,6 +101,12 @@ impl Overlay {
                 current.dirty_directory_entries = 0;
                 Ok(())
             })?;
+            // Kept rows are frozen with the generation; construction of this
+            // capture carries them again.
+            let kept: Vec<i64> = self.open.borrow().kept_live.rows.keys().copied().collect();
+            for serial in kept {
+                self.open.borrow_mut().kept_live.remove(serial);
+            }
             Ok(Capture {
                 engine: self.identity,
                 generation: state.active,

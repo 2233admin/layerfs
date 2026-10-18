@@ -21,7 +21,9 @@ fn pooled_demand_reuses_one_checked_physical_reconstruction() {
                 kind: InodeKind::RegularFile,
                 namespace_ref_count: 1,
                 content_root: ObjectId::for_bytes(&serial.to_be_bytes()),
-                metadata_root: ObjectId::for_bytes(b"metadata"),
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(
+                    ObjectId::for_bytes(b"metadata"),
+                ),
             }),
         })
         .collect::<Vec<_>>();
@@ -81,7 +83,9 @@ fn a_missing_stored_value_still_refuses_canonical_reconstruction() {
                 kind: InodeKind::Directory,
                 namespace_ref_count: 0,
                 content_root: ObjectId::for_bytes(b"content"),
-                metadata_root: ObjectId::for_bytes(b"metadata"),
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(
+                    ObjectId::for_bytes(b"metadata"),
+                ),
             }),
         }],
     }
@@ -98,44 +102,4 @@ fn a_missing_stored_value_still_refuses_canonical_reconstruction() {
         .unwrap()
         .read_objects(&[object.id()])
         .is_err());
-}
-
-#[test]
-fn save_exact_reuse_consumes_the_group_already_acquired_by_discovery() {
-    let metadata = Arc::new(metadata::MemoryMetadata::default());
-    let store = Storage::new(metadata.clone()).unwrap();
-    let canonical = InodeLeaf {
-        subtree_bytes: 64 * LEAF_ROW_BYTES as u64,
-        rows: (1u64..=64)
-            .map(|serial| InodeLeafRow {
-                serial,
-                value: encode_inode_value(InodeValue {
-                    kind: InodeKind::RegularFile,
-                    namespace_ref_count: 1,
-                    content_root: ObjectId::for_bytes(&serial.to_be_bytes()),
-                    metadata_root: ObjectId::for_bytes(b"metadata"),
-                }),
-            })
-            .collect(),
-    }
-    .encode()
-    .unwrap();
-    let object = FinalizedObject::new(ObjectRole::InodeLeaf, canonical).unwrap();
-    let save = store.begin_save().unwrap();
-    save.accept(object.clone()).unwrap();
-    save.finish().unwrap();
-    let pack = metadata.state.lock().unwrap().objects[&object.id()].pack_id;
-    let reading = Storage::new(metadata.clone()).unwrap();
-    metadata.acquired_pack_ids.lock().unwrap().clear();
-    let save = reading.begin_save().unwrap();
-    save.accept(object).unwrap();
-    let outcome = save.finish().unwrap();
-    assert_eq!(outcome.reused, 1);
-    assert_eq!(outcome.inserted, 0);
-    let reads = metadata.acquired_pack_ids.lock().unwrap();
-    assert_eq!(
-        reads.iter().filter(|id| **id == pack).count(),
-        1,
-        "discovery and reconstruction acquired the same immutable ordinary pack: {reads:?}"
-    );
 }

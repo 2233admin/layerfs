@@ -6,6 +6,9 @@ use crate::{
     OPERATION_RECORD_BYTES, PAGE_ROWS,
 };
 
+/// Key-ordered (key, value) rows and whether the kind ends after them.
+type Window = (Vec<([u8; 32], Vec<u8>)>, bool);
+
 impl Overlay {
     /// Membership projects no value BLOB. Existing owner custody stays readable
     /// after logical close; a released or foreign owner is refused.
@@ -220,5 +223,61 @@ impl Overlay {
                 key.try_into().map_err(|_| rusqlite::Error::InvalidQuery)
             },
         )
+    }
+
+    /// Keys after `after` (None: from the first) with their values, in key
+    /// order: at most `PAGE_ROWS` rows, stopped before the row that would take
+    /// the window past one record envelope. The first row is always returned,
+    /// so a window pages and never refuses; the caller continues after its
+    /// last key. The flag says no row of the kind follows the window.
+    pub fn indexed_operation_record_entries_after(
+        &self,
+        scope: IndexedOperationRecordScope,
+        kind: u32,
+        after: Option<[u8; 32]>,
+    ) -> OverlayResult<Window> {
+        self.fence_operation(scope.owner, false)?;
+        let file = scope.file_scope.to_be_bytes();
+        let operation = integer(scope.owner.owner)?;
+        let kind = i64::from(kind);
+        let mut bytes = 0_usize;
+        let mut stopped = false;
+        // A row past the envelope is stepped but its value is never copied.
+        let decode = |r: &rusqlite::Row<'_>| {
+            if stopped {
+                return Ok(None);
+            }
+            let key: Vec<u8> = r.get(0)?;
+            let key: [u8; 32] = key.try_into().map_err(|_| rusqlite::Error::InvalidQuery)?;
+            let length = match r.get_ref(1)? {
+                rusqlite::types::ValueRef::Blob(value) => value.len(),
+                _ => return Err(rusqlite::Error::InvalidQuery),
+            };
+            if bytes != 0 && bytes.saturating_add(length) > OPERATION_RECORD_BYTES {
+                stopped = true;
+                return Ok(None);
+            }
+            bytes = bytes.saturating_add(length);
+            Ok(Some((key, r.get::<_, Vec<u8>>(1)?)))
+        };
+        let rows = match after {
+            Some(after) => self.query(
+                StatementKind::OperationRecord,
+                sql::INDEXED_OPERATION_RECORD_ENTRIES_AFTER,
+                &[&operation, &file.as_slice(), &kind, &after.as_slice()],
+                64,
+                decode,
+            )?,
+            None => self.query(
+                StatementKind::OperationRecord,
+                sql::INDEXED_OPERATION_RECORD_ENTRIES,
+                &[&operation, &file.as_slice(), &kind],
+                32,
+                decode,
+            )?,
+        };
+        let ended = rows.len() < PAGE_ROWS && !stopped;
+        let entries = rows.into_iter().map_while(|row| row).collect();
+        Ok((entries, ended))
     }
 }

@@ -123,16 +123,6 @@ pub(crate) fn commit_row(row: &Row) -> HistoryResult<CommitRecord> {
 /// Decodes one Layer row.
 pub(crate) fn layer_row(row: &Row) -> HistoryResult<LayerRecord> {
     Ok(LayerRecord {
-        overwrote: {
-            let bytes: Vec<u8> = cell(row, 7)?;
-            if bytes.len() % 33 != 0 {
-                return Err(HistoryError::Integrity("displaced Layer facts"));
-            }
-            bytes
-                .chunks_exact(33)
-                .map(LayerId::from_slice)
-                .collect::<HistoryResult<Vec<_>>>()?
-        },
         id: required(layer_column(row, 0)?, "Layer identity")?,
         stack: required(stack_column(row, 1)?, "LayerStack identity")?,
         parent: layer_column(row, 2)?,
@@ -140,6 +130,7 @@ pub(crate) fn layer_row(row: &Row) -> HistoryResult<LayerRecord> {
         source_branch: branch_column(row, 4)?,
         source_commit: commit_column(row, 5)?,
         logical: cell::<i64>(row, 6)? as u64,
+        overwrote_count: unsigned(row, 7)?,
     })
 }
 

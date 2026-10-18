@@ -192,7 +192,7 @@ pub fn value(kind: InodeKind, content_root: ObjectId, metadata_root: ObjectId) -
         kind,
         namespace_ref_count: 0,
         content_root,
-        metadata_root,
+        metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(metadata_root),
     }
 }
 
