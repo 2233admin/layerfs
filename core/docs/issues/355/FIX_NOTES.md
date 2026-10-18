@@ -18,7 +18,8 @@
 | (e) F-041 | `d2fda2593` | a truthful `truncated` flag on a bounded list (not paging) | 88,972 -> 88,971 (−1) |
 | (d) No path cap | `16a19429a` | sorted runs, a 16-way stream, ancestor stacks; 8 MiB held, then records | 88,971 -> 90,391 (+1,420) |
 | #360 analysis | `40a713349` | strict `same_value` kept; proof stated for integration | 90,391 -> 90,391 (0) |
-| Records and publish timing | this commit | `branch.merge.publish` timed; docs, receipts | see commit |
+| Records and publish timing | `5d37e1a3c` | `branch.merge.publish` timed; docs, receipts | 90,391 -> 90,392 (+1) |
+| M1 merge by serial | see [M1](#m1-merge-by-serial-owner-decision-2026-10-18) | walk `from`'s changed serials, not candidate paths | 90,392 -> 90,859 (+467) |
 
 ¹ Scope core+sdk+dsh; from `e4c74f7c3` on, core only (the pinned counter's
 scope). The scopes are not comparable.
@@ -441,3 +442,133 @@ returning to the hold's drop, with the writer session's statements over it.
 The A3 figure is the backed route's cost per moved entry (~12 record reads
 and ~1 write transaction each, ~0.47 ms); before (b) the same merge was
 refused. It is a finding for (d) and the 50k/300k measurements, not a gate.
+
+## M1: merge by serial (owner decision 2026-10-18)
+
+**Decision.** The merge walks changed inode serials instead of candidate
+paths. The owner approved two semantic changes: merged root ids may differ
+from before, and a move on one side plus an edit inside the moved directory on
+the other now merges, with the edit following the serial. The two-stage
+Commit merge, the scratch records, bounded memory and the absence of caps
+are kept. The algorithm is described in
+[81-compare-and-merge](../../architecture/81-compare-and-merge.md#merge).
+
+**Design choices where the brief was silent** (owner rule: results identical,
+lane work independent of tree size, least new code, no cap):
+- The walk is one-sided, over `inode_changes(base, from)`, with `into`'s value
+  read by point lookup in windows of 256. `from` is ours for a Branch merge
+  and for Commit stage 1, theirs for the in-lane step, so that step walks only
+  what landed after stage 1. `into`'s own changes are never walked.
+- A directory changed on both sides is merged by name over
+  `binding_changes(base, from)` plus `into`'s point lookups. The result keeps
+  the old decider (`decide.rs`, now given entries instead of paths), so file
+  rules, `/.lww`, marker text and conflict kinds are unchanged.
+- Metadata merges by value: a one-sided change is kept (difference (a)
+  below). When both sides changed a directory's metadata, theirs is kept, as
+  before.
+- A file renamed differently on both sides keeps both names on the one
+  serial (two links), as the old merge did.
+- A directory renamed differently on both sides, and crossed moves that would
+  put a directory inside itself, are `type` conflicts that cancel `from`'s
+  move (difference (c) below).
+- A serial new on `from` that loses a collision is left unbound with its new
+  subtree, so no inode without a binding is written.
+- Paths are named only for decisions, deletions against a change below and
+  revived parents, from recorded bindings when the Catalog has them, else by
+  `locate`.
+- `LANE_MERGE_PATHS` keeps its name and value (1,024); it now counts changed
+  serials decided.
+- Value equality stays strict, as in the #360 note above: a serial counts as
+  unchanged only when its value is byte-identical. Under #360's mixed metadata
+  forms, a value equal in meaning but different in form is seen as changed.
+  That costs a decision, never a wrong content result; a form-only metadata
+  change on one side is kept in that side's form.
+
+**Semantic differences found (old `5d37e1a3c` vs M1, decoded views).**
+
+| Case | Old | M1 | Class |
+| --- | --- | --- | --- |
+| move on one side, edit inside on the other | `delete/modify` conflict | merged, the edit at the new path | approved |
+| directory metadata (mtime) changed only by ours | base's kept | ours' kept | (a), one-sided metadata kept |
+| file mode changed only by one side | dropped | kept | (a) |
+| one side deletes `/d2`, the other adds `/d2/new.txt` | the add is lost | `/d2` survives with `new.txt` | old data loss, fixed |
+| crossed moves `/d1 -> /d2/d1` and `/d2 -> /d1/d2` | merged; `/d2/c.txt` lost | `type` conflict | old data loss, fixed |
+| hard-linked file edited on one side | the link group splits | the group stays | old bug, fixed |
+| directory renamed differently on both sides | `/left` and `/right`, files hard-linked across both | `type` conflict | (c), reported to the liaison |
+
+Difference (c) is not one of the approved changes. Reproducing the old result
+needs fresh serials for the whole subtree, which makes the work grow with the
+subtree; the conflict keeps the work bounded by the change. It stands unless
+the owner asks for the old result.
+
+**Equivalence by decoded view.** A view lists each path with its kind,
+content id, mode, mtime and hard-link group
+([`support/view.rs`](../../crates/layerfs-store-service/tests/support/view.rs)).
+- Replay corpus: r14 only (35 recorded Branch merges, `LAYERFS_355_REPLAY_STORE`).
+  r7a2–r13 were not reachable from this worktree; that is the corpus gap.
+  All 35 merge under M1. 22 merges differ from old, in 116 lines, all class
+  (a): a directory mtime only ours changed. There are no content, presence,
+  kind, mode or link differences.
+- `merge_root_oracle` (13 rule cases): two differences, the approved move+edit
+  and the fixed `revive-deleted-parent` data loss.
+- New `merge_by_serial.rs` (11 cases: move+edit, move into a directory,
+  rename/rename of a file and of a directory, crossed moves, delete against an
+  edit and against an add below, hard links edited, removed and both, one-sided
+  chmod). All pass on M1; 7 fail on old, as classified above.
+- Suites: content, persistence, store-service and daemon (164 test binaries,
+  each under a 120 s alarm, run from its crate) and the API's
+  `sdk_merge_diagnostics` pass. The two failures are environmental, as at
+  `5d37e1a3c`: `huge_kernel_namespace_is_complete_after_install` needs
+  `LAYERFS_Q1_PREPARED` and `host_handoff` needs Docker. F-008's
+  `concurrent_commits` is unchanged and passes. Clippy `+1.85.1` is clean;
+  the product-boundary guard reports the same 16 violations as HEAD.
+- **Bug found and fixed on the way.** A new file decided at an add/add name
+  collision lost its marker value: the Emit pass wrote `from`'s own value over
+  it. `merge_report`'s written-path list caught it (Branch merges with a
+  conflict refuse, so the views could not). `emit_change` now skips a new
+  file whose entry a decision already assigned (`Plan::assigned`).
+- `sdk_merge_paths`: the assertion that a merge names at least one inode
+  described the path route. It is replaced by the stronger M1 property that
+  the merge names none.
+
+**Timing (diagnostic, one sample per arm, 2026-10-18).** Disposable, macOS
+host, release `sdk_merge_scale`, `LAYERFS_CONSTRUCTION_WORKERS` unset (the
+merge has one producer). Declared interference: 1-minute load 7.5–11.8 from
+other worktrees' builds and tests; `fseventsd` and `mds_stores` were busy in
+every sample. The old A3 rows reuse the (d) receipts committed at
+`5d37e1a3c` (same fixtures and code, not resampled); the other old rows are
+new samples of the same `5d37e1a3c` code with the M1 harness.
+
+| Case | Arm | Merge | Statements | Record writes, longest | History writes | Publish | Peak RSS | Changed serials (left, right) |
+| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | --- |
+| A3 35k | old | 10.84 s | 277,396 | 597, 8.8 ms | 338 ms | 0.82 ms | 140.2 MB | — |
+| A3 35k | M1 | 23 ms | 250 | 5, 0.11 ms | 18 ms | 0.77 ms | 30.8 MB | (1, 1) |
+| A3 100k | old | 49.06 s | 889,635 | 1,776, 150.8 ms | 1,080 ms | — | 134.7 MB | — |
+| A3 100k | M1 | 33 ms | 250 | 5, 0.16 ms | 26 ms | 0.73 ms | 31.3 MB | (1, 1) |
+| A3 135k | old | 66.32 s | 1,235,821 | 2,418, 169.3 ms | 1,377 ms | 1.16 ms | 134.9 MB | — |
+| A3 135k | M1 | 32 ms | 250 | 5, 0.11 ms | 28 ms | 0.48 ms | 31.8 MB | (1, 1) |
+| deep tree, 1,000 dirs × 100 files | old | 34.70 s | 1,010,794 | 4,302, 112.4 ms | 1,092 ms | 0.83 ms | 157.6 MB | (1, 1) |
+| deep tree | M1 | 27 ms | 247 | 5, 0.10 ms | 23 ms | 0.61 ms | 31.7 MB | (1, 1) |
+| 100k moved into `/nest` | old | 50.53 s | 888,937 | 1,778, 169.3 ms | 893 ms | 0.63 ms | 145.6 MB | (2, 1) |
+| 100k moved into `/nest` | M1 | 6 ms | 296 | 5, 0.09 ms | 2 ms | 0.21 ms | 38.8 MB | (2, 1) |
+| both sides edit 1,000 of 100k moved files | old | refused after 46.09 s (1,000 `delete/modify`) | 636,993 | 354, 137.2 ms | 982 ms | — | 136.9 MB | — |
+| both sides edit 1,000 of 100k moved files | M1 | 552 ms | 15,920 | 5, 3.2 ms | 260 ms | 0.88 ms | 37.2 MB | (1001, 1001) |
+
+Merge time and statements are flat in the file count (35k to 135k) and
+follow the changed serials instead: a move changes one serial on its side.
+Peak RSS is the test process, fixture clone included. The receipts are in
+[`receipts/`](receipts/) (`m1-*.txt`, `old-*.txt`; `m1-a3-100k-harness-failed.txt`
+is a harness failure after the merge, before the fix to the sources lookup,
+kept as run and not counted as a sample). Fixtures: `deep-1000x100.sqlite`
+(sha256 `1b5513cc…`), `both-100000.sqlite` (`9cc4a8cd…`) and the reused
+`a3-*.sqlite`, prepared by `prepare_m1_*_fixture` and `prepare_a3_fixtures`.
+
+**Production LOC.** Scope: core first-party product, counted with
+`core/tools/production_loc.py --root` on `git archive` of each tree. The
+earlier rows of this record before `e4c74f7c3` used the core+sdk+dsh scope;
+from `e4c74f7c3` on, and for M1, core only. The scopes are not comparable.
+Since R9c the reference scope is absent (retired R9c; last counted 65,417 at
+tree 498dd1917812).
+
+Deleted tests: none. `candidates.rs` and `revive.rs` (the path route) are
+deleted; they held no tests.
