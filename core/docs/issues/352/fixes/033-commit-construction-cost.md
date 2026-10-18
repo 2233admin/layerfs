@@ -8,6 +8,27 @@
 | Approved | F1, F2, F3 in that order (liaison 2026-10-19). Then, after F1's result, the liaison put F3 on hold and asked for the values and update split (counters only) before anything else. S1 (lazy delta-candidate load) and O1 (the Save's writer) are Storage's, record 034, not this record's. O2 and O3 are noted below |
 | Commits | F1 `d5439e71a`, F2 `e5b868f09`, split counters `53edff9bb`, B1 `31a3507d4`. F3 written, not committed: recorded and skipped (see F3) |
 
+## Commits for integration
+
+One row per commit on `claude/commit-cost-033` (base `d679c84ee`), in order.
+Each code commit stands on the ones above it. Gains are the daemon trace of
+the pnpm-first Commit (and the small Commit where sampled), one sample per
+arm; loads and caveats are under Measured results. The owner chooses which
+to integrate.
+
+| Commit | What | Production LOC | Measured gain | Samples |
+| --- | --- | --- | --- | --- |
+| `d5439e71a` F1 | Sealed namespace rows read as record windows (overlay range read, port method, cursor; telemetry 31 → 35) | +168 (102,246 → 102,414) | Namespace record jobs 890,283 → 45,310 (18.6 → 0.95 per inode); owner jobs 1.51M → 681k; construct 13,283 → 12,626 ms; Commit 15,256 → 14,753 ms. Small Commit 13.8 → 13.1 ms | s331 (reference), s664; small s649 → s661 |
+| `e5b868f09` F2 | Fresh files built straight from their runs, no normalized-edit records | +102 (102,414 → 102,516) | construct 12,626 → 9,553 ms; values 7,765 → 5,078 ms; owner jobs 681k → 506k; Commit 14,753 → 11,019 ms. Small Commit unchanged (13.1 ms; it edits a base file) | s664 → s675; small s661 → s673 |
+| `53edff9bb` split | Values and update phases split by counters (telemetry 35 → 47); no behaviour change | +134 (102,516 → 102,650) | None (diagnostics only); construct 9,553 → 9,347 ms, within noise | s675 → s681 (s683 accidental duplicate, unused) |
+| `c8314371d` docs | Record 033: measured F1, F2 and the split | 0 | — | — |
+| `31a3507d4` B1 | Many record keys read as one statement per call (overlay `get_many`, port prefix contract) | +53 (102,650 → 102,703) | `operation_record` statements 2.05M → 1.35M; Content state 2,624 → 2,457 ms (−167 ms, short of its −0.8 to −1.5 s ceiling). The Commit total rose +922 ms from Storage's `Save::accept`/writer, not attributed to B1 (Storage lane reconciliation) | s681 → s687 |
+| `695ead9ac` docs | Record 033: B1 result, F3 skipped | 0 | — | — |
+| this commit, docs | This table | 0 | — | — |
+
+Not committed: F3 (patch `r033-f3-held-page.patch` in the #352 shared notes;
+recorded and skipped, ceiling ≤ −0.4 s).
+
 ## Root cause (before any edit)
 
 > **Corrected after F1.** The RCA below inferred that Content's update took
