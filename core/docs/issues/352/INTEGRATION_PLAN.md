@@ -7,67 +7,96 @@
 > `issue352-uptodate` step and its checks, in "Addendum: `issue352-uptodate`"
 > at the top.
 
-## Addendum: `issue352-uptodate` (c04, `140951351`)
+## Addendum: re-run at the final heads (correctness lane, 2026-10-18, after the F-043 rework)
 
-`issue352-uptodate` is one commit on top of #353's head `d37821838`. It answers
-UpToDate for an unchanged Workspace before capture (fix record `c04`). It
-changes:
-- `store-service store/commit.rs`;
-- `store/commit_types.rs` (`CommitSuccess.capture` becomes `Option<Capture>`);
-- five `layerfs-daemon` test files.
+The heads at this re-run:
 
-**Order (b′), proposed:** correctness `c3b5f4d86` → #353 `d37821838` →
-`issue352-uptodate` `140951351` → `issue359-impl` `f7cd6311b` →
-`issue359-cost-model` `331f2c173`.
+| Branch | Head |
+| --- | --- |
+| `dsh-history-replay` | `b885c55d4` |
+| correctness | `44cf6feaa` (F-043 reworked: `926543b10`) |
+| #353 | `d37821838` |
+| `issue352-uptodate` | `7238e4551` |
+| `issue359-impl` | `2d84fe1bb` (moved from `f7cd6311b`) |
+| cost-model | `331f2c173` |
 
-The lane re-ran the chain at those heads:
+**Order (b′), proposed:** correctness → #353 → `issue352-uptodate` →
+`issue359-impl` → `issue359-cost-model`.
 
-| Step | Branch | Conflicts | Tree | Combined LOC |
-| --- | --- | --- | --- | --- |
-| 1 | correctness | 0 | `5668ce5b722d` | 97,267 (+48) |
-| 2 | #353 | 0 | `8bfae661a35b` | 100,460 (+3,193) |
-| 3 | uptodate | 0 (only its own commit on top of step 2) | `2a8a8a52c2ff` | 100,493 (+33) |
-| 4 | 359-impl | 0 | `ce932e887759` | 101,706 (+1,213) |
-| 5 | cost-model | 0 | `8d271bfb8f5c` | 101,706 (0) |
+| Step | Branch | Conflicts | Combined LOC |
+| --- | --- | --- | --- |
+| 1 | correctness | 0 | 97,285 (+66) |
+| 2 | #353 | 0 | 100,478 (+3,193) |
+| 3 | uptodate (c04 plus its test commit, on #353) | 0 | 100,511 (+33) |
+| 4 | 359-impl | **1, `core/docs/issues/352/BUGS.md` (docs)** | 101,771 (+1,260) |
+| 5 | cost-model | 0 | 101,771 (0) |
 
-The final combined LOC is **97,219 → 101,706 (+4,487)**: the subagent's
-101,673, plus c04's +33. The counter is `tools/production_loc.py --root` on
-`git archive` extracts of `core/crates`, `sdk/js` and `dsh/packages`.
+The final combined LOC is **97,219 → 101,771 (+4,552)**. The counter is
+`tools/production_loc.py --root` on `git archive` extracts of `core/crates`,
+`sdk/js` and `dsh/packages`. The subagent's per-branch tables below are at
+the earlier heads: correctness `c3b5f4d86` (+48) and 359-impl `f7cd6311b`
+(+1,213).
 
-- None of the files c04 changes are touched by `issue359-impl` or cost-model.
+**The BUGS.md conflict is a pure both-sides append after the F-043 entry.**
+- The correctness side extends the F-043 paragraph: the diagnostics, the
+  rework and the c43 ranges.
+- The 359-impl side appends new entries F-044, F-045 and F-046.
+- Resolution: keep both, the F-043 paragraph first, then F-044 onward.
+
+**Where the code meets:**
+- `encoding/codec.rs` auto-merges. The merged file has F-A4's `alloc_zeroed`
+  `workspace()` and correctness's `in_region` / `into_region` hook. The
+  regions in the idle list come from `workspace()`, so they are zeroed on
+  first allocation only.
+- A reused region is not zeroed. `tests/encode_region_reuse.rs` proves frames
+  are byte-identical for fresh, reused and poison-filled regions. Run it on
+  the merged tree with the whole `layerfs-storage` crate and
+  `save_encoder_reuse` (Linux).
 - Correctness and c04 both change `daemon tests/support/mounted_commit.rs`:
   `Rig::history` and `Rig::up_to_date` respectively. The hunks are disjoint
   and auto-merge.
+- None of c04's files is touched by `issue359-impl` or cost-model.
 
-Tests after step 3, Linux, pinned image:
-- `layerfs-daemon`: `store_commit`, `mount_control`, `mounted_commit_failures`,
-  `forced_producers`, `kernel_application`, `r5_1_actual_daemon_commit`,
-  `mounted_cycles` and `concurrent_commits` (F-008);
-- `mounted_commit` and `r5_5_install_survival`, which also need c02 from step 1;
-- `r5_10_producer_profile`.
+**E4, revised (F-A4 vs F-043).**
+- F-043 no longer keeps zstd contexts or decode arenas, and adds no
+  `unsafe`. The `Arena` and `Send` items described in E4 below are gone.
+- The idle list holds plain `Vec<u64>` encode regions, at most one per CPU.
+- F-A4's "the codec sees the same zeroed memory" holds for first allocations.
+  Reuse is shown to be content-independent.
 
-All of these passed on the c04 branch alone, with two exceptions:
-- the two `rig.history()` page assertions, which c02 fixes;
-- **`r5_10_producer_profile`, which fails at its line 385**
-  (`storage.policy` 0, expected 1).
+**E10 (new): #359 `4db0ceb9e` against c04.** That commit keeps an mtime-only
+change live until unmount, adding +47 LOC.
+- If the live row it keeps sits in the active generation, the dirty counters
+  stay non-zero. Every later Commit of that Workspace then takes the full path
+  instead of the shortcut.
+- That costs speed, not correctness: the full path decides exactly as before.
+- After step 4, check that a Workspace with only a kept mtime-only row still
+  answers UpToDate through the full path. `mounted_commit` r5_2 and
+  `r5_5_install_survival` cover this.
 
-The `r5_10` failure is **pre-existing at #353's head `d37821838`**. With the
-c04 block removed, the same build fails identically. It is not caused by c04.
-Owner of the fix: #353, or whoever owns the producer-handle receipt (#320).
-It should be diagnosed before the merge.
+**Tests after step 3** (Linux, pinned image), on the c04 branch alone:
+- pass:
+  - `layerfs-daemon`: `store_commit` 10/10, `mount_control` 9/9,
+    `mounted_commit_failures` 4/4, `forced_producers` 4/4,
+    `kernel_application` 1/1, `r5_1_actual_daemon_commit` 1/1,
+    `mounted_cycles` 4/4;
+  - `concurrent_commits` 3/3 (F-008).
+- `mounted_commit` and `r5_5_install_survival` fail only at the
+  `rig.history()` page assertions, which c02 (step 1) fixes.
+- **`r5_10_producer_profile` fails at its line 385** (`storage.policy` 0,
+  expected 1). This is **pre-existing at #353's head `d37821838`**: the same
+  build fails identically with the c04 block removed. Owner of the fix: #353,
+  or whoever owns the producer-handle receipt (#320). It should be diagnosed
+  before the merge.
 
-**E9. c04 against the rest:**
-- **#359 F-B4 negative entries.** An UpToDate answered before capture installs
-  nothing and changes no root, so no kernel invalidation is owed.
-- **#360's mtime-only rule.** An mtime-only edit still writes an inode row, so
-  the shortcut is not taken and the full path decides as before.
-- **#355 M1 two-stage merge.** The shortcut needs the head unmoved. A moved
-  head always takes the merge path, which is tested.
-- **Callers of `CommitSuccess.capture`.** It is `None` only for this answer.
-  No product code reads it; the one test reader is adapted.
-- **dsh.** A tool call that only reads now Commits in about 50 µs instead of
-  about 4 ms (one diagnostic sample). Replay Commit counts are unchanged, since
-  UpToDate never made a record.
+**E9. c04 against the rest.**
+- **#359 F-B4 negative entries.** A shortcut UpToDate installs nothing, so no
+  kernel invalidation is owed.
+- **#360's mtime-only rule.** An mtime-only edit writes an inode row, so the
+  full path runs.
+- **#355 M1.** A moved head always takes the merge path, which is tested.
+- **Readers of `CommitSuccess.capture`.** They are listed in fix record c04.
+  No product code unwraps it.
 
 ---
 
