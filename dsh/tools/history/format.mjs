@@ -36,7 +36,7 @@ export const HEADLINE_CELLS = ["Latest version", "Store on disk", "Space amplifi
 export function installedText(cl) {
   const o = cl.oracle, n = cl.normalized, f = n?.files ?? {};
   const st = (p) => (f[p] ? `\`${p.slice(13)}\` root ×${f[p].root}, time ×${f[p].time}` : `\`${p.slice(13)}\` absent`);
-  const norm = n ? `normalized: ${st("node_modules/.modules.yaml")} · ${st("node_modules/.pnpm-workspace-state-v1.json")} · root ×${f.shims?.root ?? 0} in ${f.shims?.files ?? 0} bin shims · output root ×${n.outputRoot}` : "normalized: not recorded";
+  const norm = n ? `normalized: ${st("node_modules/.modules.yaml")} · ${st("node_modules/.pnpm-workspace-state-v1.json")} · root ×${f.shims?.root ?? 0} in ${f.shims?.files ?? 0} bin shims · output root ×${n.outputRoot}${n.outputVerifiedAge != null ? `, verification age ×${n.outputVerifiedAge}` : ""}` : "normalized: not recorded";
   return `${o.ok ? `**${o.groups} package groups equal to native**` : `**differs**: ${o.missing.length} missing, ${o.extra.length} extra, ${o.differ.length} differ`} · ${norm}`;
 }
 

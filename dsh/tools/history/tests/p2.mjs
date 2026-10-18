@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fetchScript } from "../fetch-store.mjs";
 import { addedBySource, changedGroupBytes, cumulative, liveParts, sealedParts, seedBySource, stepSource, storageFigures, storageProblems } from "../storage.mjs";
-import { parseLister, rootless, buildBytes, buildListCommand, changedPackages, CLOSURE_OUTPUT, closureSteps, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, nothingToBuild, playClosure, tscStates } from "../closure.mjs";
+import { parseLister, rootless, verifiedAges, buildBytes, buildListCommand, changedPackages, CLOSURE_OUTPUT, closureSteps, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, nothingToBuild, playClosure, tscStates } from "../closure.mjs";
 import { aggregate, buildBaseline, reinstallGate, evaluate, probeSeries, thinClass } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, installedText, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
@@ -352,6 +352,10 @@ test("lister v2 (dev352-p3c r015): the install root and pnpm's run times in .bin
   // install output: only the root is normalized
   assert.equal(rootless("WARN at /workspaces/23/x", "/workspaces/23"), rootless("WARN at /lfs352-native-root/x", "/lfs352-native-root"));
   assert.throws(() => rootless("x", ""), /no install root/);
+  // the store-verification age on its own line only (dev352-p3g r015)
+  assert.equal(normalizeOutput("✓ Lockfile passes supply-chain policies (verified 6h ago)"), normalizeOutput("✓ Lockfile passes supply-chain policies (verified 5h ago)"));
+  assert.equal(verifiedAges(normalizeOutput("a\n✓ Lockfile passes supply-chain policies (verified 2m ago)")), 1);
+  assert.notEqual(normalizeOutput("note: verified 6h ago"), normalizeOutput("note: verified 5h ago"), "the age elsewhere is compared");
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -389,6 +393,14 @@ test("version figures (lead 2026-10-18): the incremental manifest from diff_comm
   assert.deepEqual(statsOf(after).largestFile, { path: "node_modules/.pnpm/p@1/node_modules/p/index.js", bytes: 18 });
   // chunks: a long list travels in several commands
   assert.ok(lstatCommands(Array.from({ length: 40000 }, (_, i) => `node_modules/.pnpm/pkg-${i}@${i}.0.0/node_modules/pkg-${i}/lib/file-${(i * 7919) % 104729}.js`), "/tmp/s").length > 3);
+  // files only (no folder items): the ancestors are looked at, so a new folder and a removed one are still seen
+  put("c/new/deep.txt", "n"); rmSync(join(ws, "b"), { recursive: true });
+  const fileOnly = changedPaths([{ path: "/c/new/deep.txt" }, { path: "/b/sub/three.txt" }]);
+  assert.deepEqual(fileOnly, ["b", "b/sub", "b/sub/three.txt", "c", "c/new", "c/new/deep.txt"]);
+  let out2 = "";
+  for (const c of lstatCommands(fileOnly, join(dir, "scratch2"))) out2 = execFileSync("sh", ["-c", c], { cwd: ws, encoding: "utf8" });
+  const again = applyEntries(updated, decodeEntries(out2));
+  assert.deepEqual(manifestDiff(walkSh(), again), []);
   // a missed change is caught by the cross-check
   assert.ok(manifestDiff(after, applyEntries(before, new Map())).length > 0);
   // the version execs are counted as tooling inside the total

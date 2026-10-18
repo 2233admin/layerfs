@@ -49,8 +49,22 @@ export function lstatCommands(paths, scratch = scratchDir()) {
   return commands;
 }
 
-/** The changed paths of diff_commits items, without the leading slash and the probe fixture. */
-export const changedPaths = (items) => [...new Set(items.map((i) => String(i.path).replace(/^\/+/, "")).filter((p) => p && p !== PROBE && !p.startsWith(`${PROBE}/`)))].sort();
+/**
+ * The paths to lstat for diff_commits items: each changed path without the
+ * leading slash, and its ancestor folders, so a folder created or removed
+ * with its files is seen whether or not diff_commits lists folders. The
+ * probe fixture is left out.
+ */
+export function changedPaths(items) {
+  const out = new Set();
+  for (const i of items) {
+    const p = String(i.path).replace(/^\/+/, "");
+    if (!p || p === PROBE || p.startsWith(`${PROBE}/`)) continue;
+    const parts = p.split("/");
+    for (let n = 1; n <= parts.length; n++) out.add(parts.slice(0, n).join("/"));
+  }
+  return [...out].sort();
+}
 
 /** The previous manifest with the lstat results applied: absent paths and the descendants of anything no longer a folder are removed. */
 export function applyEntries(prev, looked) {

@@ -189,8 +189,9 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
   if (done) {
     const oracle = JSON.parse(readFileSync(oracleFile, "utf8"));
     // pnpm prints the install root in some warnings: the root alone is compared as <root> (INSTALLS §4)
-    const native = rootless(oracle.output, oracle.root), ours = rootless(done.output, done.root);
-    out.normalized = { root: done.root, nativeRoot: oracle.root, files: done.normalized, nativeFiles: oracle.normalized, outputRoot: done.output.split(done.root).length - 1, nativeOutputRoot: oracle.output.split(oracle.root).length - 1 };
+    // the oracle's output is normalized again here, so a rule added after it was built applies to both sides
+    const nativeOutput = normalizeOutput(oracle.output), native = rootless(nativeOutput, oracle.root), ours = rootless(done.output, done.root);
+    out.normalized = { root: done.root, nativeRoot: oracle.root, files: done.normalized, nativeFiles: oracle.normalized, outputRoot: done.output.split(done.root).length - 1, nativeOutputRoot: oracle.output.split(oracle.root).length - 1, outputVerifiedAge: verifiedAges(done.output), nativeOutputVerifiedAge: verifiedAges(nativeOutput) };
     out.oracle = compareInstalled(oracle, done.groups);
     if (!out.oracle.ok) throw new Mismatch(`r${pad(k)} install differs from native: ${JSON.stringify({ missing: out.oracle.missing.slice(0, 5), extra: out.oracle.extra.slice(0, 5), differ: out.oracle.differ.slice(0, 5) })}`);
     if (ours !== native) throw new Mismatch(`r${pad(k)} install output differs from native: ${firstDifference(native, ours)}`);
@@ -258,8 +259,16 @@ export const listerCommand = (groups = []) => `node -e ${quote(LISTER)} ${groups
 /** `text` with every occurrence of the install `root` written `<root>`; a missing root is refused. */
 export const rootless = (text, root) => { if (!root || root === "/") throw new Error(`no install root to normalize (${root})`); return String(text).split(root).join("<root>"); };
 
-/** pnpm's output without what varies run to run: progress lines and durations. */
-export const normalizeOutput = (text) => String(text).split("\n").filter((l) => !/^Progress: /.test(l)).map((l) => l.replace(/Done in [\d.ms ]+using/, "Done in <t> using")).join("\n").trim();
+/**
+ * pnpm's output without what varies run to run (INSTALLS §4): progress lines,
+ * the duration on the "Done in" line, and the store-verification age on the
+ * supply-chain line only (dev352-p3g r015: "verified 5h ago" natively, "6h ago"
+ * in LayerFS). Any other difference stays a mismatch.
+ */
+export const VERIFIED_LINE = /^(✓ Lockfile passes supply-chain policies \(verified )[^)]+( ago\))$/;
+export const normalizeOutput = (text) => String(text).split("\n").filter((l) => !/^Progress: /.test(l)).map((l) => l.replace(/Done in [\d.ms ]+using/, "Done in <t> using").replace(VERIFIED_LINE, "$1<t>$2")).join("\n").trim();
+/** How many store-verification ages normalizeOutput replaced in `normalized` output. */
+export const verifiedAges = (normalized) => String(normalized).split("\n").filter((l) => l === "✓ Lockfile passes supply-chain policies (verified <t> ago)").length;
 
 /** An installed tree (lister lines) against the oracle: package folders missing, extra or differing. */
 export function compareInstalled(oracle, actualLines) {

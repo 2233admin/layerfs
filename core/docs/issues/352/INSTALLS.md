@@ -124,6 +124,9 @@ Proof:
     | `node_modules/.pnpm-workspace-state-v1.json` | `"lastValidatedTimestamp"` value | `<t>` | the install's wall-clock time |
     | a pnpm bin shim: a file directly in a `node_modules/.bin/` directory that starts `#!/bin/sh` | every occurrence of the install root | `<root>` | `NODE_PATH` in the shim is absolute |
     | pnpm's install output | every occurrence of the install root | `<root>` | some warnings print absolute paths |
+    | pnpm's install output | the age on the line `✓ Lockfile passes supply-chain policies (verified <age> ago)` | `<t>` | the time since the store's lockfile verification, which varies with when the install runs (dev352-p3g r015: 5h natively, 6h in LayerFS) |
+    | pnpm's install output | the duration on the `Done in <duration> using pnpm` line | `<t>` | the install's wall time (since the oracle was built) |
+    | pnpm's install output | `Progress: ` lines | dropped | progress redraws vary with timing (since the oracle was built) |
 
     Shims are the one entry that isn't a single path: pnpm writes one per
     bin, at the top level and inside each package with bin dependencies, so
@@ -139,7 +142,7 @@ Proof:
     stop. A state file without its time field fails the lister.
   - **Counted per install.** The lister counts every substitution: root and
     time per state file, and shim files and root substitutions. The output's
-    root count is added. They go to the metrics (`closure.normalized`, and
+    root count and its verification-age count are added. They go to the metrics (`closure.normalized`, and
     each install row's `normalized`), and the range report's "Installed tree"
     row shows them, so the comparison can't widen silently. An oracle from an
     older lister version is refused, never compared.
