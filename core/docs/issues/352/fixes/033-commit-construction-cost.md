@@ -270,3 +270,11 @@ Against s681: Commit 10.9 s, target ≤ 5 s.
 Chunking and hashing (≈ 485 ms) and Content's own compute (≈ 364 ms) are the
 work itself. Ranks 1–3 together are about −5 to −6 s; with them the Commit
 would be near the 5 s target, and without rank 1 it cannot reach it.
+
+## Integration (staging, 2026-10-19)
+
+F1, F2 and the values/update split counters are integrated on the #352
+staging branch (`claude/dsh-352-integration-c98eb1`, step 11), merged at
+`c8314371d`. B1 (`31a3507d4`, +53 LOC, −167 ms on s687) and its docs
+`695ead9ac` are measured, not integrated — owner decision 2026-10-19; F3
+recorded and skipped.
