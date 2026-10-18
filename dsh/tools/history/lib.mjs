@@ -21,7 +21,7 @@ import { compareTree, IGNORE } from "./oracle.mjs";
 import { compareResults, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
 import { INSTALL } from "./calibrate-tests.mjs";
 import {
-  abs, attributeFuse, callOf, compareIds, comparePaths, idBatches, pad, parseTreePage, PHASES, phaseOps, PROBE_DIR, quote,
+  abs, attributeFuse, callOf, changedDirs, compareIds, comparePaths, idBatches, pad, parseTreePage, PHASES, phaseOps, PROBE_DIR, quote,
   deltaWork, route, sandboxCommands, sandboxExpect, sqlCounters, traceLines, Tree, TREE_IDS, TREE_PAGE,
 } from "./steps.mjs";
 
@@ -372,7 +372,7 @@ export async function verify(run, k, { prevHead, head, layer, prevCommit, full }
   const present = [...changes.filter((c) => !c.gitlink && c.mode !== "000000").map((c) => c.path), ...paths.metadataOnly];
   const ids = compareIds(present, present.length ? await readIds(run, layer, present, `r${pad(k)}-ids`) : new Map(), expected);
   const tree = full ? compareTree(expected, await readIds(run, layer, null, `r${pad(k)}-tree`)) : null;
-  return { ok: paths.ok && ids.ok && (!tree || tree.ok), paths, ids, tree };
+  return { ok: paths.ok && ids.ok && (!tree || tree.ok), paths, ids, tree, changedDirs: changedDirs(items.map((i) => i.path)) };
 }
 
 /**

@@ -563,6 +563,13 @@ for a ~5% storage gain. Report raw deltas for both.
 
 ## 5. Gates per range
 
+> **Checkpoint diff input (F-019, 2026-10-18).** The checkpoint diff_commits
+> cost is normalised by its changed entries plus their changed ancestor
+> directories (a changed directory is a changed entry; basis
+> `checkpoint+dirs`, `dirs` recorded in the metrics). Tree-size growth is
+> judged on the fixed-input one-file probe's raw counters. The fixed/per-unit
+> fits need 4 same-binary points; fewer is "not judged" (watch).
+
 > **Chain-reading probes (F-016, 2026-10-18).** stat, read, list_small,
 > grep/glob scoped and diff_files read the fixture through metadata delta
 > chains: their cost rises one link per range and resets at the metadata

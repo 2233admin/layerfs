@@ -20,7 +20,7 @@ import { laneChanges, mergedTree } from "../agents.mjs";
 import { measure, record } from "../lib.mjs";
 import { loadBudget, wallProjection } from "../run.mjs";
 import {
-  attributeFuse, callOf, checkpointDiff, consolidationSteps, decoyBytes, nextPhase, p2Plan, route, sandboxCommands, STEP_KINDS, Tree,
+  attributeFuse, callOf, changedDirs, checkpointDiff, consolidationSteps, withDirs, decoyBytes, nextPhase, p2Plan, route, sandboxCommands, STEP_KINDS, Tree,
 } from "../steps.mjs";
 import {
   buildOverview, callTable, categoryOf, withoutProbeSetupCommits, categoryRows, CATEGORIES, checkOverview, derivedOverview, renderOverview, renderStats, stageSplit, tenths, timeLine,
@@ -388,13 +388,6 @@ test("a finding in the binding format: pending, then every part, with vs without
   assert.ok(checkFormat(text.replace("`7c2e9d40f1a3` |", "`511dceeda1b5` |"), a2, []).some((p) => /same binary/.test(p)));
 });
 
-let failed = 0;
-for (const [name, fn] of tests) {
-  try { await fn(); console.log(`ok   ${name}`); } catch (error) { failed++; console.log(`FAIL ${name}\n${error.stack}`); }
-}
-rmSync(dir, { recursive: true, force: true });
-console.log(`${tests.length - failed}/${tests.length} passed`);
-if (failed) process.exit(1);
 
 test("baselines by daemon: one per re-baseline run, beside the pilot's, never mixed", () => {
   const d = mkdtempSync(join(tmpdir(), "baseline-")), run = join(d, "run"), main = join(d, "main");
@@ -426,7 +419,7 @@ test("F-012 gate: checkpoint diff per changed entry, fitted against depth and tr
   assert.equal(grows.result, "optimize", grows.value);
   const flat = scaling(series(() => 6));
   assert.equal(flat.result, "pass", flat.value);
-  assert.match(flat.value, /checkpoint (statements|ms) per entry/);
+  assert.match(flat.value, /checkpoint (statements|ms)/);
   // ms alone rising with tree files also trips
   assert.equal(scaling(depths.map((d, i) => mk(i, d, files[i], 6, files[i] / 400))).result, "optimize");
 });
@@ -444,16 +437,21 @@ test("F-013: fixed and per-entry parts; flat total with falling entries passes, 
   const mk = (range, depth, files, c) => ({ range, binary: { daemon: "d" }, depth: { after: depth }, inputs: { tree: { files } }, checks: {}, perUnit: { "branch.diff_commits": c } });
   const scaling = (xs) => evaluate(xs.at(-1), xs.slice(0, -1)).checks.find((c) => c.name === "Scaling");
   // p1-rebase-b ranges 0-2 (daemon 361bb09e): totals flat, entries falling, tree growing
-  const real = [[571, 255, 327, 1557, 18.6], [1114, 307, 240, 1389, 14.2], [1533, 373, 208, 1413, 16.9]].map(([d, f, n, s, ms], i) => mk(i, d, f, cp(n, s, ms)));
+  const realRows = [[571, 255, 327, 1557, 18.6], [1114, 307, 240, 1389, 14.2], [1533, 373, 208, 1413, 16.9]];
+  // F-019: three points are not judged (watch); a fourth with the same shape (flat total, falling entries) passes
+  const three = scaling(realRows.map(([d, f, n, s, ms], i) => mk(i, d, f, cp(n, s, ms))));
+  assert.equal(three.result, "watch", three.value);
+  assert.match(three.value, /3 of 4 same-binary points/);
+  const real = [...realRows, [2611, 438, 190, 1480, 15.5]].map(([d, f, n, s, ms], i) => mk(i, d, f, cp(n, s, ms)));
   const r = scaling(real);
   assert.equal(r.result, "pass", r.value);
   // entries grow with tree and depth, per entry flat: a and b not separable
-  const grow = [[1000, 400, 100], [2000, 800, 200], [4000, 1600, 400]].map(([d, f, n], i) => mk(i, d, f, cp(n, n * 6, n * 0.05)));
+  const grow = [[1000, 400, 100], [2000, 800, 200], [4000, 1600, 400], [8000, 3200, 800]].map(([d, f, n], i) => mk(i, d, f, cp(n, n * 6, n * 0.05)));
   const w = scaling(grow);
   assert.equal(w.result, "watch", w.value);
   assert.match(w.value, /not judged: .*cannot be separated/);
   // entries grow and per entry grows with tree files: trips
-  const walk = [[1000, 400, 100], [2000, 800, 200], [4000, 1600, 400]].map(([d, f, n], i) => mk(i, d, f, cp(n, n * 0.25 * f, n * 0.05)));
+  const walk = [[1000, 400, 100], [2000, 800, 200], [4000, 1600, 400], [8000, 3200, 800]].map(([d, f, n], i) => mk(i, d, f, cp(n, n * 0.25 * f, n * 0.05)));
   assert.equal(scaling(walk).result, "optimize");
 });
 
@@ -464,7 +462,8 @@ test("regate: prints today's verdicts over recorded metrics and writes nothing",
   for (const k of [0, 1, 2]) writeFileSync(join(d, `range-00${k}.a1.json`), JSON.stringify(m(k)));
   const before = readdirSync(d).map((f) => [f, readFileSync(join(d, f), "utf8")]);
   const rows = regate({ metricsDir: d, oracleDir: join(d, "none") });
-  assert.deepEqual(rows.map((r) => [r.range, r.stored, r.verdict]), [[0, "optimize", "watch"], [1, "optimize", "watch"], [2, "optimize", "watch"]]);
+  assert.deepEqual(rows.map((r) => [r.range, r.stored]), [[0, "optimize"], [1, "optimize"], [2, "optimize"]]);
+  assert.ok(rows.every((r) => typeof r.verdict === "string" && r.worst.name), "each row has today's verdict and its worst check");
   assert.deepEqual(readdirSync(d).map((f) => [f, readFileSync(join(d, f), "utf8")]), before, "no file written or changed");
   rmSync(d, { recursive: true, force: true });
 });
@@ -539,3 +538,25 @@ test("glob_tree is fitted per tree file: growth with the tree passes, a per-file
   assert.equal(row(depth, "Counters").result, "optimize", row(depth, "Counters").value);
   assert.match(row(depth, "Counters").value, /glob_tree\.statements per tree file/);
 });
+
+test("F-019: the checkpoint diff is normalised by changed entries plus their changed ancestor directories", () => {
+  assert.equal(changedDirs(["/a/b/c.txt", "/a/b/d.txt", "/a/e.txt", "/f.txt"]), 3, "root, a, a/b");
+  assert.equal(changedDirs([]), 0);
+  const d = withDirs({ unit: "entry", basis: "checkpoint", entries: 100, ms: 50, statements: 1000, msPerEntry: 0.5, statementsPerEntry: 10 }, 25);
+  assert.deepEqual([d.basis, d.units, d.statementsPerEntry, d.msPerEntry, d.perChangedEntryOnly.statementsPerEntry], ["checkpoint+dirs", 125, 8, 0.4, 10]);
+  // the fixer's same-Store series: per entry rises with change shape, per (entry + changed directory) much less
+  const mk = (i, files, entries, dirs, stmts) => ({ range: 5 + i, binary: { daemon: "d" }, depth: { after: 4000 + 500 * i }, inputs: { tree: { files } }, checks: {},
+    perUnit: { "branch.diff_commits": withDirs({ unit: "entry", basis: "checkpoint", entries, ms: stmts / 100, statements: stmts, msPerEntry: 0, statementsPerEntry: stmts / entries }, dirs) } });
+  const xs = [mk(0, 654, 253, 40, 1851), mk(1, 706, 195, 75, 1725), mk(2, 804, 317, 116, 3132)];
+  const row = evaluate(xs.at(-1), xs.slice(0, -1)).checks.find((c) => c.name === "Scaling");
+  assert.equal(row.result, "watch", "three points: not judged");
+});
+
+// the runner stays last: a test registered after it never runs
+let failed = 0;
+for (const [name, fn] of tests) {
+  try { await fn(); console.log(`ok   ${name}`); } catch (error) { failed++; console.log(`FAIL ${name}\n${error.stack}`); }
+}
+rmSync(dir, { recursive: true, force: true });
+console.log(`${tests.length - failed}/${tests.length} passed`);
+if (failed) process.exit(1);

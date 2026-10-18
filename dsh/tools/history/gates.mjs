@@ -187,10 +187,13 @@ export function chainBound(name, m, pts, t = BOUND) {
  * than n) grew; no rise cannot separate a from b, so the fit is not judged
  * (watch, F8), never pass. Nothing is divided by tree files.
  */
+export const DIFF_POINTS = 4;
 export function splitFits(op, pts, th) {
   const fits = [];
+  // F-019: three points of a change-shaped cost cannot tell a residual from noise
+  if (pts.length < DIFF_POINTS) return [{ name: `${op} checkpoint`, e: null, result: "watch", note: `${pts.length} of ${DIFF_POINTS} same-binary points of basis ${pts.at(-1)?.perUnit?.[op]?.basis}` }];
   for (const [axis, at] of [["depth", (x) => x.depth?.after], ["tree files", treeFiles]]) {
-    const eN = exponent(pts.map((x) => [at(x), x.perUnit[op].entries]));
+    const eN = exponent(pts.map((x) => [at(x), x.perUnit[op].units ?? x.perUnit[op].entries]));
     for (const [total, per, what] of [["statements", "statementsPerEntry", "statements"], ["ms", "msPerEntry", "ms"]]) {
       if (pts.at(-1)?.perUnit[op][total] == null) continue;
       const against = axis === "depth" ? undefined : axis;
@@ -323,7 +326,7 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   // (splitFits, header); a legacy per-page basis keeps its per-entry fit against depth.
   for (const [op, p] of Object.entries(m.perUnit || {})) {
     const pts = all.filter((x) => x.perUnit?.[op] && x.perUnit[op].basis === p.basis);
-    if (p.basis === "checkpoint") probeFits.push(...splitFits(op, pts, t.depthExponent));
+    if (p.basis === "checkpoint" || p.basis === "checkpoint+dirs") probeFits.push(...splitFits(op, pts, t.depthExponent));
     else probeFits.push({ name: `${op} per ${p.unit}`, e: null, result: "watch", note: "a per-page median per entry cannot separate the fixed and per-entry parts (F-013)" });
   }
   // the fit that decides: the worst result, then the highest exponent; a fit may carry its own result (not judged)

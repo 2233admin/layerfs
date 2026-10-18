@@ -27,6 +27,8 @@ import { buildBaseline, evaluate, exponent, MINIMUM_POINTS, sameBinary } from ".
 import { categoryOf, derivedOverview, renderOverview, renderStats } from "./stats.mjs";
 import { FINDINGS, loadIssues, renderFormat } from "./format.mjs";
 import { change, loadFindings, REBUILD_KINDS } from "./findings.mjs";
+import { changedDirs, withDirs } from "./steps.mjs";
+import { diffTrees } from "./git.mjs";
 import { legacyGates, parseReport, storedGate, storeGate } from "./frozen.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
@@ -414,15 +416,30 @@ export function probeSetupCommits(trace) {
 }
 
 /**
+ * F-019 for an attempt recorded before the changed directories were counted:
+ * its checkpoint diff with the changed ancestor directories of git's change
+ * set between the range's base and checkpoint (which the checkpoint proved the
+ * diff lists). Returns `m` unchanged when it has them or has no such diff.
+ */
+export function withDirsFromGit(m, { repo, planDir }) {
+  const d = m.perUnit?.["branch.diff_commits"];
+  if (!d || d.basis !== "checkpoint" || !m.range) return m;
+  const plan = (k) => JSON.parse(readFileSync(join(planDir, `range-${pad(k)}.json`), "utf8"));
+  const dirs = changedDirs(diffTrees(repo, plan(m.range - 1).checkpoint, plan(m.range).checkpoint).map((c) => c.path));
+  return { ...m, perUnit: { ...m.perUnit, "branch.diff_commits": withDirs(d, dirs, "git") } };
+}
+
+/**
  * The dry run (F2: prints only): every range's latest attempt in `metricsDir`
  * re-evaluated by today's gates.mjs over the same history, seeds and
  * per-daemon baselines (`baselinesDir`), beside its stored verdict. Writes
  * nothing: no stored gate, report, comment or baseline.
  * @returns {{ range, attempt, run, daemon, stored, verdict, worst: { name, result, value } }[]}
  */
-export function regate({ metricsDir, oracleDir, baselinesDir = metricsDir }) {
+export function regate({ metricsDir, oracleDir, baselinesDir = metricsDir, repo = null, planDir = null }) {
   const attempts = loadAttempts(metricsDir);
-  const last = [...attempts.values()].map((ys) => ys.at(-1)).map((m) => withInputs(m, oracleDir));
+  const last = [...attempts.values()].map((ys) => ys.at(-1)).map((m) => withInputs(m, oracleDir))
+    .map((m) => (repo && planDir ? withDirsFromGit(m, { repo, planDir }) : m));
   const pilotFile = join(baselinesDir, "baseline.json");
   const pilot = existsSync(pilotFile) ? JSON.parse(readFileSync(pilotFile, "utf8")) : null;
   const baselines = loadBaselines(baselinesDir, pilot);
@@ -512,7 +529,8 @@ async function main() {
   if (args[0] === "regate") {
     const metricsDir = opt("--metrics");
     if (!metricsDir) { console.error("usage: report.mjs regate --metrics <dir> [--oracle <dir>] [--baselines <dir>]"); process.exit(2); }
-    const rows = regate({ metricsDir, oracleDir: opt("--oracle") ?? join(process.env.HOME, "lfs-history", "oracle"), baselinesDir: opt("--baselines") ?? join(process.env.HOME, "lfs-history", "metrics") });
+    const H = join(process.env.HOME, "lfs-history");
+    const rows = regate({ metricsDir, oracleDir: opt("--oracle") ?? join(H, "oracle"), baselinesDir: opt("--baselines") ?? join(H, "metrics"), repo: opt("--repo") ?? join(H, "dsh.git"), planDir: opt("--plan") ?? join(H, "plan") });
     console.log("| Range | Run | Daemon | Stored | Now | Worst check |\n| --- | --- | --- | --- | --- | --- |");
     for (const r of rows) console.log(`| ${pad(r.range)}.a${r.attempt} | ${r.run} | ${r.daemon} | ${r.stored} | ${r.verdict} | ${r.worst.name} ${r.worst.result}: ${r.worst.value} |`);
     return;
@@ -528,6 +546,20 @@ async function main() {
     const o = withoutProbeSetupCommits(m.overview, n);
     if (o !== m.overview) writeFileSync(file, JSON.stringify({ ...m, overview: o }, null, 1));
     console.log(JSON.stringify({ file, probeSetupCommits: n, commits: o.commits, changed: o !== m.overview }));
+    return;
+  }
+  if (args[0] === "fix-diff-dirs") {
+    // F-019: adds the changed ancestor directories to a checkpoint diff recorded before the fix, from git's
+    // change set between the range's base and its checkpoint (the checkpoint proved the diff lists exactly it)
+    const run = opt("--run"), range = Number(opt("--range")), attempt = Number(opt("--attempt") ?? 1);
+    if (!run || !Number.isInteger(range)) { console.error("usage: report.mjs fix-diff-dirs --run <id> --range N [--attempt K]"); process.exit(2); }
+    const manifest = JSON.parse(readFileSync(join(process.env.HOME, "lfs-history", "runs", run, "run.json"), "utf8"));
+    const file = join(manifest.outputs.metrics, `range-${pad(range)}.a${attempt}.json`), m = JSON.parse(readFileSync(file, "utf8"));
+    const d = m.perUnit?.["branch.diff_commits"];
+    if (!d || d.basis !== "checkpoint") { console.log(JSON.stringify({ file, changed: false, why: d ? `basis ${d.basis}` : "no checkpoint diff" })); return; }
+    const out = withDirsFromGit(m, { repo: manifest.repo, planDir: manifest.plan }), fixed = out.perUnit["branch.diff_commits"];
+    writeFileSync(file, JSON.stringify({ ...out, corrections: [...(m.corrections ?? []), { finding: "F-019", field: "perUnit.branch.diff_commits", dirs: fixed.dirs, source: "git" }] }, null, 1));
+    console.log(JSON.stringify({ file, entries: d.entries, dirs: fixed.dirs, statementsPerUnit: fixed.statementsPerEntry }));
     return;
   }
   if (args[0] === "records") {

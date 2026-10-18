@@ -389,7 +389,7 @@ async function playRange(run, k, mode) {
   m.ops = aggregate(t.calls);
   // every call by method (SPEC §3b), and the checkpoint diff's cost per entry it lists (SPEC §4)
   m.calls = callTable(t.all, run.sink.log);
-  const diff = checkpointDiff(t.all, run.sink.log, `r${pad(k)}.verify`);
+  const diff = checkpointDiff(t.all, run.sink.log, `r${pad(k)}.verify`, proof?.changedDirs ?? null);
   m.perUnit = diff ? { "branch.diff_commits": diff } : {};
   // the checkpoint tree the scoped probes read (gates.mjs SCOPED)
   const oracle = JSON.parse(readFileSync(join(run.manifest.oracle, `oracle-${pad(k)}.json`), "utf8"));

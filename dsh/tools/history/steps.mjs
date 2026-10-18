@@ -408,7 +408,21 @@ export function callOf(line, entry = null) {
  * listed no entries. `lines` are trace lines with `step`/`seq` split
  * (readTrace), `log` the call records.
  */
-export function checkpointDiff(lines, log, step) {
+/**
+ * The changed ancestor directories of changed paths (F-019): every directory
+ * above a changed entry, the root included, once. A changed directory is a
+ * changed entry of the diff (SPEC §4), so it is part of the diff's own input.
+ */
+export function changedDirs(paths) {
+  const dirs = new Set();
+  for (const p of paths) {
+    const parts = String(p).replace(/^\/+/, "").split("/");
+    for (let i = 0; i < parts.length; i++) dirs.add(parts.slice(0, i).join("/"));
+  }
+  return dirs.size;
+}
+
+export function checkpointDiff(lines, log, step, dirs = null) {
   const bySeq = new Map(log.map((e) => [e.seq, e]));
   const pages = lines.filter((l) => l.step === step && l.method === "branch.diff_commits")
     .map((l) => callOf(l, bySeq.get(l.seq)?.method === l.method ? bySeq.get(l.seq) : null));
@@ -417,8 +431,17 @@ export function checkpointDiff(lines, log, step) {
   const ms = pages.reduce((n, c) => n + c.ms, 0);
   const all = (k) => (pages.every((c) => c.sql?.[k] != null) ? pages.reduce((n, c) => n + c.sql[k], 0) : null);
   const statements = all("statements"), vmSteps = all("vm_steps");
-  return { unit: "entry", basis: "checkpoint", pages: pages.length, entries, ms: +ms.toFixed(3), statements, vmSteps,
+  const out = { unit: "entry", basis: "checkpoint", pages: pages.length, entries, ms: +ms.toFixed(3), statements, vmSteps,
     msPerEntry: +(ms / entries).toFixed(4), statementsPerEntry: statements == null ? null : +(statements / entries).toFixed(3) };
+  return dirs == null ? out : withDirs(out, dirs);
+}
+
+/** A checkpoint diff normalised by changed entries plus their changed ancestor directories (F-019, basis "checkpoint+dirs"). */
+export function withDirs(d, dirs, source = "diff") {
+  const units = d.entries + dirs;
+  return { ...d, unit: "entry or changed directory", basis: "checkpoint+dirs", dirs, dirsSource: source, units,
+    msPerEntry: +(d.ms / units).toFixed(4), statementsPerEntry: d.statements == null ? null : +(d.statements / units).toFixed(3),
+    perChangedEntryOnly: { msPerEntry: d.msPerEntry, statementsPerEntry: d.statementsPerEntry } };
 }
 
 /** The kernel opcodes of FUSE's counters (the 39 the daemon reports, before the frame dispositions). */
