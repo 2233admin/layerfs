@@ -387,3 +387,18 @@
   concurrently, so this blocks P3. **Lead decision:** the fixer diagnoses it
   before continuing F-032; the state stays frozen until the fixer has
   captured what it needs.
+- **F-036 · concurrent first installs from two daemons: one Commit fails
+  "object … is not stored" (product, correctness, scale-experiments S4,
+  2026-10-18).** Two daemons (Sandboxes a and b) committed a first-ever
+  `node_modules` install into the same Store at the same time. One Commit
+  succeeded (88.4 MB new stored); the other failed after 15.7 s in phase
+  `Commit Construct` with `object e8775b327467431049f20b8e2fa215332c9f380ab02c13e79ac914560af7ea37
+  is not stored`. Its Workspace stays mounted with 256 uncommitted changes
+  (unmount refused `Dirty`). A run from a Store that already held the
+  `node_modules` content did not fail. Likely a cross-process race between
+  two Saves sharing new identical objects (inferred, not diagnosed). State is
+  frozen for diagnosis: volume `layerfs-issue352-scale-s4`, container
+  `layerfs-issue352-scale-s4-b`, evidence `~/lfs-history/scale-experiments/s4/lww/`
+  (REPRO.md to follow). Concurrent installs are expected in P3 (lanes on a
+  4-Sandbox pool), so this blocks measured P3. Owner: to be assigned by the
+  owner (fixer queue or its own worktree session).
