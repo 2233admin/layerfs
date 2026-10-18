@@ -110,8 +110,8 @@ pointed at this file and the records.
 4. F-025 fix 4 (inode reservation pool, designed in F-020).
 5. F-027 item 1, then F-032 (`rm -rf` over FUSE; per-op timing first; owner:
    before measured range 15), then F-027 items 2 (mtime-only) → 3.
-6. F-033 lineage caps (confirmed: `scale_lineage_cap.rs` on
-   `dsh-352-scale-experiments` `9ee945370`; must be merged before range 90).
+6. (F-033 lineage caps moved to issue #353, session `local_334948d1`, branch
+   `issue353-lineage-cap`; merge is an owner decision; the before-range-90 gate stays.)
 7. Storage counters from the builder's note (`builder-storage-counters.md` in the
    shared notes).
 
