@@ -590,6 +590,57 @@ test("renderFormat and checkFormat: the binding shape passes; a missing part or 
   assert.equal(leadNote(text.replace("- (none yet)", "- watch metadata")).trim(), "- watch metadata");
 });
 
+// REPORT_FORMAT §8 (P3, from range 15): the git and Node rules' report parts, gates and checks
+const p3Of = () => {
+  const proofs = (r) => ({ P1: { result: r, normalized: 4 }, P2: { result: "pass" }, P3: { result: "pass" }, P4: { result: "pass" }, P5: { result: "pass", skipped: [{ file: "a.test.ts", reason: "fails natively" }] }, P6: { result: "pass", rewritten: 12 } });
+  return {
+    git: { head: "c".repeat(40), checkpoint: "c".repeat(40), commitsWritten: 25, dshCommits: 25, statusClean: true, freshSumScan: 0, guardViolations: [],
+      lanes: [{ lane: "a01", status: 3, diff: 3, add: 3, rm: 0, commits: 3, loose: 40 }], lead: { commitTree: 25, indexRebuild: true, repack: true },
+      perCommit: { commits: 28, index: 28_000, loose: 56_000, pack: 14_000 }, internals: { seedObjects: 9000, seedPackBytes: 2e7, lanes: [{ lane: "a01", objects: 40, indexBytes: 9000 }], trace2: [{ cmd: "git status --porcelain", ms: 140, lstat: 900 }] } },
+    node: { points: [{ lane: "a01", point: "mid", tree: "d".repeat(40), inputs: "e".repeat(64), proofs: proofs("pass"), cached: true }],
+      lanes: [{ lane: "a01", installs: 1, refreshes: 2, tsc: 2, vitestPoints: 2, vitestFiles: 9, equal: 9, run: 9 }], repair: { installs: 1, tsc: 1, rewritten: 30 },
+      inputs: { consistent: 40, total: 51 }, churn: { rewrittenBytes: 4e8, storedBytes: 2e6 }, nativeDisk: { lanes: 4, checkoutBytes: 5e8, storedBytes: 6e8 }, metadata: { perFile: 300, perCommit: 9000, budgetPerFile: null } },
+    conflicts: { tracked: 2, installOutputs: 30, buildOutputs: 4, git: 0, paths: [{ path: "node_modules/.modules.yaml", class: "installOutputs", lane: "a01" }] },
+    speed: { "git.status.cold": { lfs: { p50: 600, p95: 700 }, native: { p50: 140, p95: 150 }, cost362: 4.5 } },
+    resilience: { busy: 0, eagain: 0, refusedUnmount: 0, writerWaitMs: { p50: 1, p95: 9 }, laneHoldMs: { p50: 6, p95: 20 }, rss: { max: 210, median: 150, n: 4 }, overlayMaxBytes: 4e6, unmountMs: { p50: 30, p95: 80 } },
+    stages: { gitMs: 9000, nodeMs: 60000 }, content: { storedContent: 1.3e6, distinctNewContent: 1e6 },
+  };
+};
+
+test("P3 report (REPORT_FORMAT §8): git and Node parts render and pass the check; a stop proof or .git conflict stops; P2 renders none", () => {
+  const base = formatMetrics();
+  const version = { ...base.version, bytes: 1200, git: { files: 30, bytes: 200 } };
+  const storageReport = storageFigures({ parts: { exact: false, content: 900, metadata: 600, remainder: 3500, total: 5000 }, prevParts: null,
+    bySource: { tracked: { content: 800, metadata: 500 }, git: { content: 100, metadata: 100 } }, added: { tracked: { content: 200, metadata: 100 }, git: { content: 50, metadata: 20 } }, version, changed: { tracked: 150, git: 60 }, commits: 3 });
+  const m = { ...base, phase: "p3", version, storageReport, execs: { ...base.execs, git: 12, pnpm: 3, tsc: 4, vitest: 2, other: 1 }, p3: p3Of() };
+  const args = { plan: { ...plan, dsh: { first: "a".repeat(40), commits: 25 }, checkpoint: "b".repeat(40), milestone: false }, summary, gates: [gate("pass")] };
+  const text = renderFormat({ ...args, attempts: [m] });
+  for (const x of ["**Phase P3** · **Git ✓** · **Node ✓**", "**Content 1.30×**", "**Churn 0.01**", "**Time split:**", "### Node and git proofs", "| a01 | mid |", "pass (4 normalized)", "pass (12 rewritten)",
+    "| Install inputs (NODE_RULE §3; reported, not gated) | 40 of 51 lane steps consistent |", "`.git` 0", "**Execs by tool:** git 12", "| `.git` |", "**3e. Git and Node (P3)**", "Tracked only", "| git status (cold) | 600 ms / 700 ms | 140 ms / 150 ms | 4.29× | git / status-cold: 4.50× |",
+    "**Resilience:** Busy 0", "### H. Git internals", "### I. Proof details", "### J. Conflicts by path class", ", reported only in P3)"]) assert.ok(text.includes(x), x);
+  assert.ok(!text.includes("target ~9 : 1"));
+  assert.deepEqual(checkFormat(text, m, []), []);
+  assert.ok(checkFormat(text.replace("### Node and git proofs", "### Proofs"), m, []).some((x) => /Node and git proofs/.test(x)));
+  assert.ok(checkFormat(text.replace("\n### J. Conflicts by path class", "\n### J. Other"), m, []).some((x) => /J\. Conflicts/.test(x)));
+  assert.ok(checkFormat(text.replace("**Time split:**", "**Time:**"), m, []).some((x) => /Time split/.test(x)));
+  // gates: every P3 row passes on the good attempt; a stopped proof, a .git conflict or a Busy stops; nothing recorded is watch
+  const rows = (x) => Object.fromEntries(evaluate(x).checks.map((r) => [r.name, r.result]));
+  const good = rows(m);
+  for (const k of ["Git", "Node proofs", "`.git` conflicts", "Resilience", "Content ratio", "Install inputs (reported, not gated)"]) assert.equal(good[k], "pass", k);
+  const bad = p3Of(); bad.node.points[0].proofs.P1.result = "stop"; bad.conflicts.git = 1; bad.resilience.busy = 1; bad.git.statusClean = false; bad.content.storedContent = 6e6;
+  const b = rows({ ...m, p3: bad });
+  assert.deepEqual([b.Git, b["Node proofs"], b["`.git` conflicts"], b.Resilience, b["Content ratio"]], ["stop", "stop", "stop", "stop", "optimize"]);
+  const empty = rows({ ...m, p3: {} });
+  for (const k of ["Git", "Node proofs", "`.git` conflicts", "Resilience", "Content ratio"]) assert.equal(empty[k], "watch", k);
+  const unrun = p3Of(); delete unrun.node.points[0].proofs.P4;
+  assert.equal(rows({ ...m, p3: unrun })["Node proofs"], "watch", "a proof not run is never pass");
+  assert.ok(renderFormat({ ...args, attempts: [{ ...m, p3: unrun }] }).includes("| NOT_RUN |"));
+  // P2 attempts: none of it
+  const p2 = renderFormat({ ...args, attempts: [base] });
+  assert.ok(!p2.includes("**Phase P3**") && !p2.includes("### H. Git internals") && p2.includes("target ~9 : 1"));
+  assert.ok(!("Git" in rows(base)));
+});
+
 test("a finding in the binding format: pending, then every part, with vs without under two binaries", () => {
   const a1 = { ...formatMetrics(), attempt: 1, gate: gate("optimize") }, a2 = { ...formatMetrics(), attempt: 2, binary: { daemon: "7c2e9d40f1a3" }, gate: gate("pass") };
   const f = { range: 7, attempt: 1, verdict: "optimize", trigger: { check: "Scaling", value: "fit", threshold: "< 0.15" }, diagnosis: { step: "D4", summary: "a scan. more" },
@@ -1267,7 +1318,9 @@ test("storage revision (REPORT_FORMAT §3/§9): five parts sum to Store on disk;
   const lines = [{ method: "fs.write", step: "r015.s0001", sizes: { newStored: 3000, newMetadata: 1000 } }, { method: "sandbox.commit", step: "r015.install", sizes: { newStored: 9000, newMetadata: 4000 } },
     { method: "sandbox.commit", step: "r015.build", sizes: { newStored: 500, newMetadata: 100 } }, { method: "branch.merge", step: "r015.merge a", sizes: null }];
   const added = addedBySource(lines, stepSource(15));
-  assert.deepEqual(added, { tracked: { content: 2000, metadata: 1000 }, nodeModules: { content: 5000, metadata: 4000 }, build: { content: 400, metadata: 100 } });
+  assert.deepEqual(added, { tracked: { content: 2000, metadata: 1000 }, nodeModules: { content: 5000, metadata: 4000 }, build: { content: 400, metadata: 100 }, git: { content: 0, metadata: 0 } });
+  // P3 (REPORT_FORMAT §8): a lane's git commit and the lead's write of main are the `.git` source
+  assert.deepEqual(addedBySource([{ method: "sandbox.commit", step: "r015.a01.git-commit", sizes: { newStored: 70, newMetadata: 20 } }, { method: "sandbox.commit", step: "r015.lead.git-main", sizes: { newStored: 30, newMetadata: 10 } }], stepSource(15)).git, { content: 70, metadata: 30 });
   const seed = seedBySource(parts, added);
   const bySource = cumulative(seed, added);
   const version = { bytes: 100000, tracked: { bytes: 60000 }, nodeModules: { bytes: 39000 }, build: { bytes: 1000 } };

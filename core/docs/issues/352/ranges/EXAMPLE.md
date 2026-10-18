@@ -5,6 +5,8 @@
 > the format; none of it is a measurement. Example A is the common case: no
 > problem found. Example B is a range whose first attempt tripped an optimize
 > gate, shown at its rerun, with the fix context and the before/after comparison.
+> Example C (added 2026-10-19) shows only the parts a P3 range adds
+> (REPORT_FORMAT.md §10), with the git and Node rules in place.
 
 ---
 
@@ -270,3 +272,78 @@ play 31.2 · consolidate 2.4 · verify 1.9 · probes 0.4 · tests 3.1 · seal 2.
 snapshot 0.3 · report 0.2 s · F. Attempts: 1 optimize (`511dceed`), 2 watch
 (`7c2e9d40`) · G. Evidence: `~/lfs-history/metrics/range-057.a1.json`,
 `range-057.a2.json`, `finding-057.a1.json`, trace, runner log, snapshot manifest.
+
+---
+
+# Example C · Range 015 · **watch** · attempt 1 (P3 parts only)
+
+Only the lines and tables a P3 range adds (REPORT_FORMAT.md §10) are shown;
+everything else is as in Examples A and B.
+
+**Phase P3** · **Git ✓** · **Node —** (P1–P6: 46 pass, 0 stop, 2 NOT_RUN over 8 points) · **Content 1.21×** · **Churn 0.04**
+**Time split:** play 212.4 s · git 31.8 s · Node 288.0 s · verify 22.6 s
+
+## 1. Correctness (P3 rows)
+
+| Check | Result |
+| --- | --- |
+| Git | **HEAD = checkpoint `6e5c908a1`** · 29 commits written for 29 dsh commits · status clean · fresh mount read back 0 · lane guard 0 |
+| Install inputs (NODE_RULE §3; reported, not gated) | 41 of 52 lane steps consistent |
+| Conflicts by path class | Tracked 2 · Install outputs 318 · Build outputs 22 · `.git` 0 |
+
+### Node and git proofs
+
+Each proof runs the same command natively on the identical tree id (NODE_RULE §6); a proof not run is `NOT_RUN`, never pass.
+
+| Lane | Point | Tree | Install inputs | P1 | P2 | P3 | P4 | P5 | P6 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| r015-1-packages-core | mid | `3f0a9c21be44` | `91c2d0e7a5f3` | pass (14 normalized) | pass | pass | pass | pass | — |
+| r015-1-packages-core | end | `a8d41e09c7b2` | `91c2d0e7a5f3` | pass (14 normalized) | pass | pass | pass | pass | — |
+| lead | repair | `c5e2b7104d9a` | `91c2d0e7a5f3` | pass (14 normalized) | pass | pass | pass | NOT_RUN | pass (412 rewritten) |
+
+P5 skip list (failing natively, set at calibration): `packages/ui/src/theme.test.ts` (fails natively: missing font).
+
+## 2. Activity (P3 lines)
+
+**File changes:** … · fs 1,204 : Sandbox 611 (**2 : 1**, reported only in P3)
+**Execs by tool:** git 248 · pnpm 19 · tsc 16 · vitest 8 · other 40
+
+| Lane | git status | git diff | git add | git rm --cached | Lane commits | Loose objects |
+| --- | --- | --- | --- | --- | --- | --- |
+| r015-1-packages-core | 12 | 12 | 12 | 1 | 12 | 188 |
+| **lead** | — | — | — | — | 29 commit-tree | index rebuild ✓ · repack ✓ |
+
+## 3. Storage (P3 lines)
+
+3c gains a `` `.git` `` row, and 3e reads:
+
+| Measure | Value |
+| --- | --- |
+| Tracked only (amplification of the tracked source; comparable with ranges 0–14) | 1.34× (412.0 MiB for 307.5 MiB) |
+| Store growth per git commit (index / loose objects / pack) | 18.2 KiB / 41.7 KiB / 9.9 KiB over 41 git commits |
+| **Content ratio** (stored content ÷ distinct new content; ≤1.x, watch > 2×, act > 5×) | 1.21× |
+| **Churn ratio** (stored ÷ bytes Node churn rewrote) | 0.04 (61.2 MiB stored for 1.48 GiB rewritten) |
+| Native-disk equivalence (stored ÷ lanes × one native checkout) | 0.29 (4 lanes × 1.21 GiB) |
+| Metadata per file / per Commit (budget from the dev range) | 0.2 KiB / 6.1 KiB (budget 0.3 KiB / 8.0 KiB) |
+
+## 4. Speed (P3 lines)
+
+**Git and Node** (LayerFS ÷ native on the identical tree; ×base compares only with the P3 re-baseline, none recorded yet: not judged)
+
+| Operation | LayerFS p50 / p95 | Native p50 / p95 | ÷ native (p50) | #362 case ÷ native |
+| --- | --- | --- | --- | --- |
+| git status (cold) | 612 ms / 702 ms | 139 ms / 151 ms | 4.40× | git / status-cold: 4.50× |
+| git commit (lane) | 61.0 ms / 88.0 ms | 21.0 ms / 26.0 ms | 2.90× | git / commit: 2.80× |
+| pnpm install (incremental) | 2,612 ms / 3,104 ms | 1,480 ms / 1,702 ms | 1.76× | pnpm-reinstall / cold: 1.70× |
+| tsc -b | 598 ms / 803 ms | 214 ms / 240 ms | 2.79× | tsc-b / cold: 2.90× |
+
+**Resilience:** Busy 0 · EAGAIN 0 · refused unmount 0 · writer wait 0.4 ms / 6.0 ms · lane hold 5.8 ms / 21.0 ms per Commit (p50 / p95) · daemon RSS max 214 MB, median 152 MB over 4 daemons · overlay max 38.1 MiB · unmount 31.0 ms / 92.0 ms
+
+Verdict **watch**: two proofs `NOT_RUN` (Node proofs is watch until every proof runs).
+
+## Appendix (P3 parts)
+
+### H. Git internals · ### I. Proof details · ### J. Conflicts by path class
+
+As REPORT_FORMAT.md §10.2 describes; one row per lane, per point × proof, and per conflicted path.
+

@@ -22,7 +22,7 @@
 
 /** pack.domain values (layerfs-storage PackDomain: Metadata, Payload). */
 export const DOMAIN = { metadata: 0, payload: 1 };
-export const SOURCES = ["tracked", "nodeModules", "build"];
+export const SOURCES = ["tracked", "nodeModules", "build", "git"];
 
 /**
  * The five parts of Store on disk from the sealed file (§9). Exact: they sum
@@ -77,7 +77,8 @@ export function addedBySource(lines, sourceOf) {
 /** The source of a Commit's line by the step that made it (P3 closure steps; everything else tracked). */
 export const stepSource = (k) => (l) => {
   const step = String(l.step ?? "");
-  return /\.(install|incremental-install|clean-install|reinstall-check)$/.test(step) ? "nodeModules" : /\.(build|rebuild)$/.test(step) ? "build" : "tracked";
+  return /\.(install|incremental-install|clean-install|reinstall-check|refresh|repair-install)$/.test(step) ? "nodeModules" : /\.(build|rebuild|tsc)$/.test(step) ? "build"
+    : /\.(git-seed|git-commit|git-main)$/.test(step) ? "git" : "tracked";
 };
 
 /** node_modules bytes changed by an install: package folders added or rewritten against the previous install's lister groups. */
@@ -93,13 +94,13 @@ export function changedGroupBytes(prevGroups = [], groups = []) {
  */
 export function seedBySource(parts, added) {
   if (!parts?.exact) return null;
-  const sum = (k) => SOURCES.reduce((n, s) => n + added[s][k], 0);
-  return { tracked: { content: parts.content - sum("content"), metadata: parts.metadata - sum("metadata") }, nodeModules: { content: 0, metadata: 0 }, build: { content: 0, metadata: 0 } };
+  const sum = (k) => SOURCES.reduce((n, s) => n + (added[s]?.[k] ?? 0), 0);
+  return { tracked: { content: parts.content - sum("content"), metadata: parts.metadata - sum("metadata") }, nodeModules: { content: 0, metadata: 0 }, build: { content: 0, metadata: 0 }, git: { content: 0, metadata: 0 } };
 }
 
 /** Cumulative by source: the previous range's plus this range's, never recomputed (REPORT_FORMAT §6). */
 export function cumulative(prev, added) {
-  return Object.fromEntries(SOURCES.map((s) => [s, { content: (prev?.[s]?.content ?? 0) + added[s].content, metadata: (prev?.[s]?.metadata ?? 0) + added[s].metadata }]));
+  return Object.fromEntries(SOURCES.map((s) => [s, { content: (prev?.[s]?.content ?? 0) + (added[s]?.content ?? 0), metadata: (prev?.[s]?.metadata ?? 0) + (added[s]?.metadata ?? 0) }]));
 }
 
 /**
@@ -110,9 +111,12 @@ export function cumulative(prev, added) {
  * changed per source; `commits` this range's LayerFS Commits. Head cost is
  * null until a reachability walk of the sealed file exists (see the notes).
  */
-export function storageFigures({ parts, prevParts, bySource, added, version, changed, commits }) {
+export function storageFigures({ parts, prevParts, bySource: by, added: add, version, changed, commits }) {
+  // a source a caller did not record (metrics before `git`, P3) counts zero
+  const zero = { content: 0, metadata: 0 }, fill = (x) => Object.fromEntries(SOURCES.map((k) => [k, x?.[k] ?? zero]));
+  const bySource = fill(by), added = fill(add);
   const total = parts?.total ?? null;
-  const latest = version ? { tracked: version.tracked?.bytes ?? 0, nodeModules: version.nodeModules?.bytes ?? 0, build: version.build?.bytes ?? 0 } : null;
+  const latest = version ? { tracked: version.tracked?.bytes ?? 0, nodeModules: version.nodeModules?.bytes ?? 0, build: version.build?.bytes ?? 0, git: version.git?.bytes ?? 0 } : null;
   const ratio = (a, b) => (a == null || !b ? null : +(a / b).toFixed(3));
   const stored = (s) => bySource[s].content + bySource[s].metadata;
   const addedAll = SOURCES.reduce((n, s) => n + added[s].content + added[s].metadata, 0);
@@ -151,9 +155,11 @@ export function storageProblems(st, storeOnDisk, versionBytes) {
   const sum = parts.exact ? parts.content + parts.metadata + parts.indexRows + parts.waste + parts.other : parts.content + parts.metadata + parts.remainder;
   if (sum !== storeOnDisk) p.push(`the parts sum to ${sum} bytes, Store on disk is ${storeOnDisk}`);
   if (versionBytes && st.amplification != null && Math.abs(sum / versionBytes - st.amplification) > 0.006) p.push(`the parts give ${(sum / versionBytes).toFixed(3)}×, space amplification is ${st.amplification}×`);
-  const bySource = SOURCES.reduce((n, s) => n + st.sources[s].stored, 0);
+  // the sources this attempt recorded (`git` from P3; earlier metrics have three)
+  const have = Object.keys(st.sources);
+  const bySource = have.reduce((n, s) => n + st.sources[s].stored, 0);
   if (st.shared.stored != null && bySource + (st.unattributed ?? 0) + st.shared.stored !== storeOnDisk) p.push(`stored by source (${bySource}) plus unattributed (${st.unattributed}) plus shared (${st.shared.stored}) is not Store on disk (${storeOnDisk})`);
-  const latest = SOURCES.reduce((n, s) => n + (st.sources[s].latest ?? 0), 0);
+  const latest = have.reduce((n, s) => n + (st.sources[s].latest ?? 0), 0);
   if (versionBytes != null && latest !== versionBytes) p.push(`per-source latest versions sum to ${latest}, the latest version is ${versionBytes}`);
   if (st.headCost != null && st.historyCost != null && Math.abs(st.amplification - st.headCost - st.historyCost) > 0.006) p.push("history cost is not space amplification − head cost");
   return p;

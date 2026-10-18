@@ -13,6 +13,12 @@
 > sources (§6), checks (§7) and the storage formulas (§9) were revised so the
 > head-based ratio is always shown split into its parts and per source. It
 > applies from the next report generated; committed reports stay (F2).
+>
+> **P3 update, owner request 2026-10-19:** from range 15 the replay adds the git
+> rule ([GIT_RULE.md](GIT_RULE.md)) and the Node rule ([NODE_RULE.md](NODE_RULE.md));
+> both are on branch `claude/dsh-352-f031-design` until merged. §10 adds their
+> report parts, gates and checks to a P3 attempt's report. Sections 1–9 stay;
+> a P2 attempt renders exactly as before.
 
 ## 1. Shape
 
@@ -326,4 +332,93 @@ STORAGE_STUDY.md §2; an earlier rough split here said index 1.07, waste 0.69);
 stored per byte changed 1.78 (content 0.78, metadata 1.00); stored per Commit
 6.8 KiB. Expected ranges per part and per Commit, and defect signatures:
 [STORAGE_STUDY.md](STORAGE_STUDY.md).
+
+## 10. P3: git and Node (from range 15)
+
+A P3 attempt (`phase: "p3"`) keeps every part above and adds the parts below.
+They are rendered by `dsh/tools/history/p3.mjs` and hooked into the format
+(`format.mjs`), the gates (`gates.mjs evaluate`) and `report.mjs check`. No
+section is renumbered, so the lead's note, §5 parsing and committed reports are
+unchanged (F2).
+
+### 10.1 What the harness records
+
+Everything comes from one object on the attempt, `p3`. A field the harness did
+not record renders `not recorded`, and its gate is at least **watch** (SPEC §3
+F8). A proof that was not run is `NOT_RUN`, never pass.
+
+| Field | Contents | Rule |
+| --- | --- | --- |
+| `git` | `head`, `checkpoint`, `commitsWritten`, `dshCommits`, `statusClean`, `freshSumScan` (tracked files read back in a fresh mount), `guardViolations` (paths); `lanes[]` (`lane`, `status`, `diff`, `add`, `rm`, `commits`, `loose`); `lead` (`commitTree`, `indexRebuild`, `repack`); `perCommit` (`commits`, `index`, `loose`, `pack` bytes); `internals` (`seedObjects`, `seedPackBytes`, `lanes[]` objects and index bytes, `trace2[]` command, ms, lstat) | GIT_RULE |
+| `node` | `points[]` (`lane`, `point`, `tree`, `inputs`, `cached`, `proofs.P1`–`P6` with `result` pass, stop or NOT_RUN; `P1.normalized`, `P5.skipped[]` file and reason, `P6.rewritten`, optional `detail`); `lanes[]` (`installs`, `refreshes`, `tsc`, `vitestPoints`, `vitestFiles`, `equal`, `run`); `repair` (`installs`, `tsc`, `rewritten`); `inputs` (`consistent`, `total`); `churn` (`rewrittenBytes`, `storedBytes`); `nativeDisk` (`lanes`, `checkoutBytes`, `storedBytes`); `metadata` (`perFile`, `perCommit`, `budgetPerFile`, `budgetPerCommit`) | NODE_RULE §2–§8 |
+| `conflicts` | counts by class `tracked`, `installOutputs`, `buildOutputs`, `git`; `paths[]` (`path`, `class`, `lane`) | NODE_RULE §5, GIT_RULE |
+| `speed` | per key in §10.2's Speed table: `lfs` and `native` `{p50, p95}` on the identical tree, and `cost362`, the matching #362 case's LayerFS ÷ native | NODE_RULE §6 |
+| `resilience` | `busy`, `eagain`, `refusedUnmount`, `writerWaitMs` and `laneHoldMs` `{p50, p95}` per Commit, `rss` (`max`, `median`, `n` daemons), `overlayMaxBytes`, `unmountMs {p50, p95}` | NODE_RULE §7, HANDOFF item 4 |
+| `stages` | `gitMs`, `nodeMs` | |
+| `content` | `storedContent`, `distinctNewContent` | NODE_RULE §8 |
+
+Two changes outside `p3` feed the existing tables:
+
+- **`.git` is a fourth source.** The version walk counts `.git` apart
+  (`version.git`), never as build output. Store bytes go to `.git` by the step
+  that wrote them: a step label ending `.git-seed`, `.git-commit` or
+  `.git-main`. Node steps ending `.refresh` or `.repair-install` count as
+  `node_modules`, and `.tsc` as build output.
+- **`m.execs`** adds `git`, `pnpm`, `tsc`, `vitest` and `other`.
+
+### 10.2 Report parts
+
+| Where | Added for P3 |
+| --- | --- |
+| Headline | `**Phase P3** · **Git ✓/✗** · **Node ✓/✗/—** (P1–P6 pass, stop, NOT_RUN over n points) · **Content x×** · **Churn x**`, then `**Time split:** play · git · Node · verify` |
+| §1 Correctness | rows **Git** (HEAD = checkpoint, git commits written = dsh commits, status clean, fresh mount read back 0, lane guard 0), **Install inputs** (NODE_RULE §3; reported, not gated until the owner decides §3), **Conflicts by path class** |
+| §1, subsection **Node and git proofs** | one row per test point: lane, point, tree id, install-inputs hash, P1–P6 (P1 with its normalized count, P6 with files rewritten); the P5 skip list with reasons |
+| §2 Activity | fs : Sandbox is reported without the ~9 : 1 target (the rules add Sandbox execs by design); **Execs by tool**; a git table per lane plus the lead (commit-tree, index rebuild, repack); a Node table per lane plus the lead repair |
+| §3 Storage | 3a's latest version adds `.git`; 3c adds the **`.git`** row (still summing to Store on disk); new **3e. Git and Node**: tracked-only amplification (comparable with ranges 0–14), growth per git commit (index, loose objects, pack), **Content ratio**, **Churn ratio**, native-disk equivalence, metadata per file and per Commit against the dev-range budget |
+| §4 Speed | a **Git and Node** table, LayerFS ÷ native on the identical tree: git status cold and steady, git add, lane git commit, the lead's write of main, repack, pnpm incremental install and refresh, `tsc -b`, vitest; each beside its #362 cost case; **Resilience** line (Busy, EAGAIN, refused unmount, writer wait and lane hold per Commit, RSS per daemon as max and median, overlay size, unmount time) |
+| Appendix | **H. Git internals** (seed pack apart, per-lane objects and index, trace2 timings with lstat), **I. Proof details** (every point × proof, native result cached), **J. Conflicts by path class** |
+
+### 10.3 Gates
+
+Added to `evaluate` for a P3 attempt; a stop is a §5 finding in the existing
+six-part form.
+
+| Check | Stop / act | Watch |
+| --- | --- | --- |
+| Git | stop: HEAD ≠ checkpoint, commits ≠ dsh commits, status not clean, a tracked file read back, a lane-guard violation | not recorded |
+| Node proofs | stop: any proof `stop` | any `NOT_RUN`, or no point recorded |
+| `.git` conflicts | stop: any conflict under `.git` (unplanned tracked conflicts stop under Correctness) | not recorded |
+| Resilience | stop: any Busy, EAGAIN or refused unmount (no retries; F-040 removed the 2 s Busy) | not recorded |
+| Content ratio | optimize: > 5× | > 2×, or not recorded |
+| Install inputs | reported only, until NODE_RULE §3 is decided | — |
+
+### 10.4 Baselines and trends
+
+- **Speed baselines** are already phase-matched (`baselineFor`): a P3 attempt
+  is compared only with a P3 re-baseline (`run.mjs rebaseline --phase p3`,
+  HANDOFF), never with the P2 or P1 baseline. Until one exists, Speed is
+  `not judged` and the Git and Node table says so.
+- **Moved most** keeps its existing measures; the git and Node rows join it
+  only after three P3 ranges exist (not built yet; until then they are never
+  movers).
+- The first P3 report's lead note states that its storage and speed figures
+  start a new series.
+
+### 10.5 `report.mjs check` for P3
+
+On a P3 attempt, `checkFormat` also requires: the headline's Phase, Git, Node,
+Content, Churn and Time split; the proofs subsection in §1 with a row for every
+recorded point and `NOT_RUN` shown for proofs not run; the Git, Install inputs
+and Conflicts by path class rows; no P2 fs : Sandbox target; Execs by tool,
+3e, the Resilience line and the tracked-only line; the `.git` row in 3c when
+the storage figures carry it; and appendix H, I, J after G, in order. The
+storage sums of §7 include the `.git` source. A P2 attempt is checked exactly
+as before.
+
+### 10.6 Not built here
+
+This section and `p3.mjs` render and check what the harness records. The
+harness that records `p3` (GIT_RULE's porcelain lanes and the lead's write of
+main, NODE_RULE's churn and proofs P1–P6, the resilience counters) is the
+F-031 build, not part of this change.
 
