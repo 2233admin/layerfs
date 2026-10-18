@@ -20,6 +20,7 @@ fn request() -> SandboxRequest {
         image: IMAGE.into(),
         store_volume: "lfs-test-borrowed".into(),
         port: 30421,
+        volumes: vec![],
     }
 }
 fn volume() -> Vec<u8> {

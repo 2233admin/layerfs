@@ -55,6 +55,43 @@ real machine.
    is accepted as real cost. A link attempt must fail with the error pnpm
    expects (`EXDEV`); any other error from FUSE is a stop finding.
 
+### 3.1 As built: read-only volumes on `sandbox.create` (fixer, 2026-10-18)
+
+`sandbox.create(name, project, image, { volumes })` takes `[{ volume, target }]`
+(branch `dsh-352-installs`; Linux addon `sdk-linux-3cf1e17c`; the daemon is
+unchanged, `6d467539`). Each entry must be an existing plain local volume,
+other than the Store volume, mounted read-only at an absolute target outside
+`/`, `/workspaces`, `/layerfs-*`, `/proc`, `/sys`, `/dev` and `/tmp`. A
+volume is read once, like the Store volume. The container inspection then
+matches every mount by name and destination: the Store mount must be
+read-write and each requested volume read-only. Anything else, including a
+missing, repeated, writable or unrequested mount, is a topology mismatch.
+`sandbox.record` keeps the volumes, so a reopened Sandbox expects the same
+mounts. The service Sandbox has none.
+
+Proof:
+
+- Fake-Engine tests: `core/crates/layerfs-sandbox/tests/read_only_volumes.rs`.
+- Real container: `sdk/js/test/verify/read_only_volume_real.mjs`, which passed
+  (receipt `installs-real-run4.log`). Inside a Workspace, as the Sandbox's
+  command user:
+  - the store is readable;
+  - a write into it fails `EROFS`;
+  - a hard link store → Workspace (pnpm's direction) fails `EXDEV`, as
+    requirement 4 expects;
+  - a link Workspace → store fails `EROFS`, because `linkat(2)` refuses the
+    read-only destination mount before it compares mounts (the kernel's
+    answer, not FUSE's);
+  - a symlink into the store works and is committed;
+  - a `readOnly: false` entry and the targets `/workspaces/x` and
+    `/tmp/store` are refused before any container exists;
+  - a new process reopens the Sandbox from its record and sees the same.
+  - Nothing is written to the store volume.
+- Revert checks:
+  - dropping the read-only inspection requirement fails the fake-Engine
+    mismatch test;
+  - an addon whose reopen ignores the saved volumes fails the reopen.
+
 ## 4. Proof
 
 - **Installed tree equals native, per lockfile hash** (SPEC §2's `node_modules`

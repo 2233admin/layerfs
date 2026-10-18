@@ -20,7 +20,7 @@ use layerfs_api::{
 use layerfs_bridge::control::{CommitControl, SdkRefusal, SdkValue};
 use layerfs_bridge::daemon_setup::{DaemonLimits, DaemonSetup};
 use layerfs_history::WorkspaceId;
-use layerfs_sandbox::backend::docker::{CreatePhase, Docker, SandboxRequest};
+use layerfs_sandbox::backend::docker::{CreatePhase, Docker, ReadOnlyVolume, SandboxRequest};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -65,8 +65,9 @@ fn setup(private: [u8; 32], peer: [u8; 32]) -> DaemonSetup {
     }
 }
 
-/// The binding op `sandbox.create`: args `name`, `project`, `image`, `home` and
-/// `deploy` (docker, volume, daemon) from the JS `create(name, project, image)`.
+/// The binding op `sandbox.create`: args `name`, `project`, `image`, `home`,
+/// optional `volumes` and `deploy` (docker, volume, daemon) from the JS
+/// `create(name, project, image, { volumes })`.
 pub(crate) fn create(args: &SdkValue) -> Outcome {
     create_selected(args, false)
 }
@@ -167,6 +168,26 @@ fn create_selected(args: &SdkValue, service: bool) -> Outcome {
     made
 }
 
+/// The optional `volumes` arg, `[{ volume, target }]`: existing volumes the
+/// Sandbox mounts read-only (the runtime checks names and targets); also a
+/// saved record's, so a reopened Sandbox's inspection expects the same mounts.
+pub(crate) fn read_only_volumes(args: &SdkValue) -> Result<Vec<ReadOnlyVolume>, SdkRefusal> {
+    let items = match args.get("volumes") {
+        None | Some(SdkValue::Null) => return Ok(Vec::new()),
+        Some(SdkValue::List(items)) => items,
+        Some(_) => return Err(refused("InvalidInput", "`volumes` is a list")),
+    };
+    items
+        .iter()
+        .map(|item| {
+            Ok(ReadOnlyVolume {
+                volume: text(item, "volume")?.to_owned(),
+                target: text(item, "target")?.to_owned(),
+            })
+        })
+        .collect()
+}
+
 /// Creates the claimed Sandbox `id`: container, daemon, Store install on a
 /// project's first Sandbox, then its records.
 fn create_claimed(
@@ -179,6 +200,11 @@ fn create_claimed(
     service: bool,
 ) -> Outcome {
     let name = text(args, "project")?;
+    let volumes = if service {
+        Vec::new()
+    } else {
+        read_only_volumes(args)?
+    };
     let controller = layerfs_bridge::duplex::generate_keypair().map_err(failed)?;
     let daemon = layerfs_bridge::duplex::generate_keypair().map_err(failed)?;
     let mut daemon_setup = setup(daemon.private, controller.public);
@@ -211,6 +237,7 @@ fn create_claimed(
                 image,
                 store_volume,
                 port: PORT,
+                volumes,
             },
             setup: daemon_setup,
             executable,

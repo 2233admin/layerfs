@@ -3,10 +3,7 @@ use crate::{
     job::{failed, refused},
     registry::{self, Mount, Process, Project, SandboxState},
 };
-use layerfs_api::{
-    internal::workspace,
-    BoundWorkspace, MountedWorkspace,
-};
+use layerfs_api::{internal::workspace, BoundWorkspace, MountedWorkspace};
 use layerfs_bridge::{
     control::{Reply, SdkRefusal, SdkValue},
     provision::StoreManifest,
@@ -344,6 +341,19 @@ pub(crate) fn save_sandbox(
                 "volume",
                 SdkValue::text(&state.runtime.request().store_volume),
             ),
+            (
+                "volumes",
+                SdkValue::List(
+                    (state.runtime.request().volumes.iter())
+                        .map(|v| {
+                            SdkValue::map([
+                                ("volume", SdkValue::text(&v.volume)),
+                                ("target", SdkValue::text(&v.target)),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
             ("secret", SdkValue::Bytes(secret.to_vec())),
             ("peer", SdkValue::Bytes(peer.to_vec())),
             ("instance", SdkValue::Bytes(instance.to_vec())),
@@ -371,6 +381,8 @@ pub(crate) fn reopen(args: &SdkValue) -> Result<Arc<SandboxState>> {
             image: registry::text(&value, "image")?.to_owned(),
             store_volume: registry::text(&value, "volume")?.to_owned(),
             port: 30421,
+            // a record written before read-only volumes has none
+            volumes: crate::sandbox::read_only_volumes(&value)?,
         },
     )
     .map_err(failed)?;
@@ -417,13 +429,13 @@ pub(crate) fn refresh(state: &SandboxState) -> Result<()> {
                     .get_int("namespace")
                     .ok_or_else(|| refused("InvalidInput", "namespace"))?,
             };
-            let status = match workspace(&mut *crate::trace::control(&state.controls)?).status(token)
-            {
-                Ok(status) => status,
-                // Unmounted by the daemon; its owner removes the record next.
-                Err(failure) if absent(&failure) => continue,
-                Err(failure) => return Err(failed(failure)),
-            };
+            let status =
+                match workspace(&mut *crate::trace::control(&state.controls)?).status(token) {
+                    Ok(status) => status,
+                    // Unmounted by the daemon; its owner removes the record next.
+                    Err(failure) if absent(&failure) => continue,
+                    Err(failure) => return Err(failed(failure)),
+                };
             let ready = status
                 .kernel
                 .and_then(|k| k.ready)

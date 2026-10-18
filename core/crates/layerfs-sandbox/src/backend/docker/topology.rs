@@ -121,40 +121,64 @@ fn fuse_device<R: Read>(j: &mut Json<R>) -> Result<bool, RuntimeError> {
     })?;
     Ok(count == 1 && valid)
 }
+/// The Store mount read-write at `/layerfs-store` and each requested read-only
+/// volume at its target, matched by name and destination in any order; any
+/// other, missing or repeated mount is a topology mismatch.
 pub(super) fn mounts<R: Read>(
     j: &mut Json<R>,
     request: &SandboxRequest,
 ) -> Result<bool, RuntimeError> {
     let mut count = 0;
     let mut valid = true;
+    let mut store = false;
+    let mut seen = vec![false; request.volumes.len()];
     j.array(|j| {
         count += 1;
         let mut bits = 0;
+        let (mut volume, mut name, mut destination, mut rw, mut local) =
+            (false, None, None, false, false);
         j.object(|j, key| {
             if key.equals("Type") {
                 once(&mut bits, 1)?;
-                valid &= j.string_equals("volume")?;
+                volume = j.string_equals("volume")?;
             } else if key.equals("Name") {
                 once(&mut bits, 2)?;
-                valid &= j.string_equals(&request.store_volume)?;
+                name = Some(j.string(true)?);
             } else if key.equals("Destination") {
                 once(&mut bits, 4)?;
-                valid &= j.string_equals("/layerfs-store")?;
+                destination = Some(j.string(true)?);
             } else if key.equals("RW") {
                 once(&mut bits, 8)?;
-                valid &= j.boolean()?;
+                rw = j.boolean()?;
             } else if key.equals("Driver") {
                 once(&mut bits, 16)?;
-                valid &= j.string_equals("local")?;
+                local = j.string_equals("local")?;
             } else {
                 j.skip(3)?;
             }
             Ok(())
         })?;
-        valid &= bits == 31;
+        let (Some(name), Some(destination)) = (name, destination) else {
+            valid = false;
+            return Ok(());
+        };
+        valid &= bits == 31 && volume && local;
+        if name.equals(&request.store_volume) && destination.equals("/layerfs-store") {
+            valid &= rw && !store;
+            store = true;
+        } else if let Some(i) = request
+            .volumes
+            .iter()
+            .position(|v| name.equals(&v.volume) && destination.equals(&v.target))
+        {
+            valid &= !rw && !seen[i];
+            seen[i] = true;
+        } else {
+            valid = false;
+        }
         Ok(())
     })?;
-    Ok(count == 1 && valid)
+    Ok(valid && store && count == 1 + request.volumes.len() && seen.iter().all(|s| *s))
 }
 fn strings<R: Read>(j: &mut Json<R>, expected: &[&str]) -> Result<bool, RuntimeError> {
     let mut index = 0;

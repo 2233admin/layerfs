@@ -86,7 +86,11 @@ life: `sandbox.create(name, project, image)` takes a name of 1–63 lowercase AS
 letters, digits, `_`, `-`, `.` that starts and ends alphanumeric, this client's
 project, and a local image digest `sha256:<64 hex>`. Names are unique across the
 home, so a second create of a live name is `Exists`; the name is the Sandbox's id
-in every later call. Its records are `LAYERFS_HOME/_sandboxes/<name>/`, with the
+in every later call. `sandbox.create(name, project, image, { volumes })` also
+mounts existing local volumes read-only, each `{ volume, target }` at an absolute
+path outside `/workspaces`, `/layerfs-*`, `/proc`, `/sys`, `/dev` and `/tmp`
+(a shared package store, for instance); a write there fails `EROFS`, and a hard
+link between it and a Workspace fails `EXDEV`. Its records are `LAYERFS_HOME/_sandboxes/<name>/`, with the
 container id in the plain-text file `container` there (for `docker logs`); the
 private service Sandbox behind Store calls is `_service.<project>`. One Sandbox
 holds several Workspaces at once, each a mount of any Branch of its project:
@@ -128,7 +132,7 @@ and supervises no commands.
 | fs reads (7) | `read(ref, path, startLine?, endLine?)`, `list(ref, path?, pageSize?, pagePos?)`, `stat(ref, path)`, `grep(ref, pattern, path?, pageSize?, pagePos?)`, `glob(ref, pattern, path?, pageSize?, pagePos?)`, `diff_files(leftRef, leftPath, rightRef, rightPath)`, `blame(ref, path, fromLine?)` |
 | fs writes (7) | `write(branch, path, content, message?)`, `edit(branch, path, oldText, newText, message?)`, `apply(branch, changes, message?)`, `mkdir(branch, path, message?)`, `rm(branch, path, message?)`, `cp(branch, from, to, message?)`, `mv(branch, from, to, message?)` |
 | branch (6) | `fork(name, fromRef?)`, `list_commits(branch, pageSize?, pagePos?)`, `diff_commits(from, to, pageSize?, pagePos?, { cursor?, hunks? }?)`, `diff_branches(from, to, pageSize?, pagePos?, { cursor?, hunks? }?)`, `merge(a, b, name, message?)`, `publish(branch, commit?)` |
-| sandbox (7) | `create(name, project, image)`, `mount(id, branch)` → path, `exec(id, path, command, message?)`, `status(id, path)`, `commit(id, path, message?, force?)`, `unmount(id, path, discard?)`, `close(id)` |
+| sandbox (7) | `create(name, project, image, { volumes }?)`, `mount(id, branch)` → path, `exec(id, path, command, message?)`, `status(id, path)`, `commit(id, path, message?, force?)`, `unmount(id, path, discard?)`, `close(id)` |
 
 Every grouped method returns a Promise and takes positional arguments only; no
 method takes an options object. A ref is `main`, a Branch name, a Commit
