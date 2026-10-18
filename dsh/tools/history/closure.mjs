@@ -130,6 +130,7 @@ export async function playClosure(run, k, steps, { sb, branch, expectCall, Misma
       const t0 = Date.now();
       const r = await expectCall(run, `${label} exec`, () => run.lf.sandbox.exec(sb, ws, s.command));
       const row = { kind: s.kind, exitCode: r.exitCode, ms: Date.now() - t0, ...(s.packages ? { packages: s.packages } : {}) };
+      run.progress?.(`closure ${s.kind} exit ${r.exitCode} ${row.ms} ms`);
       out.push(row);
       if (s.kind !== "test" && r.exitCode !== 0) throw new Mismatch(`${label} exited ${r.exitCode}: ${String(r.stderr || r.stdout || "").slice(-300)}`);
       // every step's mount root: the node_modules chain records it, and a later install's lister substitutes it

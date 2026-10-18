@@ -470,3 +470,28 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   untracked `node_modules` (dev352-p3p r016: `packages/core/agent-core`).
   P2 clean-install numbers keep the old command's label and are not compared
   across the change (INSTALLS §1).
+
+- **The P3 command shape: a range in two commands (lead 2026-10-18).** With
+  F-031 option (c) on, a range does not fit one 118 s command (dev352-p3s
+  r015 reached the ceiling). Each range is played as two commands, each at
+  or under 120 s:
+  1. `play --run <id> --from k --to k --mode <m> --until lanes`: the fork,
+     the `.git` seed (first git range), `/.lww`, and every agent step with
+     its lane git exec. It saves the range context (`half-<k>.json`: lane
+     trees, counters, the call log, the tooling laps, the trace file and
+     attempt, the Store figures before the range) and marks the run
+     `halfway`.
+  2. `play --run <id> --from k --to k --mode <m> --resume`: the merges, the
+     reconcile, the lead's git, the fresh-Workspace status check, the
+     closure, the publish, verify and the rest, as in one command.
+  - Nothing measured is redone or warmed. The resume reads the saved
+    context and appends to the same trace file, so each stage's timing is
+    in the trace as if one command had played it. Its new Sandbox pool is
+    timed as `resumePrepareMs`.
+  - The saved context pins the daemon, native addon, SDK JavaScript and
+    image ids, so a resume under other binaries is refused.
+  - A run halfway through a range accepts only `--resume` for that range. A
+    failure in either half leaves the run dirty: no auto-resume, no retry.
+  - Every stage prints a progress line on stderr
+    (`[HH:MM:SS r015 +12.3s] …`), so a command stopped at its ceiling shows
+    where the time went.

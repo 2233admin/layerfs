@@ -1091,6 +1091,38 @@ test("F-031 option (c): seed pack, lane commits with their own index and ref, th
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("a range in two commands (halves.mjs): the context round-trips; a resume is refused off its range or under other binaries; bare flags", async () => {
+  const h = await import("../halves.mjs");
+  const { options } = await import("../run.mjs");
+  const { Tree } = await import("../steps.mjs");
+  const base = new Map([["a.txt", { mode: "100644", blob: "b1" }], ["d/x.txt", { mode: "100644", blob: "b2" }]]);
+  const lane = new Tree(base); lane.set("d/y.txt", { mode: "100755", blob: "b3" }); lane.delete("a.txt");
+  const ctx = { untracked: true, base, p2: { built: "from the plan" }, trees: new Map([["L1", lane]]), held: new Map(), events: [{ kind: "decoy" }], measured: false,
+    work: { fs: 3, sandbox: 1, commits: 4 }, lead: "r015-main", leadSteps: [{ op: "fork" }], merged: new Map(), tries: new Map(), published: new Set(["L0"]), played: new Map([["a01", { fs: 2 }]]),
+    steps: new Map([["a01", 2]]), lww: { picks: [] }, checkpoint: "c", git: { dates: new Map([["c", "1 +0000"]]), locks: new Map([["L1", Promise.resolve()]]), lane: { execs: 2 }, seed: { commits: 9 } } };
+  const back = h.ctxFromJson(JSON.parse(JSON.stringify(h.ctxToJson(ctx))), (b) => ({ rebuilt: b.size }));
+  assert.deepEqual([...back.trees.get("L1").files], [...lane.files]);
+  assert.ok(back.trees.get("L1").isDir("d") && !back.trees.get("L1").has("a.txt"));
+  assert.deepEqual([back.p2, back.base.size, [...back.published], back.played.get("a01"), back.steps.get("a01"), back.git.dates.get("c"), back.git.lane, back.work], [{ rebuilt: 2 }, 2, ["L0"], { fs: 2 }, 2, "1 +0000", { execs: 2 }, ctx.work]);
+  assert.equal(back.git.locks.size, 0);
+  assert.throws(() => h.ctxToJson({ ...ctx, held: new Map([["x", {}]]) }), /held Workspaces/);
+  // a saved half is checked: the run must stand halfway at that range, and the binaries must be the pinned ones
+  const dir = mkdtempSync(join(tmpdir(), "lfs352-half-")), daemon = join(dir, "daemon"), native = join(dir, "native.node");
+  writeFileSync(daemon, "d1"); writeFileSync(native, "n1");
+  const run = { dir, manifest: { run: "t", env: { LAYERFS_DAEMON: daemon, LAYERFS_NATIVE: native, LAYERFS_SDK_JS: dir, LAYERFS_IMAGE: "layerfs-issue352-no-such-image" } }, state: { halfway: 15 }, sink: { seq: 3, log: [{ seq: 1 }] }, tally: { calls: 3 } };
+  try {
+    h.saveHalf(run, 15, { ctx, attempt: 0, wall: { playMs: 5 }, elapsedMs: 9 });
+    const got = h.loadHalf(run, 15);
+    assert.deepEqual([got.attempt, got.calls, got.sink.log.length, got.wall.playMs], [0, 3, 1, 5]);
+    assert.match(h.loadHalf({ ...run, state: { halfway: null } }, 15).refused, /not halfway through range 15/);
+    assert.match(h.loadHalf(run, 16).refused, /not halfway through range 16/);
+    writeFileSync(daemon, "d2");
+    assert.match(h.loadHalf(run, 15).refused, /binaries differ from the first half's: daemon/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+  assert.deepEqual(options(["--run", "x", "--resume", "--mode", "fast"]), { _: [], run: "x", resume: true, mode: "fast" });
+  assert.deepEqual(options(["--until", "lanes", "--on"]), { _: [], until: "lanes", on: true });
+});
+
 test("devcheck (lead 2026-10-18, 120 s rule): dev checks after the publish; the verdicts; a native rerun equal to ours passes", async () => {
   const { devSteps } = await import("../devcheck.mjs");
   const { judgeDevChecks } = await import("../closure.mjs");

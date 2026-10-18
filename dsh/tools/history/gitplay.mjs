@@ -88,6 +88,7 @@ export async function leadGit(run, k, plan, ctx, cur) {
   run.label(label);
   const ops = [{ op: "mkdir", path: `/${JOB_DIR}` }, { op: "write", path: `/${JOB_DIR}/job.json.gz`, bytes }, ...(job.pack ? [{ op: "write", path: `/${JOB_DIR}/missing.pack`, bytes: job.pack }] : [])];
   await expectCall(run, `${label} job`, () => run.lf.fs.apply(cur, ops, "replay .git lead job (F-031 option (c))"), "Committed");
+  run.progress?.(`lead git job ${job.commits.length} commits, ${job.missing.blobs} blobs no step wrote (${bytes.length} B job, ${job.missing.packBytes} B pack)`);
   const prepMs = Math.round(performance.now() - t0), index = `/tmp/lfs352-lead-${process.pid}-${k}.index`, writer = { execs: 0, writerMs: 0, readTrees: 0 };
   const between = async (sb, ws) => {
     const out = [];
@@ -97,6 +98,7 @@ export async function leadGit(run, k, plan, ctx, cur) {
       if (r.exitCode !== 0) throw new Mismatch(`${label} writer exited ${r.exitCode} at commit ${next}: ${String(r.stderr ?? "").slice(0, 400)}`);
       const m = marks(r.stdout);
       if (!(m.next > next)) throw new Mismatch(`${label} writer made no progress at commit ${next}`);
+      run.progress?.(`lead writer at ${m.next}/${job.commits.length} (${m.writerMs} ms)`);
       next = m.next; writer.execs++; writer.writerMs += m.writerMs ?? 0; writer.readTrees += m.readTrees ?? 0;
       out.push(r);
     }

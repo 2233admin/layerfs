@@ -19,6 +19,8 @@
 //   node dsh/tools/history/run.mjs cleanup --run <id>
 //   node dsh/tools/history/run.mjs phase --run <id> --phase p2
 //   node dsh/tools/history/run.mjs devcheck --run <dev run> --range k   (devcheck.mjs: dev checks after the publish)
+//   node dsh/tools/history/run.mjs play --run <id> --from k --to k --mode fast|measured --until lanes   then   … --resume
+//     (a range in two commands, each under 120 s: halves.mjs; the P3 command shape with git on)
 //   node dsh/tools/history/run.mjs git --run <dev run> --on   (F-031 option (c) from the next range; dev runs only until the dev proof is accepted)
 // `phase` moves a run to the next phase (P1 → P2 …) at the range it stands
 // at, keeping its pinned binaries and its Store; the move is recorded in the
@@ -60,7 +62,8 @@ import {
   binaries, closure, consolidate, expectCall, HISTORY, loadNow, median, Mismatch, probeFixture, probes, readTrace, REPO, Run,
   sandboxHealth, setup, sha256, step, teardown, verify, writeJson,
 } from "./lib.mjs";
-import { addDelta, checkpointDiff, deltaSummary, deltaWork, diskGuard, diskModel, EXIT, nextPhase, oneshotSplit, pad, poolSharing, PHASES, phaseOps, Tree } from "./steps.mjs";
+import { addDelta, checkpointDiff, deltaSummary, deltaWork, diskGuard, diskModel, EXIT, nextPhase, oneshotSplit, p2Plan, pad, poolSharing, PHASES, phaseOps, Tree } from "./steps.mjs";
+import { ctxFromJson, dropHalf, loadHalf, saveHalf } from "./halves.mjs";
 import { consolidateLanes, playAgents, pool, startRange } from "./agents.mjs";
 import { gitFacts } from "./gitplay.mjs";
 import { buildOverview, callTable } from "./stats.mjs";
@@ -322,12 +325,21 @@ export function runnerMemory() {
   return { peakRssMb: mb(process.resourceUsage().maxRSS * 1024), rssMb: mb(u.rss), heapUsedMb: mb(u.heapUsed), heapTotalMb: mb(u.heapTotal), externalMb: mb(u.external), arrayBuffersMb: mb(u.arrayBuffers) };
 }
 
+/** Thrown inside playRange to end a `--until lanes` first half (never an error). */
+const HALFWAY = Symbol("halfway");
+
 /** Plays range k. Returns the exit code the range ends with (0 to go on). */
-async function playRange(run, k, mode) {
+async function playRange(run, k, mode, half = null) {
   const phase = PHASES[run.manifest.phase], measured = mode === "measured";
   // Tooling wall time per stage (never operation latency: that is m.ops).
-  const plan = run.plan(k), t0 = performance.now(), wall = {};
-  const lap = (name, since) => { wall[name] = Math.round(performance.now() - since); };
+  const plan = run.plan(k), wall = {};
+  let t0 = performance.now();
+  // per-stage progress on stderr (lead 2026-10-18), so a command stopped at its ceiling shows where the time went
+  run.progress = (what) => console.error(`[${new Date().toISOString().slice(11, 19)} r${pad(k)} +${((performance.now() - t0) / 1000).toFixed(1)}s] ${what}`);
+  const lap = (name, since) => { wall[name] = Math.round(performance.now() - since); run.progress(`${name} ${wall[name]} ms`); };
+  // the second half of a range played in two commands (halves.mjs): its saved first half, checked before anything runs
+  const saved = half === "resume" ? loadHalf(run, k) : null;
+  if (saved?.refused) { console.error(`range ${k} resume refused: ${saved.refused}`); return EXIT.guard; }
   // prepare: binaries, disk, calibration
   const binaryProblem = checkBinaries(run);
   if (binaryProblem) { console.error(`range ${k} refused: ${binaryProblem}`); return EXIT.guard; }
@@ -340,7 +352,7 @@ async function playRange(run, k, mode) {
   const p2 = phase.lanes === "plan";
   if (p2) await pool(run, k, plan.agents.length);
   lap("prepareMs", t0);
-  const outputs = run.manifest.outputs, attempt = measured ? nextAttempt(outputs.metrics, k) : 0;
+  const outputs = run.manifest.outputs, attempt = saved ? saved.attempt : measured ? nextAttempt(outputs.metrics, k) : 0;
   const traceFile = measured ? join(run.dir, "trace", `range-${pad(k)}.a${attempt}.jsonl`) : null;
   if (traceFile) mkdirSync(join(run.dir, "trace"), { recursive: true });
   run.traceTo(traceFile, `r${pad(k)}`);
@@ -349,22 +361,39 @@ async function playRange(run, k, mode) {
     runner: runnerFacts(process.env),
     // owner 2026-10-18: the 1-min load average where the player runs, at the start and end of the range (end: metrics)
     hostLoad: { where: "runner (Docker VM kernel)", start: loadNow() } };
-  const before = measured ? await run.op.store.stats() : null;
+  if (saved) Object.assign(m, { started: saved.started, hostLoad: { ...m.hostLoad, start: saved.hostLoadStart, resume: m.hostLoad.start } });
+  const before = saved ? saved.before : measured ? await run.op.store.stats() : null;
   const { ops, reconcile, left } = p2 ? { ops: [], reconcile: [], left: {} } : phaseOps(plan, run.manifest.phase);
   let branch = `r${pad(k)}-lane`;
   let ctx = p2 ? null : { ops, reconcile, branch, tree: new Tree(lsTree(run.repo, run.state.prevCommit).files), work: { fs: 0, sandbox: 0, commits: 0 }, measured };
-  const depthBefore = run.state.depth.commits;
+  const depthBefore = saved ? saved.depthBefore : run.state.depth.commits;
   let failure = null, published = null, proof = null, tests = null, probeOut = {}, versionOut = null;
   const startedFrom = Object.keys(run.state.heads ?? {}).length || !run.state.forkedFrom ? { kind: "live", range: k - 1 } : { kind: "fork", range: run.state.forkedFrom.range, run: run.state.forkedFrom.run };
   run.tally.calls = 0;
   run.sink.log.length = 0;
+  let halfway = false;
+  if (saved) {
+    // the first half's calls, laps and wall: the range's figures cover both commands; nothing is replayed
+    run.sink.seq = saved.sink.seq; run.sink.log.push(...saved.sink.log); run.tally.calls = saved.calls;
+    Object.assign(wall, saved.wall, { resumePrepareMs: wall.prepareMs, prepareMs: saved.wall.prepareMs });
+    t0 -= saved.elapsedMs;
+    run.state.halfway = null;
+    dropHalf(run, k);
+  }
   try {
     let since = performance.now();
     if (p2) {
       if (!run.state.head) throw new Error("P2 continues a run whose first range wrote the probe fixture (a P1 run, or a fork of one)");
-      ctx = await startRange(run, k, plan, measured);
-      await playAgents(run, k, ctx);
-      lap("playMs", since);
+      if (saved) ctx = ctxFromJson(saved.ctx, (base) => p2Plan(plan, new Set(new Tree(base).dirs.keys())));
+      else {
+        ctx = await startRange(run, k, plan, measured);
+        await playAgents(run, k, ctx);
+        lap("playMs", since);
+      }
+      if (half === "until") {
+        saveHalf(run, k, { ctx, attempt, traceFile, started: m.started, hostLoadStart: m.hostLoad.start, before, depthBefore, wall, elapsedMs: Math.round(performance.now() - t0) });
+        throw HALFWAY;
+      }
       since = performance.now();
       const beforePublish = phase.closure ? async (cur) => rangeClosure(run, k, plan, cur, { sb: await setup(run), expectCall, Mismatch, oracleDir: run.manifest.oracle, checks: run.manifest.label === "dev", lwwPicked: !!ctx.lww?.picks.some((p) => p.picks > 0), dumpTo: run.manifest.label === "dev" ? (mkdirSync(join(run.dir, "closure"), { recursive: true }), join(run.dir, "closure", `dump-${pad(k)}.json`)) : null }) : null;
       published = await consolidateLanes(run, k, plan, ctx, { beforePublish });
@@ -411,11 +440,20 @@ async function playRange(run, k, mode) {
     if (!failure && measured) { since = performance.now(); versionOut = await versionStats(run, k, published.publishedLayer.id, { items: proof?.items ?? null, crossCheck: snapshotDue || !!plan.milestone }); lap("versionMs", since); }
     m.snapshotDue = snapshotDue;
   } catch (error) {
-    if (!(error instanceof Mismatch)) console.error(error.stack ?? error);
-    failure = error instanceof Mismatch ? error.message : `error: ${error.message}`;
+    if (error === HALFWAY) halfway = true;
+    else {
+      if (!(error instanceof Mismatch)) console.error(error.stack ?? error);
+      failure = error instanceof Mismatch ? error.message : `error: ${error.message}`;
+    }
   }
   if (run.rec) run.rec.agent = "lead";
   run.traceTo(null, undefined);
+  if (halfway) {
+    run.state.halfway = k;
+    run.save();
+    console.log(`range ${k}: first half saved (${run.tally.calls} calls; tooling ${JSON.stringify({ kind: "tooling", firstHalfMs: Math.round(performance.now() - t0), ...wall })}); continue with play --resume`);
+    return EXIT.done;
+  }
   const head = published?.source?.commit ?? null, layer = published?.publishedLayer?.id ?? null;
   m.head = head; m.layer = layer; m.failure = failure;
   m.depth = { before: depthBefore, after: run.state.depth.commits + (ctx?.work.commits ?? 0) };
@@ -615,10 +653,16 @@ async function cmdPlay(o) {
   if (!["measured", "fast"].includes(mode) || !Number.isInteger(from) || !Number.isInteger(to) || to < from) return usage();
   if (run.state.dirty != null) { console.error(`run ${o.run} stopped in range ${run.state.dirty}; recover by fork from a snapshot (SPEC §6)`); return EXIT.guard; }
   if (from !== run.state.next) { console.error(`run ${o.run} stands at range ${run.state.next}, not ${from}`); return EXIT.usage; }
+  // a range in two commands (halves.mjs): one range per command; a run halfway through a range only resumes it
+  const half = o.until === "lanes" ? "until" : "resume" in o ? "resume" : null;
+  if ("until" in o && o.until !== "lanes") return usage();
+  if (half && to !== from) { console.error("--until lanes and --resume play one range (--to = --from)"); return EXIT.usage; }
+  if (half === "until" && PHASES[run.manifest.phase]?.lanes !== "plan") { console.error(`--until lanes needs a lanes phase (P2 on), not ${run.manifest.phase}`); return EXIT.usage; }
+  if (run.state.halfway != null && half !== "resume") { console.error(`run ${o.run} is halfway through range ${run.state.halfway}; continue it with play --resume`); return EXIT.guard; }
   if (mode === "measured") process.env.LAYERFS_CONSTRUCTION_WORKERS = "1";
   let code = EXIT.done;
   try {
-    for (let k = from; k <= to && code === EXIT.done; k++) code = await playRange(run, k, mode);
+    for (let k = from; k <= to && code === EXIT.done; k++) code = await playRange(run, k, mode, half);
   } catch (error) {
     console.error(error.stack ?? error);
     code = EXIT.error;
@@ -771,7 +815,8 @@ function usage() {
 
 export function options(argv) {
   const o = { _: [] };
-  for (let i = 0; i < argv.length; i++) if (argv[i].startsWith("--")) o[argv[i].slice(2)] = argv[++i]; else o._.push(argv[i]);
+  // a flag with no value (--resume, --on) is true; it never swallows the next flag
+  for (let i = 0; i < argv.length; i++) if (argv[i].startsWith("--")) o[argv[i].slice(2)] = argv[i + 1] == null || argv[i + 1].startsWith("--") ? true : argv[++i]; else o._.push(argv[i]);
   return o;
 }
 

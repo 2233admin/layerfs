@@ -260,7 +260,7 @@ export async function startRange(run, k, plan, measured) {
   // F-031 option (c): the seed on the first git range's lead Branch; its lanes then fork from the lead, so they have .git
   ctx.git = ctx.untracked ? gitContext(run, plan) : null;
   ctx.checkpoint = plan.checkpoint;
-  if (ctx.git && !run.state.gitSeeded) await seedGit(run, k, ctx);
+  if (ctx.git && !run.state.gitSeeded) { await seedGit(run, k, ctx); run.progress?.(`git seed ${ctx.git.seed.wallMs} ms`); }
   const from = ctx.git?.seed ? ctx.lead : "main";
   for (const l of plan.lanes) await expectCall(run, `r${pad(k)} fork ${l.name}`, () => run.lf.branch.fork(l.name, from), "Forked");
   ctx.leadSteps.push({ op: "fork", category: "branch" });
@@ -283,6 +283,7 @@ export async function consolidateLanes(run, k, plan, ctx, { beforePublish = null
     who.rec.next = { kind: "entries", n: changes(lane) };
     ctx.tries.set(lane, (ctx.tries.get(lane) ?? 0) + 1);
     const v = await expectCall(who, `r${pad(k)} merge ${lane}`, () => who.lf.branch.merge(cur, lane, name, `merge ${lane}`), want);
+    run.progress?.(`merge ${lane}: ${v?.kind}`);
     if (v?.kind === "Merged") { cur = name; ctx.merged.set(lane, (ctx.merged.get(lane) ?? 0) + 1); if (v.fastForward === false) ctx.work.commits++; }
     // LWW picks counted from the merge's own list (F-041: its truncated flag alone is not trusted)
     if (ctx.lww && Array.isArray(v?.lww)) ctx.lww.picks.push({ lane, picks: v.lww.length, nodeModules: v.lww.filter((d) => /(^|\/)node_modules(\/|$)/.test(d.path ?? "")).length, truncatedFlag: v.lwwTruncated ?? null, decided: v.decided ?? null });
@@ -315,9 +316,9 @@ export async function consolidateLanes(run, k, plan, ctx, { beforePublish = null
       if (ctx.race && ctx.race.doneAt == null) ctx.race.doneAt = performance.now();
       ctx.mainTree ??= mergedTree(ctx.base, [...ctx.trees.values()]);
       // F-031 option (c): the lead writes every dsh commit of the range, before the closure
-      if (ctx.git) await leadGit(run, k, plan, ctx, cur);
+      if (ctx.git) { run.progress?.("lead git start"); await leadGit(run, k, plan, ctx, cur); run.progress?.(`lead git ${ctx.git.lead.wallMs} ms; fresh status ${ctx.git.fresh?.wallMs} ms`); }
       // P3: the closure's install, build and tests, each with its own Commit on the Branch published next
-      if (beforePublish) ctx.closure = await beforePublish(cur);
+      if (beforePublish) { run.progress?.("closure start"); ctx.closure = await beforePublish(cur); run.progress?.("closure done"); }
       run.label(`r${pad(k)}.publish`);
       const v = await expectCall(run, `r${pad(k)} publish`, () => run.lf.branch.publish(cur), "Added");
       ctx.leadSteps.push({ op: "publish", category: "branch" });
