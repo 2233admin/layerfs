@@ -890,3 +890,42 @@ touch -d '2003-03-03 03:03:03.3 UTC' src/main.rs",
     rig.unmount(&fresh);
     rig.finish();
 }
+
+/// #359 E10: a row kept live for an mtime-only change is not an uncommitted
+/// change. After the Commit that kept it, and after a second Commit that
+/// carries it again and finds the Branch up to date, an Unmount without
+/// `discard` is not refused: the kept time is the live half of §4.8, which
+/// ends at unmount.
+#[test]
+fn an_unmount_without_discard_succeeds_after_an_mtime_only_commit() {
+    use layerfs_bridge::control::{Reply, Request, UnmountControl};
+    let rig = Rig::new("e10-unmount");
+    let ready = rig.mount(1);
+    let mount = root(&ready);
+    passed(
+        &bash_in(
+            COMMAND,
+            mount,
+            "set -euo pipefail; umask 022; printf 'new\\n' > made.txt
+touch -d '2003-03-03 03:03:03.3 UTC' src/main.rs",
+        ),
+        "an mtime-only edit beside a real one",
+    );
+    rig.committed(ready.token, "E10 first");
+    rig.up_to_date(ready.token, "E10 again");
+    let done = rig
+        .harness
+        .service
+        .execute_control(&Request::Unmount(UnmountControl {
+            token: ready.token,
+            discard: false,
+        }))
+        .unwrap();
+    assert_eq!(
+        done.reply,
+        Reply::Unmounted(ready.token),
+        "an Unmount without discard after an mtime-only Commit"
+    );
+    assert!(mounted::mount_entry(&ready.directory).is_none());
+    rig.finish();
+}

@@ -91,6 +91,9 @@ impl Overlay {
     /// install, the identical base after it. A serial the active generation
     /// already changed keeps that newer row. One atomic job; sends nothing to
     /// the kernel, whose view does not change. True when a row was written.
+    /// A carried row is not counted dirty: the serial is kept in
+    /// `kept_live` until a writer of its active row counts it (`unkeep`) or
+    /// the next Capture clears the set (#359 E10).
     pub fn keep_live_row(&self, reader: crate::CapturedReader, serial: u64) -> OverlayResult<bool> {
         self.atomic(|| {
             self.check_captured_reader(reader)?;
@@ -107,13 +110,23 @@ impl Overlay {
                 .revision
                 .checked_add(1)
                 .ok_or(OverlayError::Invalid("revision exhausted"))?;
-            self.dirty_counts(1, 0)?;
+            self.open.borrow_mut().kept_live.put(key, ());
             self.change_state(|state| {
                 state.revision = revision;
                 Ok(())
             })?;
             Ok(true)
         })
+    }
+    /// True when `serial`'s active row was kept live and not written since.
+    /// It is no longer kept: the caller writes that row and counts it dirty.
+    pub(crate) fn unkeep(&self, serial: i64) -> bool {
+        let mut open = self.open.borrow_mut();
+        let kept = open.kept_live.rows.contains_key(&serial);
+        if kept {
+            open.kept_live.remove(serial);
+        }
+        kept
     }
     /// Latest local inode at the current view; None delegates to immutable base.
     pub fn inode(&self, serial: u64) -> OverlayResult<Option<Inode>> {
@@ -289,7 +302,9 @@ impl Overlay {
         if changed != 1 {
             return Err(OverlayError::Invalid("inode row of the running job"));
         }
-        Ok((!active && !orphan, layer))
+        // A kept row is active but was never counted: this write counts it.
+        let kept = !orphan && self.unkeep(serial);
+        Ok(((!active && !orphan) || kept, layer))
     }
     /// The active row and the latest lower row of one name within
     /// `(floor, top]`, in one seek of the name's rows.
