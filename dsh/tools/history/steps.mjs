@@ -388,6 +388,14 @@ export function deltaSummary(work, caps) {
  * the replay's own record of the call (lib.mjs record()), the size is that
  * record's; a line without one (recorded before it) keeps the trace's.
  */
+/**
+ * Methods whose outcome changes the work done (F-024): an UpToDate merge or
+ * Commit does none of a real one's, so its latency is its own class.
+ */
+export const OUTCOME_CLASSES = new Set(["branch.merge", "sandbox.commit"]);
+/** A call's outcome class: its reply kind, a merge that made a Commit marked. */
+export const outcomeOf = (kind, newCommit) => (kind ? `${kind}${newCommit ? " (new Commit)" : ""}` : "unknown");
+
 export function callOf(line, entry = null) {
   const a = line.args ?? {};
   const size = entry ? entry.size : a.contentBytes != null ? { kind: "bytes", n: a.contentBytes } : a.changes != null ? { kind: "files", n: a.changes } : a.changeBytes != null ? { kind: "bytes", n: a.changeBytes } : null;
@@ -398,7 +406,8 @@ export function callOf(line, entry = null) {
   }
   const sql = entry ? (({ statements, vm_steps, fullscan_steps }) => ({ statements, vm_steps, fullscan_steps }))(sqlCounters(line)) : null;
   return { method: line.method, ms: line.ms, ok: line.ok, ...(size ? { size } : {}), ...(Object.keys(phases).length ? { phases } : {}),
-    ...(sql && (line.daemon ?? []).some((d) => d.sql) ? { sql } : {}), ...(line.fuse != null ? { fuse: line.fuse } : {}) };
+    ...(sql && (line.daemon ?? []).some((d) => d.sql) ? { sql } : {}), ...(line.fuse != null ? { fuse: line.fuse } : {}),
+    ...(OUTCOME_CLASSES.has(line.method) ? { outcome: outcomeOf(entry?.kind ?? line.kind, entry?.newCommit) } : {}) };
 }
 
 /**

@@ -563,6 +563,16 @@ for a ~5% storage gain. Report raw deltas for both.
 
 ## 5. Gates per range
 
+> **Baseline classes (F-024, 2026-10-18).** Each baseline class records n,
+> its calls over the baseline ranges. A class of fewer than 3 calls is not a
+> reference: Speed reads "not judged: baseline class has n calls" (watch),
+> never a ratio. 3 keeps every per-range operation (publish, store stats) and
+> drops one- and two-call classes whose p50 is one sample. `branch.merge` and
+> `sandbox.commit` are classed by outcome as well as size (UpToDate, Merged,
+> Merged with a new Commit, Committed): an UpToDate call does none of the
+> work. Baselines written before carry n derived from their stored ranges;
+> their merge classes have no outcome and match only attempts recorded before.
+
 > **Checkpoint diff input (F-019, 2026-10-18).** The checkpoint diff_commits
 > cost is normalised by its changed entries plus their changed ancestor
 > directories (a changed directory is a changed entry; basis

@@ -208,6 +208,13 @@ export function writeBaseline({ metricsDir, ranges, out, run, phase = null, note
   return { file, baseline: b };
 }
 
+/** A baseline with n per class (F-024), summed from the latest attempt of each of its ranges in `attempts`; marked derived. */
+export function withBaselineN(b, attempts) {
+  const n = {};
+  for (const k of b.ranges) for (const r of attempts.get(k)?.at(-1)?.ops ?? []) n[`${r.op}\u0000${r.sizeClass}`] = (n[`${r.op}\u0000${r.sizeClass}`] ?? 0) + (r.n ?? 0);
+  return { ...b, ops: Object.fromEntries(Object.entries(b.ops).map(([k, v]) => [k, { ...v, n: n[k] ?? 0 }])), derived: { ...(b.derived ?? {}), n: "F-024: summed from the stored ranges' ops (latest attempt each)" } };
+}
+
 /** The latency table of an attempt that recorded its calls (REPORT_OVERVIEW.md, SPEC §3c): classes, ×baseline, slopes, SQL work, FUSE. */
 export function latencyRows(m, history = [], baseline = null) {
   const own = history.filter(sameBinary(m));
@@ -560,6 +567,18 @@ async function main() {
     const out = withDirsFromGit(m, { repo: manifest.repo, planDir: manifest.plan }), fixed = out.perUnit["branch.diff_commits"];
     writeFileSync(file, JSON.stringify({ ...out, corrections: [...(m.corrections ?? []), { finding: "F-019", field: "perUnit.branch.diff_commits", dirs: fixed.dirs, source: "git" }] }, null, 1));
     console.log(JSON.stringify({ file, entries: d.entries, dirs: fixed.dirs, statementsPerUnit: fixed.statementsPerEntry }));
+    return;
+  }
+  if (args[0] === "baseline-n") {
+    // F-024: n per class for baselines written before it, summed from their stored ranges (derived; gates untouched)
+    const dir = opt("--metrics") ?? join(process.env.HOME, "lfs-history", "metrics");
+    for (const f of readdirSync(dir).filter((f) => /^baseline(-[0-9a-f]{12}(-[0-9a-f]{12}-p\d)?)?\.json$/.test(f))) {
+      const file = join(dir, f), b = JSON.parse(readFileSync(file, "utf8"));
+      if (b.derived?.n) { console.log(`${f}: has n`); continue; }
+      const out = withBaselineN(b, loadAttempts(b.source ?? dir));
+      writeFileSync(file, JSON.stringify(out, null, 1));
+      console.log(`${f}: ${Object.entries(out.ops).map(([k, v]) => `${k.replace("\u0000", " ")} ${v.n}`).filter((x) => / [0-2]$/.test(x)).join("; ") || "every class ≥ 3"}`);
+    }
     return;
   }
   if (args[0] === "records") {

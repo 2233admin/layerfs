@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { aggregate, evaluate, probeSeries } from "../gates.mjs";
+import { aggregate, buildBaseline, evaluate, probeSeries } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
 import { parseReport } from "../frozen.mjs";
@@ -23,7 +23,7 @@ import { checkRoute, loadBudget, wallProjection } from "../run.mjs";
 import { runnerArgs } from "../runner.mjs";
 import { demux, parseRun } from "../runner/docker-shim.mjs";
 import {
-  attributeFuse, callOf, changedDirs, checkpointDiff, consolidationSteps, withDirs, decoyBytes, nextPhase, p2Plan, route, sandboxCommands, STEP_KINDS, Tree,
+  attributeFuse, callOf, changedDirs, outcomeOf, checkpointDiff, consolidationSteps, withDirs, decoyBytes, nextPhase, p2Plan, route, sandboxCommands, STEP_KINDS, Tree,
 } from "../steps.mjs";
 import {
   buildOverview, callTable, categoryOf, withoutProbeSetupCommits, categoryRows, CATEGORIES, checkOverview, derivedOverview, renderOverview, renderStats, stageSplit, tenths, timeLine,
@@ -403,7 +403,7 @@ test("baselines by daemon: one per re-baseline run, beside the pilot's, never mi
   assert.throws(() => writeBaseline({ metricsDir: run, ranges: [2, 3, 4, 5], out: main, run: "r" }), /no attempt of range 5/);
   const { file, baseline } = writeBaseline({ metricsDir: run, ranges: [2, 3, 4], out: main, run: "p1-rebase" });
   assert.equal(file, join(main, "baseline-71001f65bbbb.json"));
-  assert.deepEqual([baseline.ranges, baseline.ops["fs.read\u00001–4 KiB"], Object.keys(baseline.ops).length], [[2, 3, 4], { p50: 3, p95: 6 }, 2]);
+  assert.deepEqual([baseline.ranges, baseline.ops["fs.read\u00001–4 KiB"], Object.keys(baseline.ops).length], [[2, 3, 4], { p50: 3, p95: 6, n: 0 }, 2]);
   const all = loadBaselines(main, { daemon: A });
   assert.deepEqual([...all.keys()], [A, B]);
   assert.throws(() => writeBaseline({ metricsDir: run, ranges: [2, 3, 4], out: main, run: "again" }), /already has a baseline/);
@@ -603,6 +603,20 @@ test("F-023: the one-file diff_commits probe is chain-bounded: the recorded nine
   assert.equal(rec.result, "pass", rec.value);
   assert.equal(counters(stmts.map((v, i) => mk(i, 72 + 12 * i))).result, "optimize");
   assert.equal(counters(stmts.slice(0, 3).map((v, i) => mk(i, v))).result, "watch", "three points: not judged");
+});
+
+test("F-024: baseline classes carry n; a thin class is not judged; merge and Commit outcomes are their own classes", () => {
+  const b = buildBaseline([2, 3, 4].map((range) => ({ range, binary: { daemon: "d" }, ops: [{ op: "branch.merge", sizeClass: "17–64 entries · UpToDate", n: range === 2 ? 1 : 0, p50: 3.51, p95: 3.51 }, { op: "fs.read", sizeClass: "≤8 KiB", n: 20, p50: 4, p95: 6 }].filter((r) => r.n) })));
+  assert.deepEqual([b.ops["branch.merge\u000017–64 entries · UpToDate"].n, b.ops["fs.read\u0000≤8 KiB"].n], [1, 60]);
+  const m = { range: 10, binary: { daemon: "d" }, checks: {}, ops: [{ op: "branch.merge", sizeClass: "17–64 entries · UpToDate", n: 3, p50: 227, p95: 300 }, { op: "fs.read", sizeClass: "≤8 KiB", n: 30, p50: 4.4, p95: 6.6 }] };
+  const speed = evaluate(m, [], b).checks.find((c) => c.name === "Speed");
+  assert.equal(speed.result, "watch");
+  assert.match(speed.value, /not judged: branch\.merge 17–64 entries · UpToDate: baseline class has 1 call \(minimum 3\)/);
+  // outcome classes from the calls
+  const calls = [{ method: "branch.merge", ms: 3, size: { kind: "entries", n: 20 }, outcome: outcomeOf("UpToDate") }, { method: "branch.merge", ms: 200, size: { kind: "entries", n: 20 }, outcome: outcomeOf("Merged", true) }];
+  assert.deepEqual(aggregate(calls).map((r) => r.sizeClass), ["17–64 entries · Merged (new Commit)", "17–64 entries · UpToDate"]);
+  assert.equal(callOf({ method: "sandbox.commit", ms: 1, kind: "UpToDate" }).outcome, "UpToDate");
+  assert.equal(callOf({ method: "fs.read", ms: 1, kind: "ok" }).outcome, undefined);
 });
 
 // the runner stays last: a test registered after it never runs

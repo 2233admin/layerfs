@@ -75,7 +75,7 @@ const quantile = (xs, p) => { const s = [...xs].sort((a, b) => a - b); return s.
 export function aggregate(calls) {
   const groups = new Map();
   for (const c of calls) {
-    const key = `${c.method}\u0000${sizeClass(c.size?.kind, c.size?.n)}`;
+    const key = `${c.method}\u0000${sizeClass(c.size?.kind, c.size?.n)}${c.outcome ? ` · ${c.outcome}` : ""}`;
     (groups.get(key) || groups.set(key, []).get(key)).push(c);
   }
   return [...groups].map(([key, cs]) => {
@@ -98,14 +98,25 @@ export function aggregate(calls) {
   }).sort((a, b) => (a.op < b.op ? -1 : a.op > b.op ? 1 : a.sizeClass < b.sizeClass ? -1 : 1));
 }
 
+/**
+ * F-024: the fewest calls a baseline class needs, over its ranges, to be a
+ * reference. Chosen from the P2 baseline ranges (rb-p2-58a60046, 51 classes):
+ * 3 keeps every per-range operation (publish 4, store stats 3) and drops the
+ * one- and two-call classes (merge 17–64 entries 2, apply and stat ≤512 KiB 1)
+ * whose p50 is one sample, e.g. one UpToDate merge at 3.51 ms. Below it Speed
+ * is "not judged" (watch, F8), never a ratio.
+ */
+export const BASELINE_MIN_N = 3;
+
 /** The pilot baseline: per op and class the median p50/p95 of ranges 0-4, per probe its median. */
 export function buildBaseline(metrics) {
   const ops = new Map(), probes = new Map();
   for (const m of metrics) {
     for (const r of m.ops || []) {
       const k = `${r.op}\u0000${r.sizeClass}`;
-      (ops.get(k) || ops.set(k, { p50: [], p95: [] }).get(k)).p50.push(r.p50);
+      (ops.get(k) || ops.set(k, { p50: [], p95: [], n: 0 }).get(k)).p50.push(r.p50);
       ops.get(k).p95.push(r.p95);
+      ops.get(k).n += r.n ?? 0;
     }
     for (const [name, p] of Object.entries(m.probes || {})) (probes.get(name) || probes.set(name, []).get(name)).push(p.ms);
   }
@@ -114,7 +125,7 @@ export function buildBaseline(metrics) {
   return {
     daemon: metrics[0]?.binary?.daemon ?? null,
     ranges: metrics.map((m) => m.range),
-    ops: Object.fromEntries([...ops].map(([k, v]) => [k, { p50: quantile(v.p50, 0.5), p95: quantile(v.p95, 0.5) }])),
+    ops: Object.fromEntries([...ops].map(([k, v]) => [k, { p50: quantile(v.p50, 0.5), p95: quantile(v.p95, 0.5), n: v.n }])),
     probes: Object.fromEntries([...probes].map(([k, v]) => [k, quantile(v, 0.5)])),
   };
 }
@@ -287,14 +298,18 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   } else if (baseline && (baseline.daemon ?? null) !== (m.binary?.daemon ?? null)) {
     add("Speed", `baseline measured with daemon ${(baseline.daemon ?? "unknown").slice(0, 12)}; ${insufficient(0)}`, `≤ ${t.speed.watch}×`, "watch");
   } else if (baseline) {
-    let worstRow = null;
+    let worstRow = null, thin = null;
     for (const r of m.ops || []) {
       const b = baseline.ops[`${r.op}\u0000${r.sizeClass}`];
       if (!b) continue;
-      const ratio = Math.max(r.p50 / b.p50, r.p95 / b.p95);
-      if (!worstRow || ratio > worstRow.ratio) worstRow = { ...r, ratio: +ratio.toFixed(2) };
+      const ratio = +Math.max(r.p50 / b.p50, r.p95 / b.p95).toFixed(2);
+      // F-024: a baseline class of fewer than BASELINE_MIN_N calls is not a reference
+      if (b.n != null && b.n < BASELINE_MIN_N) { if (!thin || ratio > thin.ratio) thin = { ...r, ratio, bn: b.n }; continue; }
+      if (!worstRow || ratio > worstRow.ratio) worstRow = { ...r, ratio };
     }
-    if (worstRow) {
+    if (thin && (!worstRow || thin.ratio > worstRow.ratio) && thin.ratio > t.speed.watch) {
+      add("Speed", `not judged: ${thin.op} ${thin.sizeClass}: baseline class has ${thin.bn} call${thin.bn === 1 ? "" : "s"} (minimum ${BASELINE_MIN_N}); ${thin.ratio}× it`, `≤ ${t.speed.watch}×`, "watch");
+    } else if (worstRow) {
       const series = history.map((x) => {
         const o = (x.ops || []).find((r) => r.op === worstRow.op && r.sizeClass === worstRow.sizeClass);
         const b = baseline.ops[`${worstRow.op}\u0000${worstRow.sizeClass}`];
