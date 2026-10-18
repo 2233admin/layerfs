@@ -285,10 +285,11 @@ fn parse_framed(record: &[u8]) -> StorageResult<ParsedRecord<'_>> {
 /// from the same grammar the decoder uses, so a record whose framing cannot be
 /// parsed is an integrity failure here rather than a chain that silently ends.
 ///
-/// An `Ordinary` locator is ambiguous by grammar alone: the lane holds both plain
-/// canonical objects, whose records are always FULL, and pooled inode leaves,
-/// whose records are pooled ones. The role recorded with the locator decides, the
-/// same way it decides for the decoder.
+/// An `Ordinary` locator is ambiguous by grammar alone: the lane holds plain
+/// canonical objects, whose records are always FULL, pooled inode leaves, whose
+/// records are pooled ones, and inode-table branches, whose records are whole or
+/// a COPY/INSERT program. The role recorded with the locator decides, the same
+/// way it decides for the decoder.
 pub fn stored_base(
     lane: PackLane,
     record: &[u8],
@@ -300,6 +301,11 @@ pub fn stored_base(
             crate::encoding::pool::leaf::PooledRecord::Full(_) => None,
             crate::encoding::pool::leaf::PooledRecord::Delta { base, .. } => Some(base),
         });
+    }
+    if lane == PackLane::Ordinary && role == ObjectRole::InodeBranch {
+        // An inode-table branch may be stored against its predecessor (#360
+        // item 3); its record keeps that base, as a pooled leaf's does.
+        return crate::encoding::pool::branch::stored_base(record);
     }
     Ok(parse(lane, record, canonical_length)?.base)
 }

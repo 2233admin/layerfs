@@ -171,22 +171,30 @@ The last line is the no-fallback rule in one place: **four policy outcomes and o
 failure outcome**, and `DeltaCounters` counts them separately so a receipt can say
 *why* FULL was chosen.
 
-**Only three roles may take a delta base.** `select()` returns early for the other
-ten:
+**Three roles take a payload delta base, and inode-table branches take a
+metadata program.** `select()` returns early for the other ten tree roles, and
+since #360 item 3 (2026-10-19) hands an `InodeBranch` to `delta::branch`:
 
 ```rust
 ObjectRole::ExtentLeaf | ExtentBranch | FileState
 | DirectoryLeaf | DirectoryBranch | InodeBranch
 | FilesystemRoot | AttributeLeaf | AttributeBranch | Symlink
-    => return encode_full(...);   // "never choose a payload delta base"
+    => encode_full(...)            // stored whole ...
+       InodeBranch => branch::select(...)  // ... or COPY/INSERT vs predecessor
 
 ObjectRole::InodeLeaf => Err(...)  // pooled lane, handled by select_pooled
 ```
 
-This is easy to assume the other way. Tree pages carry an `UnchangedPrefix`
-predecessor from `sorted/page.rs`, but that predecessor is **not** consumed:
-`placement.rs` never reads predecessors, and the only consumer in C2 hands them to
-`select()`, which discards them for tree roles. See [§13.6](#136-what-is-not-established).
+Tree pages carry an `UnchangedPrefix` predecessor from `sorted/page.rs`. Only
+the inode branch consumes it: one trial of the pooled COPY/INSERT producer
+against that predecessor, under the metadata depth cap (8) and chain budgets
+(64 KiB canonical, 139 KiB encoded record bytes), kept only when shorter than the
+whole record. Every other tree role still discards it. The branch record is
+`0 | canonical page` (whole, the only form before item 3) or
+`1 | base id | output length | count | program`, read under the `InodeBranch`
+role by `pool::branch`. Branch counts are kept apart from the payload counts
+(`DeltaCounters::branch`), so they never move the whole-file delta hit rate.
+See [§13.6](#136-what-is-not-established).
 
 ### 12.6 The funnel
 
@@ -404,11 +412,11 @@ chains are *dense*, that is when most chunks have been modified at some point.
 
 Recorded as `unknown` rather than guessed:
 
-- **The `UnchangedPrefix` predecessor on tree pages is inert.** `sorted/page.rs`
-  sets it; nothing consumes it (`select()` discards it for tree roles, and
-  `placement.rs` never reads predecessors). Either it is reserved for a placement
-  policy not yet written, or it is dead metadata. Bounded, deduplicated and
-  harmless either way — but not acted on.
+- **The `UnchangedPrefix` predecessor on tree pages is inert, except for inode
+  branches.** `sorted/page.rs` sets it; since #360 item 3 an `InodeBranch` takes
+  a COPY/INSERT program against it (§12.5). For every other tree role nothing
+  consumes it (`select()` discards it, and `placement.rs` never reads
+  predecessors). Bounded, deduplicated and harmless — but not acted on there.
 - **Whether delta is worth its read cost.** [§12.5](#125-delta--one-trial-complete-cost-comparison)
   describes the mechanism; the storage it recovers and the read work it adds are
   measurement questions. [`09-delta-hints.md`](09-delta-hints.md) states the test.
