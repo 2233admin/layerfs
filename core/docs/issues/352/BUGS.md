@@ -388,3 +388,40 @@
   (REPRO.md to follow). Concurrent installs are expected in P3 (lanes on a
   4-Sandbox pool), so this blocks measured P3. Owner: to be assigned by the
   owner (fixer queue or its own worktree session).
+- **Limits audit findings (owner decision 2026-10-18).** From the limits audit
+  (branch `dsh-352-limits-audit`, `core/docs/issues/352/LIMITS_AUDIT.md` §1,
+  `17148cacd`). The F-033 rule applies to each: no `Capacity` or `Busy` on a
+  count or a wait that is not a resource limit; only resource limits remain;
+  answers stay exact. Owner of each fix: assigned by the owner.
+  - **F-037 · merge path cap (audit A2).** `MAXIMUM_MERGE_PATHS` = 262,144
+    (`layerfs-content/src/merge/decide.rs:32`, enforced `:176-182`,
+    `:211-214`, `:220-221`): a merge with more candidate paths, or a path
+    search listing that many directories, fails `Capacity`
+    (`merge.locate`/`merge.paths`). Reachable with `node_modules` plus `.git`
+    on both sides.
+  - **F-038 · merge result build budget (audit A3, not yet test-confirmed).**
+    `merge/build.rs:172,177` builds the merged root on the resident route
+    with the default 64 MiB ordering budget: past 65,536 topology entries or
+    4.19M declared rows it fails `ObjectLimitExceeded`
+    (`filesystem/input.rs:76-85`, `validate/backed.rs:119-125`). Workspace
+    Commit construction uses the backed route and is not affected. First
+    step: a bounded merge test moving a directory with more than 65,536
+    descendants.
+  - **F-039 · `/.lww` includes past 16 are silently ignored (audit A7,
+    correctness).** `MAXIMUM_RULE_FILES` = 16 (`merge/lww.rs:18, :72`): later
+    `%include` files are dropped with no error, so a merge applies a partial
+    rule set. The replay's recursive `/.lww` is one file today, but any
+    caller using includes can hit it.
+  - **F-040 · 2 s writer admission window (audit A8; watch-out S2, S3).**
+    `WINDOW` = 2 s (`layerfs-persistence/src/backend/sqlite/admission.rs:12`;
+    `transaction.rs:146, :194`; `seal.rs:23`; `lane.rs:5`; Linux writer lock
+    `writer_admission.rs:41-55`): a writer queued longer than 2 s fails
+    `Busy`; a mount's inode serial refill turns it into `EAGAIN`
+    (`layerfs-daemon/src/service/filesystem_port.rs:388-398`). A time limit
+    on correct, queued work.
+  - **F-041 · merge report says `truncated: false` when it was truncated
+    (correctness).** `WRITTEN_PATHS` = 4,096
+    (`layerfs-store-service/src/store/commit_merge.rs:20, :141`) truncates
+    the written-path list; `root_changes`' `truncated` flag is dropped, and
+    `layerfs-daemon/src/control/operations.rs:39-44` reports `false`. Fix: the
+    flag is carried through, or the list is returned paged with no cap.
