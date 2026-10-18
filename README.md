@@ -60,12 +60,6 @@ Commit, and forks can be forked again, to any depth. A fork copies nothing:
 it is a new name for an existing state. Each level works independently and
 merges back up when it is ready.
 
-```text
-main ─┬─ feature ─┬─ feature/try-a ──┐
-      │           └─ feature/try-b ──┴─ merge ─► feature ─► publish ─► main
-      └─ hotfix  (forked from a Commit three weeks ago)
-```
-
 That makes LayerFS fit recursive agent work: a lead agent forks a Branch per
 subtask, each subagent forks again to try alternatives, the winners merge up
 and the losers are simply dropped.
@@ -96,14 +90,6 @@ Sandboxes are disposable compute; the Store is durable state.
   was committed; a new Sandbox mounts the same Branch.
 - **One Store, many Sandboxes.** Every Sandbox opens the same Store directly,
   so no server sits in the data path.
-
-```text
- your agents ──► @layerfs/sdk ──► fs / branch calls ──────────────┐
-                      │                                           ▼
-                      └──► sandbox calls ──► Sandbox ×N ──► one shared Store
-                                             (mount, exec,       (every Commit,
-                                              Commit)             every Branch)
-```
 
 ## 🛠️ Quickstart
 
