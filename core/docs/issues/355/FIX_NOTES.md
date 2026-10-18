@@ -626,3 +626,50 @@ assertion is weakened. It passes on Linux in 0.31 s. Deleted tests: none.
 `issue359-impl` makes the same change independently (`8ef8dfbfa`); this
 branch takes that commit's text of the file verbatim, so the integration
 meets no conflict there.
+
+## M1 x #360 mixed metadata forms (branch `issue353-m1-360-equiv`, 2026-10-19)
+
+The branch is the #353/#355 head with `issue359-impl` merged (it carries
+#360 item 2: `8aed51d60`, `683666d45`, `c4d9893e7`; `git merge-tree`
+reported no conflicts). The integration takes it as the step after
+`issue359-impl`.
+
+**Test.** `merge_mixed_forms.rs` merges against a root-form Store sealed
+before #360. The Store, `tests/fixtures/merge-forms-root.sqlite` (217,088
+bytes, sha256 `3087601b1a5b6f1a…`), was written by `merge_forms_fixture.rs`
+on the pre-#360 head `aeb02cc07`. Branch `r` holds root-form changes: a move
+of `/d1`, two edits and a mode change. Branch `l` is changed on this build,
+so everything it touches is rewritten inline:
+- form-only changes, made by a chmod there and back in two Commits (within
+  one Commit the round trip captures nothing), including one on a
+  hard-linked file;
+- a real mode change;
+- content edits, one of them inside the directory `r` moved, and one
+  text-merged against `r`'s edit of another line.
+
+The test asserts the premise (base and `r` all root form, `l`'s touched
+rows inline) and that, decoded, `l`'s form-only changes are no changes. For
+both merge orientations it then asserts that the decoded view equals `r`'s
+tree with `l`'s real changes, with no conflict, the hard-link group kept, and
+the text merge's content.
+
+**Bug found and fixed.** With the merge walking from `r`, the form-only
+`l` row of `/f/rmode.txt` lost `r`'s real mode change (600 came out 644).
+M1's metadata three-way compared metadata by bytes, so `l`'s inline form of
+the base's metadata looked like a change. `result_value` now compares by
+value, as `same_inode` does (`same_metadata`). The other orientation was
+already right, because `inode_changes` uses `same_inode` and never walks a
+form-only change. The test failed before the fix and passes after it. The fix
+lives on this branch because it needs #360's `same_inode`; on the pre-#360
+head there is one form and byte equality is exact.
+
+**Corpus.** The 35 recorded merges (the whole append-only history,
+r7a2–r14, all root form) replay on this branch with decoded views
+byte-identical to M1 on the head: merged, base, ours and theirs, 140 of 140
+files.
+
+**Suites on this branch.** See the commit message for the run. `issue359-impl`
+does not compile two persistence test targets, `space_reclamation` and
+`immutable_reads_under_reclamation`: 683666d45 changed `NewEntry` to carry
+inline `metadata`, and their files still set `metadata_root`. Both files are
+identical to `issue359-impl`'s; they were not built here.

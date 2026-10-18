@@ -26,9 +26,10 @@ use super::codec::{put_entry, Cursor};
 use super::decide::{Decider, Pick, Resolver, BASE, OURS, THEIRS};
 use super::names::{Listing, Mode, PathSlot};
 use super::spill::{single, Run, RunReader, RunWriter, Spill, DROP, REVIVE, REVIVE_ALL, SURVIVE};
-use crate::compare::tree::{inode_changes, same_value, EntryFacts};
+use crate::compare::tree::{inode_changes, same_inode, same_value, EntryFacts};
 use crate::compare::{BindingHints, DifferenceWork, NamingWork};
 use crate::error::{ContentError, ContentResult};
+use crate::filesystem::attributes::AttributeReadWork;
 use crate::filesystem::FilesystemObjects;
 use crate::object::inode_leaf::{InodeKind, InodeValue};
 use crate::object::{AuthenticatedObjects, FinalizedConsumer, FinalizedObject, ObjectId};
@@ -327,9 +328,9 @@ impl Ctx<'_, '_> {
         };
         if let (Some(b), Some(f), Some(i)) = (c.b, c.f, c.i) {
             if f.kind == i.kind && value.kind == i.kind {
-                value.metadata_root = if f.metadata_root == b.metadata_root {
+                value.metadata_root = if self.same_metadata(f, b)? {
                     i.metadata_root
-                } else if i.metadata_root == b.metadata_root {
+                } else if self.same_metadata(i, b)? {
                     f.metadata_root
                 } else {
                     value.metadata_root
@@ -337,6 +338,20 @@ impl Ctx<'_, '_> {
             }
         }
         Ok(Some(value))
+    }
+
+    /// True when `a`'s metadata is `b`'s by value: #360's root and inline
+    /// forms of equal metadata differ in bytes but are no change, as
+    /// `inode_changes` already judges them (`same_inode`).
+    fn same_metadata(&self, a: InodeValue, b: InodeValue) -> ContentResult<bool> {
+        if a.metadata_root == b.metadata_root {
+            return Ok(true);
+        }
+        let a = InodeValue {
+            metadata_root: a.metadata_root,
+            ..b
+        };
+        same_inode(self.reader, &a, &b, &mut AttributeReadWork::default())
     }
 
     /// The three listings of one changed directory, built on its own serial.

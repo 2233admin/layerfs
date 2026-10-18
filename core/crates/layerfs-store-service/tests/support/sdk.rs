@@ -116,13 +116,19 @@ impl Fixture {
     /// snapshot: one private Workspace bound on the Store, mutated, committed
     /// with the captured producer and closed.
     pub fn chmod(&self, branch: &str, path: &str, mode: u32) -> String {
+        self.chmods(branch, &[(path, mode)], 77)
+    }
+
+    /// [`Self::chmod`] of several paths in turn, in one Workspace `id` and
+    /// one Commit; a path may appear more than once.
+    pub fn chmods(&self, branch: &str, changes: &[(&str, u32)], id: u8) -> String {
         let bound = self
             .service
             .store
             .bind(
                 self.owner.client(),
                 BindRequest {
-                    workspace: WorkspaceId::from_authority([77; 32]).unwrap(),
+                    workspace: WorkspaceId::from_authority([id; 32]).unwrap(),
                     branch: BranchId::named(
                         LayerStackId::from_authority([23; 16]),
                         &HistoryName::new(branch).unwrap(),
@@ -138,35 +144,37 @@ impl Fixture {
             .acquire_base_source(route, 9001)
             .unwrap();
         let view = operation.workspace().view_for_source(source).unwrap();
-        let mut serial = view.root_serial();
-        for name in path.split('/').filter(|part| !part.is_empty()) {
-            serial = view
-                .lookup(operation.overlay(), serial, &PathName::new(name).unwrap())
-                .unwrap()
-                .serial;
+        for &(path, mode) in changes {
+            let mut serial = view.root_serial();
+            for name in path.split('/').filter(|part| !part.is_empty()) {
+                serial = view
+                    .lookup(operation.overlay(), serial, &PathName::new(name).unwrap())
+                    .unwrap()
+                    .serial;
+            }
+            let applied = operation
+                .workspace()
+                .mutate(
+                    operation.overlay(),
+                    operation.ports(),
+                    &view,
+                    Operation::SetAttributes {
+                        serial,
+                        mode: Some(mode),
+                        mtime: None,
+                        size: None,
+                    },
+                    Time {
+                        seconds: 123,
+                        nanoseconds: 0,
+                    },
+                )
+                .unwrap();
+            let Outcome::Applied { publication, .. } = applied else {
+                panic!("chmod mutation: {applied:?}");
+            };
+            operation.overlay().reply_attempted(publication).unwrap();
         }
-        let applied = operation
-            .workspace()
-            .mutate(
-                operation.overlay(),
-                operation.ports(),
-                &view,
-                Operation::SetAttributes {
-                    serial,
-                    mode: Some(mode),
-                    mtime: None,
-                    size: None,
-                },
-                Time {
-                    seconds: 123,
-                    nanoseconds: 0,
-                },
-            )
-            .unwrap();
-        let Outcome::Applied { publication, .. } = applied else {
-            panic!("chmod mutation: {applied:?}");
-        };
-        operation.overlay().reply_attempted(publication).unwrap();
         drop(view);
         operation
             .overlay()
