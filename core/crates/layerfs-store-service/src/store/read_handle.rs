@@ -2,7 +2,7 @@
 use super::{open::Counts, PortError, ReadAdmissionError};
 use layerfs_content::ObjectId;
 use layerfs_history::{BranchId, BranchSnapshot, HistoryCatalog};
-use layerfs_storage::{Diagnostics, ReadCache, Storage};
+use layerfs_storage::{Diagnostics, KeptReads, ReadCache, Storage};
 use std::{
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -39,6 +39,9 @@ impl Drop for StoreReader {
 
 struct State {
     reader: Option<StoreReader>,
+    /// A Workspace reader's storage caches, kept across its demands for as
+    /// long as it is mounted (see [`ReadSession::cached`]).
+    cache: Option<KeptReads>,
 }
 pub(super) struct ReadSession {
     pub index: usize,
@@ -54,6 +57,7 @@ impl ReadSession {
             index,
             state: Mutex::new(State {
                 reader: Some(reader),
+                cache: None,
             }),
             counts,
             failure: OnceLock::new(),
@@ -71,10 +75,11 @@ impl ReadSession {
 
     fn attempt<T>(
         &self,
-        call: impl FnOnce(&StoreReader, &Counts) -> Result<T, PortError>,
+        call: impl FnOnce(&StoreReader, &mut Option<KeptReads>, &Counts) -> Result<T, PortError>,
     ) -> Result<T, Arc<PortError>> {
         let before = Instant::now();
-        let state = self.lock()?;
+        let mut state = self.lock()?;
+        let State { reader, cache } = &mut *state;
         let waited = before.elapsed();
         layerfs_telemetry::timer::waits::add(
             layerfs_telemetry::timer::waits::Wait::ReadSession,
@@ -87,12 +92,11 @@ impl ReadSession {
         if let Some(error) = self.failure.get() {
             return Err(error.clone());
         }
-        let reader = state
-            .reader
+        let reader = reader
             .as_ref()
             .ok_or_else(|| Arc::new(PortError::ReadAdmission(ReadAdmissionError::Stopped)))?;
         self.requests.fetch_add(1, Ordering::Relaxed);
-        call(reader, &self.counts).map_err(|error| {
+        call(reader, cache, &self.counts).map_err(|error| {
             let error = Arc::new(error);
             if uncertain(&error) {
                 self.failure.get_or_init(|| error).clone()
@@ -102,16 +106,15 @@ impl ReadSession {
         })
     }
     pub fn objects(&self, ids: &[ObjectId]) -> Result<Vec<Vec<u8>>, Arc<PortError>> {
-        self.attempt(|handle, counts| {
+        self.attempt(|handle, cache, counts| {
             counts.objects.fetch_add(1, Ordering::Relaxed);
             counts
                 .object_ids
                 .fetch_add(ids.len() as u64, Ordering::Relaxed);
-            handle
-                .storage
-                .reader()
-                .and_then(|r| r.read_objects(ids))
-                .map_err(PortError::Storage)
+            self.cached(cache, |cache| match cache {
+                Some(cache) => handle.storage.read_kept(cache, ids),
+                None => handle.storage.reader()?.read_objects(ids),
+            })
         })
     }
     /// [`Self::objects`] through a caller's caches; the lock is held for
@@ -121,7 +124,7 @@ impl ReadSession {
         cache: &mut ReadCache,
         ids: &[ObjectId],
     ) -> Result<Vec<Vec<u8>>, Arc<PortError>> {
-        self.attempt(|handle, counts| {
+        self.attempt(|handle, _, counts| {
             counts.objects.fetch_add(1, Ordering::Relaxed);
             counts
                 .object_ids
@@ -133,20 +136,47 @@ impl ReadSession {
         })
     }
     pub fn file_lengths(&self, ids: &[ObjectId]) -> Result<Vec<u64>, Arc<PortError>> {
-        self.attempt(|handle, counts| {
+        self.attempt(|handle, cache, counts| {
             counts.lengths.fetch_add(1, Ordering::Relaxed);
             counts
                 .length_ids
                 .fetch_add(ids.len() as u64, Ordering::Relaxed);
-            handle
-                .storage
-                .reader()
-                .and_then(|r| r.file_lengths(ids))
-                .map_err(PortError::Storage)
+            self.cached(cache, |cache| match cache {
+                Some(cache) => handle.storage.lengths_kept(cache, ids),
+                None => handle.storage.reader()?.file_lengths(ids),
+            })
         })
     }
+    /// One demand through this session's kept caches. A Workspace reader
+    /// keeps one [`KeptReads`] from its first demand until it is released,
+    /// so a later demand reuses the pack bodies, decoded groups and pooled
+    /// values an earlier one read instead of a fresh reader's. Its rows never
+    /// change once visible and every object is authenticated as before; it
+    /// keeps only what was read, never an absence. It is kept only after a
+    /// demand that succeeded and left at most [`KeptReads::ORDINARY_BYTES`]
+    /// (3 MiB; each demand's decode arena is its own, as before); otherwise
+    /// it is dropped and the
+    /// next demand starts empty. Session 0 is the Store's control reader
+    /// (`ReadSet::new`), which serves every SDK call and Store-level
+    /// operation: it keeps none, and each of its demands reads through a
+    /// fresh reader as before.
+    fn cached<T>(
+        &self,
+        slot: &mut Option<KeptReads>,
+        read: impl FnOnce(Option<&mut KeptReads>) -> layerfs_storage::StorageResult<T>,
+    ) -> Result<T, PortError> {
+        if self.index == 0 {
+            return read(None).map_err(PortError::Storage);
+        }
+        let cache = slot.get_or_insert_with(KeptReads::new);
+        let result = read(Some(&mut *cache));
+        if result.is_err() || cache.retained_bytes() > KeptReads::ORDINARY_BYTES {
+            *slot = None;
+        }
+        result.map_err(PortError::Storage)
+    }
     pub fn snapshot(&self, branch: BranchId) -> Result<Option<BranchSnapshot>, Arc<PortError>> {
-        self.attempt(|handle, _| {
+        self.attempt(|handle, _, _| {
             handle
                 .history
                 .branch_snapshot(branch)
@@ -158,7 +188,7 @@ impl ReadSession {
         &self,
         lookup: impl FnOnce(&dyn HistoryCatalog) -> layerfs_history::HistoryResult<T>,
     ) -> Result<T, Arc<PortError>> {
-        self.attempt(|handle, _| lookup(handle.history.as_ref()).map_err(PortError::History))
+        self.attempt(|handle, _, _| lookup(handle.history.as_ref()).map_err(PortError::History))
     }
     pub fn close(&self) -> Result<(), Arc<PortError>> {
         self.release().map(drop)
@@ -170,6 +200,7 @@ impl ReadSession {
         if let Some(cause) = self.failure.get() {
             return Err(cause.clone());
         }
+        state.cache = None;
         Ok(state.reader.take())
     }
     pub fn quarantined(&self) -> bool {

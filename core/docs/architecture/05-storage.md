@@ -225,6 +225,13 @@ through it, so a caller's later demands reuse the bodies an earlier one left.
 Bounds, chain resolution and authentication are the `Reader`'s; pack ids come
 from a counter that never goes back and published packs never change, so a
 kept body stays valid. The SDK read calls keep one per call (#352 F-035).
+`KeptReads` is the same caches without the decode arena, so an owner on
+another thread can keep them (`Send`); `Storage::read_kept` and
+`lengths_kept` read through them with a fresh arena per demand, allocated only
+if the demand decodes. A Workspace reader keeps one for its lifetime (#354
+A1). Without an isolated singleton the caches hold at most
+`KeptReads::ORDINARY_BYTES` = 3 MiB; on the read path the pool reader is
+given the shared pack cache, so its own stays empty.
 
 ### #302 encoding access seam (2026-10-03)
 

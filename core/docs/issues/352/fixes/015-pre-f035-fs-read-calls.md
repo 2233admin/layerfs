@@ -284,3 +284,76 @@ Both are diagnostic on macOS. No timing on this branch is qualified.
 - equivalence old dumps were reused, not regenerated (same old identity);
 - the old timed arms were not sampled again;
 - no cross-call cache was added (it is an owner memory decision).
+
+## A1: a Workspace reader keeps its storage caches (2026-10-18)
+
+**Cause** (found by the RCA agent). `ReadSession::objects` built a fresh
+storage `Reader` for every demand, so each FUSE request re-read, hashed and
+decoded a whole pack to take one small object.
+
+**Change.**
+
+- A Workspace reader keeps one `KeptReads` (pack bodies, decoded groups, pooled values) from its first object or length demand until it is released at unmount.
+- `objects` and `file_lengths` go through it, under the reader lock that the demand already held (`Storage::read_kept`, `lengths_kept`).
+- Each demand takes a fresh decode arena, allocated only if it decodes. An arena holds a raw zstd context and is not `Send`, and making it `Send` would widen storage's audited unsafe module, so the arena is not kept.
+
+**Bound.**
+
+- The kept caches hold at most 3 MiB between demands: 2 MiB pack bodies, 512 KiB decoded groups and 512 KiB pooled values (`KeptReads::ORDINARY_BYTES`).
+- On the read path the pool reader is given the shared pack cache, so its own pack cache stays empty.
+- A demand that fails, or that leaves an isolated singleton pack (up to 16 MiB), drops the whole cache, and the next demand starts empty.
+- With N mounted Workspaces this is up to N × 3 MiB.
+
+**Positive only.** The cache keeps rows that never change once visible
+(insert-only object locations, trigger-immutable packs, insert-only inode
+values). It never records an absence.
+
+**Lifetime.** The cache lives as long as the Workspace's reader: from the
+first demand to the release at unmount. A pooled SDK reader handed back to
+the idle list is released first, so it starts empty. The Store's control
+reader (session 0) serves every SDK call and keeps none, so SDK fs calls
+still use only their per-call caches; a cross-call SDK cache stays held for
+the owner. **Measured phases must declare this cache's state.** A phase that
+follows another in the same Workspace starts warm.
+
+**Measured** (Linux, real kernel mount, `ls -l` of a committed directory of
+10,000 files with distinct metadata, one sample per arm; ledger
+`receipts-20261018/A1-LISTING-MEASUREMENT.txt`):
+
+| Cold pass, 10,000 entries | Old (`b2549b33a`) | A1 |
+| --- | --- | --- |
+| listing digest | 66d15773311f4758 | 66d15773311f4758 (identical) |
+| statements | 90,792 (9.08 / entry) | 50,607 (5.06 / entry) |
+| object demands / ids | 40,235 / 40,395 | 40,235 / 40,395 (same demands) |
+| pack selections | 40,235 | 107 |
+| pack bytes | 468,079,142 (46,808 / entry) | 1,106,120 (111 / entry) |
+| VmRSS after (daemon in-process) | 50,184 KiB | 52,404 KiB (+2,220 KiB) |
+
+- **Run conditions:** load about 8 (1 minute), with other worktrees' agents active. The counts are deterministic; wall time is diagnostic.
+- **Steady pass:** 414 → 268 statements, and 146 → 0 pack selections.
+- **Ineligible first pair:** the first pair of runs used a fixture without fixed times. It is retained as INELIGIBLE: different digests, and metadata shared across files.
+- **What remains:** the 5 statements per entry are locates and inode-value reads, one per new object. #356's sibling-length demand addresses those.
+
+**A3 (pass the locate's PackInfo into `read_scoped_pack`): not done.**
+
+- It would change the Storage→Persistence port signature: storage `port/persistence.rs`, persistence `objects_selection.rs`, and every provider and test double, all outside this lane's files.
+- After A1 it would save one statement per pack selection, so at most 107 of the 50,607 statements here.
+
+**Tests.**
+
+- New `workspace_reader_cache` checks:
+  - a repeated object or length demand on a Workspace reader runs no statement and returns identical bytes;
+  - the control reader reads again;
+  - a reader closed and mounted again starts empty.
+- It fails with the cache disabled (mutant checked).
+- New Linux `mounted_listing_reads` is the measurement.
+
+**Checks.**
+
+- Host `+1.85.1`: storage 19 binaries and store-service 24 pass, each command ≤120 s, and clippy is clean.
+- Linux clippy is clean on storage, store-service and the daemon.
+- Linux daemon tests without a mount: 25/25 pass.
+- Linux mount tests in a FUSE container pass: `fp27_reader_health`, `mounted_store_read`, `mounted_concurrency`, `kernel_mount_routes`, `mounted_parallel_commits`, `mounted_cycles`, `mounted_listing_reads`.
+- `mounted_commit::r5_8` fails the same way **without A1** at `b2549b33a`: Commit history lists 3 of 5 records. That failure predates A1 and lies outside this lane (History). Receipts: `m-mounted_commit*.log`.
+
+No tests deleted.

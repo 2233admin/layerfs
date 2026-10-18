@@ -21,7 +21,16 @@ or length batch to Reader, retaining order/cardinality and the existing4096-id,
 `StorePorts::objects_with` serves the same demand through caches the caller
 keeps across its demands (`layerfs_storage::ReadCache`, the Reader's bounded
 decode arena and pack/group/pooled-value caches); an SDK read call keeps one
-for the call and drops it at the end (#352 F-035).
+for the call and drops it at the end (#352 F-035). A Workspace reader keeps
+one `layerfs_storage::KeptReads` (the same caches without the decode arena,
+which each demand takes fresh) from its first object or length demand until
+the reader is released at unmount, so a FUSE request's demand reuses the pack
+bodies and decoded groups its siblings' demands read (#354 A1). It holds at
+most `KeptReads::ORDINARY_BYTES` (3 MiB: 2 MiB pack bodies, 512 KiB decoded
+groups, 512 KiB pooled values) between demands: a demand that fails or leaves
+an isolated singleton pack drops it, and the next starts empty. It keeps only
+rows that never change once visible and never an absence. The Store's control
+reader (session 0), which serves every SDK call, keeps none.
 A cached object invokes no Store port. The existing canonical object format and
 Storage locator/pack algorithms are unchanged. Adapter counters expose actual
 object/length demand counts and ids, and serial reservations; they are not a
