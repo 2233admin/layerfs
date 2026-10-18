@@ -65,6 +65,7 @@ import { buildOverview, callTable } from "./stats.mjs";
 import { area } from "./plan-range.mjs";
 import { nextChain, rangeClosure, studyMeasurements } from "./closure.mjs";
 import { versionStats } from "./version.mjs";
+import { d6Triggers } from "./gates.mjs";
 import { devcheck } from "./devcheck.mjs";
 import { addedBySource, changedGroupBytes, cumulative, liveParts, sealedParts, seedBySource, stepSource, storageFigures } from "./storage.mjs";
 
@@ -352,12 +353,14 @@ async function playRange(run, k, mode) {
       await playAgents(run, k, ctx);
       lap("playMs", since);
       since = performance.now();
-      const beforePublish = phase.closure ? async (cur) => rangeClosure(run, k, plan, cur, { sb: await setup(run), expectCall, Mismatch, oracleDir: run.manifest.oracle, checks: run.manifest.label === "dev" }) : null;
+      const beforePublish = phase.closure ? async (cur) => rangeClosure(run, k, plan, cur, { sb: await setup(run), expectCall, Mismatch, oracleDir: run.manifest.oracle, checks: run.manifest.label === "dev", lwwPicked: !!ctx.lww?.picks.some((p) => p.picks > 0) }) : null;
       published = await consolidateLanes(run, k, plan, ctx, { beforePublish });
       branch = ctx.final;
       ctx.tree = ctx.mainTree;
       // the node_modules chain since the last install proved equal to a clean one (closure.mjs nextChain)
       if (ctx.closure?.executed) run.state.closureChain = nextChain(run.state.closureChain, k, plan.checkpoint, ctx.closure.executed);
+      // every closure mount root the run has used: a merged node_modules can carry any of them, not only this chain's (scale S4)
+      if (ctx.closure?.executed) run.state.closureRoots = [...new Set([...(run.state.closureRoots ?? []), ...ctx.closure.executed.map((e) => e.root).filter(Boolean)])];
       if (ctx.closure?.groups) {
         const file = join(run.dir, "closure", `groups-${pad(k)}.json`);
         writeJson(file, ctx.closure.groups);
@@ -431,13 +434,15 @@ async function playRange(run, k, mode) {
     deltaTotal: deltaSummary(deltaTotal, caps(run.manifest.policy)),
     reinstall: null,
   };
+  // owner S4: the generated /.lww and the picks its rules made, per merge
+  if (ctx?.lww) m.lww = { ...ctx.lww, total: ctx.lww.picks.reduce((n, p) => n + p.picks, 0) };
   if (ctx?.closure && !ctx.closure.skipped) {
     // P3: storage by the step's own Commit (traced sizes), the reinstall gate, STORAGE_STUDY §8
     const commitOf = (kind) => t.all.find((l) => l.method === "sandbox.commit" && l.step === `r${pad(k)}.${kind}`);
     const inst = ctx.closure.rows.find((r) => /install/.test(r.kind)), build = ctx.closure.rows.find((r) => r.kind === "build");
     const instSizes = inst ? commitOf(inst.kind)?.sizes ?? null : null;
     if (ctx.closure.reinstall && m.storage) m.storage.reinstall = { changedPackages: ctx.closure.reinstall.changedPackages, rawChangedBytes: ctx.closure.reinstall.rawChangedBytes, storedNewBytes: instSizes?.newStored ?? null };
-    m.closure = { steps: ctx.closure.steps, rows: ctx.closure.rows, oracle: ctx.closure.oracle ?? null, oracleKind: ctx.closure.oracleKind ?? null, normalized: ctx.closure.normalized ?? null, earlierRoots: ctx.closure.earlierRoots ?? null };
+    m.closure = { lwwPicked: !!ctx?.lww?.picks.some((p) => p.picks > 0), steps: ctx.closure.steps, rows: ctx.closure.rows, oracle: ctx.closure.oracle ?? null, oracleKind: ctx.closure.oracleKind ?? null, normalized: ctx.closure.normalized ?? null, earlierRoots: ctx.closure.earlierRoots ?? null };
     // the development checks run after the publish: run.mjs devcheck (devcheck.mjs)
     m.study = studyMeasurements({
       fsWrites: t.all.filter((l) => l.method === "fs.write" && l.sizes).map((l) => ({ sizes: l.sizes })),
@@ -487,6 +492,7 @@ async function playRange(run, k, mode) {
   }
   m.dsh = dshFacts(run.repo, plan, changes, sizes);
   m.execs = execFacts(t.all);
+  m.defer = { d6: d6Triggers(t.all) };
   m.construction = t.construction;
   m.key = keyOps(t.calls, t.all, run.sink.log);
   const mounts = run.sink.log.filter((e) => e.method === "sandbox.mount");

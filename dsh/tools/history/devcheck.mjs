@@ -48,7 +48,7 @@ export async function devcheck(run, k) {
   const sb = await setup(run), branch = `dev-r${pad(k)}`;
   run.label(`r${pad(k)}.devcheck-fork`);
   await expectCall(run, `r${pad(k)} devcheck fork`, () => run.lf.branch.fork(branch, run.state.layer), "Forked");
-  const roots = [...new Set((run.state.closureChain ?? []).map((e) => e.root).filter(Boolean))];
+  const roots = [...new Set([...(run.state.closureChain ?? []).map((e) => e.root), ...(run.state.closureRoots ?? [])].filter(Boolean))];
   const rows = await playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, roots });
   let cleanOracle = null;
   if (steps.some((s) => s.kind === "reinstall-check")) {

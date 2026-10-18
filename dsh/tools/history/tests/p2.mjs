@@ -992,6 +992,57 @@ test("P3 removals take the file only (dev352-p3k r016): a folder may hold untrac
   assert.equal(route([{ op: "rm", path: "a/b/c.txt" }], tree, { all: true, untracked: true }).sandbox[0].target, "a/b/c.txt", "P3: the file only, as git does");
 });
 
+test("/.lww from every .gitignore (owner S4): nested patterns prefixed, deeper rules last; the lww.rs matcher port", async () => {
+  const { generateLww, gitignores, lwwMatch, parseRules, prefixed } = await import("../lww.mjs");
+  assert.deepEqual(gitignores(["a/b/.gitignore", ".gitignore", "z/.gitignore", "a/.gitignore", "x.txt"]), [".gitignore", "a/.gitignore", "z/.gitignore", "a/b/.gitignore"]);
+  assert.equal(prefixed("pkg", "dist"), "pkg/**/dist");
+  assert.equal(prefixed("pkg", "/build/"), "pkg/build/");
+  assert.equal(prefixed("pkg", "a/b"), "pkg/a/b");
+  assert.equal(prefixed("pkg", "!keep.log"), "!pkg/**/keep.log");
+  assert.equal(prefixed("pkg", "*.log"), "pkg/**/*.log");
+  const { text, sources } = generateLww(new Map([[".gitignore", "# c\nnode_modules/\nlib/\n*.tsbuildinfo\nexamples/*/*.jsonl\n\n"], ["pkg/.gitignore", "out/\n!out/keep.txt\n/root-only\n"]]));
+  assert.equal(text.includes("%include"), false, "inline, no %include (F-039)");
+  assert.deepEqual(sources, { ".gitignore": 4, "pkg/.gitignore": 3 });
+  const rules = parseRules(text);
+  const hit = (p) => !!lwwMatch(rules, p);
+  assert.ok(hit("node_modules/.pnpm/x/index.js") && hit("packages/a/node_modules/.bin/tsc"), "unanchored node_modules/ at any depth, with everything under it");
+  assert.ok(hit("packages/a/lib/index.js") && hit("packages/a/tsconfig.tsbuildinfo"));
+  assert.ok(hit("examples/demo/run.jsonl") && !hit("examples/demo/sub/run.jsonl") && !hit("x/examples/demo/run.jsonl"), "anchored glob");
+  assert.ok(hit("pkg/out/a.js") && hit("pkg/deep/out/a.js"));
+  assert.equal(hit("pkg/out/keep.txt"), false, "lww.rs: the last matching rule decides, so a negation re-includes a file under a matched folder (git would keep it ignored); the check-ignore proof reports such paths");
+  assert.ok(hit("pkg/root-only") && !hit("pkg/x/root-only"));
+  assert.ok(!hit("packages/a/src/index.ts") && !hit("pnpm-lock.yaml") && !hit("pkg/src/out.ts"));
+});
+
+test("DEFER D-6 (#355): merge errors from the trace; untraced values named, never estimated", async () => {
+  const { d6Triggers, d6Text } = await import("../gates.mjs");
+  const lines = [{ method: "branch.merge", phase: "end", ok: true, kind: "Merged" }, { method: "branch.merge", phase: "end", ok: false, kind: "Busy" }, { method: "branch.merge", phase: "start" }];
+  const d = d6Triggers(lines);
+  assert.deepEqual(d, { merges: 2, candidatesMax: null, publishHoldMaxMs: null, mergeErrors: 1 });
+  assert.match(d6Text(d), /^D-6 triggers \(\*\*TRIPPED\*\*\): max candidate paths in a merge not traced \(needs .*merge\.paths.*\) \(trips > 50,000\) · max lane hold of the merge at publish not traced \(needs .*publish\.lane.*\) \(trips > 500 ms\) · Capacity\/ObjectLimitExceeded\/Busy from 2 merges: 1 \(trips at 1\)$/);
+  assert.match(d6Text(d6Triggers(lines.slice(0, 1))), /^D-6 triggers \(none\)/);
+  assert.equal(d6Text(null), "D-6 triggers: not recorded for this attempt");
+});
+
+test("F-031 split (lead 2026-10-18): who commits each dsh commit; the commit's metadata; the scripts check ids", async () => {
+  const { classifyCommits, parseCommit, laneCommitScript, leadCommitScript, hashScript } = await import("../gitlanes.mjs");
+  const commits = [{ id: "a", parents: ["base"] }, { id: "b", parents: ["a"] }, { id: "c", parents: ["base"] }, { id: "d", parents: ["c"] }, { id: "m", parents: ["b", "d"] }, { id: "e", parents: ["base"] }];
+  const lanesOf = new Map([["a", new Set(["L1"])], ["b", new Set(["L1"])], ["c", new Set(["L1", "L2"])], ["d", new Set(["L2"])]]);
+  const c = classifyCommits(commits, lanesOf);
+  assert.deepEqual([...c].map(([id, v]) => [id, v.who, v.lane ?? v.why]), [["a", "lane", "L1"], ["b", "lane", "L1"], ["c", "lead", "split over 2 lanes"], ["d", "lead", "parent c not in the lane"], ["m", "lead", "merge"], ["e", "lead", "no planned files"]]);
+  const meta = parseCommit("tree t1\nparent p1\nauthor A B <a@b> 1700000000 +0800\ncommitter C D <c@d> 1700000001 -0500\nencoding ISO-8859-1\n\nsubject\n\nbody\n");
+  assert.deepEqual([meta.tree, meta.parents, meta.author, meta.committer.date, meta.encoding, meta.message, meta.extra], ["t1", ["p1"], { name: "A B", email: "a@b", date: "1700000000 +0800" }, "1700000001 -0500", "ISO-8859-1", "subject\n\nbody\n", []]);
+  assert.deepEqual(parseCommit("tree t\ngpgsig x\n\nm").extra, ["gpgsig x"], "a signed commit is visible, so its id mismatch is explained");
+  const lane = laneCommitScript({ lane: "L1", commit: "abc", meta, add: ["x y.txt"], remove: ["z"], msgFile: "/tmp/m" });
+  assert.match(lane, /GIT_INDEX_FILE=\.git\/lanes\/L1\/index/);
+  assert.match(lane, /git read-tree p1\ngit add -f -- 'x y\.txt'\ngit rm --cached -q -- 'z'/);
+  assert.match(lane, /git -c i18n\.commitEncoding='ISO-8859-1' commit-tree "\$t" -p p1 -F \/tmp\/m/);
+  assert.match(lane, /git update-ref refs\/heads\/lanes\/L1 "\$c"\n\[ "\$c" = abc \]$/);
+  const lead = leadCommitScript({ commit: "abc", meta: { ...meta, encoding: null }, entries: [{ mode: "100644", blob: "b1", path: "a.txt" }], remove: ["gone"], msgFile: "/tmp/m" });
+  assert.match(lead, /git update-index --add --cacheinfo 100644,b1,'a\.txt'\ngit update-index --force-remove -- 'gone'/);
+  assert.equal(hashScript(["a", "b c"]), "git hash-object -w -- 'a' 'b c'");
+});
+
 test("devcheck (lead 2026-10-18, 120 s rule): dev checks after the publish; the verdicts; a native rerun equal to ours passes", async () => {
   const { devSteps } = await import("../devcheck.mjs");
   const { judgeDevChecks } = await import("../closure.mjs");

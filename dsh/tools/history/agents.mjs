@@ -29,6 +29,8 @@ import {
   BLOB_IDS, countMutation, execAll, expectCall, Mismatch, placeCommands, PNPM_STORE, reads, setup, writeOp,
 } from "./lib.mjs";
 import { sandboxVolumes } from "./closure.mjs";
+import { generateLww, gitignores } from "./lww.mjs";
+import { createHash } from "node:crypto";
 import { abs, consolidationSteps, decoyBytes, p2Plan, pad, PHASES, quote, route, sandboxExpect, STEP_KINDS, Tree } from "./steps.mjs";
 
 /** The lead creates the pool (one Sandbox per agent, at least 4), one Sandbox at a time, recording each in the ledger. */
@@ -220,6 +222,9 @@ export function mergedTree(base, trees) {
 }
 
 /** Starts range k: the pool, the lead's Branch and one Branch per lane, forked from main (one lead step). */
+/** The size merge/decide.rs reads /.lww up to (compare/text.rs MAXIMUM_TEXT_BYTES); a larger file is ignored as absent. */
+export const LWW_MAX_BYTES = 1 << 20;
+
 export async function startRange(run, k, plan, measured) {
   await pool(run, k, plan.agents.length);
   const base = lsTree(run.repo, run.state.prevCommit).files;
@@ -227,6 +232,22 @@ export async function startRange(run, k, plan, measured) {
     work: { fs: 0, sandbox: 0, commits: 0 }, lead: `r${pad(k)}-main`, leadSteps: [], merged: new Map(), tries: new Map(), published: new Set(), played: new Map() };
   run.label(`r${pad(k)}.fork`);
   await expectCall(run, `r${pad(k)} fork`, () => run.lf.branch.fork(ctx.lead, "main"), "Forked");
+  // P3 (owner S4): /.lww from every .gitignore of the range's base, on the lead's Branch, whose rules a lane
+  // merge reads (branch.rs: merge with a's /.lww); written only when its text changes, so main carries it on
+  if (ctx.untracked) {
+    const texts = new Map();
+    for (const p of gitignores([...base.keys()])) texts.set(p, (await run.blobs().get(base.get(p).blob)).toString("utf8"));
+    const { text, sources } = generateLww(texts), sha = createHash("sha256").update(text).digest("hex");
+    ctx.lww = { written: run.state.lwwSha !== sha, sha, lines: text.split("\n").filter(Boolean).length, bytes: Buffer.byteLength(text), sources, picks: [] };
+    // merge/decide.rs reads /.lww through read_all_bounded(MAXIMUM_TEXT_BYTES = 1 MiB) and treats a larger file as absent: never silently
+    if (ctx.lww.bytes > LWW_MAX_BYTES) throw new Mismatch(`r${pad(k)}: the generated /.lww is ${ctx.lww.bytes} bytes, over the 1 MiB the merge reads (compare/text.rs MAXIMUM_TEXT_BYTES); its rules would be ignored`);
+    if (ctx.lww.written) {
+      run.label(`r${pad(k)}.lww`);
+      await expectCall(run, `r${pad(k)} write /.lww`, () => run.lf.fs.write(ctx.lead, "/.lww", Buffer.from(text), "replay /.lww from every .gitignore (owner S4)"), "Committed");
+      run.state.lwwSha = sha;
+      ctx.work.commits++;
+    }
+  }
   for (const l of plan.lanes) await expectCall(run, `r${pad(k)} fork ${l.name}`, () => run.lf.branch.fork(l.name, "main"), "Forked");
   ctx.leadSteps.push({ op: "fork", category: "branch" });
   return ctx;
@@ -249,6 +270,8 @@ export async function consolidateLanes(run, k, plan, ctx, { beforePublish = null
     ctx.tries.set(lane, (ctx.tries.get(lane) ?? 0) + 1);
     const v = await expectCall(who, `r${pad(k)} merge ${lane}`, () => who.lf.branch.merge(cur, lane, name, `merge ${lane}`), want);
     if (v?.kind === "Merged") { cur = name; ctx.merged.set(lane, (ctx.merged.get(lane) ?? 0) + 1); if (v.fastForward === false) ctx.work.commits++; }
+    // LWW picks counted from the merge's own list (F-041: its truncated flag alone is not trusted)
+    if (ctx.lww && Array.isArray(v?.lww)) ctx.lww.picks.push({ lane, picks: v.lww.length, nodeModules: v.lww.filter((d) => /(^|\/)node_modules(\/|$)/.test(d.path ?? "")).length, truncatedFlag: v.lwwTruncated ?? null, decided: v.decided ?? null });
     return v;
   };
   for (const c of consolidationSteps(plan.consolidation)) {

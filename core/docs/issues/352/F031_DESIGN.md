@@ -59,6 +59,59 @@ The lane writes only these under `.git/`:
 The player checks every path a lane Commit changed under `.git/`. Anything
 else there is a stop finding.
 
+**Departure from the owner's revision: split commits (lead decision,
+2026-10-18; the owner may override).** The frozen plan spreads a dsh
+commit's files over several lanes: 191 of 421 replayed commits in ranges
+15–20 (at r015, 36 of 67, such as `75838e10b` in 3 lanes). A lane holding
+only part of a commit can't write its tree, so the work is split:
+
+- **In the lane:** a commit wholly in one lane, whose parent commits already
+  exist in that lane's `.git`, is committed there as above.
+- **Blobs, in every lane:** each lane step of any commit runs real `git
+  hash-object -w -- <its paths>` on the Workspace's bytes (what `git add`
+  does to the object store). Each printed id must equal the plan's blob.
+  This is the lane's part of a split commit, and the parts can't conflict:
+  loose objects are content-addressed.
+- **By the lead:** every other commit is committed after the lane merges, in
+  topological order, before the checkpoint checks. That covers commits
+  split across lanes, and commits whose parent isn't in the lane yet. The
+  lead uses a lead-private index:
+  1. `git read-tree <parent>`;
+  2. `git update-index --add --cacheinfo <mode>,<blob>,<path>` for the
+     commit's changed paths (blobs from the lanes' hash-object), and
+     `--force-remove` for the deleted ones;
+  3. real `git write-tree`;
+  4. `git commit-tree` with the original metadata.
+
+  The lead can't use `git add` there: the merged Workspace holds each path's
+  final bytes, not an intermediate commit's.
+
+**What the split means in practice** (`gitlanes.mjs` `classifyCommits`,
+ranges 15–20, 1,346 dsh commits):
+
+| Committed by | Commits | Why |
+| --- | --- | --- |
+| a lane | 10 | wholly in one lane, parents present |
+| the lead | 923 | dsh merge commits |
+| the lead | 191 | split across lanes |
+| the lead | 220 | a parent split or lead-committed, so not in the lane (the chain cascades) |
+| the lead | 2 | no planned files |
+
+So the lanes write blobs, with real `git hash-object -w` in their one-shot
+Workspaces, plus the 10 eligible in-lane commits. The lead builds the trees
+and commits the rest with real git, in topological order, in as few execs as
+fit 120 s each (lead decision, 2026-10-18, reported to the owner). The dev
+range measures:
+- the lead's commit-tree count and wall time per range;
+- the lanes' hash-object time;
+- `.git` bytes by source;
+- `git status` in a fresh one-shot Workspace;
+- ids equal to dsh for every commit.
+
+Ids must equal dsh in both paths; a mismatch is a finding. Per range, the
+metrics count the commits made in a lane and by the lead, and report the
+lead's git exec time as its own series.
+
 **`git status --porcelain` share.** One in ten one-shot Workspaces (the
 step's sequence number mod 10 = 0) also runs `git status --porcelain` with
 the shared index, after its own command. The output is recorded. It must be

@@ -12,7 +12,8 @@ import { join } from "node:path";
 import { blobSizes, checkout, lsTree } from "./git.mjs";
 
 /** Paths the replay adds that git does not have; the tree comparison leaves them out. */
-export const IGNORE = [".lfs-probe/"];
+// .lww: the replay's generated last-writer-wins rules (owner S4), replay infrastructure like the probe fixture
+export const IGNORE = [".lfs-probe/", ".lww"];
 
 /** What a range's plan expects LayerFS to show at its checkpoint. */
 export function expectations(plan) {

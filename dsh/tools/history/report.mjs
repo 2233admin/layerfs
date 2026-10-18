@@ -599,6 +599,10 @@ async function main() {
     const result = checkReport({ range, metricsDir: opt("--metrics") ?? join(process.env.HOME, "lfs-history", "metrics"),
       docs: opt("--docs") ?? new URL("../../../core/docs/issues/352", import.meta.url).pathname });
     for (const line of result.lines) console.log(line);
+    // DEFER D-6 (#355): its triggers at every range close, kind "none" unless tripped
+    const { d6Text } = await import("./gates.mjs");
+    const latest = readdirSync(opt("--metrics") ?? join(process.env.HOME, "lfs-history", "metrics")).filter((f) => f.startsWith(`range-${pad(range)}.a`) && /\.a\d+\.json$/.test(f)).sort((a, b) => Number(a.match(/\.a(\d+)\./)[1]) - Number(b.match(/\.a(\d+)\./)[1])).at(-1);
+    console.log(d6Text(latest ? JSON.parse(readFileSync(join(opt("--metrics") ?? join(process.env.HOME, "lfs-history", "metrics"), latest), "utf8")).defer?.d6 : null));
     if (result.failed.length) { console.log(`range ${pad(range)}: FAIL ${result.failed.join(" ")}`); process.exit(1); }
     console.log(`range ${pad(range)}: PASS F1–F8`);
     return;

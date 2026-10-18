@@ -7,7 +7,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { exponent, opsOf, reinstallGate, sameBinary, uncontended } from "./gates.mjs";
+import { d6Text, exponent, opsOf, reinstallGate, sameBinary, uncontended } from "./gates.mjs";
 import { storageProblems } from "./storage.mjs";
 import { change, closedWithoutChange, EVIDENCE_COLUMNS, evidenceRow, kindText, REBUILD_KINDS } from "./findings.mjs";
 import { activityTables, categoryOf, checkOverview, checkTimeLine, timeLine } from "./stats.mjs";
@@ -138,6 +138,7 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
       `**${num((m.wall?.totalMs ?? 0) / 1000, 1)} s** tooling (total ${num(totalMs / 60000, 1)} min)`,
     ]]), "",
     `**Checks:** ${g.checks.length - watch.length - bad.length} pass${watch.length ? ` · ${watch.length} watch: ${watch.map((x) => `${x.name} ${x.value}`).join("; ")}` : ""}${bad.length ? ` · ${bad.length} optimize/stop: ${bad.map((x) => x.name).join(", ")}` : ""}`,
+    `**${d6Text(m.defer?.d6).replace(/^D-6 triggers/, "D-6 triggers**")}`,
     `**Moved most:** ${movers(m, prev).map(moverText).join(" · ") || "— (no previous range in this metrics folder)"}`,
     `**Budget:** ${plan.range + 1} of 202 ranges · projected total ${b.wallProjectedMs ? `${num(b.wallProjectedMs / 3.6e6, 1)} h` : "—"} (budget ${b.wallBudgetMs ? `${num(b.wallBudgetMs / 3.6e6, 1)} h` : "not set"}) · disk ${b.diskBudget ? `${Math.round((b.diskProjected / b.diskBudget) * 100)}%` : "—"} of budget at range 202`, "");
   // 1. Correctness
@@ -149,6 +150,7 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
     ["Conflicts", `**${conflicts} / ${planned} planned hit · ${c.conflicts?.unplanned ?? 0} unplanned**`],
     ["Unit tests", c.tests?.run ? `**${c.tests.equal} / ${c.tests.run} equal to native**` : `— (not played in ${String(m.phase).toUpperCase()})`],
     ...(m.closure?.oracle ? [["Installed tree", installedText(m.closure)]] : []),
+    ...(m.lww ? [["Last-writer-wins (`/.lww`)", `${m.lww.written ? "written" : "unchanged"} (${int(m.lww.lines)} lines from ${Object.keys(m.lww.sources ?? {}).length} .gitignore files) · **${int(m.lww.total)} picks** in ${m.lww.picks.length} merges${m.lww.picks.some((p) => p.nodeModules) ? ` (${int(m.lww.picks.reduce((n, p) => n + p.nodeModules, 0))} under node_modules)` : ""}${m.closure?.lwwPicked ? " · re-installed after the merge" : ""}`]] : []),
     ["Ignored files", (w.leftOut?.install ? `— (installs not played in ${String(m.phase).toUpperCase()})` : "as expected")],
     ["Milestone", plan.milestone ? (m.snapshot ? "snapshot taken; restore, oracle and quick_check by the lead (SPEC §7)" : "**snapshot not taken**") : "—"],
   ]), "");

@@ -510,3 +510,25 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   else unjudged("Wall projection", "no wall budget recorded", `≤ ${t.wall.watch}`);
   return { verdict: worst(rows.map((r) => r.result)), checks: rows };
 }
+
+/**
+ * DEFER D-6 (#355, owner 2026-10-18): the three measured triggers, checked at every range close.
+ * Candidate paths per merge and the lane hold of the merge at publish are not traced today: no
+ * estimate, the trace field each needs is named. Merge errors come from the trace's merge lines.
+ */
+export const D6_FIELDS = {
+  candidates: "a candidate-path count on branch.merge (e.g. daemon timing `merge.paths` carrying `candidates`)",
+  publishHold: "a span for the publication-lane hold inside branch.publish (e.g. daemon timing `publish.lane`, ms)",
+};
+export const D6_ERRORS = new Set(["Capacity", "ObjectLimitExceeded", "Busy"]);
+export function d6Triggers(lines) {
+  const merges = lines.filter((l) => l.method === "branch.merge" && l.phase === "end");
+  const errors = merges.filter((l) => !l.ok && D6_ERRORS.has(l.kind ?? l.code ?? l.error?.code)).length;
+  return { merges: merges.length, candidatesMax: null, publishHoldMaxMs: null, mergeErrors: errors };
+}
+export function d6Text(d) {
+  if (!d) return "D-6 triggers: not recorded for this attempt";
+  const tripped = d.mergeErrors >= 1 || (d.candidatesMax ?? 0) > 50_000 || (d.publishHoldMaxMs ?? 0) > 500;
+  const v = (x, field) => (x == null ? `not traced (needs ${field})` : String(x));
+  return `D-6 triggers (${tripped ? "**TRIPPED**" : "none"}): max candidate paths in a merge ${v(d.candidatesMax, D6_FIELDS.candidates)} (trips > 50,000) · max lane hold of the merge at publish ${v(d.publishHoldMaxMs, D6_FIELDS.publishHold)} (trips > 500 ms) · Capacity/ObjectLimitExceeded/Busy from ${d.merges} merges: ${d.mergeErrors} (trips at 1)`;
+}

@@ -88,11 +88,12 @@ export const nothingToBuild = (states) => states.length > 0 && states.every((l) 
  * packages that have a tsconfig.json, then the calibrated tests.
  * @param {{ changed: string[], packages: Set<string>, tsconfigs: Set<string>, milestone: boolean, installed: boolean, run: string[] }} r
  */
-export function closureSteps({ changed, packages, tsconfigs, milestone, installed, run = [], store = STORE_MOUNT, checks = false }) {
+export function closureSteps({ changed, packages, tsconfigs, milestone, installed, run = [], store = STORE_MOUNT, checks = false, lwwPicked = false }) {
   const steps = [];
   if (milestone && installed) steps.push({ kind: "clean-install", command: installCommand({ store, clean: true }) });
   else if (!installed) steps.push({ kind: "install", command: installCommand({ store }) });
-  else if (installInputsChanged(changed)) steps.push({ kind: "incremental-install", command: installCommand({ store }) });
+  // owner S4: after a merge whose /.lww rules picked a side, the merged result re-runs the install, as developers do after git merge
+  else if (installInputsChanged(changed) || lwwPicked) steps.push({ kind: "incremental-install", command: installCommand({ store }) });
   // development checks (owner 2026-10-18): a clean reinstall of the unchanged lockfile, whose Commit's metadata bytes are recorded
   if (checks && steps.length) steps.push({ kind: "reinstall-check", command: installCommand({ store, clean: true }) });
   const built = [...new Set(changed.map((p) => packageOf(p, packages)).filter((d) => d && tsconfigs.has(d)))].sort();
@@ -198,7 +199,7 @@ export const CLOSURE_OUTPUT = /(^|\/)node_modules(\/|$)|(^|\/)(dist|lib)\/|\.tsb
  * the stored bytes from the install Commit's traced sizes.
  */
 /** A range's closure plan: the lockfile blob, the calibrated tests and the steps (closureSteps), from git and the run's state. */
-export function planClosure({ repo, planDir, k, plan, prevCommit, installed, checks }) {
+export function planClosure({ repo, planDir, k, plan, prevCommit, installed, checks, lwwPicked = false }) {
   const git = (args) => execFileSync("git", ["--git-dir", repo, ...args], { encoding: "utf8", maxBuffer: 1 << 28 });
   const tree = lsTree(repo, plan.checkpoint).files;
   const lock = tree.get("pnpm-lock.yaml")?.blob;
@@ -208,7 +209,7 @@ export function planClosure({ repo, planDir, k, plan, prevCommit, installed, che
   if (!existsSync(calFile)) return { missing: `range ${k} has no calibration (${calFile})` };
   const cal = JSON.parse(readFileSync(calFile, "utf8"));
   const changed = git(["diff", "--name-only", prevCommit, plan.checkpoint]).split("\n").filter(Boolean);
-  return { lock, steps: closureSteps({ changed, packages: dirsWith("package.json"), tsconfigs: dirsWith("tsconfig.json"), milestone: !!plan.milestone, installed: !!installed, run: cal.run, checks }) };
+  return { lock, steps: closureSteps({ changed, packages: dirsWith("package.json"), tsconfigs: dirsWith("tsconfig.json"), milestone: !!plan.milestone, installed: !!installed, run: cal.run, checks, lwwPicked }) };
 }
 
 /**
@@ -228,10 +229,10 @@ export function oracleFiles(oracleDir, { lock, steps, chain = [], checkpoint }) 
   };
 }
 
-export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir, checks = false }) {
+export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir, checks = false, lwwPicked = false }) {
   const git = (args) => execFileSync("git", ["--git-dir", run.repo, ...args], { encoding: "utf8", maxBuffer: 1 << 28 });
   // the development checks run after the publish, on a fork (devcheck.mjs; SCRIPTS.md, 120 s rule)
-  const planned = planClosure({ repo: run.repo, planDir: run.planDir, k, plan, prevCommit: run.state.prevCommit, installed: run.state.installed, checks: false });
+  const planned = planClosure({ repo: run.repo, planDir: run.planDir, k, plan, prevCommit: run.state.prevCommit, installed: run.state.installed, checks: false, lwwPicked });
   if (planned.skipped) return { skipped: planned.skipped };
   if (planned.missing) throw new Mismatch(planned.missing);
   const { lock, steps } = planned, chain = run.state.closureChain ?? [];
@@ -241,7 +242,7 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
     if (JSON.parse(readFileSync(f, "utf8")).listerVersion !== LISTER_VERSION) throw new Mismatch(`range ${k}: the node_modules oracle ${f.split("/").at(-1)} predates lister version ${LISTER_VERSION}; rerun closure.mjs oracle --range ${k}`);
   }
   // the recorded mount roots of this chain's earlier steps: listed substitutions (INSTALLS §4, F-034)
-  const roots = [...new Set(chain.map((e) => e.root).filter(Boolean))];
+  const roots = [...new Set([...chain.map((e) => e.root), ...(run.state.closureRoots ?? [])].filter(Boolean))];
   const rows = await playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, roots, binCheck: checks });
   const out = { steps: steps.map((s) => s.kind), rows: rows.map(({ groups, ...r }) => r), oracleKind: files.kind,
     executed: steps.map((s, i) => ({ kind: s.kind, command: s.command, root: rows[i]?.root ?? null })) };
@@ -589,6 +590,12 @@ function main() {
       renameSync(`${files.clean}.tmp`, files.clean);
       console.log(JSON.stringify({ file: files.clean, exit: n.exit, groups: n.groups.length, ms: n.ms }));
     } else if (files.clean) console.log(`cached ${files.clean}`);
+    // a range without an install of its own may still re-install after an LWW merge (owner S4): its sequence oracle too
+    if (files.kind !== "sequence" && state.installed && (state.closureChain ?? []).length && !planned.steps.some((s) => /install/.test(s.kind))) {
+      const forced = planClosure({ repo, planDir, k, plan, prevCommit: state.prevCommit, installed: state.installed, checks: false, lwwPicked: true });
+      Object.assign(files, oracleFiles(join(process.env.HOME, "lfs-history", "oracle"), { lock: forced.lock, steps: forced.steps, chain: state.closureChain, checkpoint: plan.checkpoint }), { clean: files.clean });
+      planned.steps = forced.steps;
+    }
     if (files.kind === "sequence" && !fresh(files.install)) {
       const install = planned.steps.find((s) => s.kind === "incremental-install");
       const n = nativeSequence({ repo, chain: state.closureChain, final: { checkpoint: plan.checkpoint, command: install.command }, image: opt("--image"), volume: opt("--volume") });
