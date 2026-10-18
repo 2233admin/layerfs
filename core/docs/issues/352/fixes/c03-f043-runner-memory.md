@@ -1,6 +1,6 @@
 # c03 · F-043: replay runner memory is allocator retention of 16 MiB encode arenas
 
-> **Status:** fixed (reworked to the liaison ruling; decode reuse and Store-close release pending) on branch `claude/issue352-correctness-644bbc` (correctness
+> **Status:** fixed (reworked to the liaison rulings: encode and decode regions; Store-close release is a follow-up) on branch `claude/issue352-correctness-644bbc` (correctness
 > lane, 2026-10-18). Not merged. Kind 1 (no format change). The proof uses an
 > in-process probe and two real fast dev ranges (c43, below).
 
@@ -120,6 +120,60 @@ Rejected options:
   were diagnostics only (§3).
 - Reusing the per-Commit `Candidates` tables: measured, no effect. Reverted.
 
+### Decode regions (liaison approval, 2026-10-18)
+
+Decode regions are now reused the same way as encode regions:
+
+- **Hooks.** `DecompressionWorkspace::in_region` / `into_region` in
+  `codec.rs`. `into_region` gives `None` when nothing was decoded, so a read
+  that decodes nothing still allocates nothing.
+- **Reads.** `read/objects.rs` keeps a bounded `IDLE_DECODE` list of plain
+  regions, used through its `Decoder` wrapper.
+- **Saves.** `save/state.rs` keeps the Save's decode region in its own
+  bounded list. One generic `Kept<W>` wrapper serves both the Save's encode
+  and decode workspaces.
+  - Why not share the reads' list: `read/objects.rs` is private behind
+    `read/mod.rs`, which is held.
+- **Bounds.** Each list holds at most `available_parallelism()` regions.
+- **Safety.** Only `Vec<u64>` regions cross threads. No new `unsafe`.
+
+**A reused decode region is zeroed on hand-out.**
+- Without zeroing, the byte-identity test faulted (SIGBUS) in
+  `decompress_prefix` on a poison-filled region.
+- The cause: `ZSTD_initStaticDCtx` does not clear its own struct.
+  `ZSTD_initStaticCCtx` does. A prefix load then reads the decoder's
+  allocator hooks from the region's old contents.
+- A region reused as-is happened to work, because a previous decoder had left
+  valid values at the same offsets. That relies on zstd internals and is not
+  accepted.
+- A fresh region is zeroed by `workspace()` (and by F-A4's `alloc_zeroed`),
+  so zeroing on hand-out restores exactly the fresh-region contract.
+- Cost: 6.5 µs per hand-out (1 MiB, host release build, mean of 64). This is
+  diagnostic.
+- Encode regions need no zeroing. Their poison test passes for whole, PREFIX
+  and group frames.
+
+**Proof.** `tests/encode_region_reuse.rs`
+`reused_and_poisoned_decode_regions_give_byte_identical_output`: whole,
+PREFIX and group decodes from a fresh workspace equal those from a region
+reused four times, and from regions filled with three poison patterns.
+
+**Range-14 probe** (720 writes, one sample, addon `7dccd546`, host load 9.6,
+23 containers): **286 MB RSS / 238 MB anonymous** at the last round, 283 / 235
+at close.
+
+| Arm | RSS / anonymous |
+| --- | --- |
+| base | 1,246 / 1,198 |
+| encode-only (`8a14c9b5`) | 363 / 315 |
+| withdrawn context arm (`dc928427`) | 281 / 233 |
+| **this** | **286 / 238** |
+
+**Follow-up: release the idle regions when the Store closes.** To be wired
+after integration, once `store/handle.rs` is free. The lists are process-wide
+and bounded until then. No `release_idle_regions()` is exported: the decode
+list sits behind the held `read/mod.rs`, so an export needs a line there.
+
 ## 5. Proof
 
 | Probe (range-14 copy, 4 lanes) | Base `413ae60d` | Encode only `0eb6ed67` | Encode + decode `dc928427` (first version, superseded) |
@@ -191,10 +245,10 @@ Receipts: `~/lfs-history/runs/issue352c-f043/c43/` (`NOTES.md`, `*.smaps`,
 
 ## Not done
 
-- **Decode-region reuse**: about 80 MB more. The design was sent to the
-  liaison and is awaiting approval.
-- **Releasing the idle list when the Store closes**: the question was sent to
-  the liaison.
+- **Follow-up: release the idle regions when the Store closes.** Wire it
+  after integration, once `store/handle.rs` is free (liaison ruling).
+- **No c43 range was played on the decode build `7dccd546`.** The c43 ranges
+  ran on the encode-only build `8a14c9b5`.
 - The daemon runs the same Saves per Commit and should benefit the same way.
   Not measured.
 - No heaptrack profile. The attribution in §3 rests on the allocator

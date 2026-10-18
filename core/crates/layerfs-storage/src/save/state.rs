@@ -23,50 +23,84 @@ use std::{
     sync::{Mutex, PoisonError},
 };
 
-/// Encode regions of finished Saves, kept for the next Save (F-043).
+/// Encode and decode regions of finished Saves, kept for the next Save
+/// (F-043).
 ///
-/// Each Save used to allocate and zero its own 16 MiB encode region and free
-/// it at the end. glibc then kept the freed region in the allocator arena of
-/// the thread that ran it, so a process making Commits on a thread pool held
-/// about one region per thread arena: 1.2 GB measured in the SDK runner. Only
-/// plain regions are kept, never a zstd context, and at most one per
-/// available CPU; a region past that is freed.
+/// Each Save used to allocate and zero its own 16 MiB encode region (and its
+/// 1 MiB decode region) and free them at the end. glibc then kept a freed
+/// region in the allocator arena of the thread that ran it, so a process
+/// making Commits on a thread pool held about one region per thread arena:
+/// 1.2 GB measured in the SDK runner. Only plain regions are kept, never a
+/// zstd context, and at most one per available CPU per kind; a region past
+/// that is freed. Releasing them when the Store closes is a follow-up once
+/// `store/handle.rs` is free.
 static IDLE_ENCODE: Mutex<Vec<Vec<u64>>> = Mutex::new(Vec::new());
+static IDLE_DECODE: Mutex<Vec<Vec<u64>>> = Mutex::new(Vec::new());
 
-/// The Save's encode workspace; its region returns to [`IDLE_ENCODE`].
-pub(super) struct Encoder(Option<CompressionWorkspace>);
-impl Encoder {
-    fn new() -> StorageResult<Self> {
-        let idle = IDLE_ENCODE
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .pop();
-        Ok(Self(Some(match idle {
-            Some(region) => CompressionWorkspace::in_region(region)?,
-            None => CompressionWorkspace::new()?,
-        })))
+/// A codec workspace built in a plain region.
+pub(super) trait Region: Sized {
+    fn fresh() -> StorageResult<Self>;
+    fn in_region(region: Vec<u64>) -> StorageResult<Self>;
+    fn into_region(self) -> Option<Vec<u64>>;
+}
+impl Region for CompressionWorkspace {
+    fn fresh() -> StorageResult<Self> {
+        Self::new()
+    }
+    fn in_region(region: Vec<u64>) -> StorageResult<Self> {
+        Self::in_region(region)
+    }
+    fn into_region(self) -> Option<Vec<u64>> {
+        Some(self.into_region())
     }
 }
-impl Deref for Encoder {
-    type Target = CompressionWorkspace;
-    fn deref(&self) -> &CompressionWorkspace {
-        self.0.as_ref().expect("encoder until drop")
+impl Region for DecompressionWorkspace {
+    fn fresh() -> StorageResult<Self> {
+        Self::new()
+    }
+    fn in_region(region: Vec<u64>) -> StorageResult<Self> {
+        Self::in_region(region)
+    }
+    fn into_region(self) -> Option<Vec<u64>> {
+        self.into_region()
     }
 }
-impl DerefMut for Encoder {
-    fn deref_mut(&mut self) -> &mut CompressionWorkspace {
-        self.0.as_mut().expect("encoder until drop")
+
+/// A Save's workspace; its region returns to `idle` when dropped.
+pub(super) struct Kept<W: Region> {
+    workspace: Option<W>,
+    idle: &'static Mutex<Vec<Vec<u64>>>,
+}
+impl<W: Region> Kept<W> {
+    fn new(idle: &'static Mutex<Vec<Vec<u64>>>) -> StorageResult<Self> {
+        let region = idle.lock().unwrap_or_else(PoisonError::into_inner).pop();
+        let workspace = Some(match region {
+            Some(region) => W::in_region(region)?,
+            None => W::fresh()?,
+        });
+        Ok(Self { workspace, idle })
     }
 }
-impl Drop for Encoder {
+impl<W: Region> Deref for Kept<W> {
+    type Target = W;
+    fn deref(&self) -> &W {
+        self.workspace.as_ref().expect("workspace until drop")
+    }
+}
+impl<W: Region> DerefMut for Kept<W> {
+    fn deref_mut(&mut self) -> &mut W {
+        self.workspace.as_mut().expect("workspace until drop")
+    }
+}
+impl<W: Region> Drop for Kept<W> {
     fn drop(&mut self) {
-        let Some(workspace) = self.0.take() else {
+        let Some(region) = self.workspace.take().and_then(W::into_region) else {
             return;
         };
         let bound = std::thread::available_parallelism().map_or(1, usize::from);
-        let mut idle = IDLE_ENCODE.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut idle = self.idle.lock().unwrap_or_else(PoisonError::into_inner);
         if idle.len() < bound {
-            idle.push(workspace.into_region());
+            idle.push(region);
         }
     }
 }
@@ -102,8 +136,8 @@ pub(super) struct State<'a> {
     pub(super) candidates: RefMut<'a, Candidates>,
     pub(super) signatures: RefCell<BTreeMap<usize, SignatureRow>>,
     pub(super) packer: Packer,
-    pub(super) compression: Encoder,
-    pub(super) decode: DecompressionWorkspace,
+    pub(super) compression: Kept<CompressionWorkspace>,
+    pub(super) decode: Kept<DecompressionWorkspace>,
     pub(super) groups: GroupCache,
     pub(super) packs: crate::encoding::PackCache,
     pub(super) pool: PoolReader,
@@ -140,8 +174,8 @@ impl<'a> State<'a> {
             candidates,
             signatures: RefCell::new(BTreeMap::new()),
             packer: Packer::new(),
-            compression: Encoder::new()?,
-            decode: DecompressionWorkspace::new()?,
+            compression: Kept::new(&IDLE_ENCODE)?,
+            decode: Kept::new(&IDLE_DECODE)?,
             groups: GroupCache::new(),
             packs: crate::encoding::PackCache::new(),
             pool: PoolReader::new(),

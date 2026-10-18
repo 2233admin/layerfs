@@ -492,5 +492,12 @@
   - r16: 1,398 → 462 MB;
   - file-backed 44–49 MB throughout.
 
+  **Decode regions as well** (liaison approval): reused regions are zeroed
+  on hand-out, because zstd's static decoder init does not clear its own
+  struct. Range-14 probe: 286 / 238 MB, against encode-only 363 / 315 MB.
+
+  **Follow-up:** release the idle regions when the Store closes. Wire it after
+  integration, once `store/handle.rs` is free.
+
   Record:
   [fixes/c03-f043-runner-memory.md](fixes/c03-f043-runner-memory.md).
