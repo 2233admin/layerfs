@@ -47,6 +47,12 @@ pub enum CommitError {
     /// Previously conflicted files still hold marker blocks; nothing is
     /// published.
     Markers(Vec<String>),
+    /// The head moved again after the merge, by more paths than the
+    /// in-lane merge takes; nothing is published (#355).
+    LaneMerge {
+        paths: u64,
+        limit: u64,
+    },
 }
 /// What the product constructor's one namespace attempt acquired, counted and
 /// released. A named reader or owner here was acquired and is not known
@@ -100,6 +106,9 @@ pub struct MergeReport {
     pub lww: Vec<LwwDecision>,
     /// Paths a conflicted merge changed in the Workspace view, bounded.
     pub written: Vec<String>,
+    /// Paths the in-lane step decided when the head moved again after the
+    /// merge; `None` when it did not (#355).
+    pub lane_paths: Option<usize>,
 }
 /// Known history publication followed by a known paired local base install,
 /// or a conflicted merge installed locally with nothing published.

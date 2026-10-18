@@ -17,6 +17,7 @@ pub use config::{
 pub use handles::Handles;
 pub use history::HistoryProvider;
 pub use storage::acquisition::AcquisitionProvider;
+pub use storage::merge_records::{MergeRecords, MergeRecordsWork, MergeScratch, MERGE_LEASE};
 pub(crate) use storage::provider as storage_provider;
 pub(crate) use storage::publication;
 pub use storage_provider::StorageProvider;

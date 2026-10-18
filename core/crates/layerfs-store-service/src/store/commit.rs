@@ -145,16 +145,11 @@ impl BoundWorkspace {
                             })
                         }
                     };
-                // The head is read, merged with and published against inside
-                // the Store's publication lane: no other publication lands
-                // between them, so a stale Commit merges once with the head
-                // current at its publication and never meets a moved head.
-                let lane = phase(timing, "lane", || {
-                    self.store
-                        .history
-                        .publish_lane()
-                        .map_err(CommitError::History)
-                })?;
+                // Two-stage merge (#355). The head is read and merged with
+                // before the publication lane, so the merge's records and its
+                // whole build stay outside it. In the lane the head is read
+                // again: if it moved meanwhile, only what landed in between
+                // is merged into the result, in memory, then published.
                 let current = phase(timing, "head", || {
                     self.refuse_markers(&save, candidate)?;
                     self.store
@@ -173,6 +168,44 @@ impl BoundWorkspace {
                     root
                 } else {
                     candidate
+                };
+                let lane = phase(timing, "lane", || {
+                    self.store
+                        .history
+                        .publish_lane()
+                        .map_err(CommitError::History)
+                })?;
+                let conflicted = merge
+                    .as_ref()
+                    .is_some_and(|report: &MergeReport| !report.conflicts.is_empty());
+                let (current, root, moved) = if force || conflicted {
+                    (current, root, moved)
+                } else {
+                    let now = phase(timing, "head.lane", || {
+                        self.store
+                            .history
+                            .branch_snapshot(snapshot.branch.id)
+                            .map_err(CommitError::History)?
+                            .ok_or(CommitError::Context("bound Branch is absent"))
+                    })?;
+                    if now.branch.head_commit == current.branch.head_commit
+                        && now.branch.base_layer == current.branch.base_layer
+                    {
+                        (current, root, moved)
+                    } else {
+                        let (root, step) = phase(timing, "merge.lane", || {
+                            self.merge_in_lane(&save, &current, &now, root, candidate)
+                        })?;
+                        merge = Some(match merge.take() {
+                            Some(first) => MergeReport {
+                                from: first.from,
+                                lww: first.lww.into_iter().chain(step.lww).collect(),
+                                ..step
+                            },
+                            None => step,
+                        });
+                        (now, root, true)
+                    }
                 };
                 let node = current
                     .branch

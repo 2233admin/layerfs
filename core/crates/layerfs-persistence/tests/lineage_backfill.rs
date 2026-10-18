@@ -11,6 +11,7 @@ use layerfs_persistence::{Handles, PersistenceConfig, SqlitePersistenceProfile};
 use support::*;
 
 const LINEAGE: &str = include_str!("../sql/sqlite/lineage.sql");
+const SCRATCH: &str = include_str!("../sql/sqlite/merge_scratch.sql");
 
 fn definition(sql: &rusqlite::Connection) -> String {
     let mut statement = sql
@@ -53,13 +54,14 @@ fn make_old(path: &std::path::Path) {
         .unwrap();
     }
     sql.execute_batch(
-        "DROP TABLE layer_lineage; DROP TABLE commit_lineage; DROP TABLE absorbed; DROP TABLE reach;",
+        "DROP TABLE layer_lineage; DROP TABLE commit_lineage; DROP TABLE absorbed; DROP TABLE reach; \
+         DROP TABLE merge_operation; DROP TABLE merge_record;",
     )
     .unwrap();
     let source: String = sql
         .query_row("SELECT schema_source FROM history_meta", [], |r| r.get(0))
         .unwrap();
-    let old = source.replacen(LINEAGE, "", 1);
+    let old = source.replacen(LINEAGE, "", 1).replacen(SCRATCH, "", 1);
     assert_ne!(old, source, "the schema holds the lineage tables");
     sql.execute(
         "UPDATE history_meta SET schema_source=?1, schema_definition=?2",

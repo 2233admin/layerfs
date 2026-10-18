@@ -7,7 +7,7 @@ use layerfs_content::ObjectId;
 use layerfs_content::{
     compare::{binding_changes, inode_changes, root_changes, DifferenceWork, TreeTable},
     filesystem::FilesystemRootId,
-    merge::{merge_roots, paths_with_markers, MergeInput, RulesFrom},
+    merge::{merge_roots, paths_with_markers, MergeInput, RulesFrom, Side},
     ContentError, ContentResult,
 };
 use layerfs_history::BranchSnapshot;
@@ -18,6 +18,10 @@ use layerfs_workspace::{InodeSerials, WorkspaceError};
 const MERGE_SERIALS: u64 = 64;
 /// Changed paths a conflict reports as written into the Workspace.
 const WRITTEN_PATHS: usize = 4096;
+/// Paths the in-lane step may decide (#355): the lane's bound on merging
+/// what landed after the merge, so its hold stays short and grows with that
+/// change, never with the tree.
+pub const LANE_MERGE_PATHS: usize = 1024;
 
 /// A conflicted Workspace: its local base is the merge with markers, while
 /// its history binding is the head it merged with.
@@ -79,13 +83,59 @@ impl BoundWorkspace {
 
     /// Merges the candidate (ours) into the current head (theirs) against
     /// the history root this Workspace is bound to. Merged files and the
-    /// merged root go into the same Save.
+    /// merged root go into the same Save. Runs before the publication lane;
+    /// its build state goes to merge records in the Store file.
     pub(super) fn merge_candidate(
         &self,
         save: &Save<'_>,
         bound: &BranchSnapshot,
         current: &BranchSnapshot,
         candidate: FilesystemRootId,
+    ) -> Result<(FilesystemRootId, MergeReport), CommitError> {
+        self.merge_stage(save, bound, current, candidate, candidate, None)
+    }
+
+    /// The in-lane step (#355): the head moved from `merged_with` to
+    /// `current` after the merge, so only the changes between those two heads
+    /// are merged into `result`, in memory and without merge records. More
+    /// than [`LANE_MERGE_PATHS`] paths to decide is refused `LaneMerge`.
+    pub(super) fn merge_in_lane(
+        &self,
+        save: &Save<'_>,
+        merged_with: &BranchSnapshot,
+        current: &BranchSnapshot,
+        result: FilesystemRootId,
+        candidate: FilesystemRootId,
+    ) -> Result<(FilesystemRootId, MergeReport), CommitError> {
+        let merged = self.merge_stage(
+            save,
+            merged_with,
+            current,
+            result,
+            candidate,
+            Some(LANE_MERGE_PATHS),
+        );
+        match &merged {
+            Ok((_, report)) => self.store.note_lane(report.lane_paths),
+            Err(CommitError::LaneMerge { .. }) => self.store.note_lane(None),
+            Err(_) => {}
+        }
+        merged
+    }
+
+    /// One merge of `ours` into `current`'s root against `bound`'s root.
+    /// With `lane`, the paths are named from the head's side and the result
+    /// is built in memory on `ours`; otherwise they are named from ours and
+    /// the result is built on the head with merge records. `shown` is the
+    /// Workspace's candidate, against which written paths are listed.
+    fn merge_stage(
+        &self,
+        save: &Save<'_>,
+        bound: &BranchSnapshot,
+        current: &BranchSnapshot,
+        ours: FilesystemRootId,
+        shown: FilesystemRootId,
+        lane: Option<usize>,
     ) -> Result<(FilesystemRootId, MergeReport), CommitError> {
         let ports = self.store.ports(bound.scope);
         let mut range = (0u64, 0u64);
@@ -112,33 +162,74 @@ impl BoundWorkspace {
         let hints = super::CatalogHints::new(&*self.store.history);
         let input = MergeInput {
             base: FilesystemRootId(bound.effective_root),
-            ours: candidate,
+            ours,
             theirs: FilesystemRootId(current.effective_root),
             labels: ["workspace", &theirs],
             rules_from: RulesFrom::Theirs,
             policy,
             capacities: &capacities,
             hints: Some(&hints),
+            decide_from: if lane.is_some() {
+                Side::Theirs
+            } else {
+                Side::Ours
+            },
+            bound: lane,
         };
-        let merged = crate::telemetry::timed("merge", |timing| {
-            merge_roots(save, &mut save.sink(), &input, &mut fresh, timing)
-        });
+        let merged = match lane {
+            Some(_) => crate::telemetry::timed("merge.lane", |timing| {
+                Ok((
+                    merge_roots(save, &mut save.sink(), &input, &mut fresh, None, timing),
+                    None,
+                ))
+            }),
+            None => crate::telemetry::timed("merge", |timing| {
+                self.store.merge_records(|records| {
+                    merge_roots(
+                        save,
+                        &mut save.sink(),
+                        &input,
+                        &mut fresh,
+                        Some(records),
+                        timing,
+                    )
+                })
+            }),
+        };
+        let (merged, scratch) = merged.map_err(|error| CommitError::Storage(error.into()))?;
         let merged = match (merged, refused) {
             (Ok(merged), _) => {
                 self.store.note_merge(&merged);
                 merged
             }
             (Err(_), Some(error)) => return Err(CommitError::Workspace(error)),
+            (Err(_), None) if scratch.is_some() => {
+                let failure = scratch.expect("checked failure");
+                return Err(CommitError::Storage(failure.into()));
+            }
             (Err(_), None) if hints.failure.borrow().is_some() => {
                 let error = hints.failure.take().expect("checked failure");
                 return Err(CommitError::History(error));
+            }
+            (
+                Err(ContentError::BoundedCapacityExceeded {
+                    what: "merge.bound",
+                    limit,
+                    actual,
+                }),
+                None,
+            ) => {
+                return Err(CommitError::LaneMerge {
+                    paths: actual,
+                    limit,
+                })
             }
             (Err(error), None) => return Err(content(error)),
         };
         let written = if merged.clean() {
             Vec::new()
         } else {
-            root_changes(save, candidate, merged.root, WRITTEN_PATHS)
+            root_changes(save, shown, merged.root, WRITTEN_PATHS)
                 .map_err(content)?
                 .entries
                 .into_iter()
@@ -153,6 +244,7 @@ impl BoundWorkspace {
                 conflicts: merged.conflicts,
                 lww: merged.lww,
                 written,
+                lane_paths: lane.map(|_| merged.decided),
             },
         ))
     }

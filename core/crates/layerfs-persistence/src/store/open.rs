@@ -86,8 +86,13 @@ impl Handles {
         if writable {
             session.add_binding_hints()?;
             session.add_lineage(crate::history::backfill_lineage)?;
+            session.add_merge_scratch()?;
         }
-        Self::validated(session, directory, binding, cursor_key)
+        let handles = Self::validated(session, directory, binding, cursor_key)?;
+        if writable {
+            crate::storage::merge_records::sweep(&handles.storage.session)?;
+        }
+        Ok(handles)
     }
     fn validated(
         session: Arc<Session>,

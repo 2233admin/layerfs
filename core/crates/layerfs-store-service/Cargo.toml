@@ -21,3 +21,5 @@ nix = { version = "=0.31.3", default-features = false, features = ["fs"] }
 [dev-dependencies]
 # Project Init builds the installed Store the tests open.
 layerfs-project = { path = "../layerfs-project" }
+# Merge record tests count the Store's scratch rows directly.
+rusqlite = { version = "=0.40.2", features = ["cache", "limits", "blob"] }

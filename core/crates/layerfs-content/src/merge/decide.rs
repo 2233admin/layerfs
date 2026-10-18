@@ -118,30 +118,42 @@ impl<'r> Resolver<'r> {
     }
 }
 
-fn capacity(what: &'static str, actual: usize) -> ContentError {
-    ContentError::BoundedCapacityExceeded {
-        what,
-        limit: MAXIMUM_MERGE_PATHS as u64,
-        actual: actual as u64,
+/// How many paths one merge may decide, and how a larger one is named.
+#[derive(Clone, Copy)]
+pub(super) struct Cap {
+    pub(super) limit: usize,
+    /// True for a caller's bound (`merge.bound`), false for the merge's own.
+    pub(super) bound: bool,
+}
+
+impl Cap {
+    fn exceeded(self, what: &'static str, actual: usize) -> ContentError {
+        ContentError::BoundedCapacityExceeded {
+            what: if self.bound { "merge.bound" } else { what },
+            limit: self.limit as u64,
+            actual: actual as u64,
+        }
     }
 }
 
-/// Every path whose entry may differ between the base and ours.
+/// Every path whose entry may differ between the base and the `from` side.
 /// With `hints`, the changed inodes are named from recorded bindings when
 /// that names all of them; otherwise, and without hints, by the
 /// breadth-first walk. The second value is true when the hints named them.
 pub(super) fn candidates(
     resolver: &Resolver<'_>,
+    from: usize,
+    cap: Cap,
     hints: Option<&dyn BindingHints>,
     work: &mut DifferenceWork,
     naming: &mut NamingWork,
     timing: &TimingScope<'_, Active>,
 ) -> ContentResult<(BTreeSet<String>, bool)> {
     let reader = resolver.reader;
-    let [base, ours, _] = resolver.trees;
+    let (base, side) = (resolver.trees[BASE], resolver.trees[from]);
     let mut changed = Vec::new();
     timing.child("merge.changes").run(|_| {
-        crate::compare::tree::inode_changes(reader, &base, &ours, work, |serial, b, o| {
+        crate::compare::tree::inode_changes(reader, &base, &side, work, |serial, b, o| {
             if let (Some(b), Some(o)) = (b, o) {
                 changed.push((serial, *b, *o));
             }
@@ -152,15 +164,18 @@ pub(super) fn candidates(
         .iter()
         .map(|(serial, _, _)| *serial)
         .collect::<BTreeSet<_>>();
+    if wanted.len() > cap.limit {
+        return Err(cap.exceeded("merge.locate", wanted.len()));
+    }
     // The trace shows which naming ran: `merge.named` (recorded bindings),
     // and `merge.locate` only when they could not name every inode (#352).
     let hinted = match hints {
         Some(hints) => timing.child("merge.named").run(|_| {
             Ok::<_, ContentError>(
-                match crate::compare::name_from_hints(reader, hints, &ours, &wanted, naming)? {
-                    Some(in_ours) => {
+                match crate::compare::name_from_hints(reader, hints, &side, &wanted, naming)? {
+                    Some(in_side) => {
                         crate::compare::name_from_hints(reader, hints, &base, &wanted, naming)?
-                            .map(|in_base| (in_ours, in_base))
+                            .map(|in_base| (in_side, in_base))
                     }
                     None => None,
                 },
@@ -169,21 +184,21 @@ pub(super) fn candidates(
         None => None,
     };
     let named = hinted.is_some();
-    let (in_ours, in_base) = match hinted {
+    let (in_side, in_base) = match hinted {
         Some(found) => found,
         None => timing.child("merge.locate").run(|_| {
             Ok::<_, ContentError>((
-                locate(reader, &ours, &wanted, MAXIMUM_MERGE_PATHS)?,
-                locate(reader, &base, &wanted, MAXIMUM_MERGE_PATHS)?,
+                locate(reader, &side, &wanted, cap.limit)?,
+                locate(reader, &base, &wanted, cap.limit)?,
             ))
         })?,
     };
-    if in_ours.len() < wanted.len() || in_base.len() < wanted.len() {
-        return Err(capacity("merge.locate", MAXIMUM_MERGE_PATHS));
+    if in_side.len() < wanted.len() || in_base.len() < wanted.len() {
+        return Err(cap.exceeded("merge.locate", cap.limit));
     }
     let mut out = BTreeSet::new();
     for (serial, b, o) in changed {
-        let paths = [&in_base[&serial], &in_ours[&serial]];
+        let paths = [&in_base[&serial], &in_side[&serial]];
         if b.kind != InodeKind::Directory || o.kind != InodeKind::Directory {
             out.extend(paths.map(String::clone));
             continue;
@@ -203,22 +218,22 @@ pub(super) fn candidates(
             for path in paths {
                 out.insert(join(path, &name));
             }
-            for (side, tree, bound) in [(BASE, &base, was), (OURS, &ours, now)] {
+            for (index, tree, bound) in [(0, &base, was), (1, &side, now)] {
                 let Some(child) = bound else { continue };
                 if tree.value(reader, child)?.map(|value| value.kind) == Some(InodeKind::Directory)
                 {
                     let mut below = Vec::new();
-                    let room = MAXIMUM_MERGE_PATHS.saturating_sub(out.len());
-                    let path = join(paths[side], &name);
+                    let room = cap.limit.saturating_sub(out.len());
+                    let path = join(paths[index], &name);
                     if !subtree(reader, tree, &path, child, room, &mut below)? {
-                        return Err(capacity("merge.paths", MAXIMUM_MERGE_PATHS));
+                        return Err(cap.exceeded("merge.paths", cap.limit));
                     }
                     out.extend(below.into_iter().map(|(path, _, _)| path));
                 }
             }
         }
-        if out.len() > MAXIMUM_MERGE_PATHS {
-            return Err(capacity("merge.paths", out.len()));
+        if out.len() > cap.limit {
+            return Err(cap.exceeded("merge.paths", out.len()));
         }
     }
     Ok((out, named))
@@ -398,13 +413,15 @@ impl Decider<'_> {
 /// Makes every kept path's parents directories: a parent decided absent is
 /// revived from theirs when theirs holds a directory there, else from ours.
 /// A path below a parent that stays a file cannot be kept and is dropped.
+/// An unpicked path holds what the `into` side holds.
 pub(super) fn revive(
     resolver: &mut Resolver<'_>,
     picks: &mut BTreeMap<String, Pick>,
+    into: usize,
 ) -> ContentResult<()> {
     let mut work = picks.keys().cloned().collect::<Vec<_>>();
     while let Some(path) = work.pop() {
-        if path == "/" || !kept(resolver, picks, &path)? {
+        if path == "/" || !kept(resolver, picks, &path, into)? {
             continue;
         }
         let parent = split(&path).0.to_owned();
@@ -413,11 +430,16 @@ pub(super) fn revive(
         };
         let current = match picks.get(&parent) {
             None => {
-                // An unpicked parent is theirs; picking it Keep makes its own
-                // parents checked in turn.
-                let entry = resolver.entry(THEIRS, &parent)?;
-                if entry.is_some() {
-                    picks.insert(parent.clone(), Pick::Keep);
+                // An unpicked parent is the `into` side's; picking it makes
+                // its own parents checked in turn.
+                let entry = resolver.entry(into, &parent)?;
+                if let Some(held) = entry {
+                    let pick = if into == THEIRS {
+                        Pick::Keep
+                    } else {
+                        Pick::Take(held)
+                    };
+                    picks.insert(parent.clone(), pick);
                     work.push(parent.clone());
                 }
                 entry
@@ -454,9 +476,11 @@ fn kept(
     resolver: &mut Resolver<'_>,
     picks: &BTreeMap<String, Pick>,
     path: &str,
+    into: usize,
 ) -> ContentResult<bool> {
     Ok(match picks.get(path) {
-        Some(Pick::Keep) | None => resolver.entry(THEIRS, path)?.is_some(),
+        Some(Pick::Keep) => resolver.entry(THEIRS, path)?.is_some(),
+        None => resolver.entry(into, path)?.is_some(),
         Some(Pick::Absent) => false,
         Some(_) => true,
     })

@@ -384,13 +384,26 @@ pub fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
         policy,
         capacities: &capacities,
         hints: Some(&hints),
+        decide_from: layerfs_content::merge::Side::Ours,
+        bound: None,
     };
     let merged = crate::telemetry::timed("branch.merge", |timing| {
-        merge_roots(&save, &mut save.sink(), &input, &mut fresh, timing)
+        store.merge_records(|records| {
+            merge_roots(
+                &save,
+                &mut save.sink(),
+                &input,
+                &mut fresh,
+                Some(records),
+                timing,
+            )
+        })
     });
-    let merged = merged.map_err(|error| match hints.failure.take() {
-        Some(failure) => history(failure),
-        None => args::content(error),
+    let (merged, scratch) = merged.map_err(args::failed)?;
+    let merged = merged.map_err(|error| match (hints.failure.take(), scratch) {
+        (Some(failure), _) => history(failure),
+        (None, Some(failure)) => args::failed(failure),
+        (None, None) => args::content(error),
     })?;
     store.note_merge(&merged);
     let lww = layerfs_bridge::sdk_values::lww(&merged.lww);
