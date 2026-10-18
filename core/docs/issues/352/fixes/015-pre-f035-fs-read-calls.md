@@ -7,7 +7,7 @@
 | Owner decision | 2026-10-18: optimize the calls before adding any API option. The proposed opt-in `exclude` argument on `fs.grep` is dropped |
 | Issue | GitHub `Ephemeral-AI-Lab/layerfs#354` |
 | Branch | `issue354-fs-read-calls`, own worktree; merging into `dsh-history-replay` is a later owner decision |
-| Status | open |
+| Status | implemented on the branch; page tokens (step 4) on hold; merge is an owner decision |
 
 ## Old design (HEAD `8cfda6e0b`)
 
@@ -107,16 +107,125 @@ No new dependency: `std` only. Making the transitive `memchr` crate a direct
 dependency is a separate owner decision. No Store format change: a line
 index for `fs.read` is out of scope.
 
-## Proof (to be filled by the worker)
+## Proof
 
-- **Equivalence:** old vs new over a replay snapshot (range 14 or a P3 dev
-  checkpoint). Every `grep`, `glob`, `list` and `read` result is equal across
-  many patterns and paths, including binary files, invalid UTF-8, long lines,
-  matches across window and chunk boundaries, empty files and duplicate
-  contents. Paging through the full results is equal to one unpaged pass.
-- **Complexity:** paging cost is flat per page (statements per page at page 1
-  vs page 100). Glob statements follow the pruned subtree.
-- **Timing:** whole-tree grep, old vs new, one sample per arm, in a declared
-  quiet window agreed with the #352 lead. Report MB/s and native `grep -rF`.
-- **Tests:** each ≤120 s. Tests of the count-based page token are replaced, not
-  nursed.
+Branch `claude/issue354-fs-read-calls-58a66a`, pushed, not merged. Commits:
+`a69a49549` (scan, content reuse, pruned glob, walker memo), `ae398c99f` (one
+read pass per chunked file), `049a2f894` (one call's read caches, memoized
+lookups), `68695cfdc` (grep roots in batches of 64), `0b0a883f0` (immutable
+object reads without BEGIN/COMMIT). Pre-#354 binary: `a69a49549^`. Trees:
+range 14 (1,263 files, 10.30 MB) and P3 (r15 checkpoint, 40,408 regular files,
+427,061,438 B, 35,214 distinct contents, 80 binary).
+
+### Step 0 split (pre-#354, P3, probe passes)
+
+Walk 4.25 s; read 9.49 s (of which `FileView::open` 4.68 s, the 373 chunked
+files' window reads the rest); old byte scan 0.68 s. Reading, not scanning,
+dominated: 843 MB of canonical bytes were decoded for 427 MB of files. On
+range 14: read 651 ms (open 627 ms), scan 21 ms, walk 245 ms.
+
+A second split found during the read-path work: `fs.read` is ~95% fixed cost.
+For 4,000 P3 files, `fs.stat` alone (snapshot, path lookup, size; no content)
+was 682,053 of `fs.read`'s 714,456 statements and 1.157 of 1.158 GB of pack
+bytes. Path lookup was ~159 statements, 38 objects and 281 KB of pack reads
+per call: each component re-read the inode table's upper pages cold.
+
+### Read-path breakdown (before the fix)
+
+Each storage port call was BEGIN, its SELECTs, COMMIT; one delta-chain level
+cost ~6 statements and 60–100 µs. Range 14: 5.5 statements per file at one
+pack acquisition, 101.4 at 17. A fresh storage `Reader` per object demand
+re-read packs: on P3 a shared reader across one walk cut statements 344,847 ->
+178,032 and pack bytes 1.26 GB -> 257 MB.
+
+### Equivalence
+
+Old (`a69a49549^`) and new binaries' dumps are byte-identical after every
+commit above: P3 grep (4 batteries: never-present, `import`, `e`, `\n`, `}\n`,
+`a\nb`, `é`, `😀`, `the`, `export default`, two spaces, `TODO`; whole tree and
+subtrees incl. a missing path and a file path), glob (3 batteries, 19 patterns
+incl. `!`, `?`, trailing `/`, anchored and unanchored), list (5 paths), read
+(4,000 files); range 14 grep, glob, list, read and full paging at page sizes
+100 and 7 (paging equals one unpaged pass). `sdk_text_scan` compares the new
+calls with a copy of the old window scan over ~90 crafted files: NUL and
+invalid UTF-8 at window, block and chunk edges (a 32-file NUL sweep across
+256 KiB blocks, 700 KB files), incomplete final characters, long lines,
+widths around 1,024 and 49,152, empty files, duplicate contents, matches and
+characters split across parts, late lines and late read starts. Mutants it
+catches: wrong failing window, missing cross-part tail check, missing window
+holdback.
+
+### Statements per call (calls probe, one process per arm, fresh Store copy)
+
+| Call | Pre-#354 | After `049a2f894` | After `68695cfdc` | After `0b0a883f0` |
+| --- | --- | --- | --- | --- |
+| P3 `fs.grep /` | 622,275 | 217,059 | 97,047 | 39,739 |
+| P3 `fs.read` ×4,000 | 714,456 | 299,454 | 299,454 | 167,990 |
+| Range 14 `fs.grep /` | 39,261 | 37,335 | 20,850 | 7,004 |
+| Range 14 `fs.read` ×1,263 | 206,361 | 138,810 | 138,810 | 60,036 |
+
+Statements per object: P3 grep 6.72 -> 0.65 (from `ae398c99f`'s 407,817),
+P3 read 4.47 -> 1.95. The pre-#354 P3 grep figure is the timed arm below;
+the others are from the calls probe at `ae398c99f`. Pack bytes (from `ae398c99f`): P3 grep
+68.5 MB -> 18.1 MB (12.8 MB after the caches; batching raised it to 18.1 MB
+because a batch's working set exceeds the 2 MiB pack cache), P3 read
+1.158 GB -> 841 MB.
+
+Peak RSS per call (`/usr/bin/time -l`, one process per arm): P3 grep 23.6 ->
+38.0 MB (caches: 2 MiB pack bodies plus an isolated singleton, 512 KiB
+decoded groups, 512 KiB pooled values; batch roots at most 4 MiB); P3 read
+×4,000 21.3 -> 26.2 MB.
+
+### Complexity
+
+Paging is still count-based: step 4 (resumable tokens) is on hold with the
+owner. Range-14 statements at page 1 vs page 100: grep 408 -> 720 before,
+595 -> 521 now (page 1 rose because a window of 64 roots and their lengths
+are read before the first match is returned); glob 336 -> 3,558 before,
+80 -> 217 now; list 69 -> 84 before, 30 -> 35 now. Glob follows the pruned
+subtree: the range-14 glob dump went from 7.6 s to 1.2 s. Each content is
+scanned once per call; each chunk is decoded once per scan; the walker reads
+directory pages and the inode table's upper pages once per call.
+
+### Timing (one sample per arm)
+
+Window granted by the owner's liaison, started on the user's "go" at 17:26,
+2026-10-18. Host: macOS, 1-minute load 8.8–10.3 throughout, with a VM
+process using ~3.5 cores. State per arm: a new process (no in-process
+caches), a fresh Store copy for that arm only, warmed by reading the copy's
+files once with `cat`, so the whole Store was in the OS page cache for both
+grep arms alike. Native: the exported tree read once with `tar` first.
+
+| Arm | Time | MB/s over 427.1 MB |
+| --- | --- | --- |
+| Old `fs.grep` (never-present pattern, whole tree) | 11.21 s | 38 |
+| New `fs.grep` (same) | 2.93 s | 146 |
+| Native `/usr/bin/grep -rF` (BSD grep 2.6.0) | 8.90 s | 48 |
+| New `fs.read` ×4,000 files | 6.64 s | — |
+
+Earlier diagnostic times on a loaded host (load 10–170) are not claims.
+
+### Tests and checks
+
+New: `sdk_text_scan`, `sdk_fs_reads_replay` (probes; skipped without a Store),
+`sdk_root_batches`, `sdk_reads_under_publish` (40 Commits published to a fork
+during 4 rounds of paged reads of main; every answer unchanged). Changed:
+`sqlite_group_rows` and `sqlite_group_rows_indexed` exact statement counts
+(whole-pack read 5 -> 3, single locate 3 -> 1 and 1 -> 0 transactions). No
+tests deleted; no count-token test was touched because paging did not change.
+All persistence, storage, content and store-service test binaries pass, each
+≤120 s; daemon 48 of 50 (the other two need `LAYERFS_Q1_PREPARED` or a Docker
+Linux binary and fail at that setup check). Clippy `-D warnings` clean for the
+changed crates and the daemon; fmt clean on changed files; the boundary guard
+reports the same 16 violations as before #354.
+
+### Boundaries kept
+
+No delta depth, storage policy or Store format change; no new dependency.
+`StorePorts::objects_with` is the one new function in `store/ports.rs`.
+`file_lengths` signatures and the one-length-per-id-in-order contract are
+unchanged. Only object locates and pack reads run without a transaction; why
+that is safe is stated on `Session::read_immutable` and in the `0b0a883f0`
+message (insert-only locations, trigger-immutable packs, a pack id counter
+that never goes back, page-only reclamation). Reads that pick a snapshot keep
+their transaction. That argument is flagged for the owner.
