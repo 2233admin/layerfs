@@ -4,7 +4,7 @@
 
 | | |
 | --- | --- |
-| Trigger | F-046, seven intermittent `Busy` / `unmount:kernel` panics at `support/mounted.rs:133` (`mounted_commit` r5_3 ×2 and r5_9 ×2, `mounted_cycles`, `mounted_install`, `kernel_coherence` probe). A side session was asked for the RCA, a deterministic reproduction, and a fix |
+| Trigger | F-046, eight intermittent `Busy` / `unmount:kernel` panics at `support/mounted.rs:133` (`mounted_commit` r5_3 ×2 and r5_9 ×2, `mounted_cycles`, `mounted_install` ×2, `kernel_coherence` probe). The eighth, on staging `b2c43386d`, came on a build without the gate. A side session was asked for the RCA, a deterministic reproduction, and a fix |
 | Kind | test harness (`core/crates/layerfs-daemon/tests/support/mounted.rs`), plus one new test |
 | Branch | `claude/f046-busy-unmount` off staging `claude/dsh-352-integration-c98eb1` `77fe3b20ec` |
 | Production LOC | 102723 → 102723 (delta +0) |

@@ -595,6 +595,11 @@
   - **Seventh occurrence** (staging step 8): `kernel_coherence`
     `mutations_racing_the_unmount_probe_keep_normal_results_and_persist`,
     at its final normal unmount, with the same text.
+  - **Eighth occurrence** (integration step 11, staging `b2c43386d`, pinned
+    image, one container per binary, load 11.1): `mounted_install`
+    `a_directory_of_more_than_one_name_window_is_listed`, with the same text
+    at `mounted.rs:133`, after all three listings matched (65/64/65). Not
+    rerun. That build predates the gate below.
   - **Root cause (test harness, reproduced deterministically 2026-10-19).**
     A fork from any thread of the test process copies the whole descriptor
     table. That holds both for std's fork path (`uid`/`gid` or `pre_exec`)
