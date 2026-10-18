@@ -1,4 +1,6 @@
 //! Shared physical provider; Objects and Metadata use one transaction boundary.
+//! Object locates and pack reads see only immutable rows and run without one
+//! (`Session::read_immutable`); every other call keeps its transaction.
 use crate::{backend::Session, metadata, objects, publication};
 use layerfs_content::ObjectId;
 use layerfs_storage::{
@@ -29,7 +31,7 @@ impl PackPersistence for StorageProvider {
     ) -> Result<(), PersistenceError> {
         out.clear();
         self.session
-            .run(false, |tx| metadata::locations::read(tx, ids, out))
+            .read_immutable(|tx| metadata::locations::read(tx, ids, out))
     }
     fn read_packs(
         &self,
@@ -38,23 +40,22 @@ impl PackPersistence for StorageProvider {
     ) -> Result<(), PersistenceError> {
         out.clear();
         self.session
-            .run(false, |tx| objects::read::read(tx, ids, out))
+            .read_immutable(|tx| objects::read::read(tx, ids, out))
     }
     fn read_pack_selection(
         &self,
         id: i64,
         plan: &mut dyn PackReadPlan,
     ) -> Result<PersistedPackRead, PersistenceError> {
-        self.session.run(false, |tx| {
-            crate::backend::sqlite::objects_selection::read(tx, id, plan)
-        })
+        self.session
+            .read_immutable(|tx| crate::backend::sqlite::objects_selection::read(tx, id, plan))
     }
     fn read_scoped_pack(
         &self,
         id: i64,
         plan: &mut dyn PackReadPlan,
     ) -> Result<AcquiredPackRead, PersistenceError> {
-        self.session.run(false, |tx| {
+        self.session.read_immutable(|tx| {
             crate::backend::sqlite::objects_selection::read_scoped(tx, id, plan)
         })
     }

@@ -140,7 +140,12 @@ Concurrency (full rule in [83](83-store-concurrency-model.md)):
 - **Publish:** one transaction in the lane: Branch and Layer lookups, insert
   the Commit row (the trigger updates `store_totals`), move the Branch head.
   A lost reply does not undo a published Commit [impl].
-- **Reads:** WAL snapshot transactions on read-only sessions [impl].
+- **Reads:** WAL snapshot transactions on read-only sessions [impl]. Object
+  locates and pack reads (descriptor, units, body) run with no BEGIN/COMMIT,
+  each statement in its own snapshot: `object_location` is insert-only and
+  `pack`/`pack_unit` refuse UPDATE and DELETE, so no two such reads can
+  disagree. Reads that pick a snapshot (Branch heads, roots, Layer and
+  Commit rows) keep their transaction (#352 F-035) [impl].
 - **Never:** automatic retry, busy handlers, re-prepare loops or replay of a
   failed SQL attempt (AGENTS.md §4).
 
