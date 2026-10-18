@@ -50,7 +50,7 @@ fn prove_fixture(f: fixture::Fixture) {
     let operation = first.workspace.operation().unwrap();
     oracle::run(&f, &operation);
     let cache = store.cache_work().unwrap();
-    assert!(cache.charged_cache_bytes <= 8 * 1024 * 1024);
+    assert!(cache.charged_cache_bytes <= f.cache_bytes);
     println!("Q1_COUNTS shape={shape:?} post_install_mount_batches={post_install} warm_mount_batches=0 work={:?} cache={cache:?}",store.work());
     drop(operation);
     for bound in [&first, &second] {
