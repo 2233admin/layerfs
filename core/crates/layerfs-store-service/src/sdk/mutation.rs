@@ -4,7 +4,7 @@ use crate::store::{BoundWorkspace, StoreOperation};
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use layerfs_content::filesystem::PathName;
 use layerfs_workspace::{
-    InodeSerials, Operation, Outcome, OverlayJobs, SourceView, Time, ViewStat, WorkspaceError,
+    Operation, Outcome, OverlayJobs, SourceView, Time, ViewStat, WorkspaceError,
 };
 pub type Result<T> = std::result::Result<T, SdkRefusal>;
 pub struct Mutation<'a> {
@@ -61,7 +61,7 @@ impl<'a> Mutation<'a> {
     }
     fn serial(&mut self) -> Result<u64> {
         if self.serials.0 == self.serials.1 {
-            let (start, count) = self.op.ports().reserve(64).map_err(failure)?;
+            let (start, count) = self.op.ports().reserve_pooled(64).map_err(failure)?;
             self.serials = (start, start + count);
         }
         let value = self.serials.0;

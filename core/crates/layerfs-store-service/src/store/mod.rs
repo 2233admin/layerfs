@@ -24,7 +24,7 @@ pub use commit_types::{
     CapturedConstruction, CommitError, CommitFailure, CommitOptions, CommitPhase, CommitSuccess,
     MergeReport, ReleasedOwner,
 };
-pub use open::{SaveCounters, Store, StoreWork};
+pub use open::{MergeCounters, ReuseWork, SaveCounters, Store, StoreWork};
 pub use operation::{BoundWorkspace, StoreOperation};
 pub use ports::{PortError, StorePorts};
 pub use read_handle::StoreReader;

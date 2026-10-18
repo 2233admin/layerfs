@@ -229,10 +229,27 @@ pub fn delta(before: SaveCounters, after: SaveCounters) -> Option<SdkValue> {
         ("work_exceeded", less(a.work_exceeded, b.work_exceeded)),
         ("depths", depths(&a.depths, &b.depths)),
     ]);
-    Some(SdkValue::map([
-        ("payload", payload),
-        ("metadata", metadata),
-    ]))
+    let mut fields = vec![
+        ("payload".to_owned(), payload),
+        ("metadata".to_owned(), metadata),
+    ];
+    // Merge path naming (#352): merges, walk fallbacks, inodes named, the
+    // distinct inodes climbed, recorded-binding reads and object read demands.
+    let (a, b) = (&after.merge, &before.merge);
+    if a != b {
+        fields.push((
+            "merge".to_owned(),
+            SdkValue::map([
+                ("merges", less(a.merges, b.merges)),
+                ("fallbacks", less(a.fallbacks, b.fallbacks)),
+                ("inodes", less(a.naming.inodes, b.naming.inodes)),
+                ("climbed", less(a.naming.climbed, b.naming.climbed)),
+                ("bindings", less(a.naming.bindings, b.naming.bindings)),
+                ("reads", less(a.naming.reads, b.naming.reads)),
+            ]),
+        ));
+    }
+    Some(SdkValue::Map(fields))
 }
 
 /// The scalar `SqlWork` counters, in `SQL_FIELDS` order (observation

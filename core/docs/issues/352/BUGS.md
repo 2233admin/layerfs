@@ -222,6 +222,12 @@
   - the uncontended series is unchanged.
   All 35 recorded `branch.merge`s replay to the root they recorded, on both
   addons. Fix 4 is next.
+  **Fix 4 done** (`04d07a293`; daemon `128a959c`, addon `74d08425`). An SDK
+  file call reuses an idle reader, the Store's idle producer and pooled
+  serials (4,096 per catalog reservation). Mounted Workspaces are unchanged.
+  `fs.write` p50 went from 8.04 to 6.79 ms (create) and from 8.60 to 7.07 ms
+  (edit). Merge naming counters were added: 0 of 35 recorded merges fall
+  back, and per-inode naming cost is flat.
 - **F-026 · a listing re-read the inode table per entry (product, 011.a1,
   2026-10-18).** `fs.list` looked each entry up separately from the inode
   table's root, so the cost per entry grew with the table (`list_largest`

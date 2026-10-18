@@ -29,6 +29,7 @@ impl BoundWorkspace {
         self.owner
             .close(self.route())
             .map_err(super::CloseError::Owner)?;
+        self.producer.hand_to(&self.store.idle_producer);
         self.store
             .close_reader(self.identity)
             .map_err(super::CloseError::Reader)

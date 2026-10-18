@@ -21,16 +21,36 @@ impl Store {
         owner: OwnerClient,
         request: BindRequest,
     ) -> Result<BindSuccess, BindRefusal> {
+        self.bind_with(owner, request, false)
+    }
+    /// [`Self::bind`] for an SDK call's private Workspace: its reader comes
+    /// from, and returns to, the Store's idle readers (#352 F-025 fix 4).
+    #[allow(clippy::result_large_err)]
+    pub fn bind_private(
+        self: &Arc<Self>,
+        owner: OwnerClient,
+        request: BindRequest,
+    ) -> Result<BindSuccess, BindRefusal> {
+        self.bind_with(owner, request, true)
+    }
+    #[allow(clippy::result_large_err)]
+    fn bind_with(
+        self: &Arc<Self>,
+        owner: OwnerClient,
+        request: BindRequest,
+        pooled: bool,
+    ) -> Result<BindSuccess, BindRefusal> {
         let mut phase = BindPhase::Snapshot;
         let mut snapshot = None;
-        crate::telemetry::timed("bind.reader", |_| self.mount_reader(request.workspace)).map_err(
-            |error| BindRefusal {
-                phase,
-                request: request.clone(),
-                snapshot: None,
-                error: BindError::Read(error),
-            },
-        )?;
+        crate::telemetry::timed("bind.reader", |_| {
+            self.readers.mount(request.workspace, pooled)
+        })
+        .map_err(|error| BindRefusal {
+            phase,
+            request: request.clone(),
+            snapshot: None,
+            error: BindError::Read(error),
+        })?;
         let result = (|| {
             let captured = crate::telemetry::timed("bind.snapshot", |_| {
                 self.reader(Some(request.workspace))

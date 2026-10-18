@@ -147,7 +147,7 @@ impl StoreService {
         }
         let bound = crate::telemetry::phase(timing, "store.bind", || {
             self.store
-                .bind(self.owner.clone(), BindRequest { workspace, branch })
+                .bind_private(self.owner.clone(), BindRequest { workspace, branch })
         });
         match bound {
             Ok(success) => Ok(Arc::new(success.workspace)),

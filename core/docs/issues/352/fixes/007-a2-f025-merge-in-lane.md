@@ -16,7 +16,7 @@
 | Old data | still read as before |
 | Compatibility test | fix 0: **passed**. A fresh fork of `p2-main-c`'s range-11 snapshot (written by `58a60046`) passes `compat.mjs` range 11 on daemon `bd6fbeee`: 1,057 files, 296 ids, paths ok. Fix 1: **passed**. A fresh fork (`f009-compat-fix1`) of `p2-main-e`'s range-13 snapshot passes `compat.mjs` range 13 on daemon `dbf906df` (addon `59f7f8dd`): 1,167 files, 240 ids, paths 240/240, nothing missing, extra or changed, 3,401 ms. Fixes 2–4: *pending* |
 | Binaries | daemon `58a60046…` (and the evidence from `c25119ac…`) → fix 0: `bd6fbeee08156326895e16c1e0a688854f004231d55e0c359ea7ec8af256972a`, kept in `core/target/issue352/daemon-bd6fbeee/` (addon unchanged, `799e3ca6`). Fix 1: daemon `dbf906df…`, addon `59f7f8dd…` (below). Fixes 2–4: *pending* |
-| Commits | fix 0: the commit that adds its section below, on branch `dsh-352-f025-fix0`. Fix 1: `3dff9c5cb` (branch `dsh-352-f025-fix1-topdown`, merged `9815dbc95`); its proof on `dsh-352-f025-fix1-proof`. Fixes 2–4: *pending* |
+| Commits | fix 0: the commit that adds its section below, on branch `dsh-352-f025-fix0`. Fix 1: `3dff9c5cb` (branch `dsh-352-f025-fix1-topdown`, merged `9815dbc95`); its proof on `dsh-352-f025-fix1-proof`. Fix 4: `04d07a293` (branch `dsh-352-f025-fix4`). Fixes 2–3: deferred (DEFER.md D-1, D-2) |
 | Regression tests | fix 0: `core/crates/layerfs-daemon/tests/sdk_timing_coverage.rs` (moved to `layerfs-store-service` by F-020). Fix 1: `layerfs-store-service/tests/sdk_merge_paths.rs` (bound) and `history_diff_oracle.rs` (naming equals the walk). Others *pending*, listed under Proof |
 | Recovery | fork the newest good `p2-main-c` snapshot; rerun the range that trips next (or the next unplayed range) measured on the new daemon. No rebuild |
 | Order | **fix 1 first** (the cause that grows), then 2, 3, 4. Each lands, is proved, and is measured old vs new before the next |
@@ -322,6 +322,112 @@ it takes LayerFS heads (`NoSuchBranch`, nothing played). The second, with
 - **Must be built in the code that F-020 moves into `layerfs-store-service`,** so
   the in-process SDK gets it too. Coordinate with the F-020 branch
   (`dsh-352-f020`); the lead merges.
+
+#### Fix 4 as built (fixer, `04d07a293`, branch `dsh-352-f025-fix4`)
+
+Each SDK file call binds a private Workspace. Three fixed costs per call:
+
+- **Reader.** Each call opened its own read-only connection and Storage
+  (`bind.reader`). Now `Store::bind_private`, which `StoreService` uses,
+  marks the reader pooled:
+  - at close, a reader that served without failure joins the `ReadSet`'s
+    idle readers (at most 4), and the next private Workspace takes one;
+  - a failed or poisoned session keeps its cause and gives nothing back,
+    which preserves custody and quarantine;
+  - reads open a transaction per call, so a kept reader carries no
+    Workspace state;
+  - mounted Workspaces keep their mount-to-unmount reader.
+- **Producer.** Each call made a producer `Storage`, which reads the policy
+  row and content hints. Now the Store keeps one idle handle. A closing
+  Workspace hands its idle handle there, and a Workspace without one takes
+  it. Only a completed Commit keeps a handle, and a taken handle is in no
+  slot, so one Save per handle at a time still holds.
+- **Serials.** Each call reserved 64 serials in a Store writer transaction.
+  Now `StorePorts::reserve_pooled` serves SDK creates from a per-scope pool,
+  refilled by one catalog reservation of 4,096 when empty.
+  - This is simpler than the F-020 design, which refills inside the
+    publication transaction. Here one writer transaction serves 64 creating
+    calls, not 1.
+  - Mounted Workspaces keep their windows (`InodeSerials::reserve` is
+    unchanged), so the daemon's serial admission tests still count as
+    before.
+  - One attempt; serials stay consumed whether used or not.
+- **Counters.** `Store::reuse_work()` counts readers opened and reused and
+  producers made.
+
+**Proof.** `layerfs-store-service/tests/sdk_fixed_costs.rs` makes 8 file
+calls after a seeding one: 0 readers opened, 8 reused, 0 producers made,
+0 serial reservations. With all three reuses disabled it reads 8 / 0 / 8 / 8
+and fails. The `layerfs-store-service` suite passes (81 s). The daemon host
+tests pass except two that their environment gates:
+`huge_kernel_namespace_is_complete_after_install` needs
+`LAYERFS_Q1_PREPARED`, and `macos_init_handoff…` needs Docker from the
+sandboxed shell.
+
+**Binaries.** Daemon `128a959c23445894e4088739d99135e03949d367145931803147c685bd22ceab`
+and addon `74d084254931165fb440c6a7bf9cea05ecc1df0e17545622fd11fc6eec1da70f`,
+both from `04d07a293` (13.9 s warm), in `core/target/issue352/`.
+
+**Old vs new.**
+
+One sample per arm, run back to back in the lead's quiet window (opened
+06:36:31Z, builder quiet). Script `core/target/f009/fs-bench.mjs`; receipts
+`core/target/f009/fs-bench-{old,new}.json` (every sample) and
+`fs-bench-load.txt`.
+
+- **Setup:** each arm gets a fresh Store volume and Init, and one Sandbox to
+  install the Store. Store calls run in-process, so the addon is what
+  differs. On the traced client:
+  - one seeding `fs.write`;
+  - 30 sequential `fs.write` calls, each creating a new small file;
+  - then 30 `fs.write` calls editing one file.
+- **Arms:**
+  - old: addon `604df2b2` / daemon `57141b57`, 06:37:23–06:37:26Z, 1-min
+    load 6.28 → 6.65;
+  - new: addon `74d08425` / daemon `128a959c`, 06:37:26–06:37:28Z, 1-min
+    load 6.65 → 6.65.
+
+| `fs.write`, ms | Old | New | Change (p50) |
+| --- | --- | --- | --- |
+| seeding call | 12.44 | 10.81 | -1.63 |
+| create, p50 / p90 (n 30) | 8.04 / 8.23 | 6.79 / 7.22 | -1.25 |
+| edit, p50 / p90 (n 30) | 8.6 / 10.4 | 7.07 / 8 | -1.53 |
+
+Each uncontended SDK file call saves about 1.3–1.5 ms at p50 (−16% create,
+−18% edit), and the edit p90 falls from 10.4 to 8.0 ms. The serial pool
+removes a writer transaction from every creating call, and that matters most
+under contention, which this sequential case does not show. Storage:
+unchanged (no format or content change).
+
+#### Merge naming counters (lead request, with fix 4)
+
+- **Trace nodes.** `merge.paths` now has children `merge.changes`,
+  `merge.named` and `merge.locate`; `merge.locate` appears only when naming
+  fell back to the tree walk.
+- **Counts.** `MergeOutcome.naming` (`NamingWork`) counts the inodes asked
+  for, the distinct inodes climbed, the binding reads and the object read
+  demands. `Store::note_merge` sums them into `SaveCounters.merge`, and a
+  traced call's `delta.merge` reports them.
+- **Replay.** A counter build replayed all 35 recorded `branch.merge`s on a
+  `p2-main-f` range-14 fork. 0 fell back, and all 35 match their recorded
+  root.
+- **Cost per inode.** `merge.named` costs 0.13–0.47 ms per inode at every
+  size. Each climbed inode is exactly 1 binding read and 5 object read
+  demands; ancestors add 0.0–0.7 climbed per inode. So the 100–140 ms lane
+  merges are their changed-inode count (292–540), not a fallback or a
+  per-inode growth. Whole-call statements cannot be split by phase; the
+  table gives them per call. Receipts are in `core/target/f009/`:
+  `ctr2-replay.trace.jsonl`, `replay-ctr2.json` and `ctr-table.md`.
+
+| # | recorded step | inodes | climbed | bindings | reads | named ms | ms per inode | (bindings+reads) per inode | call statements | fell back |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 9 | probe:merge#2401 | 2 | 2 | 2 | 10 | 0.5 | 0.234 | 6.0 | 232 | 0 |
+| 21 | (earlier range) | 540 | 742 | 742 | 3710 | 138.7 | 0.257 | 8.2 | 11369 | 0 |
+| 31 | r013.merge r013-2-packages-subagent#1710 | 116 | 156 | 156 | 780 | 28.2 | 0.243 | 8.1 | 7889 | 0 |
+| 32 | r013.merge r013-3-docs-rfc#1711 | 254 | 366 | 366 | 1830 | 80.6 | 0.317 | 8.6 | 10623 | 0 |
+| 33 | r014.merge r014-1-examples-acp-agent#2268 | 108 | 192 | 192 | 960 | 39.2 | 0.363 | 10.7 | 8994 | 0 |
+| 34 | r014.merge r014-3-docs-rfc#2269 | 292 | 498 | 498 | 2490 | 99.8 | 0.342 | 10.2 | 11053 | 0 |
+| 35 | r014.merge r014-4-packages-core#2270 | 426 | 712 | 712 | 3560 | 133.8 | 0.314 | 10.0 | 12843 | 0 |
 
 ### Not proposed
 
