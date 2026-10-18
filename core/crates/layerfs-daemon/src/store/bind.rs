@@ -23,39 +23,45 @@ impl Store {
     ) -> Result<BindSuccess, BindRefusal> {
         let mut phase = BindPhase::Snapshot;
         let mut snapshot = None;
-        self.mount_reader(request.workspace)
-            .map_err(|error| BindRefusal {
+        crate::telemetry::timed("bind.reader", |_| self.mount_reader(request.workspace)).map_err(
+            |error| BindRefusal {
                 phase,
                 request: request.clone(),
                 snapshot: None,
                 error: BindError::Read(error),
-            })?;
+            },
+        )?;
         let result = (|| {
-            let captured = self
-                .reader(Some(request.workspace))
-                .map_err(|error| BindError::Read(Arc::new(super::PortError::ReadAdmission(error))))?
-                .snapshot(request.branch)
-                .map_err(BindError::Read)?
-                .ok_or(BindError::MissingBranch(request.branch))?;
+            let captured = crate::telemetry::timed("bind.snapshot", |_| {
+                self.reader(Some(request.workspace))
+                    .map_err(|error| {
+                        BindError::Read(Arc::new(super::PortError::ReadAdmission(error)))
+                    })?
+                    .snapshot(request.branch)
+                    .map_err(BindError::Read)?
+                    .ok_or(BindError::MissingBranch(request.branch))
+            })?;
             snapshot = Some(captured.clone());
             phase = BindPhase::Root;
             let ports = self.ports_for(captured.scope, request.workspace);
             let client = ports.client();
-            let base = checked_base(client, &captured).map_err(|error| BindError::Content {
-                error,
-                provider: ports
-                    .failure()
-                    .unwrap_or_else(|error| Some(Arc::new(error))),
-            })?;
+            let base = crate::telemetry::timed("bind.root", |_| checked_base(client, &captured))
+                .map_err(|error| BindError::Content {
+                    error,
+                    provider: ports
+                        .failure()
+                        .unwrap_or_else(|error| Some(Arc::new(error))),
+                })?;
             phase = BindPhase::Open;
-            let route = owner
-                .open(
+            let (route, owner) = crate::telemetry::timed("bind.overlay", |_| {
+                let route = owner.open(
                     None,
                     request.workspace.to_bytes(),
                     captured.effective_root.to_bytes(),
-                )
-                .map_err(BindError::Owner)?;
-            let owner = owner.workspace_client(route).map_err(BindError::Owner)?;
+                )?;
+                Ok((route, owner.workspace_client(route)?))
+            })
+            .map_err(BindError::Owner)?;
             Ok(BindSuccess {
                 workspace: BoundWorkspace {
                     store: self.clone(),

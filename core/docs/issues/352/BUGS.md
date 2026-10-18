@@ -199,6 +199,11 @@
   then lane narrowing, reads off the writer queue, and fixed per-call costs.
   Kind 1. The thin-baseline gate question goes to F-024 and does not close
   this. [fixes/007-a2-f025-merge-in-lane.md](fixes/007-a2-f025-merge-in-lane.md).
+  **Fix 0 done** (daemon `bd6fbeee`, diagnostic): the untraced gap is the
+  Store writer's admission queue. On a range-11 fork with six concurrent
+  writers, 161 of a write's ~208 ms p50 is `wait.writer`: 100 ms in
+  construct, 29 ms in the private Workspace's serial reservation (the gap),
+  31 ms in producer, begin and lane.
 - **F-026 · a listing re-read the inode table per entry (product, 011.a1,
   2026-10-18).** `fs.list` looked each entry up separately from the inode
   table's root, so the cost per entry grew with the table (`list_largest`

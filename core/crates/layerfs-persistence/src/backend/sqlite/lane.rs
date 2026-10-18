@@ -22,7 +22,9 @@ impl Session {
             return Err(BackendError::ReadOnly);
         }
         let deadline = Instant::now() + WINDOW;
-        let turn = self.admission.enter(deadline)?;
+        let turn = self
+            .admission
+            .enter(deadline, layerfs_telemetry::timer::waits::Wait::Writer)?;
         if turn.nested {
             return Err(BackendError::Integrity);
         }

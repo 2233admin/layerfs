@@ -6,10 +6,10 @@ use super::{
     mutation::Mutation,
 };
 use crate::control::Service;
-use layerfs_bridge::control::{Reply, SdkValue, UnmountControl};
+use layerfs_bridge::control::{Reply, SdkRefusal, SdkValue, UnmountControl, WorkspaceToken};
 use layerfs_history::{CommitOutcome, CommitVia, WorkspaceId};
 
-pub(crate) fn path(value: &str) -> Result<String, layerfs_bridge::control::SdkRefusal> {
+pub(crate) fn path(value: &str) -> Result<String, SdkRefusal> {
     if value.len() > 4096
         || value.as_bytes().contains(&0)
         || !(value == "/"
@@ -51,16 +51,18 @@ fn commit(
     bodies: &mut super::Bodies<'_>,
 ) -> Answer {
     let store = &service.store;
-    let stack = args::project(store, args)?;
-    let branch_name = text(args, "branch")?;
-    if branch_name == "main" {
-        return Err(args::refuse(
-            "ReadOnly",
-            "main changes only through publish",
-            SdkValue::Null,
-        ));
-    }
-    let branch = args::branch(store, &stack, branch_name)?;
+    let (branch_name, branch) = crate::telemetry::timed("files.resolve", |_| {
+        let stack = args::project(store, args)?;
+        let branch_name = text(args, "branch")?;
+        if branch_name == "main" {
+            return Err(args::refuse(
+                "ReadOnly",
+                "main changes only through publish",
+                SdkValue::Null,
+            ));
+        }
+        Ok((branch_name, args::branch(store, &stack, branch_name)?))
+    })?;
     let id = WorkspaceId::from_authority(
         layerfs_bridge::duplex::generate_keypair()
             .map_err(args::failed)?
@@ -76,63 +78,12 @@ fn commit(
     let workspace = service
         .files_workspace(token)
         .map_err(|e| args::failed(format!("{e:?}")))?;
-    let mut mutation = Mutation::new(&workspace)?;
-    let mut result = Ok(());
-    for (index, change) in changes.iter().enumerate() {
-        result = (|| {
-            let kind = text(change, "op")?;
-            let p = |key| path(text(change, key)?);
-            match kind {
-                "write" => {
-                    let bytes = match (
-                        change.get("content"),
-                        change.get("bytes"),
-                        change.get("streamed"),
-                    ) {
-                        (Some(SdkValue::Text(s)), None, None) => s.as_bytes(),
-                        (None, Some(SdkValue::Bytes(b)), None) => b.as_slice(),
-                        (None, None, Some(SdkValue::Int(n))) if *n > 0 => {
-                            return mutation.write_streamed(&p("path")?, *n as u64, bodies)
-                        }
-                        _ => return Err(args::invalid("write content must be text or bytes")),
-                    };
-                    mutation.write(&p("path")?, bytes)
-                }
-                "edit" => mutation.edit(
-                    &p("path")?,
-                    text(change, "oldText")?,
-                    text(change, "newText")?,
-                ),
-                "mkdir" => mutation.mkdir(&p("path")?),
-                "rm" => mutation.remove(&p("path")?),
-                "cp" => mutation.copy(&p("from")?, &p("to")?, index as u64),
-                "mv" => mutation.rename(&p("from")?, &p("to")?),
-                _ => Err(args::invalid(format!("unknown change op {kind}"))),
-            }
-        })()
-        .map_err(|mut e| {
-            if let SdkValue::Map(fields) = &mut e.detail {
-                fields.push(("index".into(), SdkValue::Int(index as i64)));
-            } else {
-                e.detail = SdkValue::map([("index", SdkValue::Int(index as i64))]);
-            }
-            e
-        });
-        if result.is_err() {
-            break;
-        }
-    }
+    let result = crate::telemetry::timed("files.change", |_| change(&workspace, changes, bodies))?;
     if result.as_ref().is_err_and(|e| e.code == "Unknown") {
         return result.map(|()| SdkValue::Null);
     }
-    mutation.finish()?;
     if let Err(error) = result {
-        service
-            .unmount(UnmountControl {
-                token,
-                discard: true,
-            })
-            .map_err(|e| args::failed(format!("{e:?}")))?;
+        close(service, token)?;
         return Err(error);
     }
     let outcome = workspace.commit_captured_via(
@@ -166,23 +117,13 @@ fn commit(
                     _ => "Failed",
                 };
                 let refusal = args::refuse(code, failure.to_string(), SdkValue::Null);
-                service
-                    .unmount(UnmountControl {
-                        token,
-                        discard: true,
-                    })
-                    .map_err(|e| args::failed(format!("{e:?}")))?;
+                close(service, token)?;
                 return Err(refusal);
             }
             return Err(service.retain_files_failure(token, failure));
         }
     };
-    service
-        .unmount(UnmountControl {
-            token,
-            discard: true,
-        })
-        .map_err(|e| args::failed(format!("{e:?}")))?;
+    close(service, token)?;
     // The Branch moved since the private binding and changed a path this call
     // changed too: nothing was published, as for a Workspace Commit.
     let Some(history) = outcome.history else {
@@ -229,5 +170,78 @@ fn commit(
             ),
             ("root", SdkValue::text(args::hex(root.as_bytes()))),
         ]),
+    })
+}
+
+/// Applies `changes` to the private Workspace: the first refused change's
+/// refusal, after the changes before it are finished in the overlay.
+fn change(
+    workspace: &crate::store::BoundWorkspace,
+    changes: &[SdkValue],
+    bodies: &mut super::Bodies<'_>,
+) -> Result<Result<(), SdkRefusal>, SdkRefusal> {
+    let mut mutation = Mutation::new(workspace)?;
+    let mut result = Ok(());
+    for (index, change) in changes.iter().enumerate() {
+        result = (|| {
+            let kind = text(change, "op")?;
+            let p = |key| path(text(change, key)?);
+            match kind {
+                "write" => {
+                    let bytes = match (
+                        change.get("content"),
+                        change.get("bytes"),
+                        change.get("streamed"),
+                    ) {
+                        (Some(SdkValue::Text(s)), None, None) => s.as_bytes(),
+                        (None, Some(SdkValue::Bytes(b)), None) => b.as_slice(),
+                        (None, None, Some(SdkValue::Int(n))) if *n > 0 => {
+                            return mutation.write_streamed(&p("path")?, *n as u64, bodies)
+                        }
+                        _ => return Err(args::invalid("write content must be text or bytes")),
+                    };
+                    mutation.write(&p("path")?, bytes)
+                }
+                "edit" => mutation.edit(
+                    &p("path")?,
+                    text(change, "oldText")?,
+                    text(change, "newText")?,
+                ),
+                "mkdir" => mutation.mkdir(&p("path")?),
+                "rm" => mutation.remove(&p("path")?),
+                "cp" => mutation.copy(&p("from")?, &p("to")?, index as u64),
+                "mv" => mutation.rename(&p("from")?, &p("to")?),
+                _ => Err(args::invalid(format!("unknown change op {kind}"))),
+            }
+        })()
+        .map_err(|mut e| {
+            if let SdkValue::Map(fields) = &mut e.detail {
+                fields.push(("index".into(), SdkValue::Int(index as i64)));
+            } else {
+                e.detail = SdkValue::map([("index", SdkValue::Int(index as i64))]);
+            }
+            e
+        });
+        if result.is_err() {
+            break;
+        }
+    }
+    if result.as_ref().is_err_and(|e| e.code == "Unknown") {
+        return Ok(result);
+    }
+    mutation.finish()?;
+    Ok(result)
+}
+
+/// Closes the call's private Workspace and discards its overlay.
+fn close(service: &Service, token: WorkspaceToken) -> Result<(), SdkRefusal> {
+    crate::telemetry::timed("files.close", |_| {
+        service
+            .unmount(UnmountControl {
+                token,
+                discard: true,
+            })
+            .map(drop)
+            .map_err(|e| args::failed(format!("{e:?}")))
     })
 }

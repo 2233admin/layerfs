@@ -1,5 +1,6 @@
 //! Bounded FIFO connection ownership before a single SQL attempt.
 use crate::backend::records::BackendError;
+use layerfs_telemetry::timer::waits::{self, Wait};
 use std::{
     collections::VecDeque,
     sync::{Condvar, Mutex},
@@ -22,6 +23,14 @@ struct Queue {
     holder: Option<ThreadId>,
 }
 
+/// Adds a queued entry's wait to the thread's total on every exit.
+struct Waited(Instant, Wait);
+impl Drop for Waited {
+    fn drop(&mut self) {
+        waits::add(self.1, self.0.elapsed());
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct Admission {
     queue: Mutex<Queue>,
@@ -35,7 +44,9 @@ pub(crate) struct Turn<'a> {
 }
 
 impl Admission {
-    pub(crate) fn enter(&self, deadline: Instant) -> Result<Turn<'_>, BackendError> {
+    /// Waits for this connection's turn, bounded by `deadline`. Time spent
+    /// queued is added to the calling thread's wait total for `kind`.
+    pub(crate) fn enter(&self, deadline: Instant, kind: Wait) -> Result<Turn<'_>, BackendError> {
         let mut queue = self.queue.lock().map_err(|_| BackendError::Unknown)?;
         if queue.holder == Some(std::thread::current().id()) {
             return Ok(Turn {
@@ -59,6 +70,8 @@ impl Admission {
         let ticket = queue.next;
         queue.next = queue.next.checked_add(1).ok_or(BackendError::Capacity)?;
         queue.pending.push_back(ticket);
+        let queued = Instant::now();
+        let _waited = Waited(queued, kind);
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {

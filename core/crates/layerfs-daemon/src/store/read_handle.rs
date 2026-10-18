@@ -75,8 +75,13 @@ impl ReadSession {
     ) -> Result<T, Arc<PortError>> {
         let before = Instant::now();
         let state = self.lock()?;
+        let waited = before.elapsed();
+        layerfs_telemetry::timer::waits::add(
+            layerfs_telemetry::timer::waits::Wait::ReadSession,
+            waited,
+        );
         self.wait_ns.fetch_add(
-            before.elapsed().as_nanos().min(u64::MAX as u128) as u64,
+            waited.as_nanos().min(u64::MAX as u128) as u64,
             Ordering::Relaxed,
         );
         if let Some(error) = self.failure.get() {

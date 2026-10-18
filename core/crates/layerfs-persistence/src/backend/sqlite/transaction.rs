@@ -120,6 +120,15 @@ impl Transaction<'_> {
     }
 }
 impl Session {
+    /// The wait kind of this connection's admission queue.
+    fn wait_kind(&self) -> layerfs_telemetry::timer::waits::Wait {
+        if self.writable {
+            layerfs_telemetry::timer::waits::Wait::Writer
+        } else {
+            layerfs_telemetry::timer::waits::Wait::Reader
+        }
+    }
+
     /// One read-only statement in its own implicit SQLite snapshot. Its SQL
     /// must carry every authority predicate needed for the returned payload.
     /// No facade for arbitrary unframed multi-statement work is exposed.
@@ -134,7 +143,7 @@ impl Session {
         let start = Instant::now();
         let _turn = self
             .admission
-            .enter(start + super::admission::WINDOW)
+            .enter(start + super::admission::WINDOW, self.wait_kind())
             .map_err(E::from)?;
         let mut state = self
             .state
@@ -183,7 +192,10 @@ impl Session {
         }
         let start = Instant::now();
         let deadline = start + super::admission::WINDOW;
-        let turn = self.admission.enter(deadline).map_err(E::from)?;
+        let turn = self
+            .admission
+            .enter(deadline, self.wait_kind())
+            .map_err(E::from)?;
         let mut s = self
             .state
             .lock()
