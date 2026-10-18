@@ -145,6 +145,34 @@ merges compare roots). It is left as is, and it runs outside the lane.
 a 1,000-file Workspace Commit and a one-file Commit, each with one file
 landing before its lane, hold the lane for about the same statements.
 
+## (e) The written-path list says when it is incomplete (F-041)
+
+A conflicted Commit lists the paths the merge changed in the Workspace,
+at most 4,096 (`WRITTEN_PATHS`, from `root_changes`). `root_changes` reported
+when it stopped early, but `merge_stage` dropped that flag and the daemon
+replied `truncated: false` for every conflict, so a list cut at 4,096 claimed
+to be complete.
+
+- `MergeReport::written_truncated` carries `root_changes`' flag
+  (`store/commit_merge.rs`); the in-lane step's report replaces the first
+  stage's `written` and its flag together.
+- The daemon's conflict reply sets `truncated` from it
+  (`layerfs-daemon/src/control/operations.rs`). The bridge already ORs its own
+  frame cuts into the flag (`put_report`), and the API passes it through as
+  `truncated`, so every adapter keeps it.
+- `root_changes` flags a list that reaches exactly the bound as truncated too:
+  conservative, never a false claim of completeness.
+- The other lists in the reply are complete: conflicts and `.lww` decisions
+  are whole, the pending conflicted paths and the marker list are whole.
+
+The list stays bounded (a paged, uncapped list was the alternative); the flag
+is the settled contract.
+
+**Tests.** `layerfs-daemon/tests/merge_report.rs`: a conflict with 11
+changed paths lists all 11 with `truncated` false; one with 4,197 lists at
+most 4,096 with `truncated` true. The second fails before this change
+(checked by reverting the three product files).
+
 ## Batched record jobs (before (d))
 
 The backed build asked its records one key or one guarded batch at a time,

@@ -226,15 +226,12 @@ impl BoundWorkspace {
             }
             (Err(error), None) => return Err(content(error)),
         };
-        let written = if merged.clean() {
-            Vec::new()
+        let (written, written_truncated) = if merged.clean() {
+            (Vec::new(), false)
         } else {
-            root_changes(save, shown, merged.root, WRITTEN_PATHS)
-                .map_err(content)?
-                .entries
-                .into_iter()
-                .map(|change| change.path)
-                .collect()
+            let changes = root_changes(save, shown, merged.root, WRITTEN_PATHS).map_err(content)?;
+            let paths = changes.entries.into_iter().map(|change| change.path);
+            (paths.collect(), changes.truncated)
         };
         Ok((
             merged.root,
@@ -244,6 +241,7 @@ impl BoundWorkspace {
                 conflicts: merged.conflicts,
                 lww: merged.lww,
                 written,
+                written_truncated,
                 lane_paths: lane.map(|_| merged.decided),
             },
         ))

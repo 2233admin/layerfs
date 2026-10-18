@@ -104,8 +104,12 @@ pub struct MergeReport {
     pub conflicts: Vec<Conflict>,
     /// `.lww` decisions.
     pub lww: Vec<LwwDecision>,
-    /// Paths a conflicted merge changed in the Workspace view, bounded.
+    /// Paths a conflicted merge changed in the Workspace view, at most
+    /// 4,096 in path order.
     pub written: Vec<String>,
+    /// True when `written` may omit changed paths: the comparison stopped at
+    /// its bound (#355 F-041). False only for a complete list.
+    pub written_truncated: bool,
     /// Paths the in-lane step decided when the head moved again after the
     /// merge; `None` when it did not (#355).
     pub lane_paths: Option<usize>,
