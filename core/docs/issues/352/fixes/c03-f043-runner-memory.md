@@ -2,8 +2,7 @@
 
 > **Status:** fixed (reworked to the liaison ruling; decode reuse and Store-close release pending) on branch `claude/issue352-correctness-644bbc` (correctness
 > lane, 2026-10-18). Not merged. Kind 1 (no format change). The proof uses an
-> in-process probe (below). No replay range was played on the fixed addon: see
-> "Not done".
+> in-process probe and two real fast dev ranges (c43, below).
 
 ## Finding
 
@@ -151,14 +150,51 @@ Checks (reworked fix): Linux `cargo test -p layerfs-storage` 64 passed, 0 failed
 `-D warnings` clean (host). rustfmt clean on changed files. Boundary guard
 unchanged (16 pre-existing violations, none in storage).
 
+## Real ranges (c43, liaison grant 2026-10-18)
+
+Two fast dev ranges, r15 and r16, were played on forks of p2-main-f r14:
+- base addon `413ae60d`, from `bb19d9d7d`, before the fix;
+- reworked fix `8a14c9b5`;
+- the same daemon (`b3916aa7`, built from `926543b10`), SDK JS and snapshot.
+
+One sample per range per arm.
+
+| Range / command | Base peak → fix peak | End anonymous, base → fix | File-backed |
+| --- | --- | --- | --- |
+| r15, first half (`--until lanes`) | 1,444 → **445 MB** | 1,399 → 384 MB | 44 MB both |
+| r15, second half (`--resume`) | 1,287 → **274 MB** | 1,237 → 224 MB | 48–49 MB |
+| r16 (one command) | 1,398 → **462 MB** | 1,347 → 411 MB | 49 MB both |
+
+Both arms passed every range's diff_commits verify.
+
+The fixed arm stays at 274–462 MB, not the 233 MB of the withdrawn
+encode-plus-decode version. The difference is the 1 MiB decode arenas, which
+are held until a design is approved (§4).
+
+Host load was 6.3–8.1, with 23 containers running; the outside sampler ran in
+both arms.
+
+Resources:
+- Runs `c43-*`, with resources `layerfs-issue352-c43-*`.
+- Runner `layerfs-issue352-c43-runner`, from a scratch wrapper around the
+  harness's own `runnerArgs` with only the container name changed. This is a
+  workaround until `LFS_RESOURCE_PREFIX` (issue360-storage `72782bfaa`) lands.
+  The harness is unchanged.
+- Attempt 1, using p3p's daemon `57141b57`, failed at setup: a protocol EOF
+  between that older daemon and this branch's SDK. Recorded, not a sample.
+- All c43 containers and volumes were removed afterwards.
+
+Receipts: `~/lfs-history/runs/issue352c-f043/c43/` (`NOTES.md`, `*.smaps`,
+`*.load`, the wrapper and sampler, `summarize.py`), the run folders
+`~/lfs-history/runs/c43-*`, and the binaries in
+`~/lfs-history/runs/issue352c-f043/bin/`.
+
 ## Not done
 
-- **No replay range was played on the fixed addon.** The harness names every
-  volume and container `layerfs-issue352-<run>` and uses the shared runner
-  `layerfs-issue352-runner`, outside this lane's `layerfs-issue352c-` prefix.
-  "Flat across many consecutive ranges" is shown by the 3,600-write
-  in-process probe, not by runner ranges. A dev range on the fixed addon is
-  the open confirmation.
+- **Decode-region reuse**: about 80 MB more. The design was sent to the
+  liaison and is awaiting approval.
+- **Releasing the idle list when the Store closes**: the question was sent to
+  the liaison.
 - The daemon runs the same Saves per Commit and should benefit the same way.
   Not measured.
 - No heaptrack profile. The attribution in §3 rests on the allocator

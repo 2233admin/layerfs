@@ -481,5 +481,16 @@
   not grow per range. **Cause:** each Save allocates a zero-filled 16 MiB zstd
   encode arena, which glibc keeps in the arena of each pool thread (dynamic mmap
   threshold). **Fixed** (branch `claude/issue352-correctness-644bbc`, unmerged):
-  arenas are reused: 281 MB, flat over 3,600 writes. Record:
+  arenas are reused: 281 MB, flat over 3,600 writes. Diagnostics, not the
+  fix: `MALLOC_ARENA_MAX=1` cuts per-write growth from 21 MB to 0.4 MB, and a
+  fixed `MALLOC_MMAP_THRESHOLD_` cuts it to 2 MB.
+
+  **Reworked to the liaison ruling** (`926543b10`): plain encode regions,
+  bounded to one per CPU, no new `unsafe`, decode reuse held. Real fast dev
+  ranges (c43, base → fix, runner peak):
+  - r15: 1,444 → 445 MB and 1,287 → 274 MB;
+  - r16: 1,398 → 462 MB;
+  - file-backed 44–49 MB throughout.
+
+  Record:
   [fixes/c03-f043-runner-memory.md](fixes/c03-f043-runner-memory.md).
