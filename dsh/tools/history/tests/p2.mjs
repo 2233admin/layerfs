@@ -18,7 +18,7 @@ import { checkFinding } from "../findings.mjs";
 import { checkFormat, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
 import { parseReport } from "../frozen.mjs";
 import { blockTables, findingTableProblems } from "../reportcheck.mjs";
-import { baselineFor, leadNote, loadBaselines, probeSetupCommits, regate, writeBaseline } from "../report.mjs";
+import { baselineFor, leadNote, loadBaselines, probeCommitsOf, probeSetupCommits, regate, writeBaseline } from "../report.mjs";
 import { atHead } from "../frozen.mjs";
 import { laneChanges, mergedTree } from "../agents.mjs";
 import { measure, record } from "../lib.mjs";
@@ -29,7 +29,7 @@ import {
   attributeFuse, callOf, comparePaths, diskGuard, markContention, diskModel, changedDirs, outcomeOf, checkpointDiff, consolidationSteps, withDirs, decoyBytes, nextPhase, p2Plan, route, sandboxCommands, STEP_KINDS, Tree,
 } from "../steps.mjs";
 import {
-  buildOverview, callTable, categoryOf, withoutProbeSetupCommits, categoryRows, CATEGORIES, checkOverview, derivedOverview, renderOverview, renderStats, stageSplit, tenths, timeLine,
+  buildOverview, callTable, categoryOf, withoutProbeSampleCommits, withoutProbeSetupCommits, categoryRows, CATEGORIES, checkOverview, derivedOverview, renderOverview, renderStats, stageSplit, tenths, timeLine,
 } from "../stats.mjs";
 
 const tests = [];
@@ -508,7 +508,15 @@ test("F-015: the probe setup's Commits are not range work; a recorded Overview i
   const setup = [{ seq: 900, method: "fs.apply", label: "probe-setup:diff_commits", agent: "lead", kind: "Committed" }, { seq: 901, method: "fs.apply", label: "probe-setup:diff_commits", agent: "lead", kind: "Committed" },
     { seq: 902, method: "branch.merge", label: "probe:merge", agent: "lead", kind: "Merged", newCommit: true }];
   const o = buildOverview({ ...base, log: [...base.log, ...setup] });
-  assert.deepEqual(o, buildOverview(base), "probe and probe-setup records add no Commit");
+  const { probeCommits, ...rest } = o;
+  const { probeCommits: none, ...plain } = buildOverview(base);
+  assert.deepEqual(rest, plain, "probe and probe-setup records add no Commit");
+  assert.deepEqual([probeCommits, none], [3, 0], "they are counted on their own line");
+  // the later probe samples (probe-s<i>:, a88169557) are probe records too
+  const samples = [{ seq: 903, method: "branch.merge", label: "probe-s1:merge", agent: "lead", kind: "Merged", newCommit: true }, { seq: 904, method: "sandbox.commit", label: "probe-s2:oneshot_commit", agent: "lead", kind: "Committed" }];
+  const withSamples = buildOverview({ ...base, log: [...base.log, ...setup, ...samples] });
+  assert.deepEqual([withSamples.commits, withSamples.probeCommits], [o.commits, 5]);
+  assert.match(renderOverview({ range: 14, verdict: "watch", m: { overview: withSamples, calls: {}, work: {} } }), /Scale-probe Commits \(setup and samples\): \*\*5\*\*, not range work and not counted above\./);
   // a recorded Overview that counted them (before the fix)
   const bad = { ...o, agents: o.agents.map((a) => (a.agent === "lead" ? { ...a, commits: a.commits + 2 } : a)), branches: o.branches.map((b) => (b.name === "main" ? { ...b, commits: b.commits + 2 } : b)), commits: o.commits + 2, running: o.running + 2 };
   const trace = [{ phase: "end", step: "probe-setup:diff_commits#1", method: "fs.apply", kind: "Committed" }, { phase: "start", step: "probe-setup:diff_commits#1", method: "fs.apply" },
@@ -519,6 +527,14 @@ test("F-015: the probe setup's Commits are not range work; a recorded Overview i
   assert.deepEqual([fixed.commits, fixed.running, fixed.agents.at(-1).commits, fixed.branches.at(-1).commits], [o.commits, o.running, o.agents.at(-1).commits, o.branches.at(-1).commits]);
   assert.equal(fixed.corrections[0].finding, "F-015");
   assert.equal(withoutProbeSetupCommits(fixed, 2), fixed, "applied once");
+  // an Overview recorded with the samples counted (014.a2): corrected from its trace, the probe Commits kept on their own line
+  const sampleTrace = [{ phase: "end", step: "probe-s1:merge#5", method: "branch.merge", kind: "Merged" }, { phase: "end", step: "probe-s1:oneshot_commit#6", method: "sandbox.commit", kind: "Committed" },
+    { phase: "end", step: "probe:merge#7", method: "branch.merge", kind: "Merged" }, { phase: "end", step: "probe-s2:fork#8", method: "branch.fork", kind: "Forked" }].map((x) => JSON.stringify(x)).join("\n");
+  assert.deepEqual([probeCommitsOf(sampleTrace, { samples: true }), probeCommitsOf(sampleTrace)], [2, 3]);
+  const counted = { ...o, agents: o.agents.map((a) => (a.agent === "lead" ? { ...a, commits: a.commits + 2 } : a)), branches: o.branches.map((b) => (b.name === "main" ? { ...b, commits: b.commits + 2 } : b)), commits: o.commits + 2, running: o.running + 2 };
+  const back = withoutProbeSampleCommits(counted, 2, 3);
+  assert.deepEqual([back.commits, back.agents.at(-1).commits, back.probeCommits, back.corrections.at(-1).finding], [o.commits, o.agents.at(-1).commits, 3, "probe-samples"]);
+  assert.equal(withoutProbeSampleCommits(back, 2, 3), back, "applied once");
 });
 
 test("F-016: chain-reading probes are judged as a bound over a delta-cap period, not a depth exponent", () => {

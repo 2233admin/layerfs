@@ -427,6 +427,13 @@ export function renderIndex(rows) {
  * @returns {{ verdict: string, file: string, comment: string }}
  */
 /** The Commits the probe setup made in one attempt's trace (F-015): Committed fs/sandbox calls labelled probe-setup:. */
+/** The probe Commits of a stored trace: `samples` only the later samples' (`probe-s<i>:`), else every probe label's. A Merged merge made one. */
+export function probeCommitsOf(trace, { samples = false } = {}) {
+  const label = samples ? /^probe-s\d+:/ : /^probe(-setup|-s\d+)?:/;
+  return trace.split("\n").filter(Boolean).map((l) => JSON.parse(l))
+    .filter((d) => d.phase === "end" && label.test(String(d.step ?? "")) && ((d.kind === "Committed" && /^(fs|sandbox)\./.test(d.method)) || (d.method === "branch.merge" && d.kind === "Merged"))).length;
+}
+
 export function probeSetupCommits(trace) {
   return trace.split("\n").filter(Boolean).map((l) => JSON.parse(l))
     .filter((d) => d.phase === "end" && String(d.step ?? "").startsWith("probe-setup:") && d.kind === "Committed" && /^(fs|sandbox)\./.test(d.method)).length;
@@ -610,15 +617,21 @@ async function main() {
   }
   if (args[0] === "fix-overview") {
     // F-015: removes the probe setup's Commits from an Overview recorded before the fix (counted from the attempt's trace)
-    const { withoutProbeSetupCommits } = await import("./stats.mjs");
+    const { withoutProbeSampleCommits, withoutProbeSetupCommits } = await import("./stats.mjs");
     const run = opt("--run"), range = Number(opt("--range")), attempt = Number(opt("--attempt") ?? 1);
-    if (!run || !Number.isInteger(range)) { console.error("usage: report.mjs fix-overview --run <id> --range N [--attempt K]"); process.exit(2); }
+    if (!run || !Number.isInteger(range)) { console.error("usage: report.mjs fix-overview --run <id> --range N [--attempt K] [--samples]"); process.exit(2); }
     const dir = join(process.env.HOME, "lfs-history", "runs", run), manifest = JSON.parse(readFileSync(join(dir, "run.json"), "utf8"));
     const file = join(manifest.outputs.metrics, `range-${pad(range)}.a${attempt}.json`), m = JSON.parse(readFileSync(file, "utf8"));
-    const n = probeSetupCommits(readFileSync(join(dir, "trace", `range-${pad(range)}.a${attempt}.jsonl`), "utf8"));
-    const o = withoutProbeSetupCommits(m.overview, n);
+    const trace = readFileSync(join(dir, "trace", `range-${pad(range)}.a${attempt}.jsonl`), "utf8");
+    // --samples: only the later probe samples' Commits (a88169557), for an attempt whose Overview already left the
+    // setup's out (recorded after F-015); without it, the F-015 correction alone, as before
+    const samplesOnly = args.includes("--samples");
+    const n = samplesOnly ? 0 : probeSetupCommits(trace);
+    const s = samplesOnly ? probeCommitsOf(trace, { samples: true }) : 0;
+    let o = withoutProbeSetupCommits(m.overview, n);
+    if (s) o = withoutProbeSampleCommits(o, s, probeCommitsOf(trace));
     if (o !== m.overview) writeFileSync(file, JSON.stringify({ ...m, overview: o }, null, 1));
-    console.log(JSON.stringify({ file, probeSetupCommits: n, commits: o.commits, changed: o !== m.overview }));
+    console.log(JSON.stringify({ file, probeSetupCommits: n, probeSampleCommits: s, commits: o.commits, changed: o !== m.overview }));
     return;
   }
   if (args[0] === "fix-diff-dirs") {

@@ -117,8 +117,8 @@ export const timeLine = (wall) => {
   return `**Time ${sec(wall.totalMs)} s** (tooling): ${Object.keys(st).map((k) => `${k} ${(t[k] / 10).toFixed(1)}`).join(" · ")}`;
 };
 
-/** A probe's call record: the timed call (`probe:`) or its untimed setup (`probe-setup:`, F-014). Never the range's work. */
-export const isProbeLabel = (label) => /^probe(-setup)?:/.test(String(label ?? ""));
+/** A probe's call record: the timed call (`probe:`), a later sample (`probe-s<i>:`, 2026-10-18) or its untimed setup (`probe-setup:`, F-014). Never the range's work. */
+export const isProbeLabel = (label) => /^probe(-setup|-s\d+)?:/.test(String(label ?? ""));
 
 /** Whether a call record made a new Commit: a Committed fs/sandbox call, or a merge that was not a fast-forward. */
 export const madeCommit = (e) => (e.kind === "Committed" && /^(fs|sandbox)\./.test(e.method)) || !!e.newCommit;
@@ -128,6 +128,19 @@ export const madeCommit = (e) => (e.kind === "Committed" && /^(fs|sandbox)\./.te
  * Commits (`probe-setup:` labels, `n` of them, all the lead's) as range work.
  * Returns the Overview without them, marked; an already corrected one unchanged.
  */
+/**
+ * The same for the probe samples (a88169557, first recorded in 014.a2): the
+ * later samples' Commits (`probe-s<i>:`, `n`, the lead's) were counted as range
+ * work. Removes them and records `probeCommits`, every probe Commit of the
+ * range (`all`), so the Activity section still shows them on their own line.
+ */
+export function withoutProbeSampleCommits(o, n, all) {
+  if (o.corrections?.some((c) => c.finding === "probe-samples")) return o;
+  const lessLead = (x) => (x.agent === "lead" || x.name === "main" ? { ...x, commits: x.commits - n } : x);
+  return { ...o, agents: o.agents.map(lessLead), branches: o.branches.map(lessLead), commits: o.commits - n, running: o.running - n, probeCommits: all,
+    corrections: [...(o.corrections ?? []), { finding: "probe-samples", probeSampleCommits: n, note: "the later probe samples' Commits were counted as the lead's" }] };
+}
+
 export function withoutProbeSetupCommits(o, n) {
   if (!n || o.corrections?.some((c) => c.finding === "F-015")) return o;
   const lessLead = (x) => (x.agent === "lead" || x.name === "main" ? { ...x, commits: x.commits - n } : x);
@@ -172,7 +185,9 @@ export function buildOverview({ plan, log, played, leadSteps, laneOf, events = [
     return { kind, title, hit, planned: planned.length, where, resolved };
   });
   const steps = agents.reduce((n, a) => n + a.steps, 0), commits = agents.reduce((n, a) => n + a.commits, 0);
-  return { agents, branches, conflicts, unplanned: 0, steps, commits, running: (runningBefore ?? 0) + commits,
+  // the scale probes' own Commits (setup and samples): not range work, shown on their own line
+  const probeCommits = log.filter((e) => isProbeLabel(e.label) && madeCommit(e)).length;
+  return { agents, branches, conflicts, unplanned: 0, steps, commits, probeCommits, running: (runningBefore ?? 0) + commits,
     planned: { branches: plan.lanes.length + 1, agents: plan.agents.length } };
 }
 const ordinal = (n) => `${n}${n === 2 ? "nd" : n === 3 ? "rd" : "th"}`;
@@ -241,7 +256,8 @@ export function activityTables(m) {
     table(["Agent", "Branch", "Steps", "fs", "sandbox", "branch", "project", "Commits", "Conflicts"], [
       ...o.agents.map((a) => [a.agent, short(a.lane), int(a.steps), int(a.fs), int(a.sandbox), int(a.branch), int(a.project), int(a.commits), a.conflicts.length ? a.conflicts.join(", ") : "—"]),
       ["**Total**", "", `**${int(o.steps)}**`, ...["fs", "sandbox", "branch", "project"].map((k) => `**${int(o.agents.reduce((n, a) => n + (a[k] ?? 0), 0))}**`), `**${int(o.commits)}**`, `**${hit}**`],
-    ]), ""];
+    ]), "",
+    ...(o.probeCommits != null ? [`Scale-probe Commits (setup and samples): **${int(o.probeCommits)}**, not range work and not counted above.`, ""] : [])];
   return out.join("\n");
 }
 
