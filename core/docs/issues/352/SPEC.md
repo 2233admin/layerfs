@@ -563,6 +563,15 @@ for a ~5% storage gain. Report raw deltas for both.
 
 ## 5. Gates per range
 
+> **Reinstall gate unit (lead decision 2026-10-18).** Changed packages are
+> lockfile package entries whose resolution (name, version, integrity) or
+> workspace link target differs from the previous lockfile; a changed link is
+> one package. The gate is the install's new stored `node_modules` bytes ÷ the
+> raw bytes of those packages in the oracle's tree (a link counts its link
+> entry only): watch over 2×, optimize over 5×. An install with no changed
+> package is judged by its absolute new bytes: watch over 1 MiB, optimize over
+> 16 MiB (`gates.mjs` reinstallGate, `closure.mjs` changedPackages).
+
 > **Baseline classes (F-024, lead decision 2026-10-18).** Each baseline class
 > records n and its calls per baseline range (`perRange`). A class with fewer
 > than 5 calls in any baseline range (absent = 0) is never used for a ratio:

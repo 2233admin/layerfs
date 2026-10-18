@@ -7,7 +7,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { exponent, sameBinary } from "./gates.mjs";
+import { exponent, reinstallGate, sameBinary } from "./gates.mjs";
 import { change, REBUILD_KINDS } from "./findings.mjs";
 import { activityTables, categoryOf, checkOverview, checkTimeLine, timeLine } from "./stats.mjs";
 
@@ -160,7 +160,7 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
     ["Projection at range 202 / disk budget", "", `${bytes(b.diskProjected)} / ${b.diskBudget ? `${Math.round((b.diskProjected / b.diskBudget) * 100)}%` : "—"}`, ""],
     ["Snapshot", "", m.snapshot ? `r${pad(plan.range)}, ${bytes(m.snapshot.newBytes)} new blocks` : "none this range", ""],
   ]), "", "**What's inside**", "", table(["Object", "Total", "Added", "Avg size", "Reused (dedupe hits)", "As delta"], insideRows(m)), "",
-  `Delta: ${num((s.delta?.atCap ?? 0) * 100, 1)}% at depth cap · ${num((s.delta?.byBudget ?? 0) * 100, 0)}% of refused bases stopped by budget · \`node_modules\` reinstall: ${s.reinstallGrowth == null ? "none this range" : `${num(s.reinstallGrowth)}× changed packages (gate ≤ 2×)`}`,
+  `Delta: ${num((s.delta?.atCap ?? 0) * 100, 1)}% at depth cap · ${num((s.delta?.byBudget ?? 0) * 100, 0)}% of refused bases stopped by budget · \`node_modules\` reinstall: ${s.reinstall == null ? "none this range" : reinstallGate(s.reinstall).value}`,
   `**Added by source:** content ${bytes(s.newPacks)} · metadata ${bytes(s.newMetadata)}${v ? ` · tracked ${bytes(m.dsh?.changedBytes)} changed in git` : ""}`, "");
   // 4. Speed
   const k = m.key?.ops ?? {}, cell = (op) => (k[op] ? `${ms(k[op].p50)} / ${ms(k[op].p95)}` : "—");

@@ -23,7 +23,7 @@
 // format), with `gh issue comment 352 --body-file <it>`.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { BASELINE_MIN_N, buildBaseline, evaluate, exponent, MINIMUM_POINTS, sameBinary, thinClass } from "./gates.mjs";
+import { BASELINE_MIN_N, buildBaseline, evaluate, exponent, MINIMUM_POINTS, reinstallGate, sameBinary, thinClass } from "./gates.mjs";
 import { categoryOf, derivedOverview, renderOverview, renderStats } from "./stats.mjs";
 import { FINDINGS, loadIssues, renderFormat } from "./format.mjs";
 import { change, loadFindings, REBUILD_KINDS } from "./findings.mjs";
@@ -285,7 +285,7 @@ export function renderRange({ plan, summary, attempts, gates, lead, findings = [
     ["Delta share / at cap / stopped by budget", s.delta ? `${fmt(s.delta.share)} / ${fmt(s.delta.atCap)} / ${fmt(s.delta.byBudget)}` : null],
     ["Delta, this range", deltaLine(s.delta)],
     ["Delta, since Init", deltaLine(s.deltaTotal)],
-    ["node_modules reinstall growth", s.reinstallGrowth],
+    ["node_modules reinstall growth", s.reinstall ? reinstallGate(s.reinstall).value : null],
     ["New stored bytes this range", bytes(s.newStored)],
   ]), "");
   out.push("## 6. Trends", "", m.trends?.length ? m.trends.map((t) => `- ${t}`).join("\n") : "Written by the runner from the last 3 ranges.", "");

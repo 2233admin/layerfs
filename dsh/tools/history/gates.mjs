@@ -37,7 +37,7 @@
 //     ops: [ { op, sizeClass, n, p50, p95, p99, max, slowPhase } ]   (aggregate())
 //     probes: { <name>: { ms, counters: { <name>: n } } },
 //     storage: { logical, canonical, stored, metadata, newStored, changedBytes,
-//                directoryShare, reinstallGrowth, delta: { share, atCap, byBudget } },
+//                directoryShare, reinstall: { changedPackages, rawChangedBytes, storedNewBytes }, delta: { share, atCap, byBudget } },
 //     snapshot: { size, newBytes, sealMs, copyMs } | null   (snapshot.mjs's manifest, when taken),
 //     budget: { diskProjected, diskBudget, wallProjectedMs, wallBudgetMs } }
 
@@ -111,6 +111,25 @@ export function aggregate(calls) {
  * merges are never filtered out of them.
  */
 export const BASELINE_MIN_N = 5;
+
+/**
+ * The node_modules reinstall gate (lead decision 2026-10-18, STORAGE_STUDY.md
+ * §3c). `reinstall` = { changedPackages, rawChangedBytes, storedNewBytes }:
+ * changed packages are lockfile package entries whose resolution (name,
+ * version, integrity) or workspace link target differs from the previous
+ * lockfile (closure.mjs changedPackages; a link counts one package and its
+ * link entry's bytes); stored new bytes are the install's new stored
+ * node_modules bytes. Judged as stored ÷ raw changed; an install with no
+ * changed package by its absolute new bytes: watch over 1 MiB, optimize over 16 MiB.
+ */
+export const REINSTALL_ABSOLUTE = { watch: 1 << 20, act: 16 << 20 };
+export function reinstallGate(r, t = THRESHOLDS) {
+  if (!r) return { value: "not applicable: no node_modules reinstall in this range", result: "pass" };
+  if (r.storedNewBytes == null) return { value: "not judged: the install's stored node_modules bytes were not attributed", result: "watch" };
+  if (!r.changedPackages) return { value: `no changed packages: ${r.storedNewBytes} new stored bytes`, result: band(r.storedNewBytes, REINSTALL_ABSOLUTE) };
+  const g = +(r.storedNewBytes / r.rawChangedBytes).toFixed(3);
+  return { value: `${g}× the raw bytes of ${r.changedPackages} changed package${r.changedPackages === 1 ? "" : "s"}`, result: band(g, t.reinstallGrowth) };
+}
 
 /** F-024: a baseline class too thin to be a reference (BASELINE_MIN_N). */
 export const thinClass = (b) => (b.perRange ? Math.min(...b.perRange) : b.n ?? Infinity) < BASELINE_MIN_N;
@@ -376,8 +395,8 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   const s = m.storage || {};
   if (s.directoryShare == null) unjudged("Directory share", "no new bytes measured", `< ${t.directoryShare.watch}`);
   else add("Directory share", s.directoryShare, `< ${t.directoryShare.watch}`, band(s.directoryShare, t.directoryShare));
-  if (s.reinstallGrowth == null) add("Reinstall growth", "not applicable: no node_modules reinstall in this range", `≤ ${t.reinstallGrowth.watch}×`, "pass");
-  else add("Reinstall growth", s.reinstallGrowth, `≤ ${t.reinstallGrowth.watch}×`, band(s.reinstallGrowth, t.reinstallGrowth));
+  const ri = reinstallGate(s.reinstall, t);
+  add("Reinstall growth", ri.value, `≤ ${t.reinstallGrowth.watch}× changed packages; ≤ 1 MiB with none`, ri.result);
   const measured = [...history, m];
   const eff = measured.map((x) => (x.storage?.changedBytes ? x.storage.newStored / x.storage.changedBytes : null));
   const cap = s.delta?.atCap;

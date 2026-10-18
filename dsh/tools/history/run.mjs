@@ -403,7 +403,7 @@ async function playRange(run, k, mode) {
     directoryShare: newStored > 0 ? +((after.metadata - before.metadata) / newStored).toFixed(3) : null,
     delta: deltaSummary(t.delta, caps(run.manifest.policy)),
     deltaTotal: deltaSummary(deltaTotal, caps(run.manifest.policy)),
-    reinstallGrowth: null,
+    reinstall: null,
   };
   m.ops = aggregate(t.calls);
   // every call by method (SPEC §3b), and the checkpoint diff's cost per entry it lists (SPEC §4)

@@ -102,12 +102,12 @@ export async function playClosure(run, k, steps, { sb, ws, expectCall, Mismatch 
 /**
  * Lists the installed tree: every entry under a node_modules folder (lstat,
  * symlink targets, git blob ids), one JSON line per package folder
- * ({ g, n, digest }); with folder names as arguments, their entry lines.
+ * ({ g, n, bytes, digest }: bytes of files and symlinks); with folder names as arguments, their entry lines.
  * A package folder is the path through the first node_modules and its next
  * name (two for a scope or `.pnpm`): `.pnpm/<pkg>@<v>` holds the package and
  * its dependency links.
  */
-export const LISTER = `const fs=require("fs"),c=require("crypto");const full=new Set(process.argv.slice(1));const groups=new Map();const groupOf=(p)=>{const s=p.split("/");const i=s.indexOf("node_modules");let j=i+1;if(s[j]===".pnpm"||(s[j]||"").startsWith("@"))j++;return s.slice(0,Math.min(j+1,s.length)).join("/")};const add=(p,line)=>{const g=groupOf(p);let e=groups.get(g);if(!e)groups.set(g,e=[]);e.push(line)};const blob=(p,n)=>{const h=c.createHash("sha1");h.update("blob "+n+"\\0");h.update(fs.readFileSync(p));return h.digest("hex")};const walk=(d,nm)=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=d==="."?e.name:d+"/"+e.name;if(p===".git"||p===".lfs-probe")continue;const inNm=nm||e.name==="node_modules";const s=fs.lstatSync(p);const m=(s.mode&0o7777).toString(8);if(s.isSymbolicLink()){if(inNm)add(p,"l "+m+" "+fs.readlinkSync(p)+" "+p)}else if(s.isDirectory()){if(inNm&&e.name!=="node_modules")add(p,"d "+m+" - "+p);walk(p,inNm)}else if(inNm)add(p,"f "+m+" "+blob(p,s.size)+" "+p)}};walk(".",false);for(const g of [...groups.keys()].sort()){const ls=groups.get(g).sort();if(full.size){if(full.has(g))for(const l of ls)process.stdout.write(l+"\\n");continue}process.stdout.write(JSON.stringify({g,n:ls.length,digest:c.createHash("sha256").update(ls.join("\\n")).digest("hex")})+"\\n")}`;
+export const LISTER = `const fs=require("fs"),c=require("crypto");const full=new Set(process.argv.slice(1));const groups=new Map(),bytes=new Map();const groupOf=(p)=>{const s=p.split("/");const i=s.indexOf("node_modules");let j=i+1;if(s[j]===".pnpm"||(s[j]||"").startsWith("@"))j++;return s.slice(0,Math.min(j+1,s.length)).join("/")};const add=(p,line,n)=>{const g=groupOf(p);bytes.set(g,(bytes.get(g)||0)+n);let e=groups.get(g);if(!e)groups.set(g,e=[]);e.push(line)};const blob=(p,n)=>{const h=c.createHash("sha1");h.update("blob "+n+"\\0");h.update(fs.readFileSync(p));return h.digest("hex")};const walk=(d,nm)=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=d==="."?e.name:d+"/"+e.name;if(p===".git"||p===".lfs-probe")continue;const inNm=nm||e.name==="node_modules";const s=fs.lstatSync(p);const m=(s.mode&0o7777).toString(8);if(s.isSymbolicLink()){if(inNm)add(p,"l "+m+" "+fs.readlinkSync(p)+" "+p,s.size)}else if(s.isDirectory()){if(inNm&&e.name!=="node_modules")add(p,"d "+m+" - "+p,0);walk(p,inNm)}else if(inNm)add(p,"f "+m+" "+blob(p,s.size)+" "+p,s.size)}};walk(".",false);for(const g of [...groups.keys()].sort()){const ls=groups.get(g).sort();if(full.size){if(full.has(g))for(const l of ls)process.stdout.write(l+"\\n");continue}process.stdout.write(JSON.stringify({g,n:ls.length,bytes:bytes.get(g)||0,digest:c.createHash("sha256").update(ls.join("\\n")).digest("hex")})+"\\n")}`;
 export const listerCommand = (groups = []) => `node -e ${quote(LISTER)} ${groups.map(quote).join(" ")}`;
 
 /** pnpm's output without what varies run to run: progress lines and durations. */
@@ -119,6 +119,56 @@ export function compareInstalled(oracle, actualLines) {
   const missing = [...want.keys()].filter((g) => !got.has(g)), extra = [...got.keys()].filter((g) => !want.has(g));
   const differ = [...want.keys()].filter((g) => got.has(g) && got.get(g).digest !== want.get(g).digest);
   return { ok: !missing.length && !extra.length && !differ.length, groups: want.size, missing, extra, differ };
+}
+
+/**
+ * The package entries and workspace links of a pnpm v9 lockfile (line-based:
+ * `packages:` keys with their `resolution:`; `importers:` dependencies whose
+ * version is `link:`), for the reinstall gate.
+ */
+export function parseLock(text) {
+  const packages = new Map(), links = new Map();
+  let section = null, key = null, importer = null, dep = null;
+  const unq = (t) => t.replace(/^'(.*)'$/, "$1");
+  for (const line of String(text).split("\n")) {
+    const top = /^([a-zA-Z]+):/.exec(line);
+    if (top) { section = top[1]; key = importer = dep = null; continue; }
+    if (section === "packages") {
+      const k = /^ {2}(\S.*):$/.exec(line);
+      if (k) key = unq(k[1]);
+      else if (key && /^ {4}resolution: /.test(line)) packages.set(key, line.trim().slice("resolution: ".length));
+    } else if (section === "importers") {
+      let k;
+      if ((k = /^ {2}(\S.*):$/.exec(line))) importer = unq(k[1]);
+      else if ((k = /^ {6}(\S.*):$/.exec(line))) dep = unq(k[1]);
+      else if (importer && dep && (k = /^ {8}version: link:(.*)$/.exec(line))) links.set(`${importer}\u0000${dep}`, k[1].trim());
+    }
+  }
+  return { packages, links };
+}
+
+/** Changed packages between two lockfiles (lead decision 2026-10-18): new or re-resolved entries, and links with a new target. */
+export function changedPackages(prevText, nextText) {
+  const a = parseLock(prevText ?? ""), b = parseLock(nextText);
+  const packages = [...b.packages].filter(([k, v]) => a.packages.get(k) !== v).map(([k]) => k);
+  const links = [...b.links].filter(([k, v]) => a.links.get(k) !== v).map(([k]) => { const [importer, dep] = k.split("\u0000"); return { importer, dep }; });
+  return { packages, links, count: packages.length + links.length };
+}
+
+/**
+ * The raw bytes of the changed packages in an installed tree's lister groups:
+ * a package's `.pnpm/<name>@<version>[_peers]` folders; a link's entry only
+ * (`<importer>/node_modules/<dep>`, the symlink's bytes).
+ */
+export function rawChangedBytes(changed, groups) {
+  const by = new Map(groups.map((g) => [g.g, g.bytes ?? 0]));
+  let total = 0;
+  for (const key of changed.packages) {
+    const at = key.lastIndexOf("@"), base = `node_modules/.pnpm/${key.slice(0, at).replaceAll("/", "+")}@${key.slice(at + 1)}`;
+    for (const [g, n] of by) if (g === base || g.startsWith(`${base}_`)) total += n;
+  }
+  for (const l of changed.links) total += by.get(`${l.importer === "." ? "" : `${l.importer}/`}node_modules/${l.dep}`) ?? 0;
+  return total;
 }
 
 /** Ranges whose plan install flag (plan-range.mjs) differs from git: an install input changed or not. */

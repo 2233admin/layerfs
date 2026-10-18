@@ -11,8 +11,8 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlink
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fetchScript } from "../fetch-store.mjs";
-import { closureSteps, compareInstalled, storeSetup, installInputsChanged, listerCommand, normalizeOutput, playClosure } from "../closure.mjs";
-import { aggregate, buildBaseline, evaluate, probeSeries, thinClass } from "../gates.mjs";
+import { changedPackages, closureSteps, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, playClosure } from "../closure.mjs";
+import { aggregate, buildBaseline, reinstallGate, evaluate, probeSeries, thinClass } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
 import { parseReport } from "../frozen.mjs";
@@ -666,7 +666,7 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
   mkdirSync(join(t, "src")); writeFileSync(join(t, "src/a.ts"), "no\n");
   const list = (g = []) => execFileSync("sh", ["-c", listerCommand(g)], { cwd: t, encoding: "utf8" });
   const groups = list().trim().split("\n").map((l) => JSON.parse(l));
-  assert.deepEqual(groups.map((g) => [g.g, g.n]), [["node_modules/.pnpm", 1], ["node_modules/.pnpm/x@1", 3], ["node_modules/x", 1]]);
+  assert.deepEqual(groups.map((g) => [g.g, g.n, g.bytes]), [["node_modules/.pnpm", 1, 0], ["node_modules/.pnpm/x@1", 3, 3], ["node_modules/x", 1, 24]]);
   assert.match(list(["node_modules/.pnpm/x@1"]), /^f 644 45b983be36b73c0788dc9cbcb76cbb80fc7bb057 node_modules\/\.pnpm\/x@1\/node_modules\/x\/index\.js$/m);
   assert.match(list(["node_modules/x"]), /^l 755 \.pnpm\/x@1\/node_modules\/x node_modules\/x$/m);
   assert.equal(compareInstalled({ groups }, groups).ok, true);
@@ -680,6 +680,48 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
     commit: async () => { calls.push("commit"); return { kind: "Committed" }; } } } };
   await assert.rejects(playClosure(fake, 15, steps.slice(0, 2), { sb: 1, ws: 1, expectCall: (r, l, w) => w(), Mismatch: class extends Error {} }), /r015\.build exited 2/);
   assert.deepEqual(calls, ["exec", "commit", "build", "commit"]);
+});
+
+test("reinstall gate (lead decision): changed lockfile packages and links, stored ÷ raw changed; none changed is judged absolutely", () => {
+  const prev = `lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    devDependencies:
+      vitest:
+        specifier: ^4
+        version: 4.1.7
+  packages/a:
+    dependencies:
+      '@x/b':
+        specifier: workspace:*
+        version: link:../b
+
+packages:
+
+  '@scope/p@1.0.0':
+    resolution: {integrity: sha512-AAA}
+
+  vitest@4.1.7:
+    resolution: {integrity: sha512-BBB}
+
+snapshots:
+`;
+  const next = prev.replace("sha512-AAA", "sha512-CCC").replace("vitest@4.1.7:\n", "vitest@4.1.8:\n").replace("link:../b", "link:../c");
+  const ch = changedPackages(prev, next);
+  assert.deepEqual([ch.packages, ch.links, ch.count], [["@scope/p@1.0.0", "vitest@4.1.8"], [{ importer: "packages/a", dep: "@x/b" }], 3]);
+  assert.equal(changedPackages(prev, prev).count, 0);
+  const groups = [{ g: "node_modules/.pnpm/@scope+p@1.0.0", bytes: 1000 }, { g: "node_modules/.pnpm/vitest@4.1.8_peer", bytes: 5000 }, { g: "node_modules/.pnpm/vitest@4.1.7", bytes: 9999 },
+    { g: "packages/a/node_modules/@x/b", bytes: 7 }, { g: "node_modules/vitest", bytes: 40 }];
+  assert.equal(rawChangedBytes(ch, groups), 6007, "a link counts its link entry only");
+  const gate = (r) => reinstallGate(r);
+  assert.deepEqual(gate({ changedPackages: 3, rawChangedBytes: 6007, storedNewBytes: 9000 }), { value: "1.498× the raw bytes of 3 changed packages", result: "pass" });
+  assert.equal(gate({ changedPackages: 3, rawChangedBytes: 6007, storedNewBytes: 18000 }).result, "watch");
+  assert.equal(gate({ changedPackages: 3, rawChangedBytes: 6007, storedNewBytes: 31000 }).result, "optimize");
+  assert.deepEqual([0.5, 2, 17].map((mib) => gate({ changedPackages: 0, rawChangedBytes: 0, storedNewBytes: mib * 2 ** 20 }).result), ["pass", "watch", "optimize"]);
+  assert.equal(gate(null).result, "pass");
+  assert.equal(gate({ changedPackages: 2, rawChangedBytes: 10, storedNewBytes: null }).result, "watch");
 });
 
 // the runner stays last: a test registered after it never runs
