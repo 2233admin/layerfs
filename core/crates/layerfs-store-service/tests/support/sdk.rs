@@ -9,11 +9,21 @@ use layerfs_history::{BranchId, CommitOutcome, HistoryName, LayerStackId, Worksp
 use layerfs_store_service::{
     bootstrap::open_store_observed,
     sdk::{dispatch, Bodies},
-    store::{BindRequest, CommitOptions},
+    store::{BindRequest, CommitOptions, CommitSuccess},
     Owner, OwnerConfig, StoreService,
 };
-use layerfs_workspace::{Operation, Outcome, Time};
+use layerfs_workspace::{Operation, Outcome, Position, Time};
 use std::path::Path;
+
+/// One change [`Fixture::workspace_commit`] applies at a path.
+pub enum Change<'a> {
+    /// chmod to the mode.
+    Mode(&'a str, u32),
+    /// Set only the mtime, in whole seconds.
+    Mtime(&'a str, i64),
+    /// Overwrite the bytes from offset 0.
+    Write(&'a str, &'a [u8]),
+}
 
 pub struct Fixture {
     pub host: installed::Fixture,
@@ -122,6 +132,28 @@ impl Fixture {
     /// [`Self::chmod`] of several paths in turn, in one Workspace `id` and
     /// one Commit; a path may appear more than once.
     pub fn chmods(&self, branch: &str, changes: &[(&str, u32)], id: u8) -> String {
+        let changes: Vec<Change> = changes
+            .iter()
+            .map(|&(path, mode)| Change::Mode(path, mode))
+            .collect();
+        let committed = self.workspace_commit(branch, &changes, id, || {});
+        let Some(CommitOutcome::Committed { record, .. }) = committed.history else {
+            panic!("chmod Commit: {:?}", committed.history);
+        };
+        record.id.to_string()
+    }
+
+    /// One private Workspace `id` bound on `branch` applies `changes` in
+    /// turn; `before` runs after the changes and before the product Commit
+    /// (so it may move the head: the Commit then merges), and the Workspace
+    /// closes after it. Mutations carry the time 123 s.
+    pub fn workspace_commit(
+        &self,
+        branch: &str,
+        changes: &[Change<'_>],
+        id: u8,
+        before: impl FnOnce(),
+    ) -> CommitSuccess {
         let bound = self
             .service
             .store
@@ -144,7 +176,10 @@ impl Fixture {
             .acquire_base_source(route, 9001)
             .unwrap();
         let view = operation.workspace().view_for_source(source).unwrap();
-        for &(path, mode) in changes {
+        for change in changes {
+            let path = match change {
+                Change::Mode(path, _) | Change::Mtime(path, _) | Change::Write(path, _) => path,
+            };
             let mut serial = view.root_serial();
             for name in path.split('/').filter(|part| !part.is_empty()) {
                 serial = view
@@ -158,11 +193,27 @@ impl Fixture {
                     operation.overlay(),
                     operation.ports(),
                     &view,
-                    Operation::SetAttributes {
-                        serial,
-                        mode: Some(mode),
-                        mtime: None,
-                        size: None,
+                    match change {
+                        Change::Mode(_, mode) => Operation::SetAttributes {
+                            serial,
+                            mode: Some(*mode),
+                            mtime: None,
+                            size: None,
+                        },
+                        Change::Mtime(_, seconds) => Operation::SetAttributes {
+                            serial,
+                            mode: None,
+                            mtime: Some(Time {
+                                seconds: *seconds,
+                                nanoseconds: 0,
+                            }),
+                            size: None,
+                        },
+                        Change::Write(_, bytes) => Operation::Write {
+                            serial,
+                            position: Position::At(0),
+                            data: bytes.to_vec().into(),
+                        },
                     },
                     Time {
                         seconds: 123,
@@ -171,7 +222,7 @@ impl Fixture {
                 )
                 .unwrap();
             let Outcome::Applied { publication, .. } = applied else {
-                panic!("chmod mutation: {applied:?}");
+                panic!("Workspace mutation: {applied:?}");
             };
             operation.overlay().reply_attempted(publication).unwrap();
         }
@@ -181,17 +232,15 @@ impl Fixture {
             .release_base_source(route, source)
             .unwrap();
         drop(operation);
+        before();
         let committed = workspace
             .commit_captured(&CommitOptions {
                 force: false,
-                message: Some("Prepare directory metadata diff".into()),
+                message: Some("Workspace changes".into()),
             })
-            .unwrap_or_else(|failure| panic!("chmod Commit: {failure:?}"));
-        let Some(CommitOutcome::Committed { record, .. }) = committed.history else {
-            panic!("chmod Commit: {:?}", committed.history);
-        };
+            .unwrap_or_else(|failure| panic!("Workspace Commit: {failure:?}"));
         workspace.close().unwrap();
-        record.id.to_string()
+        committed
     }
 
     pub fn work(&self) -> Work {
