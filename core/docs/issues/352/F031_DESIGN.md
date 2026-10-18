@@ -1,111 +1,86 @@
 # F-031 design · `.git` in Workspaces from P3
 
-> **Status:** revision 3, 2026-10-19, for the owner's approval. Design only:
-> no product code and no measurement. Part A answers the owner's design gate
-> against the merge rules on staging `claude/dsh-352-integration-c98eb1`
-> (`5fdee6d0c`: M1 merge by serial, metadata merged per field, the `mode`
-> conflict, `/.lww`). Part B is the approved option (c) design (owner
-> 2026-10-18), built and off by default (`gitplay.mjs`, `gitlanes.mjs`,
-> `c9466a056`), with two figures corrected (A7). Its dev-range proof has not
-> run: `dev352-p3s` r015 reached the 118 s command ceiling (RESULTS
-> 2026-10-18), and the range is now played in two commands (SCRIPTS.md).
+> **Status:** approved by the owner 2026-10-19 (revision 3 with the owner's
+> decisions below). Design and harness design only; no product change.
+> Part A answers the owner's design gate against the merge rules on staging
+> `claude/dsh-352-integration-c98eb1` (`5fdee6d0c`: M1 merge by serial,
+> metadata merged per field, the `mode` conflict, `/.lww`). Part B is the
+> option (c) design of 2026-10-18, built and off by default (`gitplay.mjs`,
+> `gitlanes.mjs`, `c9466a056`). Its lane mechanics are superseded by the
+> porcelain lanes of decision Q3 (A1); its lead is unchanged. Next step: the
+> builder implements the porcelain lanes in `gitlanes.mjs`, after the owner
+> has seen the updated rule ([GIT_RULE.md](GIT_RULE.md)). The dev-range proof
+> has not run.
 
-## Open owner questions
+## Owner decisions (2026-10-19)
 
-Each has a recommendation. None needs a new product merge rule (A3 lists
-the rules the design relies on, and the two it would need if a
-recommendation is declined).
+None needs a new product merge rule (A3).
 
-- **Q1 · `/.lww` must never decide a path under `/.git`.** The replay's
-  `/.lww` is generated from every dsh `.gitignore` (`lww.mjs`). An
-  unanchored pattern matches at any depth, including under `/.git`. Today
-  none does (r015 root `.gitignore`: `lib/`, `tmp/`, `.cache/` and others
-  match no `.git` path, and lane folders are named `r0NN-…`). A later
-  `.gitignore` with `logs/`, `index`, `objects/` or `*.pack` would make a
-  merge that both sides changed there pick the newer mtime silently, instead
-  of the `binary` or `content` conflict that stops the range. Options:
-  (a) the replay appends `!/.git` as the last generated rule, so the last
-  matching rule un-matches every `.git` path (no product change; git itself
-  never ignores `.git`); (b) a product rule: `/.lww` never applies under
-  `/.git`. **Recommendation: (a).** It needs no product change, and the
-  `lww.mjs check` proof gains one assertion: no `.git` path matches.
-- **Q2 · How exact the storage split per git Commit is.** A lane git Commit
-  holds its loose objects, its lane index and its lane ref together. The
-  lead's Commit holds the pack, the shared index, `refs/heads/main` and the
-  deletion of every loose object. The trace gives one `newStored` and
-  `newMetadata` per Commit, not per path. Options: (a) the stored total per
-  Commit, exact, plus the logical split from git (index file bytes, loose
-  object bytes, pack/idx/rev bytes, ref bytes), with the stored split
-  labelled not measured; (b) a daemon counter: the `bySource` Save counter
-  (builder-storage-counters item 1) extended with `.git` sources (`index`,
-  `laneIndex`, `loose`, `pack`, `refs`) by path; (c) the lead's finish split
-  into two Commits (pack, then index and refs), which makes the lead's split
-  exact at one more Commit per range but leaves the lane split as in (a).
-  **Recommendation: (a) for the dev range**, then (b) only if the owner
-  needs stored bytes per source before measured P3. (b) is a product change
-  on the critical path; (c) changes the workload for a report column.
-- **Q3 · Lanes commit with plumbing or porcelain.** As built, a lane runs
-  real `git add` and `git rm --cached`, then `git write-tree`,
-  `git commit-tree` and `git update-ref` of its own ref. Porcelain
-  `git commit` on the shared `.git` would move `HEAD`'s branch (`main`) in
-  every lane, and those single files would conflict at every lane merge.
-  Porcelain is possible without that: each lane gets a linked-worktree git
-  folder (`.git/worktrees/<lane>/` with its own `HEAD` →
-  `refs/heads/lanes/<lane>`, `index` and `commondir`), and runs
-  `GIT_DIR=.git/worktrees/<lane> GIT_WORK_TREE=. git commit`. Every file it
-  writes is lane-private or a new object. It adds git's own index refresh
-  (an lstat of every tracked file, 1,261–1,332 at r015) per lane commit,
-  which is what an agent's `git commit` costs. **Recommendation: keep the
-  built plumbing for range 15.** It writes the same objects and refs; the
-  porcelain variant is a separate change if the owner wants agents' exact
-  command.
-- **Q4 · Where a clean `git status` is claimed.** A clean `git status`
-  holds only at a range's checkpoint, after the lead's finish (A2.3). It does
-  not hold after a LayerFS lane merge, nor on `main` between a race publish
-  (r019 has one) and the range's publish: there `HEAD` and `.git/index` are
-  still the previous checkpoint's while the tree has the range's changes.
-  **Recommendation: confirm.** It is git's own state for uncommitted work;
-  making it clean mid-range would need the lead's writer on every merge.
-- **Q5 · The fresh-mount stat check stays a hard stop.** `freshStatus`
-  fails the range when `git status` in a fresh Workspace reads back any
-  tracked file (`refresh/sum_scan` > 0). One legitimate product behaviour
-  can cause that: §4.8 (fix record 022) commits a tracked file's mtime-only
-  change as the base mtime, while the same Workspace's live view, and so
-  `git update-index --refresh` in it, sees the new one. The lead's exec
-  touches no tracked file, so in the replay a nonzero count is a finding.
-  **Recommendation: keep the hard stop**, and record any hit with the paths
-  and their live and committed mtimes, as a finding for the owner, not a
-  harness fix.
-- **Q6 · How "wall time added per range" is measured.** (a) The sum of the
-  git stages from the trace (seed, lane git execs, lead job, writer, finish,
-  fresh status), exact and from the same play; the lane git execs overlap
-  other agents' steps, so their sum is not the critical path, and the
-  critical path is reported apart. (b) Also an end-to-end git-off play of
-  the same dev range from a clone of the same fork, one sample each. The
-  earlier git-off r015 plays (83–105 s) ran other binaries at other loads
-  and are not comparable. **Recommendation: (a) and (b)**, labelled dev
-  diagnostics, one sample each, no reruns.
+- **Q1 · `/.lww` never decides a path under `/.git`: (a), accepted.** The
+  replay appends `!/.git` as the last generated `/.lww` rule, so every
+  `.git` path is un-matched (git never ignores `.git` either). The
+  `lww.mjs check` proof gains the assertion that no `.git` path matches.
+  Without it, a later dsh `.gitignore` pattern such as `logs/`, `index` or
+  `*.pack` would let a two-sided `.git` change be picked by mtime instead of
+  stopping the range.
+- **Q2 · Storage split per git Commit: (a), accepted.** The dev range
+  reports the exact stored total per Commit (`newStored`, `newMetadata`)
+  and git's logical split (index file bytes, loose object bytes, pack, idx
+  and rev bytes, ref bytes). The stored split per source is labelled not
+  measured. No daemon counter is added.
+- **Q3 · Lanes use porcelain `git commit`: changed by the owner.** Each lane
+  gets a linked-worktree git folder, `.git/worktrees/<lane>/`, with:
+  - its own `HEAD` (`ref: refs/heads/lanes/<lane>`);
+  - its own `index`;
+  - a `commondir` (`../..`), so objects and refs are the shared ones.
 
-- **Q7 · One git commit per dsh commit, instead of one per lane step.**
-  As built (option (c)), every lane step that changes tracked files runs a
-  git exec and a lane commit. The frozen plan splits a dsh commit over
-  about 2 lanes (up to 4), so a range of 60–88 replayed dsh commits gets
-  82–174 lane commits. Each is a git exec, an extra one-shot Workspace and
-  a Commit, plus a full lane index rewrite. The alternative:
-  - lanes make no git commits. At most, each lane runs one real
-    `git add -A` of its changes at lane end (3–4 per range), so real git
-    still hashes Workspace bytes over FUSE;
-  - the lead writes exactly one git commit per dsh commit, as it does
-    today: the replayed commits, plus dsh's merges, which HEAD needs to
-    reach the checkpoint (62–279 per range).
+  The lane's exec runs `GIT_DIR=.git/worktrees/<lane> GIT_WORK_TREE=.` with
+  real `git add`, `git rm --cached` and `git commit -m …`. Everything it
+  writes is lane-private (its worktree folder, its lane ref) or a new
+  object. Reflogs stay off (`core.logAllRefUpdates=false`). Lane merges stay
+  conflict-free under `.git` (A2.1), and the lane guard allows exactly that
+  set (A4).
+- **Status and diff before every lane commit (owner).** Each lane git exec
+  runs `git status --porcelain` and `git diff --stat` before its commit, in
+  place of "one step in ten". Both run with `GIT_OPTIONAL_LOCKS=0`, so they
+  write nothing and add nothing to the Store. Each is timed on its own in
+  the trace.
+- **The lead keeps plumbing (owner).** `update-index --index-info`,
+  `write-tree` and `commit-tree` with the original metadata and parents,
+  one git commit per dsh commit, merges included, so ids equal dsh's. Only
+  the lead writes `main`, the shared `.git/index` and packs. Its finish also
+  removes the lane worktree folders (`.git/worktrees/`) along with the lane
+  refs.
+- **Q4 · A clean `git status` only at checkpoints: accepted.** After a lane
+  merge, and on `main` between a race publish and the range's publish,
+  `HEAD` and `.git/index` are still the previous checkpoint's (A2.3).
+- **Q5 · The fresh-mount stat check stays a hard stop: accepted.** A hit is
+  recorded as a finding, with the paths and their live and committed
+  mtimes. One product behaviour can cause it: §4.8 (fix record 022) commits
+  a tracked file's mtime-only change as the base mtime.
+- **Q6 · Wall time added per range: (a) and (b), accepted.** The git stages
+  from the trace, with each lane's critical path apart, and an end-to-end
+  git-off play of the same dev range from a clone of the same fork. One
+  sample each, as diagnostics.
+- **Q7 · No lane commits: declined (owner).** The lane commits stay. Lane
+  git commits are expected at about lanes × dsh commits × 0.3–0.7 per range
+  (GIT_RULE.md); ranges 15–20 plan 0.39–0.67.
+- **Q8 · Lane index dedup: new, measure first.** The dev range measures the
+  Store bytes per lane commit and how well the lane index rewrites
+  deduplicate. If deduplication is poor, the follow-up option is to keep the
+  lane index outside the Workspace and rebuild it per exec. Not now.
 
-  It removes 82–174 extra Workspaces and Commits per range and the
-  17–31 MB of raw lane index rewrites (GIT_RULE.md, Expected load). The
-  proof is unchanged. The lane guard (A4) then allows only loose objects
-  and the lane-end index. Lanes would no longer commit their own changes,
-  which option (c) asked for. **Owner decision 2026-10-19: declined.** The
-  lane commits stay. Lane git commits are expected at about lanes × dsh
-  commits × 0.3–0.7 per range (GIT_RULE.md); ranges 15–20 plan 0.38–0.66.
+**Builder items before the dev range:**
+1. Implement the porcelain lanes (Q3) and status and diff before every lane
+   commit in `gitlanes.mjs` and `gitplay.mjs`, after the owner has seen the
+   updated rule.
+2. Fix `statusProbe`: add `index/preload/sum_lstat` to `@@sumLstat`. git
+   2.39 stats the index in preload threads, so `refresh/sum_lstat` alone
+   reported 1 where git stat-ed 1,261 (GIT_RULE.md, Native baseline).
+   `sum_scan` is correct.
+3. The lane guard of A4, with the porcelain set.
+4. Q1: `!/.git` in the generated `/.lww`, plus the `lww.mjs check`
+   assertion.
 
 Two items outside F-031 still gate measured range 15 and are not decided
 here: the owner's P3 wall budget (about 254 s projected per range without
@@ -118,8 +93,8 @@ here: the owner's P3 wall budget (about 254 s projected per range without
 | Git work | Workspace | LayerFS Branch | Sandbox | Git ref it moves | `.git` files it writes |
 | --- | --- | --- | --- | --- | --- |
 | Seed (first P3 range only) | `fs.apply` of the pack and the small files, then one one-shot Workspace for the index and the checks | the range's lead Branch | `pool[0]` | `refs/heads/main` = `6e5c908a1` | everything in the seed (Part B §4) |
-| Lane commit: one per lane step that changes tracked files (`fs`, `apply`, `stale-apply`, `hold-resolve`) | a new one-shot Workspace, mounted after the step landed | the step's lane Branch (`r0NN-<n>-<folder>`) | the agent's, `pool[(N−1) mod 4]` | `refs/heads/lanes/<lane>` only; `HEAD` stays `ref: refs/heads/main` and is never written | loose objects; `.git/lanes/<lane>/index`; `refs/heads/lanes/<lane>` |
-| Lead writer and finish | one one-shot Workspace, several execs, one Commit | the merged Branch after the last lane merge and the reconcile (`r<k>-main-<n>`) | `pool[0]` | `refs/heads/main` = the checkpoint | the range's pack (`pack-*.pack/.idx/.rev`); `.git/index`; `refs/heads/main`; deletes the loose objects, `lanes/` and the lane refs |
+| Lane commit: one per lane step that changes tracked files (`fs`, including decoy writes, `apply`, `stale-apply`, `hold-resolve`) | a new one-shot Workspace, mounted after the step landed | the step's lane Branch (`r0NN-<n>-<folder>`) | the agent's, `pool[(N−1) mod 4]` | `refs/heads/lanes/<lane>`, through the lane's own `HEAD` in `.git/worktrees/<lane>/`; the shared `HEAD` stays `ref: refs/heads/main` and is never written | loose objects; `.git/worktrees/<lane>/` (`HEAD`, `commondir`, `gitdir`, `index`, `COMMIT_EDITMSG`); `refs/heads/lanes/<lane>` |
+| Lead writer and finish | one one-shot Workspace, several execs, one Commit | the merged Branch after the last lane merge and the reconcile (`r<k>-main-<n>`) | `pool[0]` | `refs/heads/main` = the checkpoint | the range's pack (`pack-*.pack/.idx/.rev`); `.git/index`; `refs/heads/main`; deletes the loose objects, `worktrees/` and the lane refs |
 | Fresh status check | one one-shot Workspace, discarded | the same merged Branch, after the lead's Commit | `pool[0]` | none | none (the Workspace is discarded) |
 
 - **Per lane, one git exec at a time.** Several agents share a lane (r015:
@@ -134,10 +109,27 @@ here: the owner's P3 wall budget (about 254 s projected per range without
   the git exec's mount. When another agent of the lane rewrote the same path
   in between, git adds the later bytes. That is real git on a shared lane;
   lane commit ids are never compared with dsh, so it changes no proof.
-- **Counts from the frozen plan.** Lane git execs per range: 122 (r015,
-  at most 42 in one lane), 174 (r016, 52), 104 (r017, 37), 133 (r018, 51),
-  124 (r019, 34), 82 (r020, 31). Each adds one mount, exec, Commit and
-  unmount.
+- **The lane exec (Q3).** On the lane's first step it creates
+  `.git/worktrees/<lane>/` (`HEAD`, `commondir`, `gitdir`), sets
+  `refs/heads/lanes/<lane>` to the range base and builds the lane index
+  (`read-tree HEAD`, `update-index --refresh`). Every exec then runs, with
+  `GIT_DIR=.git/worktrees/<lane> GIT_WORK_TREE=.`:
+  1. `git status --porcelain` and `git diff --stat`, both with
+     `GIT_OPTIONAL_LOCKS=0`;
+  2. `git add -f` of the step's written paths and `git rm --cached` of its
+     removed ones;
+  3. `git commit -q -m <step id (dsh id)>`, with the fixed lane identity
+     and the step's dsh commit date.
+- **Counts from the frozen plan** (decoy-only steps included). Lane git
+  execs per range: 123 (r015, at most 42 in one lane), 175 (r016), 105
+  (r017), 134 (r018), 125 (r019), 83 (r020). Each adds one mount, exec,
+  Commit and unmount.
+- **The shared pack's mtime.** When `git add` finds an object already in a
+  pack, git refreshes that pack's mtime ("freshen"), so every lane touches
+  the seed pack's mtime. The bytes do not change (native baseline: same
+  sha1). An mtime-only change is not committed by LayerFS (§4.8, record
+  022), so the lane's Commit and the merge never see it. The lane guard
+  must therefore judge content changes, not mtimes.
 
 ### A2 · A LayerFS merge of two Branches that both changed `.git`
 
@@ -152,10 +144,11 @@ Workspace Commit reads it from theirs.
 | `objects/<xx>/` fan-out folders | lanes, both new | "Two new directories at one name are merged by name into `into`'s." Both changed the folder's metadata: theirs is kept | clean |
 | `objects/<xx>/<id>` loose object, one lane | one lane | "theirs = base → ours" (or the converse) | clean; taken whole, metadata included |
 | `objects/<xx>/<id>` loose object, both lanes | both lanes, new on both | a name collision of two entries; "ours = theirs → theirs" when the bytes are equal. Mode is 0444 on both, so no `mode` conflict; mtime differs and takes the decided entry's | clean when git wrote equal bytes (same git and zlib in one image, deterministic). Unequal bytes are not text: `binary`, a reported conflict, so the merge answers Conflict and the range stops (D0) |
-| `lanes/<lane>/index`, `refs/heads/lanes/<lane>` | one lane each | different names: one side each | clean |
-| `lanes/`, `refs/heads/lanes/` folders | both lanes, new | merged by name | clean |
+| `worktrees/<lane>/` (`HEAD`, `commondir`, `gitdir`, `index`, `COMMIT_EDITMSG`), `refs/heads/lanes/<lane>` | one lane each | different names: one side each | clean |
+| `worktrees/`, `refs/heads/lanes/` folders | both lanes, new | merged by name | clean |
+| `objects/pack/pack-<seed>.pack` mtime | every lane (git's freshen) | not committed: an mtime-only change (§4.8) | unchanged |
 | `index`, `HEAD`, `refs/heads/main`, `config`, `packed-refs` | nobody before the lead | "ours = theirs" (both unchanged) | untouched |
-| `logs/`, `ORIG_HEAD`, `FETCH_HEAD`, `COMMIT_EDITMSG` | nobody | not created: `core.logAllRefUpdates=false`, plumbing only | absent |
+| `logs/`, `ORIG_HEAD`, `FETCH_HEAD`, the shared `COMMIT_EDITMSG` | nobody | not created: `core.logAllRefUpdates=false`; the lane's `git commit` writes `COMMIT_EDITMSG` in its own worktree folder; the lead uses plumbing | absent |
 | packs from auto-repack or `gc` | nobody | not created: `gc.auto=0`, `maintenance.auto=false` | absent |
 | the range's pack | the lead, after every lane merge | no merge follows on that Branch before the publish | not merged |
 
@@ -173,9 +166,14 @@ So A4 adds a lane guard before each lane merge.
 #### A2.2 · What the merge does to `.git/index` and refs
 
 Nothing. No lane writes `.git/index`, `HEAD` or `refs/heads/main`:
-- the lane's `git add` uses `GIT_INDEX_FILE=.git/lanes/<lane>/index`;
-- the one-in-ten lane status probe runs with `GIT_OPTIONAL_LOCKS=0`
-  (`statusProbe({ locks: false })`), so it never rewrites the shared index.
+- the lane's git runs with `GIT_DIR=.git/worktrees/<lane>`, so its
+  `git add` and `git commit` use the lane's own `index` and `HEAD`;
+- the status and diff before each commit run with `GIT_OPTIONAL_LOCKS=0`,
+  so they never rewrite an index.
+
+The native baseline confirms it: after 123 porcelain lane commits the
+shared `.git/index` was unchanged, and each lane wrote only the files A4
+allows (GIT_RULE.md, Native baseline).
 
 A lane merge copies each lane's own index and ref and the union of the loose
 objects. The merged Branch's `.git/index`, `HEAD` and `main` stay the
@@ -227,10 +225,15 @@ If the owner declines Q1 (a), the design needs a product rule (Q1 (b)).
 ### A4 · The lane guard (new, harness)
 
 Before each lane merge, the lead diffs the lane's head against the range's
-base under `/.git` (the same `diff_commits` that `verify` uses). Allowed:
-- `objects/<xx>/` and `objects/<xx>/<38 hex>`;
-- `lanes/<lane>/` and its `index`;
+base under `/.git` (the same `diff_commits` that `verify` uses, so
+mtime-only changes do not appear). Allowed, exactly (owner, 2026-10-19):
+- `objects/<xx>/` and `objects/<xx>/<38 hex>` (new loose objects);
+- `worktrees/` and `worktrees/<lane>/`, with only `HEAD`, `commondir`,
+  `gitdir`, `index` and `COMMIT_EDITMSG` in it;
 - `refs/heads/lanes/` and `refs/heads/lanes/<lane>`.
+
+The native porcelain run wrote exactly these, and nothing else that
+changed content (GIT_RULE.md, Native baseline).
 
 Anything else, or another lane's names, stops the range before the merge,
 with the paths. This catches the one-lane stray that A2.1 would otherwise
@@ -249,7 +252,7 @@ follows:
   `git unpack-objects`. Each `commit-tree` must print dsh's id, which covers
   the parents.
 - **Seed:** built and proved by the seed script (Part B §4).
-- **Cadence:** option (c), Part B §1.
+- **Cadence:** option (c), with porcelain lanes (Q3, A1).
 - **Proof:** HEAD = the checkpoint, tree id = dsh's, clean status, the fresh
   check (Part B §5), plus the lane guard (A4).
 - **Counts change:** re-derived at the P3 re-baseline (SPEC §2).
@@ -266,7 +269,7 @@ One dev range (r015, from a clone of the P2 fork, Disposable), one sample,
 | Commit | Stored and metadata | Logical split (from git in the same exec) |
 | --- | --- | --- |
 | seed (once) | `newStored`, `newMetadata` | pack, idx, rev; index; small files |
-| each lane git Commit | the same | lane index bytes; loose objects (count, bytes); ref |
+| each lane git Commit | the same | lane worktree index bytes; loose objects (count, bytes); ref; worktree folder files |
 | lead Commit | the same | new pack, idx, rev; `.git/index`; loose objects deleted (count, bytes); refs |
 | lead job and missing-blob pack (`fs.apply`) | the same | job bytes; pack bytes (removed again by the finish) |
 
@@ -279,11 +282,18 @@ From these, per range:
 - the pack bytes;
 - Store on disk before and after.
 
-The stored split per source is labelled not measured unless Q2 (b) lands.
+The stored split per source is labelled not measured (Q2 (a)).
+
+**Q8, measured first:** the stored bytes of each lane git Commit against its
+logical bytes, and the stored bytes per lane index rewrite (median, p90)
+against the index's 158–166 KB. This shows how well CDC deduplicates the
+rewrites. Poor deduplication opens the follow-up option of keeping the lane
+index outside the Workspace and rebuilding it per exec; it is not built now.
 
 **Wall time added per range** (Q6):
 - the seed's;
-- the lane git execs': count, sum, median, p90;
+- the lane git execs': count, sum, median, p90, and per command
+  (`status`, `diff --stat`, `add`, `rm`, `commit`), each its own series;
 - the critical path: per lane, the time from its last step landing to its
   last git Commit;
 - the lead's: job, unpack, writer execs, finish (refresh, repack), Commit;
@@ -298,7 +308,8 @@ Each exec stays at or under 120 s.
 - `refresh/sum_scan` and `sum_lstat` in the fresh Workspace;
 - the lane guard;
 - conflicts under `.git` (must be 0);
-- the one-in-ten lane status times.
+- `status` and `diff --stat` before every lane commit: times, and that
+  neither wrote anything.
 
 ### A7 · Corrections to Part B's figures
 
@@ -316,13 +327,18 @@ files". Both are about ten times too high; Part B now uses the figures
 above.
 
 A lane git exec rewrites its whole lane index, so per range the lanes
-write 82–174 index files of about 160 KB, 13–28 MB raw. How much CDC
+write 83–175 index files of about 160 KB, 13–28 MB raw (Q8). How much CDC
 deduplicates of each rewrite is unknown until the dev range measures it.
 Part B's estimate left this out.
 
 ---
 
 ## Part B · The approved option (c) design, as built
+
+> Kept as built on 2026-10-18. Where it differs from the owner decisions of
+> 2026-10-19 and Part A (porcelain lanes and their `.git/worktrees/<lane>/`
+> folders, status and diff before every lane commit, the lane guard), those
+> win. Its lead, seed and proof are current.
 
 ### The constraint that shapes it
 
@@ -346,6 +362,10 @@ So the design splits `.git` by what can merge:
   every merge.
 
 ### 1. How lanes commit (owner option (c), 2026-10-18)
+
+> Lanes: superseded by the porcelain lanes of decision Q3 (2026-10-19, A1).
+> The plumbing lane text below is kept as the built history; the lead's part
+> is current.
 
 Owner option (c) supersedes the per-dsh-commit lane commits of the
 revision, and the lead's split that followed them (history below).
