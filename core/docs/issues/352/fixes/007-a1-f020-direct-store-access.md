@@ -144,27 +144,185 @@ repository's (mounted read-only here).
 
 ## Performance, old vs new
 
-Same snapshot fork, same cache state, one sample per case; each series labeled
-with its binaries.
+Step 6 (2026-10-18), at `a2169f652` (branch rebased on `280ed3d6d` for the
+F-028 apply fix). Two forks of the same `p2-main-c` range-11 snapshot
+(`9f82a5ed…`), one measured range-12 play each, both inside the runner-like
+container (`core/target/f020/incontainer.sh`, `layerfs-352-runtime:node24`,
+default bridge, `LAYERFS_DAEMON_HOST=host.docker.internal`), Sandbox image
+`d3773b4e`, Disposable profile, one sample per arm.
 
-| Measure | Snapshot | Cache | Old binaries (`c25119ac`/`5baa0f5d`) | In-process (*pending*) | Change |
+- Old `f025-f020-s6b-old`: daemon `c25119ac`, Linux addon `7df89707` and
+  SDK JS from `a5a0915cd` (the source of macOS addon `5baa0f5d`, which is not
+  loadable on Linux) plus only the connect-host change. Daemon route.
+- New `f025-f020-s6b-new`: daemon `6d467539`, addon `7ec591f1`, worktree SDK
+  JS. In-process route.
+
+Both checkpoints ok (diff_commits plus a full compareTree), verdict watch on
+both. Series use the runner's own classing (`readTrace`/`markContention`,
+`adb6dbb83`): contended means a Commit or merge overlaps the call. ms is
+p50 / p95; SQL is the statements p50 per call (the call's connection-window
+counters).
+
+| Op | Series | n old/new | Old ms | New ms | SQL old → new |
 | --- | --- | --- | --- | --- | --- |
-| fs.read p50 / p95 | | | | | |
-| fs.stat p50 / p95 | | | | | |
-| fs.list p50 / p95 | | | | | |
-| fs.grep p50 / p95 | | | | | |
-| fs.write p50 / p95 | | | | | |
-| fs.apply p50 / p95 | | | | | |
-| branch.fork p50 | | | | | |
-| branch.merge p50 | | | | | |
-| branch.publish p50 | | | | | |
-| SQL statements per call (each method) | | | | | |
-| Store bytes after the equivalence sequence | | | | | |
+| fs.read | uncontended | 9/11 | 6.57 / 9.43 | 2.81 / 3.32 | 168 → 171 |
+| fs.read | contended | 33/31 | 5.96 / 9.24 | 2.89 / 4.41 | 237 → 271 |
+| fs.write | uncontended | 195/179 | 12.26 / 16.65 | 9.30 / 14.58 | 523 → 553 |
+| fs.write | contended | 427/443 | 16.19 / 71.19 | 12.88 / 46.30 | 937 → 1072 |
+| fs.list | uncontended | 8/11 | 6.70 / 9.83 | 2.73 / 3.82 | 279 → 177 |
+| fs.list | contended | 33/30 | 7.96 / 14.31 | 2.70 / 4.50 | 392 → 255 |
+| fs.stat | uncontended | 5/8 | 5.27 / 8.27 | 1.90 / 2.70 | 111 → 114 |
+| fs.stat | contended | 34/31 | 5.58 / 13.41 | 2.46 / 3.52 | 195 → 204 |
+| fs.grep | uncontended | 6/8 | 7.86 / 16.28 | 4.98 / 18.83 | 366 → 264 |
+| fs.grep | contended | 34/32 | 9.57 / 70.79 | 5.55 / 69.37 | 535 → 594 |
+| fs.apply | uncontended | 6/10 | 11.46 / 13.89 | 9.68 / 14.05 | 267 → 819 |
+| fs.apply | contended | 45/41 | 15.27 / 23.11 | 13.56 / 167.57 | 754 → 1000 |
+| branch.fork | uncontended | 7/7 | 3.35 / 3.80 | 0.61 / 1.62 | 16 → 16 |
+| branch.merge | uncontended | 3/3 | 275.0 / 275.0 | 286.1 / 286.1 | 7294 → 7294 |
+| branch.publish | uncontended | 1/1 | 6.40 | 5.51 | 753 → 753 |
+
+No merge, fork or publish call was contended in either arm.
+
+Store after range 12: file 38,203,392 → 38,240,256 B (+36,864, +0.10%);
+stored 22,093,975 → 22,093,613 (−362); metadata 28,283,521 → 28,320,642
+(+37,121); logical and changed bytes equal within 21,702 B of 39.9 GB;
+commits 8,519, layers 10 and Branches 64 on both.
+
+Workspace calls: every method's count and outcomes are identical (mount 68,
+exec 153 exit 0, commit 32 Committed / 31 UpToDate / 1 Conflict, unmount 68,
+fs.write 620 Committed / 2 UpToDate). The only difference is
+`sandbox.service` (7 calls, old only): the Sandbox the daemon route needed
+for Store calls, which this change removes.
+
+**Against DIRECT_STORE_IMPL §4:**
+
+| Criterion | Result |
+| --- | --- |
+| Read p50 lower | met: read 6.08 → 2.84 ms; stat 5.58 → 2.43; list 7.34 → 2.73 (all calls) |
+| Write p50 not higher | met: 14.73 → 11.81 ms (all), 12.26 → 9.30 uncontended |
+| Workspace calls unchanged | met |
+| SQL per call equal | met where the counters are the call's own; **missed** in the aggregate rows |
+| Store bytes equal | **missed**, +0.10% file bytes (metadata) |
+
+Diagnosis of the two misses (receipts `core/target/f020/s6b-*.txt|json`):
+
+1. The SQL counters are the shared connection's work during the call's
+   window, so they include work from overlapping calls. Paired across arms
+   by step, method and index, and limited to calls that no other call
+   overlaps, every pair is equal: fork 7/7, merge 3/3, publish 1/1, rm 2/2,
+   diff_commits 2/2. Writes are 86/99 equal, mean 517.7 → 516.7; the 13
+   that differ are reconcile writes (±3–48 statements). No read, list,
+   stat, grep or apply call ran fully alone in either arm. The old arm also
+   lacks three product fixes between `a5a0915cd` and F-020's base: F-022
+   (bind by name), F-026 (list memo; list SQL −35% is that fix) and F-025
+   fix 0 (timing spans). Its rows are not F-020 alone.
+2. Concurrent plays interleave differently: merge-at-publish ran 9 times
+   in the old arm and 10 in the new. Merges, ids and tree nodes then differ,
+   and so do metadata bytes. The serial equivalence proof (step 5, `r11b`)
+   has equal Store rows and equal used bytes, 34,455,552 on both.
+3. The contended apply p95 (23 → 168 ms) and the write p95 tail are time
+   spent queued for the writer or the lane behind a merge (~280 ms), not
+   route work. Without wait.writer, lane and begin: write p50/p95 13.73 /
+   30.43 → 9.47 / 15.93 ms; apply 13.86 / 21.71 → 9.79 / 15.11. The new play
+   runs faster (play 8,239 → 7,401 ms), so more calls queue behind the same
+   merges: 15 writes vs 7 and 5 applies vs 1 wait over 50 ms. Lane time
+   belongs to F-025 fix 1 (merge path naming by change size).
+
+Playbook finding (fixer): on a concurrent play, "SQL per call equal" and
+"Store bytes equal" cannot be judged from aggregates. Judge them from
+isolated pairs and from the serial equivalence sequence, and build the old
+arm from F-020's parent so the comparison is F-020 alone. Neither attempt
+reached optimize or stop, so no `finding-NNN.aK.json` is due.
+
+Kept until the table is accepted: volumes `layerfs-issue352-f025-f020-s6b-{old,new}`,
+`-s6-{old,new}` (the F-028 stop at `r012.s0021`, before the rebase),
+`-compat9` and `layerfs-issue352-f020-eq-r11{,b,c}-{A,B}`.
 
 ## Layout as built
 
-*pending*: the vertical listing at the final commit, replacing
-DIRECT_STORE_IMPL.md §5.
+At `a2169f652`, production LOC by `tools/production_loc.py --files`. The
+crates and SDK native module F-020 created or changed; tests live under each
+crate's `tests/` and are not counted. The daemon keeps its Workspace-only
+service and the remaining ports.
+
+```
+layerfs-store-service/src/        [8767]  (new crate; Store code moved from layerfs-daemon)
+  bootstrap.rs                       209
+  kernel_guard.rs                     49  (new: refuses bind mount and tmpfs)
+  lib.rs                              17
+  store_service.rs                   158  (new: StoreService, open_direct)
+  telemetry.rs                       323  (moved from layerfs-daemon)
+  operator/                        [512]
+    files.rs                         175
+    inspect.rs                       237
+    mod.rs                            19
+    store.rs                          81
+  overlay/                        [2035]
+    backing.rs                       118
+    captured_namespace_port.rs        67
+    captured_run_port.rs              39
+    file_port.rs                      39
+    kernel_operations.rs             119
+    lifetime_operations.rs           123
+    mod.rs                            13
+    operation_record_port.rs         105
+    owner.rs                         592
+    read_operations.rs               172
+    read_port.rs                      88
+    scopes.rs                         72
+    state.rs                          93
+    workspaces.rs                    395
+  sdk/                            [3048]
+    args.rs                          159
+    blame.rs                         248
+    body.rs                          104
+    branch.rs                        523
+    compare.rs                       414
+    dispatch.rs                       49
+    edit.rs                          113
+    files.rs                         227
+    mod.rs                            17
+    mutation.rs                      237
+    plans.rs                          26
+    reads.rs                         242
+    recursive.rs                     277
+    snapshot.rs                      166
+    window.rs                        246
+  service/                          [79]
+    mod.rs                             4
+    observations.rs                    9
+    owner_work.rs                     51
+    results.rs                         7
+    startup.rs                         8
+  store/                          [2337]
+    bind.rs                          126
+    captured.rs                      236
+    commit.rs                        337
+    commit_merge.rs                  198
+    commit_types.rs                  209
+    hints.rs                          46
+    mod.rs                            31
+    open.rs                          150
+    operation.rs                      74
+    ports.rs                         204
+    producer.rs                       70
+    read_handle.rs                   176
+    read_service.rs                  287
+    recognizer.rs                     94
+    settle.rs                         27
+    statistics.rs                     14
+    types.rs                          58
+
+sdk/js/native/src/    [1525]  (partial: files F-020 changed)
+  direct.rs              165  (new: in-process Store route)
+  discovery.rs           496
+  dispatch.rs             97
+  job.rs                  83
+  lib.rs                  30
+  pool.rs                144  (daemon host)
+  sandbox.rs             431
+  trace.rs                79
+```
 
 ## Decisions (fixer, recorded)
 
@@ -219,9 +377,20 @@ creates, so it is designed once):
   root AGENTS.md records it (2026-10-18). An SDK process on macOS gets
   `Unsupported` for Store calls; the dsh web app must run in a Linux container
   to use them.
-- `core/benchmark/fs-bench-pro/runtime` no longer compiles: it calls
-  `ProjectApi::fork` and `ProjectApi::commits`, removed in step 1 with the
-  daemon Store route. `core/benchmark/deepseek-sdk-experiment` was already
+- **Known break, left for the owner (direction 2026-10-18: do not touch,
+  build or run fs-bench-pro):** `core/benchmark/fs-bench-pro/runtime` no
+  longer compiles against this API. Call sites:
+  `src/session.rs:582` (`ProjectApi::new().fork`), `src/session.rs:628`
+  (`ProjectApi::new().commits`), `src/session.rs:8/97/118` (`ForkRequest`
+  imports and builder for the daemon fork), and the `SandboxCreate` literal
+  at `src/runtime.rs:74` (no `connect_host`). Its `tests/session_protocol.rs`
+  fork/history parse tests depend on the same session code. A compile fix
+  was made and then dropped from the branch (local ref
+  `f020-fsbench-cancelled-3c56bdb09`); `a2169f652` removes the one line the
+  daemon-host commit had added there. fs-bench-pro is not a member of the
+  core workspace, whose build passes (host +1.85.1 at `a2169f652`, 50 s;
+  Linux at the same product source, 15 m 25 s with `-j 2`, over the 2-minute
+  command limit, reported). `core/benchmark/deepseek-sdk-experiment` was already
   broken at the parent (`layerfs_history::CommitStagedOutcome`). Both are
   outside the workspace; their own lockfiles are also stale.
 - The builder's runner uses `--network host`; the owner excluded Docker
