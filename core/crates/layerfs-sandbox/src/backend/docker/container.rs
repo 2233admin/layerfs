@@ -22,13 +22,68 @@ impl SandboxRequest {
         quoted(w, SECCOMP)?;
         w.write_all(b"],\"Mounts\":[{\"Type\":\"volume\",\"Source\":")?;
         quoted(w, &self.store_volume)?;
-        w.write_all(b",\"Target\":\"/layerfs-store\",\"ReadOnly\":false,\"VolumeOptions\":{\"NoCopy\":true}}],\"PortBindings\":{")?;
+        w.write_all(b",\"Target\":\"/layerfs-store\",\"ReadOnly\":false,\"VolumeOptions\":{\"NoCopy\":true}}")?;
+        for v in &self.volumes {
+            w.write_all(b",{\"Type\":\"volume\",\"Source\":")?;
+            quoted(w, &v.volume)?;
+            w.write_all(b",\"Target\":")?;
+            quoted(w, &v.target)?;
+            w.write_all(b",\"ReadOnly\":true,\"VolumeOptions\":{\"NoCopy\":true}}")?;
+        }
+        w.write_all(b"],\"PortBindings\":{")?;
         quoted(w, &format!("{}/tcp", self.port))?;
         w.write_all(b":[{\"HostIp\":\"127.0.0.1\",\"HostPort\":\"\"}]}}}")
     }
 }
 impl Docker {
-    /// Validates the borrowed volume once, then creates one actual stopped container.
+    /// One read of an existing exact plain local volume; it has no create effect.
+    fn plain_volume(&self, name: &str) -> Result<(), Box<WireFailure>> {
+        let mut response =
+            self.exchange("GET", &format!("/v1.54/volumes/{name}"), false, |_| Ok(()))?;
+        if response.status != 200 {
+            return Err(response.fail(RuntimeError::Http(response.status), None));
+        }
+        let result = (|| {
+            let mut found = false;
+            let mut bits = 0;
+            let mut local = false;
+            let mut scope = false;
+            let mut options = false;
+            let mut j = Json::new(&mut response.body);
+            j.object(|j, key| {
+                if key.equals("Name") {
+                    once(&mut bits, 1)?;
+                    found = j.string_equals(name)?;
+                } else if key.equals("Driver") {
+                    once(&mut bits, 2)?;
+                    local = j.string_equals("local")?;
+                } else if key.equals("Scope") {
+                    once(&mut bits, 4)?;
+                    scope = j.string_equals("local")?;
+                } else if key.equals("Options") {
+                    once(&mut bits, 8)?;
+                    options = true;
+                    if !j.null()? {
+                        j.object(|j, _| {
+                            options = false;
+                            j.skip(2)
+                        })?;
+                    }
+                } else {
+                    j.skip(1)?;
+                }
+                Ok(())
+            })?;
+            j.finish()?;
+            if bits != 15 || !found || !local || !scope || !options {
+                return Err(RuntimeError::Protocol("exact plain local VM volume"));
+            }
+            Ok(())
+        })();
+        result.map_err(|e| response.fail(e, None))?;
+        Ok(())
+    }
+    /// Reads each borrowed volume once, then creates one actual stopped container.
     pub fn create_sandbox(
         &self,
         request: SandboxRequest,
@@ -39,53 +94,10 @@ impl Docker {
                 .check()
                 .map_err(|e| super::http::failure(false, 0, None, e, None))?;
             phase = CreatePhase::Volume;
-            let mut response = self.exchange(
-                "GET",
-                &format!("/v1.54/volumes/{}", request.store_volume),
-                false,
-                |_| Ok(()),
-            )?;
-            if response.status != 200 {
-                return Err(response.fail(RuntimeError::Http(response.status), None));
+            self.plain_volume(&request.store_volume)?;
+            for v in &request.volumes {
+                self.plain_volume(&v.volume)?;
             }
-            let result = (|| {
-                let mut found = false;
-                let mut bits = 0;
-                let mut local = false;
-                let mut scope = false;
-                let mut options = false;
-                let mut j = Json::new(&mut response.body);
-                j.object(|j, key| {
-                    if key.equals("Name") {
-                        once(&mut bits, 1)?;
-                        found = j.string_equals(&request.store_volume)?;
-                    } else if key.equals("Driver") {
-                        once(&mut bits, 2)?;
-                        local = j.string_equals("local")?;
-                    } else if key.equals("Scope") {
-                        once(&mut bits, 4)?;
-                        scope = j.string_equals("local")?;
-                    } else if key.equals("Options") {
-                        once(&mut bits, 8)?;
-                        options = true;
-                        if !j.null()? {
-                            j.object(|j, _| {
-                                options = false;
-                                j.skip(2)
-                            })?;
-                        }
-                    } else {
-                        j.skip(1)?;
-                    }
-                    Ok(())
-                })?;
-                j.finish()?;
-                if bits != 15 || !found || !local || !scope || !options {
-                    return Err(RuntimeError::Protocol("exact plain local VM volume"));
-                }
-                Ok(())
-            })();
-            result.map_err(|e| response.fail(e, None))?;
             phase = CreatePhase::Create;
             // `naming` admitted only characters that need no URL escape.
             let path = match &self.container_name {
