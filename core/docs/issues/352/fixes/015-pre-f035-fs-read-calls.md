@@ -229,3 +229,18 @@ that is safe is stated on `Session::read_immutable` and in the `0b0a883f0`
 message (insert-only locations, trigger-immutable packs, a pack id counter
 that never goes back, page-only reclamation). Reads that pick a snapshot keep
 their transaction. That argument is flagged for the owner.
+
+## Continuation results (2026-10-18)
+
+Full record: [#354 continuation findings](../../354/FINDINGS-20261018.md).
+The text above is unchanged.
+
+- **Timing:** the 17:26 pass was not quiet (load 8.8–10.3). Its figures are diagnostic on macOS, and the native reference is BSD grep 2.6.0. No timing on this branch is qualified.
+- **Memory:** the 19.6, 23.6 and 38.0 MB figures are process max RSS from three different builds and modes. Live heap peaks on P3 whole-tree grep are 3.29 MB at P0 and 9.36 MB at P5. The rest of the RSS is allocator retention plus SQLite's page cache. The bounded holders and the output-sensitive holders are listed there.
+- **fs.read per file on P3:** 42 statements at P5. Fixed overhead is 39.4 of them (open 7.0, lookup 31.5, size 0.9) and chain depth adds 2.6. Every query plan is an index or primary-key SEARCH.
+- **`b83871223`:** inode-value reads run without BEGIN/COMMIT. fs.read on P3 drops to 29 statements per file (115,818 for 4,000 files, was 167,990). Results are byte-identical.
+- **Safety:** the argument is extended to `inode_value` (one INSERT per ordinal; ordinals are given back only while unwritten). It is checked against #353's tables. The new `immutable_reads_under_reclamation` test covers reads during free-page reclamation.
+- **Paging:** paging is still count-based (O(R²/k) for full pagination). Tokens are held; see the [cursor proposal](../../354/PAGE-CURSOR-PROPOSAL.md).
+- **Linux qualification at `b83871223`:**
+  - persistence 29, storage 19, content 61, store-service 23 and daemon non-mount 28: all pass, and clippy passes.
+  - The daemon mount tests are NOT_RUN: the container has no FUSE device.
