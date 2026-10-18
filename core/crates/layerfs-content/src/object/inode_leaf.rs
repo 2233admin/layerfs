@@ -32,8 +32,6 @@ pub const NODE_HEADER_BYTES: usize = 31;
 pub const LEAF_ROW_BYTES: usize = 81;
 /// Largest row count of one inode leaf page.
 pub const MAXIMUM_LEAF_ROWS: usize = 100;
-/// Smallest row count of a non-root inode leaf page.
-pub const MINIMUM_LEAF_ROWS: usize = 50;
 /// Largest canonical bytes of one tree page, including the object envelope.
 pub const MAXIMUM_NODE_OBJECT_BYTES: usize = 8_192;
 /// Canonical bytes before the first row: envelope plus node header.

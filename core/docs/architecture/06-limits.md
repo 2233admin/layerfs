@@ -5,6 +5,16 @@
 > with a cumulative allowance derived from the operation's declared ordering
 > memory. The historical tables below are updated at their former entry.
 
+> **Current-source correction (2026-10-18, #352 limits audit, source
+> `efcb6d880`):** §9 now marks every row whose constant no longer exists as
+> retired, corrects the dependency pack cache and delta depth defaults, and adds
+> the history, merge, depth and time limits that were enforced but undeclared.
+> The classified list of every product limit is
+> [the #352 limits audit](../issues/352/LIMITS_AUDIT.md). The keyed
+> namespace-tree, prepared-stream and Service/Bridge file-save subsections
+> describe routes retired by the per-Workspace overlay (#321) and the one-route
+> Store (#352 F-020); they are kept as history.
+
 > **Status:** Research; informative and not a product contract.
 
 The issue #192 schema 8 changes, including the configured per-Store writer
@@ -193,7 +203,7 @@ and the [source index](README.md#references).
      │              │        └── no  ──► select FULL vs PREFIX ([§6.8](05-storage.md#68-physical-representation-selection--policy-versus-failure))
      │              │
      │              ├── frame the record in its LANE (PackLane::for_role)
-     │              ├── batch: 512 objects / 512 KiB / 8,191 rows / 4 MiB − 1
+     │              ├── batch: 512 objects / 8,191 rows / 4 MiB − 1
      │              └── early transactions MAY commit — packs stay INVISIBLE
      │
      │  5. save.finish(scope)?  ──► advances retained_pack_ceiling
@@ -307,7 +317,7 @@ where, because a limit that is stated but not enforced is not a limit.
 | mapping entries per page | 64 – 128 | `ExtentNode::validate` |
 | mapping tree level | ≤ 31 | `ExtentNode::validate` |
 | mapping node object | 8,192 B | `MAX_NODE_OBJECT_BYTES` |
-| edits per operation | `MAXIMUM_EDITS_PER_OPERATION` | `edit::input` |
+| edits per operation | no count cap (retired; not in source at `efcb6d880`: `MAXIMUM_EDITS_PER_OPERATION`); the product edit route is backed | `apply_indexed_edits_view_backed` |
 
 ### C1 — filesystem
 
@@ -320,7 +330,7 @@ where, because a limit that is stated but not enforced is not a limit.
 | inode branch children (non-root) | 64 – 127 | `limits` |
 | directory/attribute fill (non-root) | ≥ 2/5 of page | `limits::filled_page` |
 | name component | 255 B | `MAXIMUM_NAME_BYTES` |
-| path | 4,096 B / 256 components | `path.rs` |
+| path | 4,096 B / 256 components (the component cap is not a platform limit; audit A4) | `path.rs` |
 | operation scratch | 4 MiB | `MAXIMUM_OPERATION_SCRATCH_BYTES` |
 | validation topology containers (resident routes only) | `floor(ordering_bytes / 1024)` entries each; the backed route has no such limit | `validate/backed.rs` |
 | classification window (backed route) | 64 rows | `validate::CLASSIFICATION_WINDOW_ROWS` |
@@ -332,6 +342,8 @@ where, because a limit that is stated but not enforced is not a limit.
 | inode serial | 1 ..= `i64::MAX` | `InodeIdentity::new` |
 
 ### Workspace private backing — keyed namespace tree (#256)
+
+> **Retired route (2026-10-18 correction).** The keyed private-backing tree was replaced by each Workspace's own overlay SQLite file (#321). None of the constants named in this subsection exists at `efcb6d880`; the text is kept as history.
 
 The #264 Phase 4.5 mounted route, based on `6115dfcd2` plus the source in this
 commit, validates each component but does not assemble an aggregate path.
@@ -397,6 +409,8 @@ once, `O(H + L)` page reads rather than `O(H × L)`.
 
 ### Frozen namespace lowering and the prepared stream (#256)
 
+> **Retired route (2026-10-18 correction).** Commit no longer sends a prepared stream over the bridge; it constructs in the daemon from the captured overlay (#321) and SDK Store calls run in process (#352 F-020). None of the constants named in this subsection exists at `efcb6d880`; the text is kept as history.
+
 One Commit lowers the captured generation once. The frontier walk, the namespace
 records and the inode records are three ordered passes over that one keyed tree,
 and a maintained directory's final bindings are the ordered merge of its entry
@@ -450,36 +464,57 @@ slice (`04-filesystem.md` §5.8).
 | pack (ordinary/native/whole-file/pooled) | 256 KiB | `PACK_LIMIT` |
 | pack (singleton) | 16 MiB + 4 KiB | `SINGLETON_PACK_LIMIT` |
 | group body (ordinary/native/whole-file) | 65,536 | `GROUP_LIMIT` |
-| group body (pooled metadata) | 16 KiB | `METADATA_GROUP_LIMIT` |
+| group body (pooled metadata) | retired; not in source at `efcb6d880` | `METADATA_GROUP_LIMIT` |
 | group target | 48 KiB framed | `GROUP_TARGET` |
 | group count per pack | 256 | `GROUP_COUNT_LIMIT` |
 | record count per group | 8,191 | `RECORD_COUNT_LIMIT` |
 | canonical object accepted | 16 MiB | `CANONICAL_LIMIT` |
-| lookup page ids | 128 | `LOOKUP_PAGE_IDS` |
+| lookup page ids | retired; not in source at `efcb6d880`; pages follow SQLite's variable and length limits | `Transaction::input_limit` |
 | read wave | 4,096 objects | `READ_OBJECT_LIMIT` |
 | batch objects | 512 | `BATCH_OBJECT_LIMIT` |
-| batch canonical bytes | 512 KiB | `BATCH_CANONICAL_BYTES_LIMIT` |
+| wave canonical bytes | 4 MiB − 1 (was a 512 KiB batch bound) | `WAVE_CANONICAL_BYTES_LIMIT` |
+| group canonical bytes | 512 KiB | `GROUP_CANONICAL_BYTES_LIMIT` |
 | transaction rows | 8,191 | `TRANSACTION_ROW_LIMIT` |
 | transaction canonical bytes | 4 MiB − 1 | `TRANSACTION_CANONICAL_BYTES_LIMIT` |
-| cleanup page rows | 128 | `CLEANUP_PAGE_ROWS` |
+| cleanup page rows | retired; not in source at `efcb6d880` | `CLEANUP_PAGE_ROWS` |
 | chain canonical / encoded | 512 KiB / 256 KiB | `CHAIN_*_LIMIT` |
-| pooled metadata decoded work | 32 MiB | `METADATA_DECODED_WORK_LIMIT` |
+| pooled metadata decoded work | retired; not in source at `efcb6d880` | `METADATA_DECODED_WORK_LIMIT` |
 | pooled index entries | 131,072 | `METADATA_INDEX_VALUES` |
 | pooled value cache | 512 KiB | `POOLED_VALUE_CACHE_BYTES` |
-| dependency pack cache | 4 MiB | `DEPENDENCY_PACK_CACHE_BYTES` |
-| values per metadata group | 165 | `VALUES_PER_GROUP` |
-| pooled leaf rows | 100 | `POOLED_LEAF_ROWS_LIMIT` |
-| private save slots (supported space) | 64 | `MAX_CONCURRENT_WRITES_LIMIT`, `saves.active_slot` CHECK |
-| concurrent writers per Store (admitted) | 2 default, 1..=64 | persisted `store_policy.max_concurrent_writes` |
-| concurrent reads per service process | 2 | `MAX_READ_OPERATIONS` |
-| sessions per Store | budget + 2, +1 refusal slot | `session_capacity` |
-| delta depth (whole-file / chunk / metadata) | 8 / 4 / 8 defaults, ≤ 50 | policy validation |
+| dependency pack cache | 2 MiB | `DEPENDENCY_PACK_CACHE_BYTES` |
+| values per metadata group | retired; not in source at `efcb6d880` | `VALUES_PER_GROUP` |
+| pooled leaf rows | 100 | `inode_leaf::MAXIMUM_LEAF_ROWS` |
+| private save slots | retired; not in source at `efcb6d880`; one writer at a time (architecture 83) | `MAX_CONCURRENT_WRITES_LIMIT` |
+| concurrent writers per Store | one; queued writers wait at most 2 s, then `Busy` (audit A8) | `admission::WINDOW`, Linux directory lock |
+| concurrent reads per service process | retired; not in source at `efcb6d880` | `MAX_READ_OPERATIONS` |
+| sessions per Store | retired; not in source at `efcb6d880` | `session_capacity` |
+| delta depth (whole-file / chunk / metadata) | 16 / 8 / 8 defaults, ≤ 50 | policy validation |
 
-### Service/Bridge — final file save (#252)
+### History, merge, depth and time (enforced, undeclared until 2026-10-18)
+
+These refuse work on a count, depth or time rather than a resource. They are
+candidate findings (#352 F-033 and [audit](../issues/352/LIMITS_AUDIT.md) §1),
+not declared product contracts.
 
 | Limit | Value | Enforced by |
 | --- | ---: | --- |
-| logical final file | 4 GiB | `MAX_FILE` and final-sequence validation |
+| Commits since the base Layer, Layers between sides, first-parent depth | 4,096 rows per walk, then `Capacity` | `MAXIMUM_LINEAGE_ROWS` (F-033) |
+| paths one merge may decide | 262,144, then `Capacity` | `MAXIMUM_MERGE_PATHS` |
+| merge result topology (resident route) | 65,536 entries per container | `FilesystemResources::default`, `validate/backed.rs` |
+| Commit message | 4,096 B, no control character but LF and TAB | `MAXIMUM_MESSAGE_BYTES`, `CommitAttribution::check` |
+| directory moved under a parent | at most 256 levels deep | `kernel_mutation::ANCESTRY_STEPS` |
+| LWW rule include files | 16; later includes are ignored | `lww::MAXIMUM_RULE_FILES` |
+| writer wait | 2 s, then `Busy` | `admission::WINDOW` |
+| SDK `project.init` | 60 s | `INIT_DEADLINE` |
+| mounts per SDK Sandbox / control connections | 16 / 8 (fixed by the SDK) | `sandbox.rs` `DaemonLimits` |
+
+### Service/Bridge — final file save (#252)
+
+> **Retired route (2026-10-18 correction).** The bridge file-save stream and its spools are gone: SDK file calls run in process (#352 F-020) and mounted writes go through the overlay. None of the constants named in this subsection exists at `efcb6d880`; the text is kept as history.
+
+| Limit | Value | Enforced by |
+| --- | ---: | --- |
+| logical final file | retired; not in source at `efcb6d880`; file size is bounded by `i64::MAX` | `operations/file/write.rs` |
 | wire descriptor records | 24 B each; count charged by bytes, no fixed count cap | `Operation::SaveFile::input_length` |
 | descriptor plus non-base byte body | 8 GiB | `MAX_SAVE_STREAM_BYTES` |
 | derived edit, zero-range and byte spools | 8 GiB total | `file_stream::SPOOL_DISK_BYTES` |
@@ -504,11 +539,11 @@ Exceeding a work bound is an **explicit refusal** — "the same error a genuine 
 gets, **never a claim that the tree was proven acyclic**". That last clause matters:
 the failure must not be reportable as a proof.
 
-**2. Twelve constants are named `4_096`, and three of them are not counts.**
-`MAXIMUM_PATH_BYTES`, `MAXIMUM_SYMLINK_TARGET_BYTES` and `SINGLETON_FRAMING_SLACK`
-are **byte** limits; only two of the twelve are read-wave batches, and none is the
-write batch (512 objects / 512 KiB). The full disambiguation is
-[§15.4](10-counters.md#154-the-twelve-4096s--a-disambiguation).
+**2. Twenty-six constants are `4_096`, and eight of them are not counts.**
+`MAXIMUM_PATH_BYTES`, `MAXIMUM_SYMLINK_TARGET_BYTES`, `SINGLETON_FRAMING_SLACK`
+and five others are **byte** sizes; only two are read-wave batches, one is the
+history lineage cap, and none is the write batch (512 objects / 4 MiB − 1). The full disambiguation is
+[§15.4](10-counters.md#154-the-4096s--a-disambiguation).
 
 **3. `MAXIMUM_TREE_LEVEL` is derived, not restated.**
 `limits::MAXIMUM_TREE_LEVEL = file::mapping::MAX_LEVEL` ("one owner, one name"),
