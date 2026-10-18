@@ -9,6 +9,16 @@
 | Binaries | release, `--locked --offline -j 6`, image `layerfs-307-fuser-patch-clippy:1.85.1` (`378b799ef433`), pinned under `core/target/issue359-warm/` with a `SOURCE` file each, registered in `~/lfs-history/runs/issue359/binaries.json`. base: daemon `cc185d13` / addon `66d774c8` (record 026's head build; my rebuild of `615bf75f2` produced the same bytes). a32: `42c19a39` / `3ad548df`. a64: `42c19a39` / `6ae65f16` (id `w64-6ae65f16`; the daemon does not use its own default, the budget is the addon's setup). b32: `afeb92f6` / `ea7bb1dc`. a64+b32: `ecf5dea6` / `b65ef9f6` |
 | Status | **decided.** Owner, 2026-10-19: "Set the daemon CanonicalCache to 64 MiB and drop prototype (b), the shared pack tier." The branch carries 64 MiB (SDK setup in `sdk/js/native/src/sandbox.rs`, daemon default in `install_types.rs`); (b) is removed and `layerfs-storage` and `layerfs-store-service` are byte-identical to `issue359-impl` (`7dc323574`). Pushed to the branch only; nothing merged |
 
+> **Old golden, superseded (owner, 2026-10-19).** Every sample number in this
+> record (seq 347–644) was taken on the cost golden `layerfs-issue359-prep`,
+> whose attributes are in the Root form from before #360. The owner retired it
+> for new samples: "we need to drop the old store and use the latest one and do
+> not get confused". These numbers keep their verdicts (COMPLETE or FAILED) but
+> are labeled **old golden, superseded** and are never compared unlabeled with
+> samples on the current-format golden (`layerfs-issue359-golden-current-*`).
+> S2, R and the paired 8/64 MiB cp-rm-nm samples are to be rerun there; the 64
+> MiB decision itself is unchanged.
+
 ## Decision
 
 - **CanonicalCache: 64 MiB**, by owner decision 2026-10-19. It replaces 8 MiB
@@ -47,6 +57,8 @@
 - **RSS:** the daemon's VmRSS from `/proc` read by an extra exec right after the step, outside the step's counters. VmHWM was equal to VmRSS in every row. It is a point sample, not a peak claim.
 
 ## Samples
+
+*Old golden (`layerfs-issue359-prep`), superseded.*
 
 - base 8 MiB: seq 407–437
 - a32: seq 439–469
@@ -236,6 +248,8 @@ One run each, under a 115 s alarm (host) or `timeout 100` (Linux), built
 
 ## Serial operations on one daemon (owner request 2026-10-19)
 
+*Old golden (`layerfs-issue359-prep`), superseded.*
+
 **Question:** is the 64 MiB cache shared across different operations? The
 owner asked: "test against those operations ... and see if the cache is cross
 shared between operations (we can have one workspace execute on one
@@ -263,9 +277,14 @@ operation serially)".
   first-stat-deep. Case 6 (cp-rm-nm) hit the 115 s alarm: cp alone took
   117.5 s. Its runner kept running, and cases 7–10 ran while its 28 s
   rm-created step was still going, so their daemon-wide counters and walls
-  are contaminated. Close was refused (`MountsActive`), and the Sandbox and
-  volume were removed by hand. Cases 1–5 are clean but are not reported as an
-  arm. The per-case script now stops the sequence on any overrun.
+  are contaminated. **This was my mistake:** I continued with the next cases
+  after case 6 overran instead of stopping the sequence. Close was then refused
+  (`MountsActive`), so I stopped and removed the Sandbox container and its
+  volume by hand and appended a FAILED ledger entry with a note; `sample.json`
+  carries verdict FAILED. Arm S stays FAILED as recorded. Its cases 1–5 ran
+  before the overrun and stand as clean, but are not reported as an arm. The
+  per-case script now stops the sequence on any overrun (approved by the
+  liaison).
 - *cp-rm-nm's cold reference (s611): FAILED.* It ran over budget: cp 107 s
   and rm-created 36 s at host load 46–52. It was decoded afterwards for its
   counts only.
@@ -418,6 +437,7 @@ Scope and method for every line: `tools/production_loc.py --root` on `git archiv
 | `419f771bf` decision docs | 98479 → 98479 (delta 0) | |
 | `35d2e3373` serial harness | 98479 → 98479 (delta 0) | `dsh/tools` is not in a production scope |
 | serial results docs commit | 98479 → 98479 (delta 0) | |
+| old-golden label docs commit | 98479 → 98479 (delta 0) | |
 
 Net over the base `46e17bdf3`: 98479 → 98479 (delta 0). The kept product
 change is the `cache_bytes` value and its comment.
