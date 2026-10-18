@@ -14,6 +14,7 @@ import { aggregate, evaluate, probeSeries } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
 import { parseReport } from "../frozen.mjs";
+import { blockTables, findingTableProblems } from "../reportcheck.mjs";
 import { baselineFor, leadNote, loadBaselines, probeSetupCommits, regate, writeBaseline } from "../report.mjs";
 import { atHead } from "../frozen.mjs";
 import { laneChanges, mergedTree } from "../agents.mjs";
@@ -550,6 +551,18 @@ test("F-019: the checkpoint diff is normalised by changed entries plus their cha
   const xs = [mk(0, 654, 253, 40, 1851), mk(1, 706, 195, 75, 1725), mk(2, 804, 317, 116, 3132)];
   const row = evaluate(xs.at(-1), xs.slice(0, -1)).checks.find((c) => c.name === "Scaling");
   assert.equal(row.result, "watch", "three points: not judged");
+});
+
+test("F-020: F4 checks the before/after table and the with-vs-without table each by its own shape", () => {
+  const ba = "| Measure | Before | After | Change | Old binary | New binary | Snapshot / checkpoint | Cache |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| p50 | 40 ms | 17 ms | −58% | `aaaaaaaa` | `bbbbbbbb` | r007 | warm |";
+  const ww = (h2 = "Attempt 2 (with) · `c25119ace6ae`", row = "| Range time (tooling) | 16.6 s | 20.6 s |") =>
+    `**4. With vs without the optimization, this range**\n\n| Measure | Attempt 1 (without) · \`361bb09e1d94\` | ${h2} |\n| --- | --- | --- |\n${row}`;
+  const block = (w) => `**3. Before / after**\n\n${ba}\n\nCounter text.\n\n${w}\n\n**5. Cost of the fix:** none`;
+  assert.deepEqual(findingTableProblems(block(ww())), []);
+  assert.deepEqual(findingTableProblems(block(ww("Attempt 2 (with)"))), ['with-vs-without column "Attempt 2 (with)" is not labelled with its binary']);
+  assert.deepEqual(findingTableProblems(block(ww(undefined, "| Range time (tooling) | 16.6 s |  |"))), ['with-vs-without row "Range time (tooling)" does not fill every column']);
+  assert.deepEqual(findingTableProblems(block("").replace("| warm |", "|  |")), ['row "p50" does not fill every column']);
+  assert.deepEqual(blockTables(block(ww())).map((t) => t.rows.length), [1, 1]);
 });
 
 // the runner stays last: a test registered after it never runs

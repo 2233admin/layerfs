@@ -43,6 +43,42 @@ function section(text, heading) {
   return body.join("\n");
 }
 
+/** The tables of a Finding block: each one's header and rows, contiguous `|` lines, in order. */
+export function blockTables(block) {
+  const tables = [];
+  let cur = null;
+  for (const l of block.split("\n")) {
+    if (!l.startsWith("|")) { cur = null; continue; }
+    if (!cur) { cur = { header: cells(l), rows: [] }; tables.push(cur); continue; }
+    if (!/^\|\s*-{3}/.test(l)) cur.rows.push(cells(l));
+  }
+  return tables;
+}
+
+/**
+ * F4 (REPORT_FORMAT.md §5 Findings, items 3 and 4): the before/after table has
+ * the eight columns, every cell filled, numbers with units; the with-vs-without
+ * table, when present, is Measure plus one column per attempt, each labelled
+ * with its binary (a backticked id), every cell filled.
+ */
+export function findingTableProblems(block) {
+  const p = [], tables = blockTables(block);
+  const ba = tables.find((t) => JSON.stringify(t.header) === JSON.stringify(FINDING_COLUMNS));
+  if (!ba) return [`the before/after columns are not ${FINDING_COLUMNS.join(" · ")}`];
+  for (const c of ba.rows) {
+    if (c.length !== FINDING_COLUMNS.length || c.some((x) => !x)) p.push(`row "${c[0]}" does not fill every column`);
+    else if (!/exponent|ratio|share/.test(c[0]) && [c[1], c[2]].some((x) => /^[−\-]?[\d,.]+$/.test(x))) p.push(`row "${c[0]}" has a number without its unit`);
+  }
+  const at = block.indexOf("With vs without");
+  const ww = at < 0 ? null : blockTables(block.slice(at))[0];
+  if (ww) {
+    if (ww.header[0] !== "Measure" || ww.header.length < 3) p.push("the with-vs-without table is not Measure plus one column per attempt");
+    else for (const h of ww.header.slice(1)) if (!/`[0-9a-f]{8,}`/.test(h)) p.push(`with-vs-without column "${h}" is not labelled with its binary`);
+    for (const c of ww.rows) if (c.length !== ww.header.length || c.some((x) => !x)) p.push(`with-vs-without row "${c[0]}" does not fill every column`);
+  }
+  return p;
+}
+
 /** The Finding blocks of §7 (the binding format: §5): "NNN.aK" -> block text. */
 function findingBlocks(text, heading = LEAD_START) {
   const seven = section(text, heading) ?? "", out = new Map();
@@ -132,14 +168,8 @@ export function checkReport({ range, metricsDir, docs }) {
       if (!comment.includes(f.trigger.check)) fail("F3", `comment-${pad(range)}.md lacks finding ${id}'s trigger`);
       for (const r of f.improvement) if (!comment.includes(r.measure)) fail("F3", `comment-${pad(range)}.md lacks the measure "${r.measure}" of finding ${id}`);
     }
-    // F4: the table
-    const lines = block.split("\n").filter((l) => l.startsWith("|")), at = lines.findIndex((l) => l.startsWith("| Measure |"));
-    if (at < 0 || JSON.stringify(cells(lines[at])) !== JSON.stringify(FINDING_COLUMNS)) fail("F4", `Finding ${id}: the before/after columns are not ${FINDING_COLUMNS.join(" · ")}`);
-    else for (const l of lines.slice(at + 2)) {
-      const c = cells(l);
-      if (c.length !== FINDING_COLUMNS.length || c.some((x) => !x)) fail("F4", `Finding ${id}: row "${c[0]}" does not fill every column`);
-      else if (!/exponent|ratio|share/.test(c[0]) && [c[1], c[2]].some((x) => /^[−\-]?[\d,.]+$/.test(x))) fail("F4", `Finding ${id}: row "${c[0]}" has a number without its unit`);
-    }
+    // F4: each table of the block by its own shape (F-020): the before/after table, and the with-vs-without one
+    for (const p of findingTableProblems(block)) fail("F4", `Finding ${id}: ${p}`);
     // F5: its records and ledger linked
     for (const r of f.records ?? []) if (!block.includes(`](../${r.path})`)) fail("F5", `Finding ${id} does not link ${r.path}`);
     for (const l of f.ledger ?? []) if (!block.includes(`](../${l.file})`)) fail("F5", `Finding ${id} does not link ${l.file}`);
