@@ -386,8 +386,10 @@
   frozen for diagnosis: volume `layerfs-issue352-scale-s4`, container
   `layerfs-issue352-scale-s4-b`, evidence `~/lfs-history/scale-experiments/s4/lww/`
   (REPRO.md to follow). Concurrent installs are expected in P3 (lanes on a
-  4-Sandbox pool), so this blocks measured P3. Owner: to be assigned by the
-  owner (fixer queue or its own worktree session).
+  4-Sandbox pool), so this blocks measured P3. **Owner decision
+  (2026-10-18):** the fixer takes F-036 right after F-032; until then it only
+  reads source, logs and REPRO-F036.md, with no product change; frozen-volume
+  access goes through the lead. Measured P3 waits for it.
 - **Limits audit findings (owner decision 2026-10-18).** From the limits audit
   (branch `dsh-352-limits-audit`, `core/docs/issues/352/LIMITS_AUDIT.md` §1,
   `17148cacd`). The F-033 rule applies to each: no `Capacity` or `Busy` on a
