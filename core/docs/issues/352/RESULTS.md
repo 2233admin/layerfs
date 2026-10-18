@@ -115,6 +115,7 @@
 | 2026-10-18 | Calibration of ranges 16–29 is complete (14 test files). F-031: the replay's Workspaces have no `.git`, which is a seed-method gap, not by design. The decision is to include it from P3 (depth-1 clone seed; one add+commit exec per range; `git status` in the closure; `.git` checked by HEAD id and a clean status, not compareTree; storage counted separately in the P3 recalibration). It lands at the P3 boundary, so no measured series inside a phase changes workload | AGENTS: a Workspace includes `.git` |
 | 2026-10-18 | Owner decisions. (1) F-031 revised: from P3 a full `dsh.git` clone and one git commit per replayed dsh commit (original metadata, HEAD = replayed id); the proof adds HEAD and a clean status. Recorded in SPEC §2 (new subsection), the P0 note, §5 and §7 (`ccf7125f6`), plus BUGS F-031; the builder owns it after the P3 dev checks. The lead's depth-1 plan stopped before any edit; nothing to keep. (2) Stop after range 14 and hand off to a fresh lead. Finish the 014.a1 proof, range 14's measured rerun, its report and P2 close (with the DEFER.md trigger check). The crew reaches a clean committed state with no new queue items. HANDOFF.md is rewritten for a fresh lead. Builder idle since 03:49:45Z (last tooling `a88169557`, calibration 16–29 complete) | Owner |
 | 2026-10-18 | F-031 correction (owner): the `.git` seed is the full history up to P3's start commit only, not a clone of the bare repo, which holds later commits. Every commit, tree and blob reachable from `6e5c908a1` (range 14's checkpoint), with refs and HEAD there. The builder chooses the method and proves it: `git rev-list --all` shows nothing after the start. Lead measurement with `git pack-objects --revs`: 1,545 commits, 9.35 MiB pack plus 0.73 MiB index, against 301 MiB for the whole repo. Updated in SPEC §2 and BUGS F-031 | Owner |
+| 2026-10-18 | P2 closed at range 14 (attempt 2 watch on `p2-main-f`, daemon `57141b57`, addon `438bae05`, baseline `baseline-57141b57ac53-438bae05ad7c-p2.json`). The P2 section has the ranges, fixes, speed, storage recalibration (46.47 MiB, −0.7% against forecast) and the DEFER.md trigger check (nothing reopened; D-1/D-2 need metrics). The second lead hands off per the owner. HANDOFF.md is rewritten for a fresh lead, and the crew is idle with nothing uncommitted | Owner: stop after range 14 |
 | 2026-10-18 | Control-arm reports stay in `~/lfs-history/runs/p1-control/` and get no #352 checkpoint comment; the comparison is posted in the P1 summary | They are a control, not checkpoints of the main line (SPEC §3 counts one comment per main-line attempt) |
 
 ## P1 · Pilot
@@ -188,7 +189,68 @@ depth exponents 0.20–0.25 (sublinear).
 
 ## P2 · Multi-agent
 
-Pending.
+Closed 2026-10-18 at range 14 (owner: stop after range 14 and hand off).
+Ranges 5–14, 5–10 agents on 2–4 lanes each, fs writes only (no Sandbox file
+work yet; that is P3).
+
+### Ranges
+
+| Range | Final attempt | Verdict | Line | Daemon / addon |
+| --- | --- | --- | --- | --- |
+| 5–8 | see RANGES.md | watch | `p2-main-b` | `c25119ac` / `5baa0f5d` and earlier |
+| 9 | a2 | watch | `p2-main-b` | `58a60046` / `799e3ca6` |
+| 10 | a1 | watch | `p2-main-c` | `0cc2a732` / `799e3ca6` |
+| 11 | a2 | watch | `p2-main-d` | `6d467539` / `7ec591f1` (F-020) |
+| 12 | a1 | watch | `p2-main-d` | same |
+| 13 | a2 | optimize (closed as noise, 013.a2 kind none) | `p2-main-e` | same |
+| 14 | a2 | watch | `p2-main-f` | `57141b57` / `438bae05` (014.a1 + F-025 fix 1) |
+
+Every checkpoint is ok. Each range has its report and its #352 comment.
+
+### Fixed in P2
+
+F-008 (merge at publication), F-009, F-010, F-011, F-017, F-018, F-020
+(direct Store, one route), F-022 (mount Branch lookup), F-026 (list per entry),
+F-028 (identical apply), 013.a1 and 013.a2 (noise, kind none), 014.a1 (diff memo
+eviction), F-025 fix 1 (top-down path naming), INSTALLS read-only volumes.
+Gate tooling: F-019 unit, two series, thin baselines, chain-bounded probes, split one-shot
+probe, five-sample time median with load, kind-none findings.
+
+### Storage at P2's end (recalibration against STORAGE_STUDY §5)
+
+Sealed Store at range 14 (`p2-main-f`): **48,726,016 B = 46.47 MiB**. STORAGE_STUDY
+§5 forecast for r014: 46.8 MiB expected (45.9–48.7). Measured −0.7% against
+expected, inside the band. No re-plan. The forecast is not edited; P3's
+recalibration adds F-031's `.git` (seed 9.35 MiB pack plus 0.73 MiB index, then
+one git commit per replayed dsh commit) and the first installs.
+
+### Speed at range 14 (daemon `57141b57`, uncontended, p50 / p95)
+
+write 18.7 / 41.1 ms (1.22× the P2 baseline) · read 2.8 / 5.8 (1.21×) · list
+3.0 / 7.9 (0.96×) · one-shot Commit 14.9 / 34.3 (1.06×) · mount 12.7 / 23.9
+(0.89×) · merge 169 / 264 (2.31×, thin class) · one-shot Workspace 128 ms p50.
+Range 14 attempt 1 on the previous binary had contended `fs.write` p95 at
+438–480 ms; attempt 2's p95 is 41 ms. That is one sample each, not a fix claim.
+F-025 fix 1's old-vs-new table is still pending.
+Daemon memory: the report's "526 MB (+288 MB)" is the **sum** of VmRSS over
+all daemons, one per Sandbox (`lib.mjs` `sandboxHealth`). The delta compares
+sums across different Sandbox counts and binaries (9 at range 13, 11 at range 14),
+so it is not growth. Per daemon: r011 43.9, r012 44.6, r013 26.4, r014 47.8 MB.
+No breakdown is measured (heap, SQLite page cache, fuser receive buffers,
+shared immutable cache). For the next lead: report RSS per daemon (max and
+median) and a one-time `smaps` breakdown of one daemon at range end, and judge
+per-daemon growth, not the sum.
+
+### DEFER.md trigger check at P2 close
+
+| Item | Trigger | Measured | Result |
+| --- | --- | --- | --- |
+| D-1 F-025 fix 2 | After fix 1: the uncontended fs.write / fs.rm / one-shot Commit series trips a speed gate, or uncontended lane hold per Commit grows with history, tree or Branch count | Range 14 a2 (fix 1 in): Speed watch, worst `branch.publish` (thin class). No trip on fs.write, fs.rm or one-shot Commit. Lane hold per Commit is not in the range metrics, and there is 1 same-binary point | Not reopened. The lane-hold series needs a metric: it goes to the builder at P3 |
+| D-2 F-025 fix 3 | After fix 1: uncontended Save time includes writer-queue wait, or the contended Save phase grows range over range | No uncontended `wait.writer` split in range metrics; 1 same-binary point | Not reopened; same instrumentation note |
+| D-3 zstd dictionary | After F-027 and its recalibration | F-027 not landed | Not reached |
+| D-4 storage items < 10% | After F-027's recalibration | F-027 not landed | Not reached |
+| D-5 editor-style saves | A measurement after measured P3 starts | P3 not started | Not reached |
+
 
 ## P3 · Sandbox share
 

@@ -288,6 +288,19 @@ Open for the lead: the reinstall gate's "× changed packages" is undefined for
 the ~96 installs that change only workspace links and no package (C); define it
 before P3 judges one.
 
+### Recalibration at P2 close (2026-10-18, lead) [E]
+
+Sealed Store at range 14 (line `p2-main-f`, daemon `57141b57`, addon
+`438bae05`): 48,726,016 B = **46.47 MiB**. §5's r014 forecast: 46.8 expected
+(45.9–48.7). Measured −0.7% against expected, inside the band. Earlier sealed
+points on the same lineage: r011 34,267,136 B (`p2-main-d`), r013 42,627,072 B
+(`p2-main-e`). The forecast above is not edited. Not yet in it: F-031's `.git`
+from P3. Its seed is history up to `6e5c908a1` only: 1,545 commits, a 9.35 MiB
+pack plus a 0.73 MiB index (`git pack-objects --revs`, lead). Then one git
+commit per replayed dsh commit. The builder's P3 dev range measures growth per
+git commit (index, loose objects, packs). A dated section "Recalibration for
+`.git` (F-031)" follows from the liaison side.
+
 ## 8. What P3's development run must measure (recalibration)
 
 1. Store bytes per small `fs.write` Commit before and after the first install,
