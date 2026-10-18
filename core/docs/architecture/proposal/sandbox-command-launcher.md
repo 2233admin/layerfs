@@ -1,7 +1,7 @@
 # Proposal: a long-lived command launcher per Sandbox
 
-> **Status:** Proposal for an owner decision, written 2026-10-18 by the #352
-> liaison. **Not decided, not implemented.** Nothing here changes current
+> **Status:** Owner-approved proposal (2026-10-18), **not yet implemented**.
+> Written 2026-10-18 by the #352 liaison; decisions in §12. Nothing here changes current
 > behaviour or the execution-ownership rules in
 > [core/AGENTS.md](../../../AGENTS.md#filesystem-access-and-execution-ownership).
 > Evidence: #352 finding 013.a1 (`core/docs/issues/352/fixes/013-a1-oneshot-exec-launch.md`,
@@ -189,3 +189,17 @@ filesystem work is drained; those rules are unchanged.
 3. Foreground cancel: add it, or keep it out of scope.
 4. Timing: before or after #352 P3 (the replay's Sandbox share is about one
    call in ten, so P3 and later ranges gain the most).
+
+## 12. Owner decisions, 2026-10-18
+
+1. **Adopt** the launcher; the per-call Docker exec route is removed after the
+   switch (one route, no fallback).
+2. **Transport:** one launcher session per SDK process and Sandbox over one
+   Docker exec stream; no published port.
+3. **Foreground cancel:** out of the first version; background cancel moves
+   to the launcher.
+4. **Timing:** before #352 measured P3, built in parallel by a separate
+   worker on its own branch (not the fixer), touching the SDK exec code and
+   `layerfs-sandbox` only. #352 F-029 (per-call `discovery::refresh` on exec)
+   is folded into the same work. The switch shares the P3 re-baseline after
+   F-027 rather than forcing a second one.
