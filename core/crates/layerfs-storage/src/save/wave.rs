@@ -89,9 +89,14 @@ impl State<'_> {
                 values: &self.values,
             };
             if let Some(location) = view.location(object.id(), i64::MAX)? {
+                // Exact reuse trusts the content address (owner, 2026-10-19;
+                // #352 record 034 A-1): the id is the hash of the canonical
+                // bytes, so a stored object with this id, role and length is
+                // not read back. A role or length mismatch is still refused
+                // here. A corrupt stored copy fails later, at its first read,
+                // where every read authenticates bytes against the id.
                 if location.role != object.role()
                     || location.canonical_length != object.canonical_len()
-                    || self.resolve(object.id())? != object.canonical()
                 {
                     return Err(StorageError::Collision(object.id()));
                 }
