@@ -122,8 +122,8 @@ All of this is from source at `77fe3b20ec`.
     another process's discovery mutation is refused `Busy` ("another
     process owns this discovery mutation"). Explicit `flock(LOCK_UN)` before
     the close would remove the window. The window needs a concurrent
-    discovery mutation from a second process and is narrow. Owner:
-    unassigned.
+    discovery mutation from a second process and is narrow. The owner filed
+    it as F-053 (2026-10-19), and it is fixed in record 037.
 - **(c) The range runner (`dsh/tools/history`): no mount copy.**
   - `run.mjs`, `lib.mjs` and `runner.mjs` start `docker`, `git`, `sh`,
     `node`, `df`, `chmod` and `cp` with `execFileSync`/`spawnSync`, in the
