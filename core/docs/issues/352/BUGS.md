@@ -525,3 +525,19 @@
   **Status: OPEN. Owner: unassigned.** Next step: capture the `Failure`
   value, then diagnose it from the unmount drain source.
   [fixes/022-359-mtime-only-live-rows.md](fixes/022-359-mtime-only-live-rows.md).
+
+- **F-047 · `fp21_detach_stages` fails 0/2 after the A1 merge (test premise,
+  likely; #359 head run, 2026-10-18).**
+  - Both cases expire at "the request is inside its Store read"
+    (`fp21_detach_stages.rs:95`).
+  - The test stages a request inside a provider read by gating the Store
+    after a lookup. Under #354 A1, the Workspace reader keeps that lookup's
+    objects (`KeptReads`), so the later `open` or listing is served without
+    a provider call and never enters the gate.
+  - It passed 2/2 before the merge (record 018).
+  - The cause is inferred from source, not re-run on a pre-A1 build.
+    Product detach behaviour is not shown to be wrong.
+
+  Needs a stage that misses `KeptReads` (a test change). **Owner:
+  unassigned** (A1 owner #354 or the lead).
+  [fixes/026-359-head-full-sample.md](fixes/026-359-head-full-sample.md).
