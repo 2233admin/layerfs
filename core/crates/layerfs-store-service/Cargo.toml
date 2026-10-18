@@ -17,3 +17,7 @@ layerfs-telemetry = { path = "../layerfs-telemetry" }
 # Concrete Store opening (bootstrap) and the kernel guard's open.
 layerfs-persistence = { path = "../layerfs-persistence" }
 nix = { version = "=0.31.3", default-features = false, features = ["fs"] }
+
+[dev-dependencies]
+# Project Init builds the installed Store the tests open.
+layerfs-project = { path = "../layerfs-project" }

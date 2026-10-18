@@ -17,7 +17,10 @@ fn refused(directory: &Path) -> (String, Vec<u8>, Vec<u8>) {
         Err(other) => panic!("expected Unsupported, got {other:?}"),
         Ok(_) => panic!("expected Unsupported, the Store opened"),
     };
-    assert!(!template.exists(), "no overlay template before the guard passes");
+    assert!(
+        !template.exists(),
+        "no overlay template before the guard passes"
+    );
     (reason, before, std::fs::read(&store).unwrap())
 }
 

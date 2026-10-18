@@ -689,6 +689,7 @@ dependencies = [
  "layerfs-history",
  "layerfs-overlay",
  "layerfs-persistence",
+ "layerfs-project",
  "layerfs-storage",
  "layerfs-telemetry",
  "layerfs-workspace",
