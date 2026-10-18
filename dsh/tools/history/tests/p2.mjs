@@ -297,7 +297,8 @@ test("F-014: probes fit only same-version, same-input points; growing probes are
   const mk = (range, depth, probes) => ({ range, binary: { daemon: "d" }, depth: { after: depth }, inputs: { tree: { files: 100 * (range + 1), bytes: 1e4 * (range + 1) } }, checks: {}, probes });
   const one = (ms, input, version) => ({ ms, counters: { statements: 100 }, ...(input ? { input } : {}), ...(version ? { version } : {}) });
   const row = (xs, name = "Scaling") => evaluate(xs.at(-1), xs.slice(0, -1)).checks.find((c) => c.name === name);
-  const same = [1, 2, 3].map((i) => mk(i, 1000 * i, { diff_commits: one(5, { files: 1 }, 2) }));
+  // (a fixed-input probe outside the chain-bounded set: diff_commits is chain-bounded since F-023)
+  const same = [1, 2, 3].map((i) => mk(i, 1000 * i, { list_commits: one(5, { pageSize: 20, items: 20 }) }));
   assert.equal(row(same).result, "pass", row(same).value);
   // the input drifted (the v1 defect): refused with the reason
   const drift = [1, 2, 3].map((i) => mk(i, 1000 * i, { diff_commits: one(5 * i, { files: [4, 5, 60][i - 1] }, 2) }));
@@ -591,6 +592,17 @@ test("runner container: docker run arguments, the route guard, the shim's run pa
   const frame = (k, t) => Buffer.concat([Buffer.from([k, 0, 0, 0]), Buffer.from([0, 0, 0, Buffer.byteLength(t)]), Buffer.from(t)]);
   const d = demux(Buffer.concat([frame(1, "out1 "), frame(2, "err"), frame(1, "out2")]));
   assert.deepEqual([d.stdout.toString(), d.stderr.toString()], ["out1 out2", "err"]);
+});
+
+test("F-023: the one-file diff_commits probe is chain-bounded: the recorded nine points pass, unbounded growth trips", () => {
+  const files = [373, 438, 530, 654, 706, 760, 804, 830, 860], stmts = [78, 78, 96, 72, 96, 90, 90, 93, 84];
+  const mk = (i, v) => ({ range: 2 + i, binary: { daemon: "d" }, depth: { after: 1500 + 500 * i }, inputs: { tree: { files: files[i] } }, checks: {}, storage: { delta: { caps: { metadata: 8 } } },
+    probes: { diff_commits: { ms: 5 + (v % 7) / 10, version: 3, input: { files: 1 }, counters: { statements: v } } } });
+  const counters = (xs) => evaluate(xs.at(-1), xs.slice(0, -1)).checks.find((c) => c.name === "Counters");
+  const rec = counters(stmts.map((v, i) => mk(i, v)));
+  assert.equal(rec.result, "pass", rec.value);
+  assert.equal(counters(stmts.map((v, i) => mk(i, 72 + 12 * i))).result, "optimize");
+  assert.equal(counters(stmts.slice(0, 3).map((v, i) => mk(i, v))).result, "watch", "three points: not judged");
 });
 
 // the runner stays last: a test registered after it never runs

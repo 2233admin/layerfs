@@ -3,7 +3,8 @@
 // reads the files and writes the reports.
 //
 // Chain-reading probes (F-016, builder's choice, 2026-10-18): stat, read,
-// list_small, grep/glob scoped and diff_files read the fixture through
+// list_small, grep/glob scoped and diff_files read the fixture, and (F-023)
+// diff_commits, merge and oneshot_commit rewrite fixed probe paths, through
 // metadata delta chains, whose position rises one link per range and resets
 // at the cap (8): list_small cycled 60 → 228 blob reads. They are judged as a
 // bound, not a depth exponent: the max over the latest cap period against the
@@ -159,7 +160,10 @@ export function probeSeries(name, m, all) {
  * gives 1.0; growth without a reset raises the latest period's maximum.
  * Fewer than a period plus one point, or no recorded cap, is not judged.
  */
-export const CHAIN = new Set(["stat", "read", "list_small", "grep_scoped", "glob_scoped", "diff_files"]);
+export const CHAIN = new Set(["stat", "read", "list_small", "grep_scoped", "glob_scoped", "diff_files",
+  // F-023: probes that rewrite a fixed file or directory each range (diff-one.txt, m/*, c/one.txt), so their
+  // own writes and reads walk the same per-path delta chains: bounded by the cap, not monotone
+  "diff_commits", "merge", "oneshot_commit"]);
 /** The bound's bands: counters are deterministic (any rise is a finding), ms carries noise. */
 export const BOUND = { counters: { watch: 1.0, act: 1.05 }, ms: { watch: 1.2, act: 1.5 } };
 
