@@ -7,7 +7,7 @@
 | Branch | `claude/issue359-warm-daemon-cache-0d14ff`, based on `46e17bdf3` (`issue359-impl` line; product source = `2d84fe1bb`). Not merged anywhere; integration is the owner's decision |
 | Commits | harness `615bf75f2`; (a) 32 MiB `8bc399ce1`, 64 MiB `276138ea3`; (b) `a09854c0c`; (a)+(b) `a82efb484`; this record and docs: the commit that adds it |
 | Binaries | release, `--locked --offline -j 6`, image `layerfs-307-fuser-patch-clippy:1.85.1` (`378b799ef433`), pinned under `core/target/issue359-warm/` with a `SOURCE` file each, registered in `~/lfs-history/runs/issue359/binaries.json`. base: daemon `cc185d13` / addon `66d774c8` (record 026's head build; my rebuild of `615bf75f2` produced the same bytes). a32: `42c19a39` / `3ad548df`. a64: `42c19a39` / `6ae65f16` (id `w64-6ae65f16`; the daemon does not use its own default, the budget is the addon's setup). b32: `afeb92f6` / `ea7bb1dc`. a64+b32: `ecf5dea6` / `b65ef9f6` |
-| Status | **prototyped and measured; final budget is the owner's decision.** Not pushed at the time of writing |
+| Status | **prototyped and measured; on hold until the owner picks the budget** (liaison, 2026-10-18). Pushed to the branch only |
 
 ## Cache state and conditions
 
@@ -17,7 +17,7 @@
   - *warm-daemon*: W1 mounts, runs the case once, unmounts discarded (unmeasured); a fresh W2 on the same Branch and daemon runs it once and is measured.
   - Each arm is labeled on its own. The warm-daemon arm never credits or replaces cold (AGENTS §1).
 - **Store file:** page-cache resident in every arm after the volume clone (declared, not controlled). Wall times are warm-Store diagnostics; counts are exact.
-- **Record 026 difference:** its `--part all` cold arm followed a native setup mount on the same daemon, so its small-case cold times were partly warm (first stat 4.4 ms there, 35.9 ms here on a truly fresh daemon at base).
+- **Record 026 difference:** its `--part all` cold arm followed a native setup mount on the same daemon, so it is not a fresh-daemon arm. Its cold numbers and this record's cold arm measure different cache states and are not compared here; every comparison below is within this record's samples.
 - **One sample per arm**, no retry, no best-of. Each case ran as its own command under a 115 s alarm; every sample is COMPLETE.
 - **Interference (one-minute host load, other activity):**
 
@@ -125,6 +125,24 @@ CanonicalCache occupancy at the end of each sample (`charged_cache_bytes`) gives
 - **(a)+(b).** Over a64, the warm-daemon arm gains nothing, since both are at 0 statements. Cold vitest reads 3.7 MB instead of 5.2 MB of whole packs. RSS rises by up to 14 MB (vitest 57.5 → 71.9 MB).
 - **Mount latency** is about 8–11 ms (median of 8 cases) in every arm, warm W2 or fresh. A warm daemon has no mount-specific gap.
 
+## Order of the arms
+
+The owner asked for "32 first": report 32 MiB on its own before running 64 MiB
+or (b). That direction reached this session after the a64, b32 and a64+b32
+arms had already run (seq 471–565): the liaison's go-ahead for stop point 1
+and the "32 first" message both arrived after stop point 2 was sent. So a32
+was not reported on its own first. Its samples (seq 439–469) were taken
+before any later arm and are unchanged by them; each arm is its own build,
+daemon and Store clone.
+
+## Interaction with the RCA facts window
+
+The RCA session's LOOKUP facts window (F-A2/F-A3, record 032) charges its
+entries against the same CanonicalCache allowance that `cache_bytes` sets.
+Whatever budget is chosen is shared with it. The occupancies and RSS here were
+measured on this branch without that work, so a window's entries would come
+out of the same budget and could evict objects these cases kept.
+
 ## Options for the owner (budget is daemon memory held while the daemon lives)
 
 | Option | Warm-daemon Store work, large cases | Largest daemon RSS seen | Notes |
@@ -137,7 +155,9 @@ CanonicalCache occupancy at the end of each sample (`charged_cache_bytes`) gives
 
 The cache charges only what is read, so RSS grows towards the budget only on daemons that read that much. The RSS figures are single point samples on a loaded host. Allocator retention after W1's caches are freed makes warm-daemon RSS exceed cold RSS even at 8 MiB.
 
-My recommendation: (a) at 64 MiB, or 40 MiB if memory per daemon matters more than vitest-sized working sets. Prototype (b) is not worth its memory unless the locator rows are shared too. Sharing them would let a tier hit skip `locate`, but it touches `read/fetch.rs` locator code that this lane does not own, so it is not done here.
+My recommendation: (a) at 64 MiB, or 40 MiB if memory per daemon matters more than vitest-sized working sets. The default is the owner's decision; these prototypes report numbers and pick none. Prototype (b) is not worth its memory unless the locator rows are shared too. Sharing them would let a tier hit skip `locate`. The liaison scoped that as a possible positive-only prototype (never a miss or negative answer, per F-036), branched from the correctness lane's `fetch.rs`, then put it on hold: it is not built unless the owner asks.
+
+**Out-of-lane edits.** (b) touches `read/fetch.rs` (correctness lane) and `read/mod.rs` (#354 lane). Both are approved only as a prototype on this branch. If the owner drops (b), those edits drop with it (commit `a09854c0c`, and the tier half of `a82efb484`).
 
 ## Prototype (b) design
 
