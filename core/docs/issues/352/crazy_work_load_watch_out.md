@@ -34,10 +34,14 @@ clean reinstall 44.7 s, of which ~31.6 s is `rm -rf node_modules` (F-032).
 ## 2. Stops and correctness (any one ends a range or the replay)
 
 **S1. The 4,096-row ancestry cap will stop ranges 98, 112 and 129.** [V]
-- `MAXIMUM_LINEAGE_ROWS = 4096` (`layerfs-history/src/contract/records.rs:24`).
-  Publish (`layerfs-persistence/src/history/layerstack.rs:389`, `commit.rs:68`)
-  and merge walk every Commit since the Branch's base Layer. Past the cap the
-  call fails `Capacity`.
+- `MAXIMUM_LINEAGE_ROWS = 4096` (`layerfs-history/src/contract/records.rs:24`)
+  is still in the code, at v0.1.7 and at HEAD. What #352 finding 002 removed
+  (`3f127ee3e`, after v0.1.7) is its dependence on **total history**: walks
+  now stop at Layers, so they no longer reach all published history. The cap
+  still applies to the Commits **since the last published Layer**. Publish
+  (`layerfs-persistence/src/history/layerstack.rs:389`, `commit.rs:68`) and
+  merge walk those Commits; past 4,096 the call fails `Capacity`. In the
+  replay each range publishes one Layer, so the limit is per range.
 - Publish statements track the range's Commits almost exactly [E]: r011 960
   Commits / 977 statements, r013 866 / 883, r014 1,163 / 2,346 (two walks).
 - Forecast with F-031's extra Commit per dsh commit: r98 ~6,251, r112 ~4,589,
@@ -78,8 +82,8 @@ clean reinstall 44.7 s, of which ~31.6 s is `rm -rf node_modules` (F-032).
   at a time (`layerfs-workspace/src/workspace/serials.rs:8`) through a Store
   write. If the 2 s admission wait (S2) gives up with the pool empty, the create
   answers `EAGAIN` (`layerfs-daemon/src/service/filesystem_port.rs:369`) and
-  pnpm fails. F-025 fix 4 (the reservation pool, now being timed) is the
-  relevant fix.
+  pnpm fails. F-025 fix 4 (merged 2026-10-18) pools serials for SDK file
+  calls only; mounted Workspaces are unchanged, so this risk stays open.
 - **Check:** serial reservations, their writer wait and `EAGAIN` replies per
   mount; one install while another Workspace commits a `node_modules`-sized
   change. Any `EAGAIN` is a stop finding.
