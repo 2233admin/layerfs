@@ -304,6 +304,10 @@
   (D0). Not folded into F-027.
   **Owner decision 2026-10-18:** fixed before measured range 15 (moved ahead
   of measured P3; per-op timing first).
+  **GitHub #356 (owner, 2026-10-18):** target a delete of a committed entry
+  costing about what a create costs (tens of µs, not 0.7 ms), `rm -rf` of the
+  dev tree within a small multiple of native, flat per-entry cost against
+  directory size; generic, exact POSIX semantics.
 - **F-033 · `MAXIMUM_LINEAGE_ROWS` (4,096) refuses history walks with
   `Capacity` (product, liaison research, owner decision 2026-10-18).** The
   constant (`layerfs-history/src/contract/records.rs:24`) bounds three walks,
