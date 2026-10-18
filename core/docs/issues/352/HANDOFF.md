@@ -118,8 +118,12 @@ pointed at this file and the records.
 7. Storage counters from the builder's note (`builder-storage-counters.md` in the
    shared notes).
 
-Limits-audit findings F-037 to F-041 (BUGS, 6fb065e3b) have no fix owner until
-the owner assigns them; they are not in the fixer's queue. The replay works
+Limits-audit findings: F-037, F-038, F-041 and S2 risk 1 are deferred as DEFER.md
+D-6 (#355, 7fb928f91); the lead checks D-6 triggers at every range close
+(merge > 50,000 candidate paths, merge-at-publish lane hold > 500 ms, any
+Capacity/ObjectLimitExceeded/Busy from a merge) and reports a trip to the
+liaison; `report.mjs check` gets a D-6 block (builder). F-039 and F-040 have no
+fix owner until the owner assigns them; they are not in the fixer's queue. The replay works
 around them: the generated `/.lww` is written inline with no `%include` (F-039);
 Busy/EAGAIN in a range is recorded as F-040, not retried; LWW picks are counted
 from the merge result, not the `truncated` flag (F-041).
