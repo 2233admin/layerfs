@@ -3,7 +3,7 @@
 // records which the range runs (#352 SPEC §2, Tests, steps 4–5):
 //   node dsh/tools/history/calibrate-tests.mjs --repo <dsh.git> --plan <dir> --image I
 // (I: the replay's runtime image id, SPEC §2, Runtime image)
-//     --pnpm-store <volume> [--checkout <dir>] [--from N] [--to M] [--fetch]
+//     --pnpm-store <volume> [--checkout <dir>] [--from N] [--to M] [--fetch] [--store-policy verified|release-age-off]
 // For each range in order it moves the one working tree to the checkpoint
 // (oracle.mjs checkout), installs node_modules from the offline pnpm store
 // when the range installs or nothing is installed yet, and runs every
@@ -81,6 +81,8 @@ function main() {
   const summary = JSON.parse(readFileSync(join(planDir, "plan.json"), "utf8"));
   const from = Number(opt("--from", "0")), to = Number(opt("--to", String(summary.ranges.length - 1)));
   const max = Number(opt("--max-files", "0"));
+  // NODE_RULE §11 a: the run's store policy (owner decision pending); the plan's own default keeps dsh's
+  const install = installCommand({ policy: opt("--store-policy", "verified") });
   for (let k = from; k <= to; k++) {
     const plan = JSON.parse(readFileSync(join(planDir, `range-${pad(k)}.json`), "utf8"));
     const tests = plan.closure.tests;
@@ -92,7 +94,7 @@ function main() {
       // `--fetch` fills the store from this lockfile first (the network's one use);
       // the install itself is offline (SPEC §2, Speed-ups 4)
       if (args.includes("--fetch")) execFileSync("docker", dockerArgs({ image, tree, store, network: "bridge", command: FETCH }), { stdio: "inherit" });
-      execFileSync("docker", dockerArgs({ image, tree, store, command: INSTALL }), { stdio: "inherit" });
+      execFileSync("docker", dockerArgs({ image, tree, store, command: install }), { stdio: "inherit" });
     }
     const file = join(planDir, `tests-${pad(k)}.json`), partialFile = join(planDir, `tests-${pad(k)}.partial.json`);
     const slice = nextSlice(tests.files, existsSync(partialFile) ? JSON.parse(readFileSync(partialFile, "utf8")) : null, plan.checkpoint, max);
@@ -109,7 +111,7 @@ function main() {
     }
     const native = tests.files.map((f) => byPath.get(f)).filter(Boolean);
     const chosen = chooseRun(native, tests.tier);
-    writeFileSync(`${file}.tmp`, JSON.stringify({ range: k, image, checkpoint: plan.checkpoint, install: blocked ? null : INSTALL, candidates: tests.candidates, dropped: tests.dropped, native, ...chosen }, null, 1));
+    writeFileSync(`${file}.tmp`, JSON.stringify({ range: k, image, checkpoint: plan.checkpoint, install: blocked ? null : install, candidates: tests.candidates, dropped: tests.dropped, native, ...chosen }, null, 1));
     renameSync(`${file}.tmp`, file);
     if (existsSync(partialFile)) unlinkSync(partialFile);
     console.log(`range ${k}: ${chosen.run.length} of ${tests.files.length} run (${chosen.nativeMs} ms native), ${chosen.skipped.length} skipped, ${((Date.now() - t0) / 1000).toFixed(1)} s`);

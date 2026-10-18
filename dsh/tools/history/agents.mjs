@@ -24,13 +24,14 @@
 // against the dev evidence and would need its own dev run to qualify; one
 // Sandbox per agent also matches one agent per Sandbox in the target. The pool
 // stays across ranges until a seal.
-import { lsTree } from "./git.mjs";
+import { git, lsTree } from "./git.mjs";
 import {
   BLOB_IDS, countMutation, execAll, expectCall, Mismatch, placeCommands, PNPM_STORE, reads, setup, writeOp,
 } from "./lib.mjs";
 import { sandboxVolumes } from "./closure.mjs";
 import { generateLww, gitignores } from "./lww.mjs";
-import { gitContext, laneGit, laneGuard, leadGit, seedGit } from "./gitplay.mjs";
+import { gitContext, laneGit, laneGuard, laneLock, leadGit, seedGit } from "./gitplay.mjs";
+import { afterStep, inputsHash, leadInstall, nodeContext } from "./nodelanes.mjs";
 import { createHash } from "node:crypto";
 import { abs, consolidationSteps, decoyBytes, p2Plan, pad, PHASES, quote, route, sandboxExpect, STEP_KINDS, Tree } from "./steps.mjs";
 
@@ -208,6 +209,8 @@ export async function playAgents(run, k, ctx) {
       const by = ctx.played.get(agent) ?? ctx.played.set(agent, { fs: 0, sandbox: 0, branch: 0, project: 0 }).get(agent);
       by[STEP_KINDS[s.kind]]++;
       settle.get(s.id).resolve();
+      // NODE_RULE §4: a lane's test point after its middle and last step, once its earlier steps landed (the plan's order respects every barrier)
+      if (ctx.node) await afterStep(a, k, s, ctx, { lock: laneLock, waitFor: (id) => (id === s.id ? null : done.get(id)), plan: run.plan(k) });
     }
   };
   await Promise.all([...ctx.p2.agents.keys()].map((agent) => task(agent).catch(fail)));
@@ -261,7 +264,16 @@ export async function startRange(run, k, plan, measured) {
   ctx.git = ctx.untracked ? gitContext(run, plan) : null;
   ctx.checkpoint = plan.checkpoint;
   if (ctx.git && !run.state.gitSeeded) { await seedGit(run, k, ctx); run.progress?.(`git seed ${ctx.git.seed.wallMs} ms`); }
-  const from = ctx.git?.seed ? ctx.lead : "main";
+  // NODE_RULE §2: the lead's first install (and at milestones its clean reinstall) on its Branch, before any lane forks
+  ctx.node = ctx.untracked ? nodeContext(run, plan) : null;
+  if (ctx.node) {
+    const r = await leadInstall(run, k, plan, ctx);
+    if (r) run.progress?.(`lead install ${r.install.exitCode} ${r.install.ms} ms, tsc ${r.tsc?.exitCode} ${r.tsc?.ms} ms, point ${r.ms} ms`);
+    // the chain every lane point starts from (nodeproof.mjs replays it natively): as trees, with the range base's
+    const treeOf = (c) => git(run.repo, ["rev-parse", `${c}^{tree}`]).trim();
+    Object.assign(ctx.node, { baseTree: treeOf(run.state.prevCommit), chainInputs: inputsHash(base), chain: (run.state.closureChain ?? []).map((e) => ({ tree: treeOf(e.checkpoint), command: e.command, kind: e.kind })) });
+  }
+  const from = ctx.git?.seed || ctx.node?.points.length ? ctx.lead : "main";
   for (const l of plan.lanes) await expectCall(run, `r${pad(k)} fork ${l.name}`, () => run.lf.branch.fork(l.name, from), "Forked");
   ctx.leadSteps.push({ op: "fork", category: "branch" });
   return ctx;

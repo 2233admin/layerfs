@@ -21,7 +21,7 @@ const entries = (m) => (m ? [...m] : null);
 /** The range context as JSON: lane trees and maps as entries; held Workspaces must be gone. */
 export function ctxToJson(ctx) {
   if (ctx.held?.size) throw new Error(`${ctx.held.size} held Workspaces are still mounted; a range cannot stop halfway with them`);
-  const { p2, held, trees, base, merged, tries, published, played, steps, git, ...rest } = ctx;
+  const { p2, held, trees, base, merged, tries, published, played, steps, git, laneLocks, ...rest } = ctx;
   return {
     ...rest,
     trees: [...trees].map(([lane, t]) => [lane, [...t.files]]),

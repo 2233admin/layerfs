@@ -29,6 +29,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { lsTree } from "./git.mjs";
 import { compareResults, packageOf, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
+import { emittedCommand, nodeOf, parseEmitted, wholeBuild } from "./nodeconfig.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
 const quote = (t) => `'${String(t).replaceAll("'", "'\\''")}'`;
@@ -54,8 +55,17 @@ export const storeSetup = (store = STORE_MOUNT) => [
 ].join(" && ");
 /** The install (INSTALLS §1); `clean` at milestones removes node_modules first. */
 export const CLEAN_REMOVE = "find . -name node_modules -type d -prune -exec rm -rf {} +";
-export function installCommand({ store = STORE_MOUNT, clean = false } = {}) {
-  const install = "pnpm install --offline --frozen-lockfile --store-dir /tmp/pnpm-store --cache-dir /tmp/pnpm-cache --ignore-scripts";
+/**
+ * How the store meets dsh's `minimumReleaseAge` policy (NODE_RULE §11 a; owner decision pending, so a switch):
+ * `verified` keeps dsh's config (the store must hold a verification record per lockfile); `release-age-off`
+ * departs from it with the one override that disables the check offline.
+ */
+export const STORE_POLICIES = { verified: "", "release-age-off": "pnpm_config_minimum_release_age=0 " };
+/** NODE_RULE B3: a store gap fails at once instead of hanging on network retries (§11). */
+export const FAIL_FAST = "--fetch-retries=0 --fetch-timeout=3000";
+export function installCommand({ store = STORE_MOUNT, clean = false, policy = "verified" } = {}) {
+  if (!(policy in STORE_POLICIES)) throw new Error(`store policy ${policy}: one of ${Object.keys(STORE_POLICIES).join(", ")}`);
+  const install = `${STORE_POLICIES[policy]}pnpm install --offline --frozen-lockfile --store-dir /tmp/pnpm-store --cache-dir /tmp/pnpm-cache --ignore-scripts ${FAIL_FAST}`;
   // clean (lead interim yes 2026-10-18, from P3 on): every node_modules folder goes, not only the root's; a package
   // that left the workspace keeps its untracked node_modules otherwise (dev352-p3p r016, packages/core/agent-core)
   return `${storeSetup(store)} && ${clean ? `${CLEAN_REMOVE} && ` : ""}${install}`;
@@ -91,14 +101,15 @@ export const nothingToBuild = (states) => states.length > 0 && states.every((l) 
  * packages that have a tsconfig.json, then the calibrated tests.
  * @param {{ changed: string[], packages: Set<string>, tsconfigs: Set<string>, milestone: boolean, installed: boolean, run: string[] }} r
  */
-export function closureSteps({ changed, packages, tsconfigs, milestone, installed, run = [], store = STORE_MOUNT, checks = false, lwwPicked = false }) {
+export function closureSteps({ changed, packages, tsconfigs, milestone, installed, run = [], store = STORE_MOUNT, checks = false, lwwPicked = false, policy = "verified", repair = false }) {
   const steps = [];
-  if (milestone && installed) steps.push({ kind: "clean-install", command: installCommand({ store, clean: true }) });
-  else if (!installed) steps.push({ kind: "install", command: installCommand({ store }) });
-  // owner S4: after a merge whose /.lww rules picked a side, the merged result re-runs the install, as developers do after git merge
-  else if (installInputsChanged(changed) || lwwPicked) steps.push({ kind: "incremental-install", command: installCommand({ store }) });
+  if (milestone && installed) steps.push({ kind: "clean-install", command: installCommand({ store, clean: true, policy }) });
+  else if (!installed) steps.push({ kind: "install", command: installCommand({ store, policy }) });
+  // owner S4: after a merge whose /.lww rules picked a side, the merged result re-runs the install, as developers do after git merge;
+  // NODE_RULE §4 (`repair`): a lead repair follows every consolidation, whatever changed
+  else if (installInputsChanged(changed) || lwwPicked || repair) steps.push({ kind: repair ? "repair-install" : "incremental-install", command: installCommand({ store, policy }) });
   // development checks (owner 2026-10-18): a clean reinstall of the unchanged lockfile, whose Commit's metadata bytes are recorded
-  if (checks && steps.length) steps.push({ kind: "reinstall-check", command: installCommand({ store, clean: true }) });
+  if (checks && steps.length) steps.push({ kind: "reinstall-check", command: installCommand({ store, clean: true, policy }) });
   const built = [...new Set(changed.map((p) => packageOf(p, packages)).filter((d) => d && tsconfigs.has(d)))].sort();
   if (built.length) steps.push({ kind: "build", command: buildCommand(built), packages: built });
   // and the same build again after its Commit, unmount and a fresh mount: it must find nothing to build, or what native finds
@@ -151,7 +162,13 @@ export async function playClosure(run, k, steps, { sb, branch, expectCall, Misma
         row.states = tscStates(row.output, row.root);
         row.nothingToBuild = nothingToBuild(row.states);
       }
-      if (s.kind === "build") row.bytes = buildBytes((await run.lf.sandbox.exec(sb, ws, buildListCommand(s.packages))).stdout, s.packages);
+      if (s.kind === "build") {
+        row.bytes = buildBytes((await run.lf.sandbox.exec(sb, ws, buildListCommand(s.packages))).stdout, s.packages);
+        // NODE_RULE P6 (its P4 part): the emitted .js/.d.ts by blob id, judged natively after the play (nodeproof.mjs)
+        if (s.kind === "build" && nodeOf(run.manifest).on) { row.command = s.command; row.emitted = parseEmitted((await run.lf.sandbox.exec(sb, ws, emittedCommand(s.packages))).stdout); }
+      }
+      // NODE_RULE P6: the files the repair rewrote (the Workspace's dirty inodes before its Commit)
+      if (s.kind === "repair-install") row.rewritten = (await run.lf.sandbox.status(sb, ws))?.overlay?.inodes ?? null;
       if (s.kind === "test") row.results = compareResults(s.files, parseVitestJson(String(r.stdout), row.root));
       row.commit = (await expectCall(run, `${label} commit`, () => run.lf.sandbox.commit(sb, ws, label), "Committed|UpToDate"))?.kind;
       if (row.results?.differ.length) throw new Mismatch(`${label}: ${row.results.differ.length} file(s) differ from native`);
@@ -205,7 +222,7 @@ export const CLOSURE_OUTPUT = /(^|\/)node_modules(\/|$)|(^|\/)(dist|lib)\/|\.tsb
  * the stored bytes from the install Commit's traced sizes.
  */
 /** A range's closure plan: the lockfile blob, the calibrated tests and the steps (closureSteps), from git and the run's state. */
-export function planClosure({ repo, planDir, k, plan, prevCommit, installed, checks, lwwPicked = false }) {
+export function planClosure({ repo, planDir, k, plan, prevCommit, installed, checks, lwwPicked = false, policy = "verified", repair = false }) {
   const git = (args) => execFileSync("git", ["--git-dir", repo, ...args], { encoding: "utf8", maxBuffer: 1 << 28 });
   const tree = lsTree(repo, plan.checkpoint).files;
   const lock = tree.get("pnpm-lock.yaml")?.blob;
@@ -215,7 +232,7 @@ export function planClosure({ repo, planDir, k, plan, prevCommit, installed, che
   if (!existsSync(calFile)) return { missing: `range ${k} has no calibration (${calFile})` };
   const cal = JSON.parse(readFileSync(calFile, "utf8"));
   const changed = git(["diff", "--name-only", prevCommit, plan.checkpoint]).split("\n").filter(Boolean);
-  return { lock, steps: closureSteps({ changed, packages: dirsWith("package.json"), tsconfigs: dirsWith("tsconfig.json"), milestone: !!plan.milestone, installed: !!installed, run: cal.run, checks, lwwPicked }) };
+  return { lock, steps: closureSteps({ changed, packages: dirsWith("package.json"), tsconfigs: dirsWith("tsconfig.json"), milestone: !!plan.milestone, installed: !!installed, run: cal.run, checks, lwwPicked, policy, repair }) };
 }
 
 /**
@@ -224,10 +241,11 @@ export function planClosure({ repo, planDir, k, plan, prevCommit, installed, che
  * the chain (`seq-<key>.json`); a first or clean install, and the dev
  * reinstall check, with the clean native install of the lockfile.
  */
-export function oracleFiles(oracleDir, { lock, steps, chain = [], checkpoint }) {
+export function oracleFiles(oracleDir, { lock, steps, chain = [], checkpoint, policy = "verified" }) {
   const install = steps.find((s) => /install/.test(s.kind) && s.kind !== "reinstall-check");
-  const onTop = install?.kind === "incremental-install" && chain.length > 0;
-  const clean = join(oracleDir, "node_modules", `${lock}.json`);
+  const onTop = (install?.kind === "incremental-install" || install?.kind === "repair-install") && chain.length > 0;
+  // a clean oracle per lockfile and store policy (NODE_RULE §11 a: the policy decides whether pnpm accepts the lockfile offline)
+  const clean = join(oracleDir, "node_modules", `${lock}${policy === "verified" ? "" : `.${policy}`}.json`);
   return {
     install: install ? (onTop ? join(oracleDir, "node_modules", `seq-${sequenceKey(chain, { checkpoint, command: install.command })}.json`) : clean) : null,
     kind: onTop ? "sequence" : "clean",
@@ -238,14 +256,17 @@ export function oracleFiles(oracleDir, { lock, steps, chain = [], checkpoint }) 
 export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir, checks = false, lwwPicked = false, dumpTo = null }) {
   const git = (args) => execFileSync("git", ["--git-dir", run.repo, ...args], { encoding: "utf8", maxBuffer: 1 << 28 });
   // the development checks run after the publish, on a fork (devcheck.mjs; SCRIPTS.md, 120 s rule)
-  const planned = planClosure({ repo: run.repo, planDir: run.planDir, k, plan, prevCommit: run.state.prevCommit, installed: run.state.installed, checks: false, lwwPicked });
+  const node = nodeOf(run.manifest);
+  const planned = planClosure({ repo: run.repo, planDir: run.planDir, k, plan, prevCommit: run.state.prevCommit, installed: run.state.installed, checks: false, lwwPicked, policy: node.storePolicy, repair: node.on && !!run.state.installed });
   if (planned.skipped) return { skipped: planned.skipped };
   if (planned.missing) throw new Mismatch(planned.missing);
   const { lock, steps } = planned, chain = run.state.closureChain ?? [];
-  const files = oracleFiles(oracleDir, { lock, steps, chain, checkpoint: plan.checkpoint });
+  const files = oracleFiles(oracleDir, { lock, steps, chain, checkpoint: plan.checkpoint, policy: node.storePolicy });
   for (const f of [files.install].filter(Boolean)) {
     if (!existsSync(f)) throw new Mismatch(`range ${k}: no node_modules oracle ${f.split("/").at(-1)}; run closure.mjs oracle --run ${run.manifest.run ?? "<run>"} --range ${k} first`);
-    if (JSON.parse(readFileSync(f, "utf8")).listerVersion !== LISTER_VERSION) throw new Mismatch(`range ${k}: the node_modules oracle ${f.split("/").at(-1)} predates lister version ${LISTER_VERSION}; rerun closure.mjs oracle --range ${k}`);
+    const o = JSON.parse(readFileSync(f, "utf8")), want = steps.find((s) => /install/.test(s.kind))?.command;
+    if (o.listerVersion !== LISTER_VERSION) throw new Mismatch(`range ${k}: the node_modules oracle ${f.split("/").at(-1)} predates lister version ${LISTER_VERSION}; rerun closure.mjs oracle --range ${k}`);
+    if (files.kind === "clean" && want && o.install !== want) throw new Mismatch(`range ${k}: the node_modules oracle ${f.split("/").at(-1)} was made with another install command; rerun closure.mjs oracle --range ${k}`);
   }
   // the recorded mount roots of this chain's earlier steps: listed substitutions (INSTALLS §4, F-034)
   const roots = [...new Set([...chain.map((e) => e.root), ...(run.state.closureRoots ?? [])].filter(Boolean))];
@@ -263,6 +284,7 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
     out.oracle = compareInstalled(oracle, done.groups);
     // dev: the dumped groups as installed (playClosure, before any later step), for the finding (never compared)
     if (dumpTo && done.dump) writeFileSync(dumpTo, JSON.stringify({ range: k, groups: DEV_DUMP, differ: out.oracle.differ, files: done.dump }, null, 1));
+    out.outputOk = ours === native;
     if (!out.oracle.ok) throw new Mismatch(`r${pad(k)} install differs from native: ${JSON.stringify({ missing: out.oracle.missing.slice(0, 5), extra: out.oracle.extra.slice(0, 5), differ: out.oracle.differ.slice(0, 5) })}`);
     if (ours !== native) throw new Mismatch(`r${pad(k)} install output differs from native: ${firstDifference(native, ours)}`);
     let prevLock = "";
@@ -504,8 +526,8 @@ export function checkPlan(repo, planDir) {
 }
 
 /** The native install of one checkpoint's tree in the image (network off, read-only store): exit, output, lister groups. */
-export function nativeInstall({ repo, commit, image, volume, name = "layerfs-issue352-oracle" }) {
-  const script = `mkdir ${ORACLE_ROOT} && tar -x -C ${ORACLE_ROOT} && cd ${ORACLE_ROOT} && (${installCommand()}) > /tmp/o 2>&1; echo "@@exit $?"; sed 's/^/@@out /' /tmp/o; ${listerCommand()}`;
+export function nativeInstall({ repo, commit, image, volume, name = "layerfs-issue352-oracle", policy = "verified" }) {
+  const script = `mkdir ${ORACLE_ROOT} && tar -x -C ${ORACLE_ROOT} && cd ${ORACLE_ROOT} && (${installCommand({ policy })}) > /tmp/o 2>&1; echo "@@exit $?"; sed 's/^/@@out /' /tmp/o; ${listerCommand()}`;
   const archive = execFileSync("git", ["--git-dir", repo, "archive", commit], { maxBuffer: 1 << 30 });
   const t0 = Date.now();
   const r = spawnSync("docker", ["run", "--rm", "-i", "--name", name, "--network", "none", "-v", `${volume}:${STORE_MOUNT}:ro`, "--entrypoint", "sh", image, "-c", script], { input: archive, encoding: "utf8", maxBuffer: 1 << 28 });
@@ -594,31 +616,39 @@ function main() {
     // the oracles a run's range k needs, from its state: the clean install of the lockfile and, for an install on top, the chain's replay
     const k = Number(opt("--range")), plan = JSON.parse(readFileSync(join(planDir, `range-${pad(k)}.json`), "utf8"));
     const runDir = join(process.env.HOME, "lfs-history", "runs", opt("--run"));
-    const state = JSON.parse(readFileSync(join(runDir, "state.json"), "utf8")), manifest = JSON.parse(readFileSync(join(runDir, "run.json"), "utf8"));
+    let state = JSON.parse(readFileSync(join(runDir, "state.json"), "utf8"));
+    const manifest = JSON.parse(readFileSync(join(runDir, "run.json"), "utf8"));
     if (state.next !== k) { console.error(`run ${opt("--run")} is at range ${state.next}, not ${k}`); process.exit(1); }
-    const planned = planClosure({ repo, planDir, k, plan, prevCommit: state.prevCommit, installed: state.installed, checks: false });
+    // NODE_RULE §2: the lead installs on the range base before the lanes fork, so the repair installs on top of that chain
+    if (nodeOf(manifest).on && (!state.installed || plan.milestone)) {
+      const clean = !!state.installed;
+      const build = wholeBuild(lsTree(repo, state.prevCommit).files);
+      state = { ...state, installed: true, closureChain: [{ range: k, checkpoint: state.prevCommit, kind: clean ? "clean-install" : "install", command: installCommand({ clean, policy: nodeOf(manifest).storePolicy }) }, ...(build.packages.length ? [{ range: k, checkpoint: state.prevCommit, kind: "tsc", command: build.command }] : [])] };
+    }
+    const node = nodeOf(manifest), oracleRoot = manifest.oracle ?? join(process.env.HOME, "lfs-history", "oracle");
+    const planned = planClosure({ repo, planDir: manifest.plan ?? planDir, k, plan, prevCommit: state.prevCommit, installed: state.installed, checks: false, policy: node.storePolicy, repair: node.on && !!state.installed });
     if (planned.skipped || planned.missing) { console.log(planned.skipped ?? planned.missing); return; }
-    const files = oracleFiles(join(process.env.HOME, "lfs-history", "oracle"), { lock: planned.lock, steps: planned.steps, chain: state.closureChain ?? [], checkpoint: plan.checkpoint });
+    const files = oracleFiles(oracleRoot, { lock: planned.lock, steps: planned.steps, chain: state.closureChain ?? [], checkpoint: plan.checkpoint, policy: node.storePolicy });
     const fresh = (f) => existsSync(f) && JSON.parse(readFileSync(f, "utf8")).listerVersion === LISTER_VERSION;
     mkdirSync(join(process.env.HOME, "lfs-history", "oracle", "node_modules"), { recursive: true });
     if (existsSync(join(process.env.HOME, "lfs-history", "fetch", "pending.json"))) { console.error("a pnpm fetch batch is pending; the oracle needs a quiescent store"); process.exit(1); }
     // a dev run's devcheck compares its clean reinstall with the clean oracle of the lockfile, so a dev run needs it too
-    if (!files.clean && files.install && manifest.label === "dev") files.clean = join(process.env.HOME, "lfs-history", "oracle", "node_modules", `${planned.lock}.json`);
-    if (files.clean && !fresh(files.clean)) {
-      const n = nativeInstall({ repo, commit: plan.checkpoint, image: opt("--image"), volume: opt("--volume") });
-      writeFileSync(`${files.clean}.tmp`, JSON.stringify({ lockfile: planned.lock, range: k, checkpoint: plan.checkpoint, image: opt("--image"), install: installCommand(), listerVersion: LISTER_VERSION, root: ORACLE_ROOT, ...n }, null, 1));
+    if (!files.clean && files.install && manifest.label === "dev") files.clean = oracleFiles(oracleRoot, { lock: planned.lock, steps: [], policy: node.storePolicy }).clean;
+    if (files.clean && !(fresh(files.clean) && JSON.parse(readFileSync(files.clean, "utf8")).install === installCommand({ policy: node.storePolicy }))) {
+      const n = nativeInstall({ repo, commit: plan.checkpoint, image: opt("--image"), volume: opt("--volume"), policy: node.storePolicy });
+      writeFileSync(`${files.clean}.tmp`, JSON.stringify({ lockfile: planned.lock, range: k, checkpoint: plan.checkpoint, image: opt("--image"), install: installCommand({ policy: node.storePolicy }), listerVersion: LISTER_VERSION, root: ORACLE_ROOT, ...n }, null, 1));
       renameSync(`${files.clean}.tmp`, files.clean);
       console.log(JSON.stringify({ file: files.clean, exit: n.exit, groups: n.groups.length, ms: n.ms }));
     } else if (files.clean) console.log(`cached ${files.clean}`);
     // a range without an install of its own may still re-install after an LWW merge (owner S4): its sequence oracle too
     if (files.kind !== "sequence" && state.installed && (state.closureChain ?? []).length && !planned.steps.some((s) => /install/.test(s.kind))) {
-      const forced = planClosure({ repo, planDir, k, plan, prevCommit: state.prevCommit, installed: state.installed, checks: false, lwwPicked: true });
-      Object.assign(files, oracleFiles(join(process.env.HOME, "lfs-history", "oracle"), { lock: forced.lock, steps: forced.steps, chain: state.closureChain, checkpoint: plan.checkpoint }), { clean: files.clean });
+      const forced = planClosure({ repo, planDir: manifest.plan ?? planDir, k, plan, prevCommit: state.prevCommit, installed: state.installed, checks: false, lwwPicked: true, policy: node.storePolicy });
+      Object.assign(files, oracleFiles(oracleRoot, { lock: forced.lock, steps: forced.steps, chain: state.closureChain, checkpoint: plan.checkpoint, policy: node.storePolicy }), { clean: files.clean });
       planned.steps = forced.steps;
     }
     // dev: the sequence replayed again with the named groups dumped, beside the cached oracle (never replacing it)
     if (files.kind === "sequence" && opt("--dump")) {
-      const install = planned.steps.find((s) => s.kind === "incremental-install");
+      const install = planned.steps.find((s) => s.kind === "incremental-install" || s.kind === "repair-install");
       const n = nativeSequence({ repo, chain: state.closureChain, final: { checkpoint: plan.checkpoint, command: install.command }, image: opt("--image"), volume: opt("--volume"), dump: opt("--dump").split(",") });
       const file = files.install.replace(/\.json$/, `.dump-${pad(k)}.json`);
       writeFileSync(file, JSON.stringify({ range: k, root: ORACLE_ROOT, groups: n.groups.filter((g) => opt("--dump").split(",").includes(g.g)), dump: n.dump, ms: n.ms }, null, 1));
@@ -626,7 +656,7 @@ function main() {
       return;
     }
     if (files.kind === "sequence" && !fresh(files.install)) {
-      const install = planned.steps.find((s) => s.kind === "incremental-install");
+      const install = planned.steps.find((s) => s.kind === "incremental-install" || s.kind === "repair-install");
       const n = nativeSequence({ repo, chain: state.closureChain, final: { checkpoint: plan.checkpoint, command: install.command }, image: opt("--image"), volume: opt("--volume") });
       writeFileSync(`${files.install}.tmp`, JSON.stringify({ lockfile: planned.lock, range: k, checkpoint: plan.checkpoint, image: opt("--image"), chain: state.closureChain.map(({ range, checkpoint, kind }) => ({ range, checkpoint, kind })), install: install.command, listerVersion: LISTER_VERSION, root: ORACLE_ROOT, ...n }, null, 1));
       renameSync(`${files.install}.tmp`, files.install);
