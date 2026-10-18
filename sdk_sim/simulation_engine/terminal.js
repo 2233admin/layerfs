@@ -1,10 +1,9 @@
 // Command engine for the LayerFS terminal UI. Three CLIs, each line mapping to
-// SDK calls through a backend (backend/sim.js or backend/live.js), awaited:
+// SDK calls through a backend (backend/sim.js), awaited:
 //   fs       — file commands on one Branch (direct Store writes, no mount)
 //   sandbox  — shell commands (each one sandbox.exec), commit, unmount
 //   history  — branches / log / fork / publish / diff for the whole project
-// Shell commands are simulated against the Workspace overlay (simulator), or
-// run for real in the mounted Workspace (live).
+// Shell commands are simulated against the Workspace overlay.
 (function (global) {
   "use strict";
   const M = typeof module !== "undefined" && module.exports ? require("./model.js") : global.LayerSim;

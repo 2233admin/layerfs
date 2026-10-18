@@ -1,4 +1,4 @@
-// Demo stories played by tui.html and checked by test_demo.js.
+// Demo stories for the simulation engine (terminal.js Engine).
 // term: "history" | "fs" (the active tab's Branch) | a Sandbox terminal alias.
 // branch: switch to that Branch's tab first (fs steps and ui "open").
 // ui:   "open" (new Sandbox terminal), "split" (new Workspace in the same

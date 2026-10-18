@@ -6,7 +6,7 @@
 // ids, and `group` names the script or bash call that made it.
 //
 // Sources produce story steps that runStep plays into a view:
-//   sources/story.js    scripted stories and the tui.html demo stories
+//   sources/story.js    scripted stories and demo stories (demoFrames)
 //   sources/trace.js    SDK trace lines (LAYERFS_TRACE / DSH_LAYERFS_TRACE)
 //   sources/records.js  dsh session records, which carry trace lines
 import { endLines } from "./sources/trace.js";

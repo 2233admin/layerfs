@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds the dsh_design.html agent avatars from the sharky_maid assets.
+"""Builds the dsh LayerFS tab's agent avatars from the sharky_maid assets.
 
 Usage: python3 sdk_sim/avatars/build.py [path/to/dsh/assets/sharky_maid]
 

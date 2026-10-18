@@ -11,9 +11,11 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
 | Host plugin `layerfs-host` | `@dsh-layerfs/host` | bash environment, session records, the `/layerfs` web route |
 | Client plugin `layerfs-client` | `@dsh-layerfs/client` | LayerFS tab, project picker, LayerFS panel (dsh web) |
 | Agent preset `layerfs-dsh-minimalist` | `dsh-layerfs` (`presets/`) | "LayerFS × DSH minimalist" in the preset menu |
-| View model | `@dsh-layerfs/model` | used by the client and `sdk_sim/dsh_design.html` |
-| Renderer | `@dsh-layerfs/view` | used by the client and `sdk_sim/dsh_design.html` |
+| View model | `@dsh-layerfs/model` | used by the client and the Host |
+| Renderer | `@dsh-layerfs/view` | used by the client |
 | Mock model `layerfs-mock` (demo bundle `dsh-layerfs-demo`) | `@dsh-layerfs/mock` | "LayerFS mock · …" models in the model picker |
+
+The LayerFS tab is the only LayerFS UI. The standalone HTML pages that used to live in `sdk_sim/` (the terminal UI page and its design preview) and their live server are removed; do not build or revive a standalone HTML or TUI page. `sdk_sim/` keeps only the simulation engine: `simulation_engine/model.js` and `files.js`, which the client and the Host import, the terminal engine (`terminal.js`, `backend/sim.js`) and demo stories (`demo.js`) that the demos were written from, and the avatars (`avatars/`).
 
 ### Host plugin
 
@@ -113,12 +115,12 @@ The `dsh-layerfs-demo` bundle adds the LayerFS mock model: an LLM provider that 
 
 | Demo | Agents | Shows |
 |---|---|---|
-| `tour` | root | the design preview's Tour, 24 steps: fs Commits, a Sandbox terminal that installs, fails lint, builds and serves (unmount Busy), a stale Workspace that merges on commit, a second Workspace, a fork from a Commit, two publishes |
+| `tour` | root | the Tour story, 24 steps: fs Commits, a Sandbox terminal that installs, fails lint, builds and serves (unmount Busy), a stale Workspace that merges on commit, a second Workspace, a fork from a Commit, two publishes |
 | `parallel` | root, header, footer | two subagents on their own Branches; the root publishes one, then asks the other to merge main in first |
-| `conflicts` | root | the design preview's Conflicts, 15 steps: a commit Conflict resolved in the Workspace, a merge Conflict resolved by making the Branches agree |
-| `merge` | root | the design preview's Commit & merge, 21 steps: a clean stale commit, a commit Conflict, merge into a new Branch, a merge Conflict, publish |
+| `conflicts` | root | the Conflicts story, 15 steps: a commit Conflict resolved in the Workspace, a merge Conflict resolved by making the Branches agree |
+| `merge` | root | the Commit & merge story, 21 steps: a clean stale commit, a commit Conflict, merge into a new Branch, a merge Conflict, publish |
 | `sandbox` | root | one Sandbox with two Workspaces, a background build job, and the MountsActive, Busy and Dirty refusals |
-| `agents` | root and five | the design preview's 5 agents, 52 steps (62 bash calls): a Workspace per call in each Branch's shared Sandbox, stale merges, `.lww`, a same-line Conflict fixed in the kept Workspace, a dev server and curl, a try on a fork, merge, publish and blame |
+| `agents` | root and five | the 5 agents story, 52 steps (62 bash calls): a Workspace per call in each Branch's shared Sandbox, stale merges, `.lww`, a same-line Conflict fixed in the kept Workspace, a dev server and curl, a try on a fork, merge, publish and blame |
 | `shop` | root | Live only. #334's Builder 2 replayed, 19 steps: a small web shop built over six milestones, 12 recorded commands (npm, esbuild, node tests, a server smoke) run again |
 | `depot` | root | Live only. #337's Builder 2 replayed, 103 steps: a Rust inventory service and its browser client, 82 recorded commands (cargo fetch and builds from crates.io, cargo and Python tests, Chromium) run again in Workspaces that stay mounted across steps |
 | `crew` | root + 5 | Live only. #340's Builder 2 r3 replayed, 1,550 steps: a lead and 17 agents playing as 6 roles build one application on Branches of their own; 304 recorded commands, of which the 147 that only verify and belong to a browser proof are disabled (their run files say `"verification": "no-browser"`) and the other 157 run; the roles run at the same time and wait for each other only where they touched the same Branch |
@@ -141,7 +143,7 @@ A root step may carry `checkpoint: { label, verdict?, note?, restore? }` (#352):
 
 `@name` in an argument is a subagent or job started earlier. A subagent's `description` is its name in the scenario. `order` places the demo in lists and `speed` sets how fast the mock runs it at first. Every scenario's `fixture` is `demo-workspace/`, the shared website; its install, build, test and serve are small shell scripts, not npm: test checks each page's heading and that every `@/…` import resolves, and serve answers each page's heading on localhost:3000 (with python3). The sandbox demo's scripts keep their notes between bash calls under `<temp>/dsh-layerfs/demo-notes/<project>/`, outside the workspace folder, because Init imports everything in it.
 
-The tour, conflicts, merge and agents demos are the design preview's stories ([`sdk_sim/demo.js`](../sdk_sim/demo.js)) step for step, without its captions and progress cards: each step is one bash call of [`scenarios/shared/terminal.mjs`](scenarios/shared/terminal.mjs), which makes the same SDK calls as that step's terminal line and prints what the terminal printed (`npm ci`, `npm run build`, `npm test` and `npm run start` become the shell scripts). An agent's call mounts a Workspace of its own in its Branch's shared Sandbox, runs, commits and unmounts; after a Conflict the Workspace is kept for the agent's next call, and a trailing `&` keeps it for the server. The lead wakes the agents of each step with send_message and waits for them; each agent's pause is the preview's thinking time, and the call takes its typing and running time, so a burst's calls overlap and commit in the same order as in the preview. The calls keep their notes (a terminal's Workspace, an agent's kept one, the C<n> labels) under the project's LayerFS home entry, which is removed with the project.
+The tour, conflicts, merge and agents demos are the simulation engine's demo stories ([`sdk_sim/demo.js`](../sdk_sim/demo.js)) step for step: each step is one bash call of [`scenarios/shared/terminal.mjs`](scenarios/shared/terminal.mjs), which makes the same SDK calls as that step's terminal line and prints what the terminal printed (`npm ci`, `npm run build`, `npm test` and `npm run start` become the shell scripts). An agent's call mounts a Workspace of its own in its Branch's shared Sandbox, runs, commits and unmounts; after a Conflict the Workspace is kept for the agent's next call, and a trailing `&` keeps it for the server. The lead wakes the agents of each step with send_message and waits for them; each agent's pause is the story's thinking time, and the call takes its typing and running time, so a burst's calls overlap and commit in the same order as in the story's schedule. The calls keep their notes (a terminal's Workspace, an agent's kept one, the C<n> labels) under the project's LayerFS home entry, which is removed with the project.
 
 #### The demo workspace
 
@@ -227,7 +229,6 @@ Only dsh web is checked; dsh desktop serves the same web client but was not test
 | Command | Does |
 |---|---|
 | `pnpm test` | Host tests, the mock model's scenario tests, and the model's trace replay check |
-| `node ../sdk_sim/test_dsh_view.mjs sim` | the view model against the simulator's stories |
 | `node tools/init-project.mjs <profile dir> <folder> <image> <daemon>` | Init outside dsh |
 | `node tools/demo.mjs [<demo> <folder>]` | lists the demos, or copies the demo website into another folder |
 | `node tools/check-demo.mjs '<dsh web URL with ?token=…>' <session id> <demo> [--wait <s>]` | checks a finished demo session: every agent ran, and each bash step with `expect` left those LayerFS outcomes on the trace. For a replayed run also: no Sandbox of the project is open, every Branch's history is as recorded, and `main`'s tracked files match `final.json` |
@@ -243,7 +244,5 @@ Only dsh web is checked; dsh desktop serves the same web client but was not test
 | `node tools/check-scenario.mjs <demo>` | a converted scenario's static checks, in seconds: run files, expects, disabled commands, and the lead's starts, turns and waits |
 | `LAYERFS_DEMO_FAST=1` (dsh web's environment) | the mock and `terminal.mjs` skip typing, thinking and terminal delays; nothing else changes |
 | `node tools/check-session.mjs '<dsh web URL with ?token=…>' <session id>` | checks that a session's tab draws what LayerFS reports: Branches, heads, `main`, Sandboxes, which agent made each Commit and Layer, and bash-call groups |
-
-The design preview `sdk_sim/dsh_design.html` imports the same model and renderer, so it and the tab draw the same thing.
 
 `assets/` holds unlicensed character art and is never committed. `lib/` is build output.

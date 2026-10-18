@@ -1,5 +1,5 @@
 // The LayerFS tab: the root session's SDK calls, replayed into the shared
-// view (@dsh-layerfs/view), as the design preview draws a trace. It follows
+// view (@dsh-layerfs/view). It follows
 // the Host's /layerfs/session route while it is shown, and plays each call
 // at its own time, a moment behind the run (playback.ts). A demo's speed is
 // set on its demo strip (DemoStrip.tsx), not here.

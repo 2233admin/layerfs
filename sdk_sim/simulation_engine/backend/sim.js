@@ -1,5 +1,5 @@
-// The simulator backend: the model in this page (model.js), behind the same
-// asynchronous surface as backend/live.js. Shell commands are simulated
+// The simulator backend: the model (model.js) behind an asynchronous SDK-shaped
+// surface. Shell commands are simulated
 // (terminal.js simulateShell), so `simulated` is true.
 (function (global) {
   "use strict";

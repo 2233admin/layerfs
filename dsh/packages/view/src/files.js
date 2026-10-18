@@ -1,4 +1,4 @@
-// The Files pane (tui.html's), one per tab. The subject is the tab's Branch
+// The Files pane, one per tab. The subject is the tab's Branch
 // (or main) at its latest head or at one fixed point; the base is what it is
 // compared with. Reads go through the files helpers (simulation_engine/files.js)
 // on the engine state, so they work on any engine that has trees.
