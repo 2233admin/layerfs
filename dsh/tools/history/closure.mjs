@@ -171,6 +171,61 @@ export function rawChangedBytes(changed, groups) {
   return total;
 }
 
+/**
+ * Build outputs of the built packages, listed in the Workspace after the
+ * build step: `dist/` files and `*.tsbuildinfo`, node_modules pruned. One
+ * line per file: `<bytes> <path>`.
+ */
+export const buildListCommand = (packages) => `find ${packages.map(quote).join(" ")} -path '*/node_modules' -prune -o \\( -name '*.tsbuildinfo' -o -path '*/dist/*' \\) -type f -printf '%s %p\\n'`;
+
+/** Build output bytes per built package from buildListCommand's lines. */
+export function buildBytes(lines, packages) {
+  const out = Object.fromEntries(packages.map((p) => [p, 0]));
+  for (const l of String(lines).split("\n")) {
+    const m = /^(\d+) (.*)$/.exec(l);
+    if (!m) continue;
+    const pkg = packages.find((p) => m[2] === p || m[2].startsWith(`${p}/`));
+    if (pkg) out[pkg] += Number(m[1]);
+  }
+  return out;
+}
+
+/** The four large binary packages STORAGE_STUDY.md §3c could not size (§8 item 6). */
+export const STUDY_BINARIES = [/^@anthropic-ai\/claude-agent-sdk-linux-arm64@/, /^@openai\/codex@.*linux-arm64/, /libreoffice-kit-wasm@/, /cua-driver@/];
+
+/**
+ * The seven measurements STORAGE_STUDY.md §8 asks of P3's development run,
+ * from what one range records. Storage is attributed by the step's own Commit
+ * (an install Commit writes node_modules, a build Commit build output, the
+ * agents' Commits tracked files). Bytes by role (content vs metadata) need the
+ * product's per-domain pack write counters; until the trace has them each
+ * such value is null with `needs`.
+ * @param {{ fsWrites: object[], install?: { storage, delta, prevGroups, groups, changed }, build?: { storage, bytes }, binaries?: object }} r
+ */
+export const ROLE_COUNTER = "per-Commit stored pack body bytes by domain (payload, metadata) in the daemon storage counters";
+export function studyMeasurements({ fsWrites = [], install = null, build = null, binaries = null }) {
+  const p50 = (xs) => { const v = xs.filter((x) => x != null).sort((a, b) => a - b); return v.length ? v[Math.floor((v.length - 1) / 2)] : null; };
+  const role = (st) => (st?.payload_pack_write_bytes == null ? { content: null, metadata: null, needs: ROLE_COUNTER } : { content: st.payload_pack_write_bytes, metadata: st.metadata_pack_write_bytes });
+  const out = {
+    fsWriteCommit: { n: fsWrites.length, storedP50: p50(fsWrites.map((c) => c.storage?.pack_write_bytes)), ...role(fsWrites.length ? { payload_pack_write_bytes: p50(fsWrites.map((c) => c.storage?.payload_pack_write_bytes)), metadata_pack_write_bytes: p50(fsWrites.map((c) => c.storage?.metadata_pack_write_bytes)) } : null) },
+  };
+  if (install) {
+    const was = new Map((install.prevGroups ?? []).map((g) => [g.g, g.digest]));
+    const added = install.groups.filter((g) => !was.has(g.g)), rewritten = install.groups.filter((g) => was.has(g.g) && was.get(g.g) !== g.digest);
+    const newPaths = added.reduce((n, g) => n + g.n, 0), r = role(install.storage);
+    const ownGroup = (g) => install.changed?.packages.some((k) => { const at = k.lastIndexOf("@"); return g.g.includes(`/.pnpm/${k.slice(0, at).replaceAll("/", "+")}@${k.slice(at + 1)}`); });
+    out.install = { stored: install.storage?.pack_write_bytes ?? null, ...r, newPaths, newPackageFolders: added.length,
+      // per-path facts: read from the sealed snapshot (inspect.mjs), not from one Commit's counters
+      lockYamlDeduped: install.paths?.lockYamlDeduped ?? null, modulesYamlDelta: install.paths?.modulesYamlDelta ?? null };
+    out.metadataPerPath = { perNewPath: r.metadata == null || !newPaths ? null : +(r.metadata / newPaths).toFixed(1), ...(r.needs ? { needs: r.needs } : {}) };
+    out.reuse = install.delta ?? null;
+    out.relink = { rewrittenFolders: rewritten.length, unchangedPackageFolders: rewritten.filter((g) => !ownGroup(g)).length };
+  }
+  if (binaries) out.binaries = binaries;
+  if (build) out.build = { stored: build.storage?.pack_write_bytes ?? null, perPackage: build.bytes, ...role(build.storage) };
+  return out;
+}
+
 /** Ranges whose plan install flag (plan-range.mjs) differs from git: an install input changed or not. */
 export function checkPlan(repo, planDir) {
   const summary = JSON.parse(readFileSync(join(planDir, "plan.json"), "utf8"));

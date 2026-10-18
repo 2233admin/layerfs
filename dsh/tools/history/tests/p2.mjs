@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlink
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fetchScript } from "../fetch-store.mjs";
-import { changedPackages, closureSteps, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, playClosure } from "../closure.mjs";
+import { buildBytes, buildListCommand, changedPackages, closureSteps, ROLE_COUNTER, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, playClosure } from "../closure.mjs";
 import { aggregate, buildBaseline, reinstallGate, evaluate, probeSeries, thinClass } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
@@ -737,6 +737,21 @@ test("disk projection: the study model's estimate beside the guard's floor", () 
   assert.equal(Math.round(later.installBytes / 2 ** 20), 290 + 370);
   const floor = diskGuard({ storeBytes: 0, growthBytes: 2 ** 20, dockerFree: 2 ** 40, hostFree: 2 ** 40, rangesLeft: 10 });
   assert.equal(floor.projected, 10 * 256 * 2 ** 20, "the guard keeps its 256 MiB floor");
+});
+
+test("study §8 measurements: storage by the step's Commit; role bytes need the product's domain counters", () => {
+  const prevGroups = [{ g: "node_modules/.pnpm/a@1", n: 3, digest: "x" }, { g: "node_modules/.pnpm/b@1", n: 2, digest: "y" }];
+  const groups = [{ g: "node_modules/.pnpm/a@1", n: 3, digest: "x" }, { g: "node_modules/.pnpm/b@1", n: 2, digest: "z" }, { g: "node_modules/.pnpm/c@2", n: 4, digest: "w" }];
+  const m = studyMeasurements({
+    fsWrites: [{ storage: { pack_write_bytes: 5000 } }, { storage: { pack_write_bytes: 7000 } }, { storage: { pack_write_bytes: 9000 } }],
+    install: { storage: { pack_write_bytes: 1000 }, delta: { share: 0.4 }, prevGroups, groups, changed: { packages: ["c@2"], links: [] } },
+    build: { storage: { pack_write_bytes: 300, payload_pack_write_bytes: 200, metadata_pack_write_bytes: 100 }, bytes: buildBytes("10 packages/a/dist/x.js\n5 packages/a/tsconfig.tsbuildinfo\n7 packages/b/dist/y.js\n", ["packages/a", "packages/b"]) },
+  });
+  assert.deepEqual(m.fsWriteCommit, { n: 3, storedP50: 7000, content: null, metadata: null, needs: ROLE_COUNTER });
+  assert.deepEqual([m.install.newPaths, m.install.newPackageFolders, m.install.metadata, m.relink], [4, 1, null, { rewrittenFolders: 1, unchangedPackageFolders: 1 }]);
+  assert.equal(m.metadataPerPath.needs, ROLE_COUNTER);
+  assert.deepEqual(m.build, { stored: 300, perPackage: { "packages/a": 15, "packages/b": 7 }, content: 200, metadata: 100 });
+  assert.match(buildListCommand(["packages/a"]), /^find 'packages\/a' -path '\*\/node_modules' -prune -o/);
 });
 
 // the runner stays last: a test registered after it never runs
