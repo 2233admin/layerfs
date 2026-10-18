@@ -122,9 +122,11 @@ impl Drop for Peer {
         let _ = fs::remove_dir_all(&self.directory);
     }
 }
+/// One response on its own connection: this peer closes after each, and
+/// says so, so a keep-alive client does not keep it.
 pub fn fixed(status: u16, body: &[u8]) -> Vec<u8> {
     let mut bytes = format!(
-        "HTTP/1.1 {status} test\r\nContent-Length: {}\r\n\r\n",
+        "HTTP/1.1 {status} test\r\nConnection: close\r\nContent-Length: {}\r\n\r\n",
         body.len()
     )
     .into_bytes();

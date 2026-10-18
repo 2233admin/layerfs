@@ -260,6 +260,11 @@
   - 16 concurrent traced calls across 16 mounts: 845.9 → 56.0 ms;
   - sequential exec at 16 mounts: 109 → 19 ms.
   [fixes/013-a1-f029-sandbox-call-discovery.md](fixes/013-a1-f029-sandbox-call-discovery.md).
+  **Engine connection reuse done** (`0126695f9`, addon `604df2b2`, daemon
+  unchanged). Exec create and inspect share one kept-alive Engine
+  connection; Start keeps its own Upgrade. Over 30 `exec true` calls, one
+  sample per arm, p50/p90 went from 43.9/48.6 to 35.1/46.8 ms.
+  [fixes/013-a1-engine-connection-reuse.md](fixes/013-a1-engine-connection-reuse.md).
 - **F-030 · `daemon[].fuse.served` on traced exec lines is cumulative
   (tooling, liaison, 2026-10-18).** It rose 35 → 248 across calls, including
   `true` calls that make no requests. Readers must take differences per

@@ -27,6 +27,16 @@ impl<R: Read> Body<R> {
     pub fn inner_mut(&mut self) -> &mut R {
         &mut self.inner
     }
+    /// The body was read to its framed end (a fixed length or the last chunk).
+    pub fn ended(&self) -> bool {
+        self.done && matches!(self.mode, Framing::Fixed(_) | Framing::Chunked)
+    }
+    pub fn inner(&self) -> &R {
+        &self.inner
+    }
+    pub fn into_inner(self) -> R {
+        self.inner
+    }
     fn next_chunk(&mut self) -> io::Result<()> {
         if self.post_chunk {
             let mut crlf = [0; 2];

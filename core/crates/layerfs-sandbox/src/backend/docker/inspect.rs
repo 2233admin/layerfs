@@ -12,12 +12,7 @@ impl Docker {
         exec: ExecId,
     ) -> Result<ExecInspection, Box<WireFailure>> {
         let mut response = self
-            .exchange(
-                "GET",
-                &format!("/v1.54/exec/{exec}/json"),
-                false,
-                |_| Ok(()),
-            )
+            .exchange_kept("GET", &format!("/v1.54/exec/{exec}/json"), |_| Ok(()))
             .map_err(|mut failure| {
                 failure.requested_container = Some(container);
                 failure.requested_exec = Some(exec);
@@ -86,12 +81,18 @@ impl Docker {
                 pid,
             })
         })();
-        parsed.map_err(|cause| {
-            let mut failure = response.fail(cause, id);
-            failure.observed_container = owner;
-            failure.requested_container = Some(container);
-            failure.requested_exec = Some(exec);
-            failure
-        })
+        match parsed {
+            Ok(inspection) => {
+                response.release();
+                Ok(inspection)
+            }
+            Err(cause) => {
+                let mut failure = response.fail(cause, id);
+                failure.observed_container = owner;
+                failure.requested_container = Some(container);
+                failure.requested_exec = Some(exec);
+                Err(failure)
+            }
+        }
     }
 }
