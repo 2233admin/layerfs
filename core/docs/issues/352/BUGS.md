@@ -253,8 +253,10 @@
   with `git --git-dir <bare> --work-tree`, so Init never saw a `.git`. The
   player never runs git, and SPEC does not mention it. AGENTS says a Workspace
   includes `.git` and its index. **Owner decision 2026-10-18 (replaces the
-  lead's depth-1 plan, which stopped before any edit):** from P3, a full clone
-  of `dsh.git` checked out at the range start, and one `git commit` per
+  lead's depth-1 plan, which stopped before any edit; corrected the same day):**
+  from P3, a seed holding the full history up to range 15's start commit only
+  (nothing later; proved by `git rev-list --all`; 1,545 commits, 9.35 MiB pack),
+  checked out at the range start, and one `git commit` per
   replayed dsh commit with the original message, author and dates, so HEAD
   equals the replayed id. The proof adds HEAD = the checkpoint commit and a
   clean `git status`. See [SPEC §2, `.git` in Workspaces](SPEC.md). Owner: the

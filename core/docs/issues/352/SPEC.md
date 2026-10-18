@@ -79,8 +79,17 @@ From P3 on, the replay's Workspaces carry a real `.git`, as AGENTS requires
 was checked out with `--git-dir`/`--work-tree` from a bare clone
 ([BUGS.md F-031](BUGS.md)). Ranges 0–14 keep their recorded workload.
 
-- **Seed:** a full clone of `~/lfs-history/dsh.git` (all history, ~304 MB),
-  checked out at the range's start commit. Not a shallow clone.
+- **Seed:** the full history up to the P3 start commit only: every commit,
+  tree and blob reachable from range 15's start commit (`6e5c908a1`, range 14's
+  checkpoint), with refs and HEAD at that commit and nothing later. The bare
+  repo holds history up to today, so a plain clone would leak future commits.
+  The builder picks the method (for example, `git pack-objects --revs` from the
+  start commit, or a clone pruned to refs at or before it) and proves it:
+  `git rev-list --all` in the seeded `.git` contains no commit after the start.
+  Measured by the lead (2026-10-18): 1,545 commits; `pack-objects --revs` gives a
+  9.35 MiB pack and a 0.73 MiB index (the whole bare repo is 301 MiB). The
+  replay's own `git commit` per dsh commit then adds later history one commit
+  at a time.
 - **Cadence:** one `git commit` per replayed dsh commit. After a step writes a
   commit's files, the agent runs `git add` on exactly that commit's paths, then
   `git commit` with the original message, author and dates, so the Workspace's
