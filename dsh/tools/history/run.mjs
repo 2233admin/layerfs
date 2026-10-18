@@ -429,7 +429,7 @@ async function playRange(run, k, mode) {
     const inst = ctx.closure.rows.find((r) => /install/.test(r.kind)), build = ctx.closure.rows.find((r) => r.kind === "build");
     const instSizes = inst ? commitOf(inst.kind)?.sizes ?? null : null;
     if (ctx.closure.reinstall && m.storage) m.storage.reinstall = { changedPackages: ctx.closure.reinstall.changedPackages, rawChangedBytes: ctx.closure.reinstall.rawChangedBytes, storedNewBytes: instSizes?.newStored ?? null };
-    m.closure = { steps: ctx.closure.steps, rows: ctx.closure.rows, oracle: ctx.closure.oracle ?? null };
+    m.closure = { steps: ctx.closure.steps, rows: ctx.closure.rows, oracle: ctx.closure.oracle ?? null, normalized: ctx.closure.normalized ?? null };
     // development checks (owner 2026-10-18): the unchanged lockfile's clean reinstall, and the build again after a remount
     const again = commitOf("reinstall-check")?.sizes ?? null;
     if (ctx.closure.reinstallCheck) m.closure.reinstallCheck = { ...ctx.closure.reinstallCheck, newMetadata: again?.newMetadata ?? null, newStored: again?.newStored ?? null };

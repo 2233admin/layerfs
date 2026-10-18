@@ -99,6 +99,50 @@ Proof:
   tree a native install of the same lockfile made in the same image. Any
   difference is a stop finding.
 - **pnpm's exit status and output match native**, apart from timing.
+- **The install root and pnpm's run times (lead rule, 2026-10-18, found on
+  dev352-p3c r015; lister version 3, `closure.mjs`).** pnpm writes the absolute
+  install root into some files and the install time into two. Comparison is
+  exact wherever it can be.
+  - **Why the oracle can't install at the same path.** A Workspace's path is
+    `/workspaces/<N>`, which the daemon picks fresh at each mount, so it isn't
+    known until the closure's install mounts. The native oracle is made once
+    per lockfile hash before play, on the host (`closure.mjs oracle`), and
+    reused by every install of that lockfile, including the clean-reinstall
+    check in another Workspace. The player runs in the runner container,
+    which has no Docker access for a native install at the mount's path. So
+    the oracle installs at `/lfs352-native-root`, a path no package content
+    contains.
+  - **What is normalized.** Only the items below, each by exact substitution
+    of the one install-root string (the lister's working directory, or `pwd`
+    in the Workspace) with `<root>`, or of one named field's value with `<t>`.
+
+    | File | Field | Normalized to | Reason |
+    | --- | --- | --- | --- |
+    | `node_modules/.modules.yaml` | every occurrence of the install root | `<root>` | pnpm records absolute paths of the install |
+    | `node_modules/.modules.yaml` | `"prunedAt"` value | `<t>` | the install's wall-clock time |
+    | `node_modules/.pnpm-workspace-state-v1.json` | every occurrence of the install root | `<root>` | project keys are absolute paths |
+    | `node_modules/.pnpm-workspace-state-v1.json` | `"lastValidatedTimestamp"` value | `<t>` | the install's wall-clock time |
+    | a pnpm bin shim: a file directly in a `node_modules/.bin/` directory that starts `#!/bin/sh` | every occurrence of the install root | `<root>` | `NODE_PATH` in the shim is absolute |
+    | pnpm's install output | every occurrence of the install root | `<root>` | some warnings print absolute paths |
+
+    Shims are the one entry that isn't a single path: pnpm writes one per
+    bin, at the top level and inside each package with bin dependencies, so
+    the set is the lockfile's bins. The shebang condition keeps any other
+    file in `.bin/` raw.
+  - **Everything else is exact.** Every other byte of those files is
+    compared: the package set, versions, layout, store and hoist settings,
+    the project list and the pnpm configuration. Integrity isn't stored in
+    either state file: it is in the lockfile and the store, and every package
+    file's blob id proves it. Every other file in `node_modules`, including a
+    package file that holds the root, is compared by git blob id, mode and
+    path. A field outside the table that differs is a mismatch, and so a
+    stop. A state file without its time field fails the lister.
+  - **Counted per install.** The lister counts every substitution: root and
+    time per state file, and shim files and root substitutions. The output's
+    root count is added. They go to the metrics (`closure.normalized`, and
+    each install row's `normalized`), and the range report's "Installed tree"
+    row shows them, so the comparison can't widen silently. An oracle from an
+    older lister version is refused, never compared.
 - **Timing:** FUSE ÷ native for the same install on the same tree (playbook D6),
   per install kind (first, incremental, clean). Speed findings are diagnosed, never
   avoided by changing the route.

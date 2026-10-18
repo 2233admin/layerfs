@@ -7,15 +7,15 @@
 //   node dsh/tools/history/tests/p2.mjs
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fetchScript } from "../fetch-store.mjs";
 import { addedBySource, changedGroupBytes, cumulative, liveParts, sealedParts, seedBySource, stepSource, storageFigures, storageProblems } from "../storage.mjs";
-import { buildBytes, buildListCommand, changedPackages, CLOSURE_OUTPUT, closureSteps, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, nothingToBuild, playClosure, tscStates } from "../closure.mjs";
+import { parseLister, rootless, buildBytes, buildListCommand, changedPackages, CLOSURE_OUTPUT, closureSteps, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, nothingToBuild, playClosure, tscStates } from "../closure.mjs";
 import { aggregate, buildBaseline, reinstallGate, evaluate, probeSeries, thinClass } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
-import { checkFormat, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
+import { checkFormat, installedText, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
 import { parseReport } from "../frozen.mjs";
 import { blockTables, findingTableProblems } from "../reportcheck.mjs";
 import { baselineFor, leadNote, loadBaselines, probeCommitsOf, probeSetupCommits, regate, writeBaseline } from "../report.mjs";
@@ -317,6 +317,42 @@ test("shared pool (P3, lead 2026-10-18): aN in pool[(N-1) mod 4]; sharing per Sa
     { method: "sandbox.unmount", args: { sandbox: "p15-2", path: "/workspaces/1" }, start: at(20), ms: 5 },
   ];
   assert.deepEqual(poolSharing(lines), { "p15-1": { workspaces: 2, calls: 2, mounts: 3 }, "p15-2": { workspaces: 1, calls: 1, mounts: 1 } });
+});
+
+test("lister v2 (dev352-p3c r015): the install root and pnpm's run times in .bin shims and state files don't count; other bytes do", () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "lfs352-lister-"))); // the lister's root is its cwd, a real path
+  const tree = (name, when, extra = "x") => {
+    const root = join(dir, name), nm = join(root, "node_modules");
+    mkdirSync(join(nm, ".bin"), { recursive: true });
+    mkdirSync(join(nm, ".pnpm", "a@1", "node_modules", "a"), { recursive: true });
+    writeFileSync(join(nm, ".bin", "tsc"), `#!/bin/sh\nexport NODE_PATH="${root}/node_modules/.pnpm/node_modules"\nexec node "$basedir/../typescript/bin/tsc" "$@"\n`, { mode: 0o755 });
+    writeFileSync(join(nm, ".modules.yaml"), `{\n  "prunedAt": "${when}",\n  "virtualStoreDir": ".pnpm"\n}\n`);
+    writeFileSync(join(nm, ".pnpm-workspace-state-v1.json"), `{\n  "lastValidatedTimestamp": ${when.length},\n  "projects": { "${root}/packages/p": {} }\n}\n`);
+    writeFileSync(join(nm, ".pnpm", "a@1", "node_modules", "a", "index.js"), `module.exports = "${extra}";\n`);
+    const out = parseLister(execFileSync("sh", ["-c", listerCommand()], { cwd: root, encoding: "utf8" }));
+    norms.push(out.normalized);
+    return out.groups;
+  };
+  const norms = [];
+  const a = tree("one", "Sun, 18 Oct 2026 06:08:44 GMT"), b = tree("workspaces-15", "Sun, 18 Oct 2026 06:08:47 GMT, later");
+  assert.deepEqual(norms[0], { shims: { files: 1, root: 1 }, "node_modules/.modules.yaml": { root: 0, time: 1 }, "node_modules/.pnpm-workspace-state-v1.json": { root: 1, time: 1 } });
+  const shown = installedText({ oracle: compareInstalled({ groups: a }, b), normalized: { files: norms[0], outputRoot: 2 } });
+  assert.equal(shown, "**5 package groups equal to native** · normalized: `.modules.yaml` root ×0, time ×1 · `.pnpm-workspace-state-v1.json` root ×1, time ×1 · root ×1 in 1 bin shims · output root ×2");
+  assert.ok(compareInstalled({ groups: a }, b).ok, JSON.stringify(compareInstalled({ groups: a }, b)));
+  assert.notEqual(a.find((g) => g.g === "node_modules/.bin").bytes, b.find((g) => g.g === "node_modules/.bin").bytes, "bytes stay raw sizes");
+  const c = tree("other", "t", "changed");
+  assert.deepEqual(compareInstalled({ groups: a }, c).differ, ["node_modules/.pnpm/a@1"]);
+  // the root is normalized only in sh shims under node_modules/.bin and the two named state files
+  const d = tree("rooted-a", "t", "ROOT"), e = tree("rooted-b", "t", "ROOT");
+  assert.deepEqual(compareInstalled({ groups: d }, e).differ, [], "package bytes without the root are equal");
+  const pkg = (name) => { const f = join(dir, name, "node_modules", ".pnpm", "a@1", "node_modules", "a", "index.js"); writeFileSync(f, `module.exports = "${join(dir, name)}";\n`); };
+  pkg("rooted-a"); pkg("rooted-b");
+  const list = (name) => parseLister(execFileSync("sh", ["-c", listerCommand()], { cwd: join(dir, name), encoding: "utf8" })).groups;
+  assert.deepEqual(compareInstalled({ groups: list("rooted-a") }, list("rooted-b")).differ, ["node_modules/.pnpm/a@1"], "a package file holding the root is compared raw");
+  // install output: only the root is normalized
+  assert.equal(rootless("WARN at /workspaces/23/x", "/workspaces/23"), rootless("WARN at /lfs352-native-root/x", "/lfs352-native-root"));
+  assert.throws(() => rootless("x", ""), /no install root/);
+  rmSync(dir, { recursive: true, force: true });
 });
 
 test("per-call scratch (lead 2026-10-18): distinct folders; removed on success and after a failed exec", async () => {
@@ -772,7 +808,8 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
   symlinkSync(".pnpm/x@1/node_modules/x", join(t, "node_modules/x"));
   mkdirSync(join(t, "src")); writeFileSync(join(t, "src/a.ts"), "no\n");
   const list = (g = []) => execFileSync("sh", ["-c", listerCommand(g)], { cwd: t, encoding: "utf8" });
-  const groups = list().trim().split("\n").map((l) => JSON.parse(l));
+  const groups = parseLister(list()).groups;
+  assert.deepEqual(parseLister(list()).normalized, { shims: { files: 0, root: 0 } });
   assert.deepEqual(groups.map((g) => [g.g, g.n, g.bytes]), [["node_modules/.pnpm", 1, 0], ["node_modules/.pnpm/x@1", 3, 3], ["node_modules/x", 1, 24]]);
   assert.match(list(["node_modules/.pnpm/x@1"]), /^f 644 45b983be36b73c0788dc9cbcb76cbb80fc7bb057 node_modules\/\.pnpm\/x@1\/node_modules\/x\/index\.js$/m);
   assert.match(list(["node_modules/x"]), /^l 755 \.pnpm\/x@1\/node_modules\/x node_modules\/x$/m);
@@ -789,7 +826,7 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
     commit: async () => { calls.push("commit"); return { kind: "Committed" }; } } } });
   const deps = { sb: 1, branch: "r015-main-3", expectCall: (r, l, w) => w(), Mismatch: class extends Error {} };
   await assert.rejects(playClosure(fake(true), 15, steps.slice(0, 2), deps), /r015\.build exited 2/);
-  assert.deepEqual(calls, ["mount", "store?", "install", "list", "commit", "unmount", "mount", "build", "unmount"]);
+  assert.deepEqual(calls, ["mount", "store?", "install", "pwd", "list", "commit", "unmount", "mount", "build", "unmount"]);
   calls.length = 0;
   await assert.rejects(playClosure(fake(false), 15, steps.slice(0, 1), deps), /no pnpm store at \/pnpm-store/);
   assert.deepEqual(calls, ["mount", "store?", "unmount"], "no install without the store mount");

@@ -27,6 +27,19 @@ export const NONE_LINE = "**Optimization:** none — no problems found.";
 export const FINDINGS = "## 5. Findings and action";
 export const HEADLINE_CELLS = ["Latest version", "Store on disk", "Space amplification", "Added this range", "Commits", "Time"];
 
+/**
+ * The closure's install against the native oracle, with the count of every
+ * normalized field (INSTALLS §4, lister v3), so the comparison can't silently
+ * widen: install root and time in the two named state files, root in sh bin
+ * shims, root in pnpm's output.
+ */
+export function installedText(cl) {
+  const o = cl.oracle, n = cl.normalized, f = n?.files ?? {};
+  const st = (p) => (f[p] ? `\`${p.slice(13)}\` root ×${f[p].root}, time ×${f[p].time}` : `\`${p.slice(13)}\` absent`);
+  const norm = n ? `normalized: ${st("node_modules/.modules.yaml")} · ${st("node_modules/.pnpm-workspace-state-v1.json")} · root ×${f.shims?.root ?? 0} in ${f.shims?.files ?? 0} bin shims · output root ×${n.outputRoot}` : "normalized: not recorded";
+  return `${o.ok ? `**${o.groups} package groups equal to native**` : `**differs**: ${o.missing.length} missing, ${o.extra.length} extra, ${o.differ.length} differ`} · ${norm}`;
+}
+
 /** The range's 1-min load average line (owner 2026-10-18), or why there is none. */
 export const hostLoadLine = (m) => (m?.hostLoad ? `Load average (1-min, ${m.hostLoad.where ?? "player"}): start ${m.hostLoad.start ?? "—"} · end ${m.hostLoad.end ?? "—"}.` : "Load average: not recorded (before 2026-10-18).");
 
@@ -134,6 +147,7 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
     ["Steps", `${int(c.steps?.matched)} / ${int(c.steps?.total)} outcomes as planned`],
     ["Conflicts", `**${conflicts} / ${planned} planned hit · ${c.conflicts?.unplanned ?? 0} unplanned**`],
     ["Unit tests", c.tests?.run ? `**${c.tests.equal} / ${c.tests.run} equal to native**` : `— (not played in ${String(m.phase).toUpperCase()})`],
+    ...(m.closure?.oracle ? [["Installed tree", installedText(m.closure)]] : []),
     ["Ignored files", (w.leftOut?.install ? `— (installs not played in ${String(m.phase).toUpperCase()})` : "as expected")],
     ["Milestone", plan.milestone ? (m.snapshot ? "snapshot taken; restore, oracle and quick_check by the lead (SPEC §7)" : "**snapshot not taken**") : "—"],
   ]), "");

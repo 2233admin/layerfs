@@ -126,8 +126,9 @@ export async function playClosure(run, k, steps, { sb, branch, expectCall, Misma
       out.push(row);
       if (s.kind !== "test" && r.exitCode !== 0) throw new Mismatch(`${label} exited ${r.exitCode}: ${String(r.stderr || r.stdout || "").slice(-300)}`);
       if (/install/.test(s.kind)) {
+        row.root = String((await run.lf.sandbox.exec(sb, ws, "pwd")).stdout).trim();
         row.output = normalizeOutput(`${r.stdout ?? ""}${r.stderr ?? ""}`);
-        row.groups = String((await run.lf.sandbox.exec(sb, ws, listerCommand())).stdout).split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l));
+        Object.assign(row, parseLister((await run.lf.sandbox.exec(sb, ws, listerCommand())).stdout));
       }
       if (s.kind === "rebuild") {
         row.output = `${r.stdout ?? ""}${r.stderr ?? ""}`.slice(-20_000);
@@ -175,14 +176,18 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
   const install = steps.find((s) => /install/.test(s.kind));
   const oracleFile = join(oracleDir, "node_modules", `${lock}.json`);
   if (install && !existsSync(oracleFile)) throw new Mismatch(`range ${k}: no node_modules oracle for lockfile ${lock.slice(0, 12)}; run closure.mjs oracle --range ${k} first`);
+  if (install && JSON.parse(readFileSync(oracleFile, "utf8")).listerVersion !== LISTER_VERSION) throw new Mismatch(`range ${k}: the node_modules oracle for lockfile ${lock.slice(0, 12)} predates lister version ${LISTER_VERSION}; rerun closure.mjs oracle --range ${k}`);
   const rows = await playClosure(run, k, steps, { sb, branch, expectCall, Mismatch });
   const out = { steps: steps.map((s) => s.kind), rows: rows.map(({ groups, ...r }) => r) };
   const done = rows.find((r) => /install/.test(r.kind));
   if (done) {
     const oracle = JSON.parse(readFileSync(oracleFile, "utf8"));
+    // pnpm prints the install root in some warnings: the root alone is compared as <root> (INSTALLS §4)
+    const native = rootless(oracle.output, oracle.root), ours = rootless(done.output, done.root);
+    out.normalized = { root: done.root, nativeRoot: oracle.root, files: done.normalized, nativeFiles: oracle.normalized, outputRoot: done.output.split(done.root).length - 1, nativeOutputRoot: oracle.output.split(oracle.root).length - 1 };
     out.oracle = compareInstalled(oracle, done.groups);
     if (!out.oracle.ok) throw new Mismatch(`r${pad(k)} install differs from native: ${JSON.stringify({ missing: out.oracle.missing.slice(0, 5), extra: out.oracle.extra.slice(0, 5), differ: out.oracle.differ.slice(0, 5) })}`);
-    if (done.output !== oracle.output) throw new Mismatch(`r${pad(k)} install output differs from native: ${firstDifference(oracle.output, done.output)}`);
+    if (ours !== native) throw new Mismatch(`r${pad(k)} install output differs from native: ${firstDifference(native, ours)}`);
     let prevLock = "";
     try { prevLock = git(["show", `${run.state.prevCommit}:pnpm-lock.yaml`]); } catch { prevLock = ""; }
     const ch = changedPackages(prevLock, git(["show", `${plan.checkpoint}:pnpm-lock.yaml`]));
@@ -224,8 +229,28 @@ export function firstDifference(a, b) {
  * name (two for a scope or `.pnpm`): `.pnpm/<pkg>@<v>` holds the package and
  * its dependency links.
  */
-export const LISTER = `const fs=require("fs"),c=require("crypto");const full=new Set(process.argv.slice(1));const groups=new Map(),bytes=new Map();const groupOf=(p)=>{const s=p.split("/");const i=s.indexOf("node_modules");let j=i+1;if(s[j]===".pnpm"||(s[j]||"").startsWith("@"))j++;return s.slice(0,Math.min(j+1,s.length)).join("/")};const add=(p,line,n)=>{const g=groupOf(p);bytes.set(g,(bytes.get(g)||0)+n);let e=groups.get(g);if(!e)groups.set(g,e=[]);e.push(line)};const blob=(p,n)=>{const h=c.createHash("sha1");h.update("blob "+n+"\\0");h.update(fs.readFileSync(p));return h.digest("hex")};const walk=(d,nm)=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=d==="."?e.name:d+"/"+e.name;if(p===".git"||p===".lfs-probe")continue;const inNm=nm||e.name==="node_modules";const s=fs.lstatSync(p);const m=(s.mode&0o7777).toString(8);if(s.isSymbolicLink()){if(inNm)add(p,"l "+m+" "+fs.readlinkSync(p)+" "+p,s.size)}else if(s.isDirectory()){if(inNm&&e.name!=="node_modules")add(p,"d "+m+" - "+p,0);walk(p,inNm)}else if(inNm)add(p,"f "+m+" "+blob(p,s.size)+" "+p,s.size)}};walk(".",false);for(const g of [...groups.keys()].sort()){const ls=groups.get(g).sort();if(full.size){if(full.has(g))for(const l of ls)process.stdout.write(l+"\\n");continue}process.stdout.write(JSON.stringify({g,n:ls.length,bytes:bytes.get(g)||0,digest:c.createHash("sha256").update(ls.join("\\n")).digest("hex")})+"\\n")}`;
+/**
+ * The node_modules lister. Version 3 (dev352-p3c, r015; v3 counts what it normalizes): pnpm writes the
+ * install root into the \`.bin\` shims, \`.modules.yaml\` and
+ * \`.pnpm-workspace-state-v1.json\`, and the run's time into the last two
+ * (\`prunedAt\`, \`lastValidatedTimestamp\`). Only for those files, the
+ * digest hashes the content with the root (the lister's cwd) as \`<root>\` and
+ * those two values as \`<t>\`. Every other file is its git blob id. The raw
+ * size stays in \`bytes\`. Native installs at ORACLE_ROOT, a path no package
+ * content contains, so the replacement cannot touch unrelated bytes.
+ */
+export const LISTER_VERSION = 3;
+export const ORACLE_ROOT = "/lfs352-native-root";
+export const LISTER = `const fs=require("fs"),c=require("crypto");const full=new Set(process.argv.slice(1));const groups=new Map(),bytes=new Map();const groupOf=(p)=>{const s=p.split("/");const i=s.indexOf("node_modules");let j=i+1;if(s[j]===".pnpm"||(s[j]||"").startsWith("@"))j++;return s.slice(0,Math.min(j+1,s.length)).join("/")};const add=(p,line,n)=>{const g=groupOf(p);bytes.set(g,(bytes.get(g)||0)+n);let e=groups.get(g);if(!e)groups.set(g,e=[]);e.push(line)};const root=process.cwd(),state={"node_modules/.modules.yaml":/("prunedAt": )"[^"\\n]*"/,"node_modules/.pnpm-workspace-state-v1.json":/("lastValidatedTimestamp": )\\d+/},shim=/(^|\\/)node_modules\\/\\.bin\\/[^/]+$/;const norm={shims:{files:0,root:0}};const blob=(p,n)=>{let b=fs.readFileSync(p);const t=state[p];if(t||(shim.test(p)&&b.subarray(0,10).toString()==="#!/bin/sh\\n")){const parts=b.toString("utf8").split(root);let s=parts.join("<root>");if(t){if(!t.test(s))throw new Error(p+": no "+t);s=s.replace(t,"$1<t>");norm[p]={root:parts.length-1,time:1}}else{norm.shims.files++;norm.shims.root+=parts.length-1}b=Buffer.from(s)}const h=c.createHash("sha1");h.update("blob "+b.length+"\\0");h.update(b);return h.digest("hex")};const walk=(d,nm)=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=d==="."?e.name:d+"/"+e.name;if(p===".git"||p===".lfs-probe")continue;const inNm=nm||e.name==="node_modules";const s=fs.lstatSync(p);const m=(s.mode&0o7777).toString(8);if(s.isSymbolicLink()){if(inNm)add(p,"l "+m+" "+fs.readlinkSync(p)+" "+p,s.size)}else if(s.isDirectory()){if(inNm&&e.name!=="node_modules")add(p,"d "+m+" - "+p,0);walk(p,inNm)}else if(inNm)add(p,"f "+m+" "+blob(p,s.size)+" "+p,s.size)}};walk(".",false);for(const g of [...groups.keys()].sort()){const ls=groups.get(g).sort();if(full.size){if(full.has(g))for(const l of ls)process.stdout.write(l+"\\n");continue}process.stdout.write(JSON.stringify({g,n:ls.length,bytes:bytes.get(g)||0,digest:c.createHash("sha256").update(ls.join("\\n")).digest("hex")})+"\\n")}if(!full.size)process.stdout.write("#normalized "+JSON.stringify(norm)+"\\n")`;
+/** Lister stdout: its groups, and what version 2 normalized (`#normalized`: per state file root and time substitutions; shims: files and root substitutions). */
+export const parseLister = (stdout) => {
+  const lines = String(stdout).split("\n"), norm = lines.find((l) => l.startsWith("#normalized "));
+  return { groups: lines.filter((l) => l.startsWith("{")).map((l) => JSON.parse(l)), normalized: norm ? JSON.parse(norm.slice(12)) : null };
+};
 export const listerCommand = (groups = []) => `node -e ${quote(LISTER)} ${groups.map(quote).join(" ")}`;
+
+/** `text` with every occurrence of the install `root` written `<root>`; a missing root is refused. */
+export const rootless = (text, root) => { if (!root || root === "/") throw new Error(`no install root to normalize (${root})`); return String(text).split(root).join("<root>"); };
 
 /** pnpm's output without what varies run to run: progress lines and durations. */
 export const normalizeOutput = (text) => String(text).split("\n").filter((l) => !/^Progress: /.test(l)).map((l) => l.replace(/Done in [\d.ms ]+using/, "Done in <t> using")).join("\n").trim();
@@ -359,7 +384,7 @@ export function checkPlan(repo, planDir) {
 
 /** The native install of one checkpoint's tree in the image (network off, read-only store): exit, output, lister groups. */
 export function nativeInstall({ repo, commit, image, volume, name = "layerfs-issue352-oracle" }) {
-  const script = `mkdir /w && tar -x -C /w && cd /w && (${installCommand()}) > /tmp/o 2>&1; echo "@@exit $?"; sed 's/^/@@out /' /tmp/o; ${listerCommand()}`;
+  const script = `mkdir ${ORACLE_ROOT} && tar -x -C ${ORACLE_ROOT} && cd ${ORACLE_ROOT} && (${installCommand()}) > /tmp/o 2>&1; echo "@@exit $?"; sed 's/^/@@out /' /tmp/o; ${listerCommand()}`;
   const archive = execFileSync("git", ["--git-dir", repo, "archive", commit], { maxBuffer: 1 << 30 });
   const t0 = Date.now();
   const r = spawnSync("docker", ["run", "--rm", "-i", "--name", name, "--network", "none", "-v", `${volume}:${STORE_MOUNT}:ro`, "--entrypoint", "sh", image, "-c", script], { input: archive, encoding: "utf8", maxBuffer: 1 << 28 });
@@ -368,7 +393,7 @@ export function nativeInstall({ repo, commit, image, volume, name = "layerfs-iss
   return {
     exit: Number(/^@@exit (\d+)/.exec(lines.find((l) => l.startsWith("@@exit")) ?? "")?.[1] ?? NaN),
     output: normalizeOutput(lines.filter((l) => l.startsWith("@@out ")).map((l) => l.slice(6)).join("\n")),
-    groups: lines.filter((l) => l.startsWith("{")).map((l) => JSON.parse(l)),
+    ...parseLister(r.stdout),
     ms: Date.now() - t0,
   };
 }
@@ -402,12 +427,12 @@ function main() {
     const lock = lsTree(repo, plan.checkpoint).files.get("pnpm-lock.yaml");
     if (!lock) { console.log(`range ${k}: no pnpm-lock.yaml, no oracle`); return; }
     const dir = join(process.env.HOME, "lfs-history", "oracle", "node_modules"), file = join(dir, `${lock.blob}.json`);
-    if (existsSync(file)) { console.log(`cached ${file}`); return; }
+    if (existsSync(file) && JSON.parse(readFileSync(file, "utf8")).listerVersion === LISTER_VERSION) { console.log(`cached ${file}`); return; }
     // pnpm 11's store index is SQLite: a read-only open fails ("unable to open database file") while a fetch writes the store
     if (existsSync(join(process.env.HOME, "lfs-history", "fetch", "pending.json"))) { console.error("a pnpm fetch batch is pending; the oracle needs a quiescent store"); process.exit(1); }
     mkdirSync(dir, { recursive: true });
     const n = nativeInstall({ repo, commit: plan.checkpoint, image: opt("--image"), volume: opt("--volume") });
-    writeFileSync(`${file}.tmp`, JSON.stringify({ lockfile: lock.blob, range: k, checkpoint: plan.checkpoint, image: opt("--image"), install: installCommand(), ...n }, null, 1));
+    writeFileSync(`${file}.tmp`, JSON.stringify({ lockfile: lock.blob, range: k, checkpoint: plan.checkpoint, image: opt("--image"), install: installCommand(), listerVersion: LISTER_VERSION, root: ORACLE_ROOT, ...n }, null, 1));
     renameSync(`${file}.tmp`, file);
     console.log(JSON.stringify({ file, exit: n.exit, groups: n.groups.length, entries: n.groups.reduce((a, g) => a + g.n, 0), ms: n.ms }));
     return;
