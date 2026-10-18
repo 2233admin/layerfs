@@ -7,11 +7,11 @@
 //   node dsh/tools/history/tests/p2.mjs
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fetchScript } from "../fetch-store.mjs";
-import { closureSteps, compareInstalled, installInputsChanged, listerCommand, normalizeOutput, playClosure } from "../closure.mjs";
+import { closureSteps, compareInstalled, storeSetup, installInputsChanged, listerCommand, normalizeOutput, playClosure } from "../closure.mjs";
 import { aggregate, buildBaseline, evaluate, probeSeries, thinClass } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
@@ -643,8 +643,18 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
   assert.deepEqual(kinds({ changed: ["docs/x.md"], installed: true, milestone: true }), ["clean-install"]);
   assert.equal(installInputsChanged(["node_modules/x/package.json"]), false, "installed files are not inputs");
   const steps = closureSteps({ packages, tsconfigs, changed: ["packages/b/src/y.ts", "packages/a/q.ts", "packages/c/z.ts"], installed: true, milestone: true, run: ["packages/a/tests/t.spec.ts"] });
-  assert.match(steps[0].command, /rm -rf node_modules && pnpm install --offline --frozen-lockfile --store-dir \/pnpm-store --cache-dir \/tmp\/pnpm-cache --ignore-scripts$/);
-  assert.match(steps[0].command, /^mkdir -p \/tmp\/pnpm-cache && for e in \/pnpm-store\/\.cache\/\*\/; do ln -sfn/);
+  assert.match(steps[0].command, /rm -rf node_modules && pnpm install --offline --frozen-lockfile --store-dir \/tmp\/pnpm-store --cache-dir \/tmp\/pnpm-cache --ignore-scripts$/);
+  // the private writable layer over the read-only store, built by the shell on a fake store
+  const fakeStore = mkdtempSync(join(tmpdir(), "store-"));
+  mkdirSync(join(fakeStore, ".cache/v11"), { recursive: true }); mkdirSync(join(fakeStore, "v11/files"), { recursive: true });
+  writeFileSync(join(fakeStore, ".cache/lockfile-verified.jsonl"), "{}\n"); writeFileSync(join(fakeStore, "v11/index.db"), "db");
+  const tmpRoot = mkdtempSync(join(tmpdir(), "priv-"));
+  execFileSync("sh", ["-c", storeSetup(fakeStore).replaceAll("/tmp/", `${tmpRoot}/`)]);
+  assert.equal(readFileSync(join(tmpRoot, "pnpm-store/v11/index.db"), "utf8"), "db");
+  assert.equal(readlinkSync(join(tmpRoot, "pnpm-store/v11/files")), join(fakeStore, "v11/files"));
+  assert.equal(readlinkSync(join(tmpRoot, "pnpm-cache/v11")), join(fakeStore, ".cache/v11"));
+  assert.ok(existsSync(join(tmpRoot, "pnpm-cache/lockfile-verified.jsonl")));
+  rmSync(fakeStore, { recursive: true, force: true }); rmSync(tmpRoot, { recursive: true, force: true });
   assert.equal(steps[1].command, "./node_modules/.bin/tsc -b 'packages/a' 'packages/b'");
   assert.match(steps[2].command, /vitest run --reporter=json 'packages\/a\/tests\/t\.spec\.ts'$/);
   assert.equal(normalizeOutput("Progress: resolved 1\nPackages: +3\nDone in 1m 44.3s using pnpm v11.7.0"), "Packages: +3\nDone in <t> using pnpm v11.7.0");

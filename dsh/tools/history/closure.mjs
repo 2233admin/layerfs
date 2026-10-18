@@ -11,12 +11,17 @@
 // once per lockfile (a cached one is kept): pnpm's exit status and output
 // (timing removed) and the installed tree as digests per package folder.
 //
-// Store access (decided 2026-10-18 from a native run, range 15, pnpm 11.7.0):
-// pnpm installs offline from a read-only store when its cache dir is
-// writable; it writes only `lockfile-verified.jsonl` there. So the cache dir
-// is a private /tmp folder whose metadata entries link to the store's
-// read-only `.cache`: no copy-on-write layer and no copy of the 223 MB
-// metadata are needed (INSTALLS §3.2).
+// Store access (decided 2026-10-18 from native runs, range 15, pnpm 11.7.0):
+// pnpm cannot install from a read-only store directly. Its store index
+// (v11/index.db) is SQLite opened read-write in WAL mode ("unable to open
+// database file" on a read-only mount), and offline it asks the registry
+// unless its cache holds the lockfile's verification record
+// (lockfile-verified.jsonl, written by the fetch). So each install gets a
+// private writable layer in the Sandbox's /tmp, outside the Workspace
+// (INSTALLS §3.2): a copy of the index (15 MB at 81 lockfiles) and of the
+// verification records (73 KB), with links to the read-only package files
+// and registry metadata. Nothing is written to the store volume. Measured:
+// exit 0, "Done in 3.8s", --network none.
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -38,12 +43,17 @@ export const sandboxVolumes = (volume) => ({ volumes: [{ volume, target: STORE_M
 export const INSTALL_INPUT = /(^|\/)(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc)$/;
 export const installInputsChanged = (paths) => paths.some((p) => INSTALL_INPUT.test(p) && !p.includes("node_modules/"));
 
-/** pnpm's writable cache dir over the read-only store's metadata (see the header). */
-export const cacheSetup = (store = STORE_MOUNT) => `mkdir -p /tmp/pnpm-cache && for e in ${store}/.cache/*/; do ln -sfn "$e" /tmp/pnpm-cache/; done`;
+/** The private writable store and cache in /tmp over the read-only store (see the header). */
+export const storeSetup = (store = STORE_MOUNT) => [
+  "mkdir -p /tmp/pnpm-cache /tmp/pnpm-store",
+  `for d in ${store}/.cache/*/; do ln -sfn "\${d%/}" /tmp/pnpm-cache/; done`,
+  `cp ${store}/.cache/lockfile-verified.jsonl /tmp/pnpm-cache/`,
+  `for v in ${store}/v*/; do v=\${v%/}; n=\${v##*/}; mkdir -p /tmp/pnpm-store/$n && cp "$v/index.db" /tmp/pnpm-store/$n/ && ln -sfn "$v/files" /tmp/pnpm-store/$n/files; done`,
+].join(" && ");
 /** The install (INSTALLS §1); `clean` at milestones removes node_modules first. */
 export function installCommand({ store = STORE_MOUNT, clean = false } = {}) {
-  const install = `pnpm install --offline --frozen-lockfile --store-dir ${store} --cache-dir /tmp/pnpm-cache --ignore-scripts`;
-  return `${cacheSetup(store)} && ${clean ? "rm -rf node_modules && " : ""}${install}`;
+  const install = "pnpm install --offline --frozen-lockfile --store-dir /tmp/pnpm-store --cache-dir /tmp/pnpm-cache --ignore-scripts";
+  return `${storeSetup(store)} && ${clean ? "rm -rf node_modules && " : ""}${install}`;
 }
 export const buildCommand = (packages) => `./node_modules/.bin/tsc -b ${packages.map(quote).join(" ")}`;
 

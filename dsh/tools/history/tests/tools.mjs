@@ -193,7 +193,7 @@ test("calibration runs offline in the runtime image", () => {
   assert.deepEqual(parseProbe('{"path":"a","status":"pass","ms":3}\nwarning\n'), [{ path: "a", status: "pass", ms: 3 }]);
   // pnpm 11's offline install reads registry metadata from the cache the fetch filled on the store volume, through a writable /tmp cache dir
   assert.ok(FETCH.includes("--store-dir /pnpm-store --cache-dir /pnpm-store/.cache"), FETCH);
-  assert.ok(INSTALL.includes("for e in /pnpm-store/.cache/*/; do ln -sfn") && INSTALL.includes("--store-dir /pnpm-store --cache-dir /tmp/pnpm-cache"), INSTALL);
+  assert.ok(INSTALL.includes("for v in /pnpm-store/v*/") && INSTALL.includes("--store-dir /tmp/pnpm-store --cache-dir /tmp/pnpm-cache"), INSTALL);
   const tree = join(dir, "tree");
   mkdirSync(tree, { recursive: true });
   assert.match(noInstall(tree), /no pnpm-lock\.yaml/, "a yarn checkpoint installs nothing");
