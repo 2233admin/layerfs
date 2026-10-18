@@ -176,3 +176,9 @@ measurements. Where a number cannot come from the named source yet:
   seal + snapshot includes the sealed file's figures; report includes the
   metrics and health reads.
 
+
+- **Open issues are judged as of the attempt** (F-021 follow-up, lead
+  decision 2026-10-18; F2). The §7 check requires only the BUGS.md findings
+  open now that were opened (first committed, `git log -S`) by the latest
+  attempt's `started` time in its metrics; one opened later, or not yet
+  committed, is not required in an earlier report.

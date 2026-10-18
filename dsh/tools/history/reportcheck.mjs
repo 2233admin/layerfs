@@ -23,7 +23,7 @@ import { checkFinding, checkRecord, loadFindings } from "./findings.mjs";
 import { atHead, cells, legacyGates, parseReport, tableAfter } from "./frozen.mjs";
 import { FINDING_COLUMNS, LEAD_END, LEAD_START, NOTE_START } from "./report.mjs";
 import { checkOverview } from "./stats.mjs";
-import { checkFormat, FINDINGS, loadIssues } from "./format.mjs";
+import { checkFormat, FINDINGS, issueOpenTimes, issuesAsOf, loadIssues } from "./format.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
 const HEADINGS = (k) => [`# Range ${pad(k)}`, "## Attempts", "## 1. Checks", "## 2. Work", "## 3. Operation latency", "## 4. Scale probes", "## 5. Storage", "## 6. Trends", LEAD_START, NOTE_START, LEAD_END];
@@ -110,7 +110,8 @@ export function checkReport({ range, metricsDir, docs }) {
   // (REPORT_FORMAT.md) for an attempt that recorded its measurements
   const last = attempts.at(-1);
   const binding = !!(last?.version && last?.overview && last?.calls);
-  if (binding) for (const p of checkFormat(text, last, loadIssues(docs))) fail("F1", p);
+  // open issues as of the latest attempt's start (F2: a recorded report is frozen)
+  if (binding) for (const p of checkFormat(text, last, issuesAsOf(loadIssues(docs), issueOpenTimes(docs), last.started))) fail("F1", p);
   let from = 0;
   for (const h of binding ? [] : HEADINGS(range)) {
     const lines = text.split("\n"), at = lines.findIndex((l, i) => i >= from && (l === h || l.startsWith(`${h} (`)));

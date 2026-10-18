@@ -4,6 +4,7 @@
 // attempt that recorded the format's measurements (`version`, `overview`,
 // `calls`); attempts recorded before keep their committed report (F2).
 // `checkFormat` holds REPORT_FORMAT.md §7's checks; reportcheck.mjs runs it.
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { exponent, sameBinary } from "./gates.mjs";
@@ -295,4 +296,32 @@ export function checkFormat(text, m, issues = []) {
 }
 
 /** BUGS.md's open findings for the docs folder, or none when it has no BUGS.md. */
+/**
+ * When each finding of BUGS.md was opened: the commit time of the first commit
+ * that added its "- **F-NNN ·" line (git log -S). An entry not committed yet
+ * has none (it opened after every recorded attempt).
+ */
+export function issueOpenTimes(docs) {
+  const file = join(docs, "BUGS.md");
+  if (!existsSync(file)) return new Map();
+  const out = new Map();
+  for (const id of [...readFileSync(file, "utf8").matchAll(/^- \*\*(F-\d{3}) ·/gm)].map((m) => m[1])) {
+    try {
+      const t = execFileSync("git", ["-C", docs, "log", "--format=%cI", "-S", `**${id} ·`, "--", "BUGS.md"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim().split("\n").filter(Boolean).at(-1);
+      if (t) out.set(id, Date.parse(t));
+    } catch { /* outside git: unknown */ }
+  }
+  return out;
+}
+
+/**
+ * F-021 follow-up (F2): a report's open issues are judged as of its latest
+ * attempt's start (`started` in its metrics): the findings open now that were
+ * opened (committed) by then. One opened later, or not committed, is not required.
+ */
+export const issuesAsOf = (issues, opened, started) => {
+  const t = Date.parse(started ?? "");
+  return Number.isFinite(t) ? issues.filter((i) => opened.has(i.id) && opened.get(i.id) <= t) : issues;
+};
+
 export const loadIssues = (docs) => (existsSync(join(docs, "BUGS.md")) ? openIssues(readFileSync(join(docs, "BUGS.md"), "utf8")) : []);

@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { aggregate, evaluate, probeSeries } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
-import { checkFormat, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
+import { checkFormat, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
 import { parseReport } from "../frozen.mjs";
 import { blockTables, findingTableProblems } from "../reportcheck.mjs";
 import { baselineFor, leadNote, loadBaselines, probeSetupCommits, regate, writeBaseline } from "../report.mjs";
@@ -563,6 +563,14 @@ test("F-020: F4 checks the before/after table and the with-vs-without table each
   assert.deepEqual(findingTableProblems(block(ww(undefined, "| Range time (tooling) | 16.6 s |  |"))), ['with-vs-without row "Range time (tooling)" does not fill every column']);
   assert.deepEqual(findingTableProblems(block("").replace("| warm |", "|  |")), ['row "p50" does not fill every column']);
   assert.deepEqual(blockTables(block(ww())).map((t) => t.rows.length), [1, 1]);
+});
+
+test("F-021 follow-up: open issues are judged as of the latest attempt's start", () => {
+  const issues = [{ id: "F-013" }, { id: "F-020" }, { id: "F-099" }];
+  const opened = new Map([["F-013", Date.parse("2026-10-17T20:00:00Z")], ["F-020", Date.parse("2026-10-18T00:11:13Z")]]);
+  assert.deepEqual(issuesAsOf(issues, opened, "2026-10-17T23:16:50.546Z").map((i) => i.id), ["F-013"], "F-020 opened after; F-099 not committed");
+  assert.deepEqual(issuesAsOf(issues, opened, "2026-10-18T01:00:00Z").map((i) => i.id), ["F-013", "F-020"]);
+  assert.deepEqual(issuesAsOf(issues, opened, undefined), issues, "no start recorded: every open issue");
 });
 
 // the runner stays last: a test registered after it never runs
