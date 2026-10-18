@@ -57,7 +57,7 @@ on the parent in every path walk, however the dentry was made.
 ## Performance, baseline vs batch 4 vs follow-up
 
 `cost.mjs case`, one sample per arm, Disposable, `LAYERFS_CONSTRUCTION_WORKERS=1`,
-cache state as each case declares it. Host load (1-minute):
+cache state as below. Host load (1-minute):
 
 - baseline: find 10.4, ls-r 14.1, du-s 6.8, rm-rf-nm 6.4;
 - batch 4: 8.2–8.5;
@@ -65,6 +65,25 @@ cache state as each case declares it. Host load (1-minute):
 
 Two non-#359 issue containers ran throughout. Tables:
 `~/lfs-history/runs/issue359/table-{baseline,batch4,batch4b}.json`.
+
+**Cache state (corrected 2026-10-18, VERIFICATION.md finding 1).** The arm
+names are `cost.mjs` step names, not cache claims:
+
+- `cold` is the first run in a fresh one-shot Workspace on a fresh daemon.
+- `steady` is the same Workspace run again.
+- `native` is a page-cache-resident copy of the tree.
+
+In every arm the Store file stays resident in the VM page cache after the
+clone (declared, not controlled). `cost.mjs` drops no cache and checks no
+residency. Earlier wording here said the page cache was dropped; that was
+wrong and is withdrawn. No cold-cache claim is made. Wall times are
+warm-Store diagnostics only (AGENTS §1); the count comparisons (lookups,
+statements, requests, jobs) are unaffected.
+
+**Budget (declared exception).** These cases exceed the 15 s / 25 s
+defaults (measurement policy §3.7). Each runs in its own command under the
+#359 owner-scoped exception, "each case runs in its own command, under 2
+minutes" (RCA §10). Command times from the ledger: batch 4 find 52.6 s, du-s 45.6 s; follow-up find 52.0 s, du-s 47.1 s, rm-rf-nm 44.4 s; baseline as in record 017.
 
 | Case / step | Baseline ms | Batch 4 ms | Follow-up ms | Store reader requests (base → follow-up) | Statements | Owner jobs (base → b4 → b4b) |
 | --- | ---: | ---: | ---: | --- | --- | --- |

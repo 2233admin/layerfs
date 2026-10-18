@@ -14,12 +14,33 @@
 A1 keeps a per-Workspace reader cache of at most 3 MiB (positive rows only),
 from the first demand until unmount.
 
-- **cold** arm: a fresh Workspace mount, page cache dropped. The A1 cache
-  starts empty and fills only from that arm's own demands.
+- **cold** arm: the first run in a fresh Workspace on a fresh daemon. The A1
+  cache starts empty and fills only from that arm's own demands. The Store
+  file stays page-cache resident (declared, not controlled); see the
+  correction below.
 - **steady** arm: the same Workspace again, as before A1. It inherits the
   kernel caches and up to 3 MiB of A1 cache that the cold arm left. That is
   the declared steady state of every walk case; no setup step touches it.
 - The SDK control reader keeps no A1 cache. No SDK case is in this set.
+
+**Cache state (corrected 2026-10-18, VERIFICATION.md finding 1).** The arm
+names are `cost.mjs` step names, not cache claims:
+
+- `cold` is the first run in a fresh one-shot Workspace on a fresh daemon.
+- `steady` is the same Workspace run again.
+- `native` is a page-cache-resident copy of the tree.
+
+In every arm the Store file stays resident in the VM page cache after the
+clone (declared, not controlled). `cost.mjs` drops no cache and checks no
+residency. Earlier wording here said the page cache was dropped; that was
+wrong and is withdrawn. No cold-cache claim is made. Wall times are
+warm-Store diagnostics only (AGENTS §1); the count comparisons (lookups,
+statements, requests, jobs) are unaffected.
+
+**Budget (declared exception).** These cases exceed the 15 s / 25 s
+defaults (measurement policy §3.7). Each runs in its own command under the
+#359 owner-scoped exception, "each case runs in its own command, under 2
+minutes" (RCA §10). Command times from the ledger: find 15.4 s, du-s 25.6 s, grep-r 54.1 s, rm-rf-nm 29.7 s, cp-rm-nm 65.7 s, folder-10000-ls 15.2 s.
 
 ## Samples
 
@@ -56,7 +77,7 @@ case (`b83871223`; rm-rf-nm 2,850 → 0).
   - Store statements per reader request fell about 2 → 1.1.
   - Pack bytes read fell 40–60× where a sample before A1 exists (rm-rf-nm
     2.36 GB → 38 MB, cp 2.39 GB → 53 MB).
-  - Wall time fell in every name and stat walk: find −35%, du-s cold −30%,
+  - Wall time (warm-Store diagnostic) fell in every name and stat walk: find −35%, du-s cold −30%,
     `ls -l` of 10,000 entries −37%, rm-rf-nm −15%.
 - **Not changed by A1:** reader requests, owner jobs, LOOKUPs and the
   immutable-cache misses (rm-rf-nm 196,641 both). The per-entry cost is still

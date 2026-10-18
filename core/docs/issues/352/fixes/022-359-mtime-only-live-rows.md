@@ -151,9 +151,10 @@ Intermittent, preserved:
     `a_caller_blocked_on_a_full_pipe_neither_blocks_commit_nor_is_touched_by_unmount`.
 
   Each passed on one diagnostic rerun, and the next full runs of both targets
-  passed. The error text was not captured; the helper now keeps it. Both
-  tests leave a process or mapping alive across the unmount. Host load was
-  4.7–8. Not attributed to this change; open.
+  passed. The error text was not captured; the run script now keeps it.
+  Both tests leave a process or mapping alive across the unmount. Host load
+  was 4.7–8. Not attributed to this change. Filed as **BUGS.md F-046** (open,
+  owner unassigned); a rerun pass is not evidence of a pass.
 - **r5-5b-50 precondition** ("no write was seen between capture and return"):
   failed once and passed on one diagnostic rerun. This is a timing
   precondition of the test, recorded earlier in this work.

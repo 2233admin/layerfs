@@ -45,6 +45,25 @@ ownership is not yet confirmed by the liaison.
 | cp-rm-nm / cp | 50,475 (batch 2) | 71,594 | 563,803 → 569,783 | 616,470 → 622,760 | 5,430 → 8,224 | 7.2 → 17.8 |
 | cp-rm-nm / rm-created | 10,471 (batch 2) | 25,911 | 197,677 → 203,212 | 209,918 → 215,453 | 2,284 → 4,444 | 7.2 → 17.8 |
 
+**Cache state (corrected 2026-10-18, VERIFICATION.md finding 1).** The arm
+names are `cost.mjs` step names, not cache claims:
+
+- `cold` is the first run in a fresh one-shot Workspace on a fresh daemon.
+- `steady` is the same Workspace run again.
+- `native` is a page-cache-resident copy of the tree.
+
+In every arm the Store file stays resident in the VM page cache after the
+clone (declared, not controlled). `cost.mjs` drops no cache and checks no
+residency. Earlier wording here said the page cache was dropped; that was
+wrong and is withdrawn. No cold-cache claim is made. Wall times are
+warm-Store diagnostics only (AGENTS §1); the count comparisons (lookups,
+statements, requests, jobs) are unaffected.
+
+**Budget (declared exception).** These cases exceed the 15 s / 25 s
+defaults (measurement policy §3.7). Each runs in its own command under the
+#359 owner-scoped exception, "each case runs in its own command, under 2
+minutes" (RCA §10). Command times from the ledger: rm-rf-nm 42.8 s, cp-rm-nm 105.8 s.
+
 Request and job counts are unchanged, and so are Store statements. The
 removed statements are overlay SQL, which the telemetry does not report.
 

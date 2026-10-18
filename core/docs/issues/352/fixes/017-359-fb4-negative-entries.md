@@ -74,13 +74,36 @@ this batch.
 
 `cost.mjs case <case> --binary <id> --label baseline|batch2`, one sample per
 arm, Disposable Store, `LAYERFS_CONSTRUCTION_WORKERS=1`, fresh volume per
-sample, cache state as each case declares it (cold = fresh Workspace and
-dropped page cache, steady = the same Workspace again). Tables:
+sample. Tables:
 `~/lfs-history/runs/issue359/table-baseline.json` and `table-batch2.json`.
 Native ms is the batch 2 sample's own native part. The exception is vitest,
 which ran only `--part lfs` in batch 2, so its native time is the baseline's.
 Native timing itself moved with load between the series: tsc-b cold went
 206 → 599 ms, cp 1,163 → 1,643 ms.
+
+**Cache state (corrected 2026-10-18, VERIFICATION.md finding 1).** The arm
+names are `cost.mjs` step names, not cache claims:
+
+- `cold` is the first run in a fresh one-shot Workspace on a fresh daemon.
+- `steady` is the same Workspace run again.
+- `native` is a page-cache-resident copy of the tree.
+
+In every arm the Store file stays resident in the VM page cache after the
+clone (declared, not controlled). `cost.mjs` drops no cache and checks no
+residency. Earlier wording here said the page cache was dropped; that was
+wrong and is withdrawn. No cold-cache claim is made. Wall times are
+warm-Store diagnostics only (AGENTS §1); the count comparisons (lookups,
+statements, requests, jobs) are unaffected.
+
+**Budget (declared exception).** These cases exceed the 15 s / 25 s
+defaults (measurement policy §3.7). Each runs in its own command under the
+#359 owner-scoped exception, "each case runs in its own command, under 2
+minutes" (RCA §10). Command times from the ledger: baseline find 20.4 s, pnpm-first 40.1 s, grep-r 62.8 s, du-s 34.0 s, cp-rm-nm 72.7 s, rm-rf-nm 34.7 s; batch 2 pnpm-first 32.4 s, cp-rm-nm 71.2 s.
+
+**Disclosed breach.** One earlier sample broke the 2-minute rule outright.
+Ledger seq 7, the vitest `diagnostic` sample from before the baseline, ran
+216.8 s and is recorded `FAILED`. It is in no table of this or any later
+record.
 
 Declared interference: baseline samples ran at host load 6.5–17 (vitest,
 tsc-b, pnpm-* and node-require at 12.6–17.1). Batch 2 ran at 5.6–8.2. Two non-#359 issue

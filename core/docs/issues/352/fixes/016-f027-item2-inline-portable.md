@@ -115,7 +115,7 @@ one command each, Disposable/WAL/OFF, 4 KiB pages,
 | mtime-only is not a change (§4.8): `touch`, identical rewrite, temp file created and deleted | each Commit `UpToDate`; the three beside one real edit: `Committed`, exactly 1 changed path; after a remount the touched file shows its committed mtime (same ns) | same |
 | Attribute-only change: `chmod 600` of one file | exactly 1 changed path; mode 600, mtime unchanged to the ns after a remount | same |
 | Checkpoint after a played range | range 14 checkpoint ok (old arm and final new arm) | `i360-r14-old`, `i360-r14-final` |
-| Dedup: one existing file copied to a new path; 1,000 known files copied into a new folder | content added (newStored − newMetadata): one file 6,424 B old → 6,382 B new; 1,000 files 9,917 B old → **0** new | `proof-old-p45-1792319900116`, `proof-new-p45-1792319910555` |
+| Dedup: one existing file copied to a new path; 1,000 known files copied into a new folder | content added (newStored − newMetadata): one file 6,424 B old → 6,382 B new; 1,000 files 9,917 B old → **0** new | `proof-old-p45-1792319900116` (old `20b7fde1`), `proof-new-p45-1792319910555` (**intermediate `76816d87`**, not the final binary) |
 | Localized edit: 1 byte in the middle of a 1 MiB and a 16 MiB file, through a mounted Workspace | stored per edit Commit: 1 MiB 3,577 → 3,276 B, 16 MiB 15,344 → 15,065 B; statements 180 → 138 and 175 → 165 | same |
 | Compression per role | canonical bytes per content role unchanged; pack bytes −2.0% (domain 0) and −0.6% (domain 1) | range-14 figures |
 
@@ -161,7 +161,8 @@ spec's "r011-equivalent snapshot" figure would need ranges 1–11 replayed on
 the new daemon, which was not done here (gap).
 
 **Init** of the 51,491-entry #359 head tree (`init-compare.mjs`): the Store file is
-124,923,904 B old and 124,952,576 B new (+0.02%, 7 pages); Init 23.2 s → 23.1 s. Init already
+124,923,904 B old and 124,952,576 B new (+0.02%, 7 pages); Init 23.7 s → 23.1 s (old: the first
+sample, see "Corrections"; new: **intermediate daemon `76816d87`**, not the final `928b2872`). Init already
 deduplicated metadata roots (357 distinct mode/mtime trees for 51k
 entries), so moving them inline saves objects (−224 chunk, −224 extent leaf,
 −224 file state, −357 attribute leaf) but not file pages.
@@ -169,8 +170,10 @@ entries), so moving them inline saves objects (−224 chunk, −224 extent leaf,
 ### Statements per stat (spec §7; owner's "statements per stat, old vs new")
 
 `stat-probe.mjs`: the 20 regular files range 14 modified (each arm wrote them
-itself: old arm root form, new arm inline), one cold `stat` each through FUSE
-in a fresh Workspace on a fresh daemon:
+itself: old arm root form, new arm inline), one first `stat` each through FUSE
+in a fresh Workspace on a fresh daemon. The Store file's page-cache state was
+not controlled. The new arm ran on the **intermediate daemon `76816d87`**, not
+the final binary:
 
 | | Old | New | Change |
 | --- | ---: | ---: | ---: |
@@ -227,3 +230,46 @@ differs with the run's merge interleaving, as item 1 recorded. Not resampled.
   proof over r7a2–r11's recorded merges (spec §4) was not run here, and
   needs #353's agreement to change that file if it shows a difference.
 - r011-equivalent whole-Store figure (needs ranges 1–11 on the new daemon).
+
+## Corrections (2026-10-18, VERIFICATION.md on `claude/issue352-correctness-644bbc`)
+
+**Production LOC of `c4d9893e7`.** Its commit message says `97,379 -> 97,443
+(delta +64)`. That is wrong: its parent `72782bfaa` counts 97,396, so the
+comparison is **97,396 → 97,443 (delta +47)**.
+
+- Method: `tools/production_loc.py --root` on `git archive` of each commit.
+- The pushed commit message is not rewritten. This record and the next
+  commit message carry the correction.
+
+**Repeated samples, disclosed.** Two old-arm probes ran twice. One sample per
+arm means the first is the result unless it was recorded as failed or
+ineligible; neither first sample was so recorded. The receipts do not say why
+the second ran. `init-compare.mjs` and `stat-probe.mjs` were both modified
+between the two runs, which suggests a harness fix, but that is not
+established.
+
+| Probe | First sample | Second sample | Reported |
+| --- | --- | --- | --- |
+| Old Init (`20b7fde1`) | `init-old-1792319690243`: Init completed, `ok`, 23,677 ms (trace); no `result.json`, so no Store size | `init-old-1792319721651`: 23,158 ms, Store 124,923,904 B | time: **the first, 23.7 s** (corrected from 23.2 s); Store size: the second, the only one recorded |
+| Old stat probe (`20b7fde1`) | `stat-old-1792319797489`: empty `daemon.jsonl`, no `result.json`; no counts were recorded, so it is ineligible for the count table | `stat-old-1792319824832`: 1,458 statements | the second, as the only sample with counts |
+
+With the first sample, old Init 23.7 s → new 23.1 s. One sample each under
+host load 7–9; no speed claim either way.
+
+**Binary identities.** These rows ran on the intermediate daemon `76816d87` /
+addon `04cbdedb` (`683666d45`), not the final `928b2872` / `0286ddbd`
+(`c4d9893e7`):
+
+- the new-arm Init;
+- the new-arm stat probe;
+- the new-arm dedup and localized-edit proof (p4/p5, `proof-new-p45-…`).
+
+`c4d9893e7` changed only how diffs compare values, so it does not touch Init,
+stat or the stored bytes. Even so, these rows are labelled with their actual
+identity and are not claimed for the final binary. The final binary ran the
+value-equivalence proof (`proof-new-all-…`, over a Store written by
+`76816d87`) and range 14. They are not re-taken.
+
+**Cache state.** Range-14 timings and the probes ran on fresh daemons and
+fresh Workspaces over byte clones of the Store volume. The Store file's
+page-cache state was declared, not controlled; no cold-cache claim is made.

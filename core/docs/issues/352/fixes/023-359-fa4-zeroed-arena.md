@@ -55,6 +55,32 @@ The cache state is as each case declares it (record 020).
 
 `=` means unchanged. Store transactions are 0 in every arm.
 
+**Cache state (corrected 2026-10-18, VERIFICATION.md finding 1).** The arm
+names are `cost.mjs` step names, not cache claims:
+
+- `cold` is the first run in a fresh one-shot Workspace on a fresh daemon.
+- `steady` is the same Workspace run again.
+- `native` is a page-cache-resident copy of the tree.
+
+In every arm the Store file stays resident in the VM page cache after the
+clone (declared, not controlled). `cost.mjs` drops no cache and checks no
+residency. Earlier wording here said the page cache was dropped; that was
+wrong and is withdrawn. No cold-cache claim is made. Wall times are
+warm-Store diagnostics only (AGENTS §1); the count comparisons (lookups,
+statements, requests, jobs) are unaffected.
+
+**Budget (declared exception).** These cases exceed the 15 s / 25 s
+defaults (measurement policy §3.7). Each runs in its own command under the
+#359 owner-scoped exception, "each case runs in its own command, under 2
+minutes" (RCA §10). Command times from the ledger: du-s 19.1 s, grep-r 37.5 s; small-commit 2.6 s is within the default.
+
+**Dependency.** The correctness lane's F-043 fix reuses encode workspaces
+across Saves, through an idle list in `save/state.rs`, on top of this
+change. Once it lands, the Save-side (encode) figures here move. The small
+Commit row will no longer isolate F-A4, and these numbers are not carried
+forward past that integration.
+
+
 ## Reading
 
 - **du-s** (cold −19%, steady −16%): the counts are equal, and owner hold

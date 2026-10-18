@@ -502,3 +502,26 @@
   it on a vanilla kernel before attributing pnpm costs to LayerFS. No product
   change.
   [fixes/018-359-b4-readdirplus.md](fixes/018-359-b4-readdirplus.md).
+
+- **F-046 · a terminal unmount in two mount tests fails intermittently
+  (test or product, not yet diagnosed; #359 §4.8 test runs, 2026-10-18).**
+  - `tests/support/mounted.rs:133` (`unmount`, `try_unmount(..).unwrap()`)
+    panicked twice, in different targets. Both runs were on `4db0ceb9e`'s
+    test build in the pinned image, at host load 4.7–8:
+    - `mounted_commit`
+      `r5_9_stores_through_shared_mappings_are_committed_once_written_back`,
+      in a run where `r5_8` panicked in the same process;
+    - `mounted_cycles`
+      `a_caller_blocked_on_a_full_pipe_neither_blocks_commit_nor_is_touched_by_unmount`.
+  - **The error text was not captured.** The run script kept only the panic
+    line, and it now keeps the two lines after it.
+  - Each test passed on one diagnostic rerun, and the next full runs of both
+    targets passed. That does not close the finding and is not a pass.
+  - Both tests leave a process or a dirty shared mapping alive across the
+    unmount. The candidate is a refused or after-failure unmount
+    (`Failure::Rejected` / `Failure::After`) racing that process, not a
+    stale-share or build effect.
+
+  **Status: OPEN. Owner: unassigned.** Next step: capture the `Failure`
+  value, then diagnose it from the unmount drain source.
+  [fixes/022-359-mtime-only-live-rows.md](fixes/022-359-mtime-only-live-rows.md).
