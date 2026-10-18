@@ -58,9 +58,19 @@ constructing (c finished at +25.4 s).
 ## The failing object
 
 - **Id:** `e8775b327467431049f20b8e2fa215332c9f380ab02c13e79ac914560af7ea37`.
-- **Which Commit stored it, and whether `object_location` holds it now:**
-  not yet read. Both need a read-only query on a copy of the Store file,
-  which touches the frozen volume. It waits for the lead's agreement.
+- **Frozen copy of the Store.** At about 07:15Z, `store.sqlite`, `-wal` and `-shm` were copied together from the volume, mounted read-only, into `F036-store-copy/` (next to this note), with SHA256SUMS:
+  - `store.sqlite`: 249,864,192 B, `229952039e55…`
+  - `-wal`: 4,194,304 B, `9ad52415cc58…`
+  - `-shm`: 32,768 B, `6607ac2a7fec…`
+  - All three have mtime 07:12Z. The checksums still verify after the query. The query ran on a second copy (`F036-query-copy/`), which opening may have checkpointed.
+- **`object_location` now (07:3xZ, on the query copy): present.**
+  - `object_id E8775B32…EA37`, role 1, canonical_length 1,024, pack_id **45,942,259**, group 0, record 17.
+  - Store totals: 452,011 `object_location` rows and 34,684 packs (max pack_id 45,943,223).
+- **The base did not have it.** The range-14 snapshot, rebuilt into scratch, has no row for the object and ends at max pack_id 45,895,683 (30,549 packs). So the object was stored after the base. 4,135 packs are new:
+  - small blocks of 3–5 packs, consistent with the `fs.apply` steps;
+  - a block of 1,610 packs (45,936,641–45,938,250);
+  - a block of 2,487 packs (45,940,737–45,943,223), **which holds the object**.
+- **Which Commit stored it: not identifiable from the Store alone.** Pack rows carry no writer or Commit. The two large blocks fit one reservation range per concurrently constructing daemon, but which daemon owned which block is not recorded. So it is open whether c's Commit stored the object, or d's failed Commit left it behind.
 - **The daemon logs** (`lww/daemon-a.log`, `lww/daemon-b.log`) have no line naming the object. Each has one `ConnectionFailure … UnexpectedEof` from the runner exiting.
 
 ## Contrast
