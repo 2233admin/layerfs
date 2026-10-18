@@ -15,6 +15,7 @@
 | 007.a1 | D6 | F-017, range-8 play on the range-7 fork, old → new addon: `fs.read` p50 25.0 → 6.6 ms, `fs.grep` 32.2 → 12.4, `sandbox.commit` 14.4 → 13.4; client connection wait p95 0 ms. Cost: p95 `fs.read` 43 → 93, `sandbox.commit` 93 → 133 (Commit `begin` p95 26 → 69) | this commit | [Concurrent SDK calls take separate control connections](fixes/007-a1-f017-control-connections.md) |
 | 007.a1 | D6 | F-018, range-8 play on the range-7 fork, daemon `361bb09e` → `c25119ac` (addon `5baa0f5d`): `fs.read` p95 96.1 → 9.7 ms, `fs.stat` 46.6 → 7.1, `fs.grep` 100.1 → 63.6, all reads 90.4 → 24.9. Cost: span 14.8 → 17.1 s, in-lane merges 132 → 193 | this commit | [Reads stop queueing behind the publication lane](fixes/007-a1-f018-reads-behind-publication-lane.md) |
 | 009.a1 | D4 | `oneshot_mount_exec.vm_steps` 0.971 → 0 (`p2-main-b` r7/r9 forks: 1,923/2,331 → 1,140/1,140 VM steps); a mount looked its Branch up by listing every Branch | this commit | [A mount finds its Branch by name](fixes/009-a1-mount-branch-lookup.md) |
+| 011.a1 | D3 | `list_largest.statements` per entry 16.6 → 6.2 (r9) and 24.3 → 7.2 (r11) on `p2-main-c` forks; each listed entry re-read the inode table's upper levels. Residual +16% per entry r9 → r11 is the leaves' chain position (F-016 effect, bounded) | this commit | [A listing looks its entries up together](fixes/011-a1-list-entry-lookups.md) |
 
 ## Watch
 
@@ -33,3 +34,9 @@
   merges: `fs.rm` calls that merged went 4 of 23 → 16 of 26 → 13 of 13 over
   ranges 7–9, and merge p50 is 35 ms at range 9. This is the same cause as the
   in-lane merge watch above.
+
+- **`fs.apply` ≤8 KiB construct tail (011.a1 S1).** 20.11× baseline at range
+  11. Construct totals 1.36 s → 5.46 s (ranges 10 → 11); the tail is the
+  captured namespace `update` phase on one Branch (378 and 331 ms for
+  two-change applies), not merges. It needs its own diagnosis; the baseline
+  class is thin (F-024).
