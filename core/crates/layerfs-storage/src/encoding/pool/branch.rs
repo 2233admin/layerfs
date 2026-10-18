@@ -141,7 +141,10 @@ impl PoolReader {
                     ceiling,
                 });
             }
-            if chain.iter().any(|(row, _)| row.object_id == current.object_id) {
+            if chain
+                .iter()
+                .any(|(row, _)| row.object_id == current.object_id)
+            {
                 return Err(StorageError::Integrity("branch dependency cycle"));
             }
             let record = self.record(connection, workspace, &current, caches.as_mut())?;
@@ -153,8 +156,11 @@ impl PoolReader {
             if chain.len() > cap {
                 return Err(StorageError::Integrity("branch chain depth"));
             }
+            // A base a stored record names is re-located, never answered by a
+            // stale per-wave "absent" (F-036): a concurrent winner may have
+            // published it after this wave first asked.
             let location = connection
-                .location(base, ceiling)?
+                .base_location(base, ceiling)?
                 .ok_or(StorageError::ObjectMissing(base))?;
             if location.role != ObjectRole::InodeBranch {
                 return Err(StorageError::Integrity("branch chain role"));

@@ -67,7 +67,9 @@ fn commit(
         apply_inode_values(
             &mut objects,
             base,
-            changes.into_iter().map(|(serial, value)| Ok((serial, Some(value)))),
+            changes
+                .into_iter()
+                .map(|(serial, value)| Ok((serial, Some(value)))),
             MAXIMUM_SCRATCH_BYTES,
         )
         .unwrap()
@@ -147,9 +149,15 @@ fn small_commits(
 
 fn initial(storage: &Storage) -> (ObjectId, Vec<u64>) {
     let versions = vec![0_u64; INODES as usize + 1];
-    let rows = (1..=INODES).map(|serial| (serial, value(serial, 0))).collect();
+    let rows = (1..=INODES)
+        .map(|serial| (serial, value(serial, 0)))
+        .collect();
     let (root, outcome) = commit(storage, None, rows);
-    assert_eq!(outcome.delta.branch.delta_branches, 0, "{:?}", outcome.delta.branch);
+    assert_eq!(
+        outcome.delta.branch.delta_branches, 0,
+        "{:?}",
+        outcome.delta.branch
+    );
     (root, versions)
 }
 
@@ -171,7 +179,11 @@ fn branch_chains_grow_to_the_cap_reset_whole_and_read_back() {
         // and chunk selection a Commit's content takes is what it was.
         let payload = outcome.delta;
         assert_eq!(
-            (payload.prepared_full, payload.trials, payload.prefix_selected),
+            (
+                payload.prepared_full,
+                payload.trials,
+                payload.prefix_selected
+            ),
             (0, 0, 0),
             "{payload:?}"
         );
@@ -213,7 +225,11 @@ fn a_store_of_whole_branches_reads_identically_after_delta_branches_join_it() {
         assert_eq!(read_all(&new, *root), expected(versions));
     }
     let outcomes = small_commits(&new, &mut root, &mut versions, 5, 5);
-    assert!(outcomes[0].delta.branch.delta_branches >= 1, "{:?}", outcomes[0].delta);
+    assert!(
+        outcomes[0].delta.branch.delta_branches >= 1,
+        "{:?}",
+        outcomes[0].delta
+    );
     roots.push((root, versions.clone()));
     for (root, versions) in &roots {
         assert_eq!(read_all(&new, *root), expected(versions));
@@ -233,7 +249,10 @@ fn a_lookup_reconstructs_one_branch_chain_per_level() {
         assert_eq!(found, Some(value(serial, versions[serial as usize])));
         let pool = reader.pooled_read_counters();
         assert_eq!(work.pages_read, 3, "root branch, child branch, leaf");
-        assert_eq!(pool.branch_requests, 2, "one chain per branch level: {pool:?}");
+        assert_eq!(
+            pool.branch_requests, 2,
+            "one chain per branch level: {pool:?}"
+        );
         assert!(pool.branch_chain_edges <= 2 * 8, "{pool:?}");
         assert!(pool.branch_chain_edges >= 1, "{pool:?}");
         assert_eq!(pool.leaf_requests, 1, "{pool:?}");
@@ -246,9 +265,16 @@ fn a_lookup_reconstructs_one_branch_chain_per_level() {
     lookup_many(&reader, table(root), &serials, &mut work).unwrap();
     let pool = reader.pooled_read_counters();
     let leaves = pool.leaf_requests;
-    assert_eq!(pool.branch_requests + leaves, work.pages_read, "{pool:?} {work:?}");
+    assert_eq!(
+        pool.branch_requests + leaves,
+        work.pages_read,
+        "{pool:?} {work:?}"
+    );
     let branch_pages = work.pages_read - leaves;
-    assert!(branch_pages <= 1 + 16, "root and its child branches: {work:?} {pool:?}");
+    assert!(
+        branch_pages <= 1 + 16,
+        "root and its child branches: {work:?} {pool:?}"
+    );
     println!(
         "lookup_many {} serials: pages {} branch chains {} edges {} applies {} leaves {}",
         serials.len(),
@@ -303,7 +329,11 @@ fn a_refused_base_stores_the_branch_whole_and_it_reads_back() {
         .unwrap();
     }
     let outcome = save.finish().unwrap();
-    assert_eq!(outcome.delta.branch.branches, 2, "{:?}", outcome.delta.branch);
+    assert_eq!(
+        outcome.delta.branch.branches, 2,
+        "{:?}",
+        outcome.delta.branch
+    );
     assert_eq!(outcome.delta.branch.full_branches, 2);
     assert_eq!(outcome.delta.branch.delta_branches, 0);
     assert_ne!(page, Vec::<u8>::new());

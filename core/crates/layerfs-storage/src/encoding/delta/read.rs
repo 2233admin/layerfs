@@ -233,9 +233,8 @@ impl<'a> Resolver<'a> {
                 self.counters.canonical_bytes = chain.canonical;
                 self.counters.encoded_bytes = chain.encoded;
             } else {
-                self.counters.canonical_bytes = chain
-                    .canonical
-                    .saturating_sub(root.canonical_length as u64);
+                self.counters.canonical_bytes =
+                    chain.canonical.saturating_sub(root.canonical_length as u64);
             }
             self.counters.pooled = self.caches.pool.counters().since(before);
             return Ok((canonical, id));
