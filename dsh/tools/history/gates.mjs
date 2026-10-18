@@ -41,6 +41,8 @@
 //     snapshot: { size, newBytes, sealMs, copyMs } | null   (snapshot.mjs's manifest, when taken),
 //     budget: { diskProjected, diskBudget, wallProjectedMs, wallBudgetMs } }
 
+import { p3Checks } from "./p3.mjs";
+
 export const THRESHOLDS = {
   speed: { watch: 1.2, act: 1.5 },
   depthExponent: { watch: 0.15, act: 0.7 },
@@ -508,6 +510,8 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   else unjudged("Disk projection", "no disk budget recorded", `< ${t.disk.watch}`);
   if (b.wallBudgetMs) add("Wall projection", +(b.wallProjectedMs / b.wallBudgetMs).toFixed(2), `≤ ${t.wall.watch}`, band(b.wallProjectedMs / b.wallBudgetMs, t.wall, "stop"));
   else unjudged("Wall projection", "no wall budget recorded", `≤ ${t.wall.watch}`);
+  // REPORT_FORMAT §8.3: the git rule's and Node rule's gates (P3 on)
+  if (m.phase === "p3") rows.push(...p3Checks(m));
   return { verdict: worst(rows.map((r) => r.result)), checks: rows };
 }
 

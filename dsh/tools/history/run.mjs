@@ -539,9 +539,10 @@ async function playRange(run, k, mode, half = null) {
   m.startedFrom = startedFrom;
   // the latest version: LayerFS's walk, split by git's tracked figures (the tree matched git) and node_modules
   if (versionOut) {
-    const v = versionOut, nm = v.nm, tracked = { files: oracle.files, bytes: oracle.bytes };
+    const v = versionOut, nm = v.nm, git = v.git ?? { files: 0, bytes: 0 }, tracked = { files: oracle.files, bytes: oracle.bytes };
     m.version = { how: v.how, looked: v.looked, bytes: v.bytes, files: v.files, dirs: v.dirs, symlinks: v.symlinks, largestFile: v.largestFile, largestDir: v.largestDir,
-      tracked, nodeModules: { files: nm.files, bytes: nm.bytes }, build: { files: Math.max(0, v.files - nm.files - tracked.files), bytes: Math.max(0, v.bytes - nm.bytes - tracked.bytes) } };
+      tracked, nodeModules: { files: nm.files, bytes: nm.bytes }, build: { files: Math.max(0, v.files - nm.files - git.files - tracked.files), bytes: Math.max(0, v.bytes - nm.bytes - git.bytes - tracked.bytes) },
+      ...(git.files ? { git: { files: git.files, bytes: git.bytes } } : {}) };
   }
   m.dsh = dshFacts(run.repo, plan, changes, sizes);
   m.execs = execFacts(t.all);
@@ -609,7 +610,7 @@ async function playRange(run, k, mode, half = null) {
     if (parts && prevBy) {
       const bySource = cumulative(prevBy, added);
       const changed = { tracked: m.storage?.changedBytes ?? 0, nodeModules: ctx?.closure?.groups ? changedGroupBytes(ctx.closure.prevGroups, ctx.closure.groups) : 0,
-        build: Object.values(ctx?.closure?.rows?.find((r) => r.kind === "build")?.bytes ?? {}).reduce((n, x) => n + x, 0) };
+        build: Object.values(ctx?.closure?.rows?.find((r) => r.kind === "build")?.bytes ?? {}).reduce((n, x) => n + x, 0), git: ctx?.git?.changedBytes ?? 0 };
       m.storageReport = storageFigures({ parts, prevParts: run.state.parts ?? null, bySource, added, version: m.version, changed, commits: m.work?.lfsCommits });
       run.state.parts = parts; run.state.bySource = bySource;
     }

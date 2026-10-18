@@ -79,14 +79,15 @@ export function applyEntries(prev, looked) {
 
 /** The version figures of a manifest. Ties go to the smallest path, so a walk and an update agree. */
 export function statsOf(entries) {
-  const o = { files: 0, dirs: 0, symlinks: 0, bytes: 0, nm: { files: 0, dirs: 0, symlinks: 0, bytes: 0 }, largestFile: { path: null, bytes: -1 }, largestDir: { path: ".", entries: -1 } };
+  const o = { files: 0, dirs: 0, symlinks: 0, bytes: 0, nm: { files: 0, dirs: 0, symlinks: 0, bytes: 0 }, git: { files: 0, dirs: 0, symlinks: 0, bytes: 0 }, largestFile: { path: null, bytes: -1 }, largestDir: { path: ".", entries: -1 } };
   const children = new Map([[".", 0]]);
   const better = (n, p, best, key) => n > best[key] || (n === best[key] && best.path != null && p < best.path);
   for (const [p, [t, size]] of entries) {
     const parent = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : ".";
     children.set(parent, (children.get(parent) ?? 0) + 1);
     if (t === "x") continue;
-    const nm = p.split("/").includes("node_modules") ? o.nm : null;
+    // `.git` (P3, GIT_RULE) is its own source, never node_modules or build
+    const nm = p === ".git" || p.startsWith(".git/") ? o.git : p.split("/").includes("node_modules") ? o.nm : null;
     if (t === "d") { o.dirs++; if (nm) nm.dirs++; if (!children.has(p)) children.set(p, 0); continue; }
     if (t === "l") { o.symlinks++; o.bytes += size; if (nm) { nm.symlinks++; nm.bytes += size; } continue; }
     o.files++; o.bytes += size; if (nm) { nm.files++; nm.bytes += size; }

@@ -11,6 +11,7 @@ import { d6Text, exponent, opsOf, reinstallGate, sameBinary, uncontended } from 
 import { storageProblems } from "./storage.mjs";
 import { change, closedWithoutChange, EVIDENCE_COLUMNS, evidenceRow, kindText, REBUILD_KINDS } from "./findings.mjs";
 import { activityTables, categoryOf, checkOverview, checkTimeLine, timeLine } from "./stats.mjs";
+import { checkP3, isP3, p3Activity, p3Appendix, p3CorrectnessRows, p3Headline, p3Health, p3Proofs, p3Speed, p3Storage } from "./p3.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
 const int = (n) => (n == null ? "—" : Math.round(n).toLocaleString("en-US"));
@@ -128,7 +129,7 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
   out.push(`# Range ${pad(plan.range)} · **${g.verdict}** · attempt ${m.attempt}`, "",
     `**Matches git ${c.tree?.ok ? "✓" : "✗"}** · daemon \`${id12(m.binary?.daemon)}\` · image \`${String(m.binary?.image ?? "?").replace(/^sha256:/, "").slice(0, 8)}\` · plan v${m.plan?.version ?? "?"} · ${start}${m.devAid ? ` · dev aid: ${m.devAid}` : ""}`,
     `dsh \`${plan.dsh.first.slice(0, 9)}\`..\`${plan.checkpoint.slice(0, 9)}\` · **${int(plan.dsh.commits)} commits** (${int(m.dsh?.mainline)} mainline, ${int(m.dsh?.side)} side) · ${m.dsh?.first ?? "?"} → ${m.dsh?.last ?? "?"}`,
-    `Areas changed: ${top.map((a) => `\`${a.name}\` ${Math.round(a.share * 100)}%`).join(" · ")}${other > 0.005 ? ` · other ${Math.round(other * 100)}%` : ""}`, "",
+    `Areas changed: ${top.map((a) => `\`${a.name}\` ${Math.round(a.share * 100)}%`).join(" · ")}${other > 0.005 ? ` · other ${Math.round(other * 100)}%` : ""}`, ...(isP3(m) ? p3Headline(m) : []), "",
     table(HEADLINE_CELLS, [[
       `**${bytes(v?.bytes)}** (${prev?.version ? signed(v.bytes - prev.version.bytes) : "prev —"})`,
       `**${bytes(store)}** (${prev?.storeDisk ? signed(store - storeOnDisk(prev)) : "prev —"})${m.storeDisk?.sealed ? "" : " live"}`,
@@ -153,25 +154,26 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
     ...(m.lww ? [["Last-writer-wins (`/.lww`)", `${m.lww.written ? "written" : "unchanged"} (${int(m.lww.lines)} lines from ${Object.keys(m.lww.sources ?? {}).length} .gitignore files) · **${int(m.lww.total)} picks** in ${m.lww.picks.length} merges${m.lww.picks.some((p) => p.nodeModules) ? ` (${int(m.lww.picks.reduce((n, p) => n + p.nodeModules, 0))} under node_modules)` : ""}${m.closure?.lwwPicked ? " · re-installed after the merge" : ""}`]] : []),
     ["Ignored files", (w.leftOut?.install ? `— (installs not played in ${String(m.phase).toUpperCase()})` : "as expected")],
     ["Milestone", plan.milestone ? (m.snapshot ? "snapshot taken; restore, oracle and quick_check by the lead (SPEC §7)" : "**snapshot not taken**") : "—"],
-  ]), "");
+    ...(isP3(m) ? p3CorrectnessRows(m) : []),
+  ]), "", ...(isP3(m) ? [p3Proofs(m), ""] : []));
   // 2. Activity
   const mu = w.mutations ?? {}, sumMu = (k) => (mu.fs?.[k] ?? 0) + (mu.sandbox?.[k] ?? 0);
   const fsN = w.fileMutations?.fs ?? 0, sbN = w.fileMutations?.sandbox ?? 0, ex = m.execs ?? {};
   out.push("## 2. Activity", "",
     `**${int(Object.values(m.calls).reduce((n, x) => n + x.n, 0))} calls** · **${int(o.steps)} steps** by **${o.agents.length - 1} agents + lead** on **${o.branches.length - 1} Branches + main** · **${int(w.workspaces)} Workspaces** (${Math.round((w.oneShotShare ?? 0) * 100)}% one-shot, ${int(m.health?.workspacesOpen)} open at end)`,
-    `**File changes:** +${int(sumMu("added"))} added · ${int(sumMu("modified"))} modified · −${int(sumMu("deleted"))} deleted · ${bytes(sumMu("bytes"))} written · fs ${int(fsN)} : Sandbox ${int(sbN)} (**${sbN ? num(fsN / sbN, 0) : "—"} : 1**, target ~9 : 1)`,
+    `**File changes:** +${int(sumMu("added"))} added · ${int(sumMu("modified"))} modified · −${int(sumMu("deleted"))} deleted · ${bytes(sumMu("bytes"))} written · fs ${int(fsN)} : Sandbox ${int(sbN)} (**${sbN ? num(fsN / sbN, 0) : "—"} : 1**${isP3(m) ? ", reported only in P3" : ", target ~9 : 1"})`,
     `**Execs:** ${int(ex.total)} (JS ${int(ex.js)} · shell ${int(ex.shell)}) · ${int(ex.nonZero)} non-zero exits · install ${int(ex.installs)} · test runs ${int(ex.tests)}${ex.version != null ? ` · version figures ${int(ex.version)} (tooling)` : ""}`, "",
-    activityTables(m));
+    activityTables(m), ...(isP3(m) ? ["", p3Activity(m), ""] : []));
   // 3. Storage
   const pv = prev?.version, median = (() => { const xs = history.map((x) => (x.storage?.changedBytes ? x.storage.newStored / x.storage.changedBytes : null)).filter((x) => x != null).sort((a, b) => a - b); return xs.length ? xs[Math.floor((xs.length - 1) / 2)] : null; })();
   const perByte = s.changedBytes ? s.newStored / s.changedBytes : null;
-  const split = (x) => (x ? `${bytes(x.bytes)} (${bytes(x.tracked.bytes)} / ${bytes(x.nodeModules.bytes)} / ${bytes(x.build.bytes)})` : "—");
+  const split = (x) => (x ? `${bytes(x.bytes)} (${bytes(x.tracked.bytes)} / ${bytes(x.nodeModules.bytes)} / ${bytes(x.build.bytes)}${isP3(m) ? ` / ${bytes(x.git?.bytes ?? 0)}` : ""})` : "—");
   const counts = (x) => (x ? `${int(x.files)} / ${int(x.dirs)} / ${int(x.symlinks)}` : "—");
   const sr = m.storageReport, psr = prev?.storageReport;
   const xv = (n) => (n == null || !v?.bytes ? "—" : `${num(n / v.bytes)}`);
   const headCost = sr ? (m.storeDisk?.sealed ? "— (needs a reachability walk of the sealed file; not built)" : "— (not at a snapshot)") : "—";
   out.push("## 3. Storage", "", "**3a. Overview**", "", table(["", `Previous${prev ? ` (r${pad(prev.range)})` : ""}`, "Now", "Change"], [
-    ["Latest version (tracked / `node_modules` / build)", split(pv), split(v), pv && v ? signed(v.bytes - pv.bytes) : "—"],
+    [`Latest version (tracked / \`node_modules\` / build${isP3(m) ? " / `.git`" : ""})`, split(pv), split(v), pv && v ? signed(v.bytes - pv.bytes) : "—"],
     ...(v?.how ? [["Version figures from", "", `${v.how}${v.how === "incremental" ? ` (${int(v.looked)} changed paths)` : ""}`, ""]] : []),
     ["Files / directories / symlinks", counts(pv), counts(v), pv && v ? `${signed(v.files - pv.files, int)} / ${signed(v.dirs - pv.dirs, int)} / ${signed(v.symlinks - pv.symlinks, int)}` : "—"],
     ["Largest file / largest directory", pv ? `${bytes(pv.largestFile.bytes)} / ${int(pv.largestDir.entries)} entries` : "—", v ? `${bytes(v.largestFile.bytes)} (\`${v.largestFile.path}\`) / ${int(v.largestDir.entries)} entries (\`${v.largestDir.path}\`)` : "—", ""],
@@ -188,7 +190,7 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
   ]), "", "**3b. Where the bytes are**", "", sr ? partsTable(sr.parts, psr?.parts, v?.bytes) : "— (recorded before the storage revision, REPORT_FORMAT §3)", "",
   "**3c. By source**", "", sr ? sourceTable(sr) : "— (recorded before the storage revision)", "",
   "**3d. What's inside**", "", table(["Object", "Total", "Added", "Avg size", "Reused (dedupe hits)", "As delta"], insideRows(m)), "",
-  `Delta: ${num((s.delta?.atCap ?? 0) * 100, 1)}% at depth cap · ${num((s.delta?.byBudget ?? 0) * 100, 0)}% of refused bases stopped by budget · \`node_modules\` reinstall: ${s.reinstall == null ? "none this range" : reinstallGate(s.reinstall).value}`, "");
+  `Delta: ${num((s.delta?.atCap ?? 0) * 100, 1)}% at depth cap · ${num((s.delta?.byBudget ?? 0) * 100, 0)}% of refused bases stopped by budget · \`node_modules\` reinstall: ${s.reinstall == null ? "none this range" : reinstallGate(s.reinstall).value}`, "", ...(isP3(m) ? [p3Storage(m), ""] : []));
   // 4. Speed
   const k = m.key?.ops ?? {}, cell = (op) => (k[op] ? `${ms(k[op].p50)} / ${ms(k[op].p95)}` : "—");
   // SPEC §5: the ratio is the uncontended series' (rows recorded before the split: all of them)
@@ -204,7 +206,8 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
     `**Commit cost:** ${m.key?.commitPerFileMs == null ? "—" : `${num(m.key.commitPerFileMs)} ms per changed file`} · **One-shot Workspace** (mount + exec + commit + unmount): ${ms(m.key?.oneShotP50)} p50 over ${int(m.key?.oneShots)}`,
     `**Slowest:** ${(m.key?.slowest ?? []).map((x) => `${x.op} ${ms(x.ms)}${x.size ? ` (${int(x.size.n)} ${x.size.kind})` : ""}`).join(" · ") || "—"}${m.perUnit?.["branch.diff_commits"] ? ` · checkpoint diff_commits ${num(m.perUnit["branch.diff_commits"].msPerEntry)} ms${m.perUnit["branch.diff_commits"].statementsPerEntry != null ? ` and ${num(m.perUnit["branch.diff_commits"].statementsPerEntry)} statements` : ""} per entry (${int(m.perUnit["branch.diff_commits"].entries)} entries${m.perUnit["branch.diff_commits"].basis === "checkpoint" ? ` in ${m.perUnit["branch.diff_commits"].pages} pages` : " per page"})` : ""}`,
     `**Scaling:** ${fits.judged ? `${fits.flat} of ${fits.judged} probes flat${fits.rising.length ? ` · ${fits.rising.map((f) => `\`${f.name}\` ${num(f.e)}`).join(" · ")}` : ""}` : `not judged: fewer than 3 same-binary ranges (${fits.total} probes)`}`, "",
-    `**Health:** ${int(h.workspacesOpen)} Workspaces open · ${h.overlaysLeft == null ? "overlay files not measured" : `${int(h.overlaysLeft)} overlay files left`} · daemons ${h.daemonRssMb == null ? "—" : `${num(h.daemonRssMb, 0)} MB`}${prev?.health?.daemonRssMb != null && h.daemonRssMb != null ? ` (${signed(h.daemonRssMb - prev.health.daemonRssMb, (x) => `${num(x, 0)} MB`)})` : ""} over ${h.sandboxes ?? "?"} Sandboxes · ${int(h.openFiles)} open files · WAL ${m.snapshot ? `before seal ${bytes(m.snapshot.walBytes)}` : `${bytes(m.storeDisk?.wal)} (live)`}`, "");
+    ...(isP3(m) ? [`**Git and Node** (LayerFS ÷ native on the identical tree; ×base compares only with the P3 re-baseline${baseline ? "" : ", none recorded yet: not judged"})`, "", p3Speed(m), ""] : []),
+    `**Health:** ${int(h.workspacesOpen)} Workspaces open · ${h.overlaysLeft == null ? "overlay files not measured" : `${int(h.overlaysLeft)} overlay files left`} · daemons ${h.daemonRssMb == null ? "—" : `${num(h.daemonRssMb, 0)} MB`}${prev?.health?.daemonRssMb != null && h.daemonRssMb != null ? ` (${signed(h.daemonRssMb - prev.health.daemonRssMb, (x) => `${num(x, 0)} MB`)})` : ""} over ${h.sandboxes ?? "?"} Sandboxes · ${int(h.openFiles)} open files · WAL ${m.snapshot ? `before seal ${bytes(m.snapshot.walBytes)}` : `${bytes(m.storeDisk?.wal)} (live)`}`, ...(isP3(m) ? [p3Health(m)] : []), "");
   // 5. Findings and action
   out.push(FINDINGS, "");
   const tripped = attempts.map((a, i) => [a, gates[i]]).filter(([, x]) => x.verdict === "optimize" || x.verdict === "stop");
@@ -231,7 +234,8 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
     APPENDIX[4], "", timeLine(m.wall), "", stageLine ? stageLine(m.wall) : "", "",
     APPENDIX[5], "", table(["#", "Binary", "Started", "Result", "Reason"], attempts.map((a, i) => [String(a.attempt), gates[i].binary, gates[i].started, gates[i].verdict, gates[i].reason])), "",
     APPENDIX[6], "", ...attempts.map((a) => `- \`~/lfs-history/metrics/range-${pad(a.range)}.a${a.attempt}.json\``), ...findings.map((f) => `- \`~/lfs-history/metrics/finding-${pad(f.range)}.a${f.attempt}.json\``),
-    `- trace \`~/lfs-history/runs/${m.run}/trace/range-${pad(m.range)}.a${m.attempt}.jsonl\` · runner log \`~/lfs-history/runs/${m.run}/play.log\`${m.snapshot ? ` · snapshot manifest \`${m.snapshot.manifest}\`` : ""}`, "");
+    `- trace \`~/lfs-history/runs/${m.run}/trace/range-${pad(m.range)}.a${m.attempt}.jsonl\` · runner log \`~/lfs-history/runs/${m.run}/play.log\`${m.snapshot ? ` · snapshot manifest \`${m.snapshot.manifest}\`` : ""}`, "",
+    ...(isP3(m) ? [p3Appendix(m), ""] : []));
   return out.join("\n");
 }
 
@@ -249,7 +253,7 @@ function partsTable(p, prevP, versionBytes) {
 
 /** 3c (REPORT_FORMAT §3): per source; Shared is shown and never divided. */
 function sourceTable(sr) {
-  const name = { tracked: "Tracked", nodeModules: "`node_modules`", build: "Build output" };
+  const name = { tracked: "Tracked", nodeModules: "`node_modules`", build: "Build output", git: "`.git`" };
   const rows = Object.entries(sr.sources).map(([k, x]) => [name[k], bytes(x.latest), `${bytes(x.stored)} (${bytes(x.content)} + ${bytes(x.metadata)})`, x.latest ? `${num(x.amplification)}×` : "—",
     "—", x.added.content + x.added.metadata ? bytes(x.added.content + x.added.metadata) : "0", x.changed == null ? "—" : bytes(x.changed),
     x.perByteChanged ? num(x.perByteChanged.content + x.perByteChanged.metadata) : "—"]);
@@ -364,6 +368,7 @@ export function checkFormat(text, m, issues = []) {
     const at = text.indexOf(`\n${h}`), body = at < 0 ? "" : text.slice(at, text.indexOf("\n#", at + 2));
     if (!/daemon `[0-9a-f]+`|Daemon `[0-9a-f]+`/.test(body)) p.push(`${h} does not name its binary`);
   }
+  p.push(...checkP3(text, m));
   return p;
 }
 
