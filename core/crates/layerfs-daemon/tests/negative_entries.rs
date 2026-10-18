@@ -55,7 +55,10 @@ fn a_missing_name_is_asked_once_and_every_namespace_change_shows_at_once() {
     let lookups = counts[Opcode::Lookup as usize];
     println!("NEGATIVE_ENTRIES lookups={lookups} receipt={receipt}");
     // ENOENT answers would be re-asked: at least the 201 probes of one name.
-    assert!(lookups < 60, "repeated misses reached the daemon: {lookups}");
+    assert!(
+        lookups < 60,
+        "repeated misses reached the daemon: {lookups}"
+    );
     rig.finish();
 }
 
@@ -66,14 +69,24 @@ fn a_name_another_workspace_added_shows_after_the_merged_install() {
     let b = rig.mount(2);
     // A caches the name as missing; B adds it and publishes first.
     passed(
-        &bash_in(COMMAND, root(&a), "! stat from-b 2>/dev/null && ! stat from-b 2>/dev/null"),
+        &bash_in(
+            COMMAND,
+            root(&a),
+            "! stat from-b 2>/dev/null && ! stat from-b 2>/dev/null",
+        ),
         "A sees from-b missing",
     );
-    passed(&bash_in(COMMAND, root(&b), "printf bravo > from-b"), "B creates");
+    passed(
+        &bash_in(COMMAND, root(&b), "printf bravo > from-b"),
+        "B creates",
+    );
     rig.committed(b.token, "B publishes from-b");
     // A has its own change, so its Commit merges with B's and installs the
     // merged root; the kernel's negative entry must not outlive that.
-    passed(&bash_in(COMMAND, root(&a), "printf alpha > from-a"), "A creates");
+    passed(
+        &bash_in(COMMAND, root(&a), "printf alpha > from-a"),
+        "A creates",
+    );
     let done = rig.commit(a.token).expect("A commits");
     assert!(
         matches!(done.reply, Reply::MergeCommitted(_)),
@@ -81,7 +94,11 @@ fn a_name_another_workspace_added_shows_after_the_merged_install() {
         done.reply
     );
     passed(
-        &bash_in(COMMAND, root(&a), "test \"$(cat from-b)\" = bravo && test \"$(cat from-a)\" = alpha"),
+        &bash_in(
+            COMMAND,
+            root(&a),
+            "test \"$(cat from-b)\" = bravo && test \"$(cat from-a)\" = alpha",
+        ),
         "A sees from-b after the merged install",
     );
     rig.unmount(&a);

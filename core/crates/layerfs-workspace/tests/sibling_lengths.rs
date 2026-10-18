@@ -8,7 +8,7 @@ use layerfs_content::filesystem::{
     build_filesystem, scope_for_seed, DirectoryUpdate, FilesystemInput, FilesystemObjects,
     FilesystemResources, InodeUpdate,
 };
-use layerfs_content::object::inode_leaf::{InodeKind, InodeValue};
+use layerfs_content::object::inode_leaf::{InodeKind, InodeMetadata, InodeValue};
 use layerfs_content::ObjectId;
 use layerfs_workspace::{
     BaseView, CanonicalCache, CanonicalClient, FileLengths, Need, VisitFacts, WorkspaceResult,
@@ -49,7 +49,7 @@ fn base() -> (Store, BaseView, Arc<CanonicalCache>, Arc<Counting>) {
             value: InodeValue {
                 kind: InodeKind::Directory,
                 content_root: ObjectId::for_bytes(b"new-directory"),
-                metadata_root: dir_meta,
+                metadata_root: InodeMetadata::Root(dir_meta),
                 namespace_ref_count: 0,
             },
         });
@@ -62,7 +62,7 @@ fn base() -> (Store, BaseView, Arc<CanonicalCache>, Arc<Counting>) {
             value: InodeValue {
                 kind: InodeKind::RegularFile,
                 content_root: root,
-                metadata_root: file_meta,
+                metadata_root: InodeMetadata::Root(file_meta),
                 namespace_ref_count: 0,
             },
         });
@@ -115,7 +115,10 @@ fn a_lookup_supplies_its_siblings_lengths_in_one_demand() {
     // Those answer from memory, with their own lengths; the next does not.
     for n in 0..=WINDOW {
         let stat = resident.stat(3 + n).unwrap();
-        assert_eq!(stat.logical_len, format!("file {n} of the sibling window").len() as u64);
+        assert_eq!(
+            stat.logical_len,
+            format!("file {n} of the sibling window").len() as u64
+        );
     }
     assert!(resident.stat(3 + WINDOW + 1).is_err());
     // A lookup whose length is remembered asks nothing more.
