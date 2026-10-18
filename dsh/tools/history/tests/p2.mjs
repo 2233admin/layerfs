@@ -7,9 +7,11 @@
 //   node dsh/tools/history/tests/p2.mjs
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fetchScript } from "../fetch-store.mjs";
+import { closureSteps, compareInstalled, installInputsChanged, listerCommand, normalizeOutput, playClosure } from "../closure.mjs";
 import { aggregate, buildBaseline, evaluate, probeSeries, thinClass } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
@@ -624,6 +626,50 @@ test("F-024: baseline classes carry n; a thin class is not judged; merge and Com
   assert.deepEqual(aggregate(calls).map((r) => r.sizeClass), ["17–64 entries · Merged (new Commit)", "17–64 entries · UpToDate"]);
   assert.equal(callOf({ method: "sandbox.commit", ms: 1, kind: "UpToDate" }).outcome, "UpToDate");
   assert.equal(callOf({ method: "fs.read", ms: 1, kind: "ok" }).outcome, undefined);
+});
+
+test("fetch-store: one status line per lockfile, at most four fetches at a time, scripts ignored", () => {
+  const sc = fetchScript(["aa", "bb"]);
+  assert.match(sc, /^printf '%s\\n' aa bb \| xargs -P 4 -I\{\} sh -c /);
+  assert.match(sc, /cd \/tmp\/\{\} && pnpm fetch .*--ignore-scripts > \/f\/\{\}\/fetch\.log 2>&1; echo "\{\} \$\?"'$/);
+});
+
+test("closure (INSTALLS): install, build and test steps; the node_modules lister and oracle comparison", async () => {
+  const packages = new Set(["packages/a", "packages/b", "packages/c"]), tsconfigs = new Set(["packages/a", "packages/b"]);
+  const kinds = (o) => closureSteps({ packages, tsconfigs, run: [], ...o }).map((s) => s.kind);
+  assert.deepEqual(kinds({ changed: ["packages/a/src/x.ts"], installed: false, milestone: false }), ["install", "build"]);
+  assert.deepEqual(kinds({ changed: ["packages/c/package.json", "packages/b/src/y.ts"], installed: true, milestone: false }), ["incremental-install", "build"]);
+  assert.deepEqual(kinds({ changed: ["docs/x.md"], installed: true, milestone: false }), []);
+  assert.deepEqual(kinds({ changed: ["docs/x.md"], installed: true, milestone: true }), ["clean-install"]);
+  assert.equal(installInputsChanged(["node_modules/x/package.json"]), false, "installed files are not inputs");
+  const steps = closureSteps({ packages, tsconfigs, changed: ["packages/b/src/y.ts", "packages/a/q.ts", "packages/c/z.ts"], installed: true, milestone: true, run: ["packages/a/tests/t.spec.ts"] });
+  assert.match(steps[0].command, /rm -rf node_modules && pnpm install --offline --frozen-lockfile --store-dir \/pnpm-store --cache-dir \/tmp\/pnpm-cache --ignore-scripts$/);
+  assert.match(steps[0].command, /^mkdir -p \/tmp\/pnpm-cache && for e in \/pnpm-store\/\.cache\/\*\/; do ln -sfn/);
+  assert.equal(steps[1].command, "./node_modules/.bin/tsc -b 'packages/a' 'packages/b'");
+  assert.match(steps[2].command, /vitest run --reporter=json 'packages\/a\/tests\/t\.spec\.ts'$/);
+  assert.equal(normalizeOutput("Progress: resolved 1\nPackages: +3\nDone in 1m 44.3s using pnpm v11.7.0"), "Packages: +3\nDone in <t> using pnpm v11.7.0");
+  // the lister on a small pnpm-shaped tree
+  const t = mkdtempSync(join(tmpdir(), "nm-"));
+  mkdirSync(join(t, "node_modules/.pnpm/x@1/node_modules/x"), { recursive: true });
+  writeFileSync(join(t, "node_modules/.pnpm/x@1/node_modules/x/index.js"), "hi\n");
+  symlinkSync(".pnpm/x@1/node_modules/x", join(t, "node_modules/x"));
+  mkdirSync(join(t, "src")); writeFileSync(join(t, "src/a.ts"), "no\n");
+  const list = (g = []) => execFileSync("sh", ["-c", listerCommand(g)], { cwd: t, encoding: "utf8" });
+  const groups = list().trim().split("\n").map((l) => JSON.parse(l));
+  assert.deepEqual(groups.map((g) => [g.g, g.n]), [["node_modules/.pnpm", 1], ["node_modules/.pnpm/x@1", 3], ["node_modules/x", 1]]);
+  assert.match(list(["node_modules/.pnpm/x@1"]), /^f 644 45b983be36b73c0788dc9cbcb76cbb80fc7bb057 node_modules\/\.pnpm\/x@1\/node_modules\/x\/index\.js$/m);
+  assert.match(list(["node_modules/x"]), /^l 755 \.pnpm\/x@1\/node_modules\/x node_modules\/x$/m);
+  assert.equal(compareInstalled({ groups }, groups).ok, true);
+  const changed = compareInstalled({ groups }, [{ ...groups[0], digest: "0" }]);
+  assert.deepEqual([changed.differ, changed.missing], [["node_modules/.pnpm"], ["node_modules/.pnpm/x@1", "node_modules/x"]]);
+  rmSync(t, { recursive: true, force: true });
+  // playing: one exec and one Commit per step; a failing build stops
+  const calls = [];
+  const fake = { label: () => {}, tally: { calls: 0 }, lf: { sandbox: {
+    exec: async (sb, ws, c) => { calls.push(c.startsWith("./node_modules/.bin/tsc") ? "build" : c === "pwd" ? "pwd" : "exec"); return { exitCode: c.startsWith("./node_modules/.bin/tsc") ? 2 : 0, stdout: "" }; },
+    commit: async () => { calls.push("commit"); return { kind: "Committed" }; } } } };
+  await assert.rejects(playClosure(fake, 15, steps.slice(0, 2), { sb: 1, ws: 1, expectCall: (r, l, w) => w(), Mismatch: class extends Error {} }), /r015\.build exited 2/);
+  assert.deepEqual(calls, ["exec", "commit", "build", "commit"]);
 });
 
 // the runner stays last: a test registered after it never runs

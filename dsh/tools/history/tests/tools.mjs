@@ -187,11 +187,13 @@ test("LayerFS's test results are compared file by file with the native ones", ()
 
 test("calibration runs offline in the runtime image", () => {
   const a = dockerArgs({ image: "img", tree: "/t/w", store: "pnpm", command: INSTALL });
-  assert.deepEqual(a.slice(0, 4), ["run", "--rm", "--network", "none"]);
-  assert.ok(a.includes("pnpm:/pnpm-store") && a.at(-1).includes("--offline"));
+  assert.deepEqual(a.slice(0, 6), ["run", "--rm", "--name", "layerfs-issue352-calibrate", "--network", "none"]);
+  assert.ok(a.includes("pnpm:/pnpm-store:ro") && a.at(-1).includes("--offline"));
+  assert.ok(dockerArgs({ image: "img", tree: "/t/w", store: "pnpm", network: "bridge", command: FETCH }).includes("pnpm:/pnpm-store"), "the fetch writes the store");
   assert.deepEqual(parseProbe('{"path":"a","status":"pass","ms":3}\nwarning\n'), [{ path: "a", status: "pass", ms: 3 }]);
-  // pnpm 11's offline install reads registry metadata from the cache, so both share it on the store volume
-  for (const c of [INSTALL, FETCH]) assert.ok(c.includes("--store-dir /pnpm-store --cache-dir /pnpm-store/.cache"), c);
+  // pnpm 11's offline install reads registry metadata from the cache the fetch filled on the store volume, through a writable /tmp cache dir
+  assert.ok(FETCH.includes("--store-dir /pnpm-store --cache-dir /pnpm-store/.cache"), FETCH);
+  assert.ok(INSTALL.includes("for e in /pnpm-store/.cache/*/; do ln -sfn") && INSTALL.includes("--store-dir /pnpm-store --cache-dir /tmp/pnpm-cache"), INSTALL);
   const tree = join(dir, "tree");
   mkdirSync(tree, { recursive: true });
   assert.match(noInstall(tree), /no pnpm-lock\.yaml/, "a yarn checkpoint installs nothing");

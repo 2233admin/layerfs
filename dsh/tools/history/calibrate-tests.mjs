@@ -20,16 +20,18 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkout } from "./git.mjs";
 import { chooseRun } from "./unit-tests.mjs";
+import { installCommand, STORE_MOUNT } from "./closure.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 /**
  * The install both the calibration and the replay run (SPEC §2, Ignored
- * files): offline, from the pnpm store, no install scripts. pnpm 11 checks
- * the lockfile against its supply-chain policies from cached registry
- * metadata, so the metadata cache lives on the store volume too; without it
- * an offline install still asks the registry and hangs.
+ * files; INSTALLS §1): offline, from the read-only pnpm store, no install
+ * scripts (closure.mjs installCommand). pnpm 11 checks the lockfile against
+ * its supply-chain policies from cached registry metadata, so the metadata
+ * cache lives on the store volume; without it an offline install still asks
+ * the registry and hangs.
  */
-export const INSTALL = "pnpm install --offline --frozen-lockfile --store-dir /pnpm-store --cache-dir /pnpm-store/.cache --ignore-scripts";
+export const INSTALL = installCommand();
 /** Fills the store and the metadata cache for the checkout's lockfile; the one step with the network. */
 export const FETCH = "pnpm fetch --store-dir /pnpm-store --cache-dir /pnpm-store/.cache --ignore-scripts";
 /** Why a checkpoint has no offline install, or null: only pnpm projects have one (range 0 is yarn's). */
@@ -38,9 +40,15 @@ export function noInstall(tree) {
 }
 const pad = (n) => String(n).padStart(3, "0");
 
-/** The docker arguments of one container on the working tree, offline unless `network` is given. */
-export function dockerArgs({ image, tree, store, network = "none", command }) {
-  return ["run", "--rm", "--network", network, "-v", `${tree}:/w`, "-v", `${here}:/t:ro`, ...(store ? ["-v", `${store}:/pnpm-store`] : []), "-w", "/w", "--entrypoint", "sh", image, "-c", command];
+/**
+ * The docker arguments of one named container on the working tree, offline
+ * unless `network` is given (the fetch). The store is read-only offline. The
+ * name makes a second container refuse to start while a killed run's one is
+ * still there, instead of two writing the tree.
+ */
+export function dockerArgs({ image, tree, store, network = "none", command, name = "layerfs-issue352-calibrate" }) {
+  const mount = store ? ["-v", `${store}:${STORE_MOUNT}${network === "none" ? ":ro" : ""}`] : [];
+  return ["run", "--rm", "--name", name, "--network", network, "-v", `${tree}:/w`, "-v", `${here}:/t:ro`, ...mount, "-w", "/w", "--entrypoint", "sh", image, "-c", command];
 }
 
 /** Parses the probe's JSON lines. */
