@@ -18,10 +18,7 @@ impl Session {
         #[cfg(target_os = "linux")]
         let state = {
             let mut state = state;
-            state.writer_hold = Some(super::writer_admission::Writer::acquire(
-                &self.path,
-                std::time::Instant::now() + super::admission::WINDOW,
-            )?);
+            state.writer_hold = Some(super::writer_admission::Writer::acquire(&self.path)?);
             state
         };
         #[cfg(target_os = "macos")]

@@ -54,16 +54,17 @@ Busy/Locked/Protocol lock codes retain typed `Busy` through Persistence, Storage
 and History: no body, transaction or rollback follows a refused begin.
 
 Before SQL, each session admits one caller through a FIFO connection turn.
-Read, write and diagnostic access share a two-second admission deadline; at
-most 1,024 pending u64 tickets hold 8,192 bytes of ticket data plus container
-metadata. Full admission returns Capacity before SQL. An expired waiter removes
-its ticket and returns Busy; later callers remain runnable. This is a bounded
-concurrent-admission resource, independent of total files, bytes, Saves or
-Workspace lifetime. SQL counters are unchanged by admission itself.
+Since #352 F-040 (fix record 038) the wait has no time limit and no count
+limit: queued correct work waits its turn and is never refused `Busy` or
+`Capacity` for waiting. Each queued ticket belongs to one blocked thread, so
+the queue is bounded by the threads the process runs. A waiter leaves without
+its turn only when the session is closed (`Handles::close`, typed `Closed`) or
+the queue's mutex is poisoned (`Unknown`); it removes its ticket and later
+callers remain runnable. SQL counters are unchanged by admission itself.
 
 On Linux, a writable transaction also acquires an exclusive advisory flock of
 an independently opened description of the existing Store parent directory,
-within that same deadline. It never opens an additional descriptor to the main,
+after its FIFO turn, in one blocking kernel wait. It never opens an additional descriptor to the main,
 WAL or SHM files. Closing any main-file descriptor outside SQLite can cancel all
 of that process's POSIX locks on that inode; SQLite documents this
 [lock-corruption hazard](https://www.sqlite.org/howtocorrupt.html#_posix_advisory_locks_canceled_by_a_separate_thread_doing_close_).
@@ -71,12 +72,14 @@ The directory inode is a coarse coordination key: multiple Store files in the
 same directory share the short transaction lane. A relative bare filename uses
 `.`. No sidecar is created. Existing Store placement requires stable names and
 parent directory authority; renamed/reparented active stores are not qualified.
-Nonblocking lock polling is readiness before the single BEGIN, not transaction
-replay. Separate handles and daemons on the same local named VM volume share
+The blocking wait is readiness before the single BEGIN, not transaction
+replay; a signal that interrupts it returns typed `Cancelled`, and a holder
+process that exits releases the lock to the next waiter. Separate handles and daemons on the same local named VM volume share
 this kernel admission. The lock covers one atomic transaction through its
 known COMMIT or definite ROLLBACK, never a Save, construction or whole Commit.
-FIFO is provided within a session; cross-session/process polling has no FIFO or
-starvation guarantee and may expire before effect. An uncooperative SQLite
+FIFO is provided within a session; across sessions and processes the kernel's
+flock wake order applies, with no FIFO guarantee. Each session has at most one
+thread in that wait, behind holds that are one short transaction each. An uncooperative SQLite
 writer still produces the original exact Busy at BEGIN.
 
 macOS has the local session FIFO only. Its flock interacts with SQLite's

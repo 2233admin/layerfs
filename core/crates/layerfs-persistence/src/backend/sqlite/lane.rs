@@ -2,9 +2,9 @@
 //! cooperative writer lock, held by one thread across a short read-decide-write
 //! sequence. Its own SQL work runs as ordinary transactions inside the held
 //! turn; no other publication of any process can interleave.
-use super::{admission::WINDOW, connection::Session, writer_admission::Writer};
+use super::{connection::Session, writer_admission::Writer};
 use crate::backend::records::BackendError;
-use std::{marker::PhantomData, sync::Arc, time::Instant};
+use std::{marker::PhantomData, sync::Arc};
 
 /// A held lane; dropping it releases the writer lock, then the turn.
 pub struct LaneHold {
@@ -15,20 +15,19 @@ pub struct LaneHold {
 }
 
 impl Session {
-    /// Waits, bounded by the admission window, for the lane. A wait is
-    /// readiness, not a retry: nothing has been attempted before it is held.
+    /// Waits its FIFO turn, then the cross-process writer lock, for the lane.
+    /// A wait is readiness, not a retry: nothing is attempted before it is held.
     pub(crate) fn hold_lane(self: &Arc<Self>) -> Result<LaneHold, BackendError> {
         if !self.writable {
             return Err(BackendError::ReadOnly);
         }
-        let deadline = Instant::now() + WINDOW;
         let turn = self
             .admission
-            .enter(deadline, layerfs_telemetry::timer::waits::Wait::Writer)?;
+            .enter(layerfs_telemetry::timer::waits::Wait::Writer)?;
         if turn.nested {
             return Err(BackendError::Integrity);
         }
-        let writer = Writer::acquire(&self.path, deadline)?;
+        let writer = Writer::acquire(&self.path)?;
         turn.hold()?;
         Ok(LaneHold {
             session: self.clone(),

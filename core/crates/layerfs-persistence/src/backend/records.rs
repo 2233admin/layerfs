@@ -76,6 +76,11 @@ impl Record {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum BackendError {
     Busy,
+    /// The Store was closed while the call waited for, or before, its turn.
+    Closed,
+    /// A signal interrupted the cross-process writer wait (Linux only).
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    Cancelled,
     ReadOnly,
     Capacity,
     Integrity,
@@ -97,6 +102,8 @@ impl From<BackendError> for layerfs_history::HistoryError {
     fn from(e: BackendError) -> Self {
         match e {
             BackendError::Busy => Self::Busy,
+            // The writer was never obtained; nothing was attempted.
+            BackendError::Closed | BackendError::Cancelled => Self::OwnershipUnavailable,
             BackendError::ReadOnly => Self::ContinuityUnavailable,
             BackendError::Capacity => Self::Capacity("persistence"),
             BackendError::Integrity => Self::Integrity("persistence"),
