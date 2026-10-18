@@ -44,7 +44,11 @@
 > computes its skipped Layers from heights and records only their count: they
 > are the chain's heights `(covered, H]`, so `LayerRecord.overwrote` is
 > replaced by `overwrote_count`, and `overwritten(layer, position, limit)`
-> (SDK `project.list_overwritten`) pages the full list. It then records what
+> (SDK `project.list_overwritten`) pages the full list. **Breaking API
+> change:** `LayerRecord.overwrote` and `AddLayerOutcome::Added { overwrote }`
+> are gone; the SDK layer value drops `overwrote`/`overwroteTruncated` for
+> `overwroteCount`, and `branch.publish` returns `overwroteCount`,
+> `overwrote` (first 50) and `overwroteHasMore`. It then records what
 > it absorbs. A Store written before the tables is backfilled at open (REBUILD
 > kind 2). See the [design note](../issues/353/DESIGN.md).
 

@@ -86,8 +86,12 @@ heights `(covered, H]` (the old walk stopped at the first covered Layer). So
 the full list is already stored, one row per displaced Layer: their
 `layer_lineage` rows, addressed by that height range. The publication writes
 only `overwrote_count`; nothing is dropped, there is no fixed count, and lane
-work does not depend on the list's length. `LayerRecord.overwrote` is replaced
-by `overwrote_count`; `AddLayerOutcome::Added` no longer carries a list.
+work does not depend on the list's length. **Breaking API change (for the
+integrator):** `LayerRecord.overwrote` is replaced by `overwrote_count`;
+`AddLayerOutcome::Added` no longer carries a list; the SDK layer value drops
+`overwrote` and `overwroteTruncated` for `overwroteCount`, and
+`branch.publish` returns `overwroteCount`, the first 50 `overwrote` and
+`overwroteHasMore`.
 `HistoryCatalog::overwritten(layer, position, limit)` returns one page (newest
 first, at most 128) with one indexed range read on `layer_heights`, outside the
 lane. The SDK's `branch.publish` reads the first 50 after the publication and
@@ -200,6 +204,33 @@ transaction at open creates them, backfills, and records the new schema.
 - `absorbed` and `reach`: replay steps 3–5 for every Layer in height order.
 Cost is linear in history, once; no ranges are replayed and nothing existing is
 rewritten. A Store with any other recorded schema is left to `validate`.
+
+**Measured, 2026-10-18 08:05Z (one sample, Disposable).** A copy of the #352
+range-14 main-line Store (p2-main-f, 48,726,016 B, schema 22, last written by
+daemon 57141b57; 10,612 Commits, 18 Layers, 168 Branches), opened writable by
+`tests/lineage_backfill_measure.rs` (debug test binary of 45ba293b4 plus this
+test). Host load at start 7.29 / 9.51 / 11.68; #354 was running one
+single-threaded read probe in the window.
+
+| Measure | Value |
+| --- | ---: |
+| Writable open with backfill (one write transaction: the writer's hold) | 292.8 ms |
+| Writable open of the migrated copy (no backfill) | 1.1 ms |
+| Backfill hold, by difference | ~292 ms |
+| Peak RSS of the whole process (both opens) | 14.9 MB |
+| Rows written | 10,612 commit_lineage, 18 layer_lineage, 37 absorbed, 17 reach (78 runs, 35 merges) |
+
+The hold is under the 2 s writer admission window at this size. It is linear in
+Commits (~27.6 µs per Commit here), so by extrapolation it reaches 2 s near
+72,000 Commits; a Store migrated past that size holds the writer longer than
+the admission window once, at its first writable open, and another writer
+waiting in that window is refused `Busy`. Not changed without an owner
+decision.
+
+**Store cost (same copy, `dbstat`).** The four tables and four indexes take
+1,904,640 B: `commit_lineage` 933,888 B and `commit_runs` 946,176 B, one page
+each for the rest. That is **179.5 B per Commit (3.5% of ~5.1 KB/Commit)**;
+the file grew by 1,941,504 B (183 B per Commit, including page slack).
 
 ## 7. Expected production LOC (estimate)
 
