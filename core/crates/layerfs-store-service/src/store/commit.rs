@@ -169,44 +169,8 @@ impl BoundWorkspace {
                 } else {
                     candidate
                 };
-                let lane = phase(timing, "lane", || {
-                    self.store
-                        .history
-                        .publish_lane()
-                        .map_err(CommitError::History)
-                })?;
-                let conflicted = merge
-                    .as_ref()
-                    .is_some_and(|report: &MergeReport| !report.conflicts.is_empty());
-                let (current, root, moved) = if force || conflicted {
-                    (current, root, moved)
-                } else {
-                    let now = phase(timing, "head.lane", || {
-                        self.store
-                            .history
-                            .branch_snapshot(snapshot.branch.id)
-                            .map_err(CommitError::History)?
-                            .ok_or(CommitError::Context("bound Branch is absent"))
-                    })?;
-                    if now.branch.head_commit == current.branch.head_commit
-                        && now.branch.base_layer == current.branch.base_layer
-                    {
-                        (current, root, moved)
-                    } else {
-                        let (root, step) = phase(timing, "merge.lane", || {
-                            self.merge_in_lane(&save, &current, &now, root, candidate)
-                        })?;
-                        merge = Some(match merge.take() {
-                            Some(first) => MergeReport {
-                                from: first.from,
-                                lww: first.lww.into_iter().chain(step.lww).collect(),
-                                ..step
-                            },
-                            None => step,
-                        });
-                        (now, root, true)
-                    }
-                };
+                // Everything that grows with the Commit runs before the lane:
+                // the Save's finish, the logical count and the binding hints.
                 let node = current
                     .branch
                     .head_commit
@@ -224,17 +188,7 @@ impl BoundWorkspace {
                 // Count only after finish has proved the root's references
                 // closed, so a missing dependency stays a Storage refusal.
                 let logical = phase(timing, "logical.count", || {
-                    let reader = storage.reader().map_err(CommitError::Storage)?;
-                    layerfs_content::filesystem::statistics::logical_size_after(
-                        &reader,
-                        FilesystemRootId(current.effective_root),
-                        root,
-                        known,
-                    )
-                    .map_err(|error| CommitError::Content {
-                        error,
-                        provider: None,
-                    })
+                    self.logical_after(&storage, current.effective_root, root, known)
                 })?;
                 phase(timing, "bindings", || {
                     let reader = storage.reader().map_err(CommitError::Storage)?;
@@ -245,6 +199,68 @@ impl BoundWorkspace {
                         root,
                     )
                 })?;
+                let lane = phase(timing, "lane", || {
+                    self.store
+                        .history
+                        .publish_lane()
+                        .map_err(CommitError::History)
+                })?;
+                let conflicted = merge
+                    .as_ref()
+                    .is_some_and(|report: &MergeReport| !report.conflicts.is_empty());
+                let (current, root, moved, logical) = if force || conflicted {
+                    (current, root, moved, logical)
+                } else {
+                    let now = phase(timing, "head.lane", || {
+                        self.store
+                            .history
+                            .branch_snapshot(snapshot.branch.id)
+                            .map_err(CommitError::History)?
+                            .ok_or(CommitError::Context("bound Branch is absent"))
+                    })?;
+                    if now.branch.head_commit == current.branch.head_commit
+                        && now.branch.base_layer == current.branch.base_layer
+                    {
+                        (current, root, moved, logical)
+                    } else {
+                        // The in-lane step has its own Save; its count and
+                        // hints cover only what it changed in the result.
+                        let step_save = storage.begin_save().map_err(CommitError::Storage)?;
+                        let (stepped, step) = phase(timing, "merge.lane", || {
+                            self.merge_in_lane(&step_save, &current, &now, root, candidate)
+                        })?;
+                        let step_saved = phase(timing, "finish.lane", || {
+                            step_save.finish().map_err(CommitError::Storage)
+                        })?;
+                        self.store.note_save(&step_saved);
+                        if let Some(saved) = retained.saved.as_mut() {
+                            saved.canonical_bytes += step_saved.canonical_bytes;
+                            saved.stored_bytes += step_saved.stored_bytes;
+                            saved.metadata_bytes += step_saved.metadata_bytes;
+                        }
+                        let logical = phase(timing, "logical.lane", || {
+                            self.logical_after(&storage, root.0, stepped, logical)
+                        })?;
+                        phase(timing, "bindings.lane", || {
+                            let reader = storage.reader().map_err(CommitError::Storage)?;
+                            super::hints::record_new_bindings(
+                                &reader,
+                                &*self.store.history,
+                                Some(root),
+                                stepped,
+                            )
+                        })?;
+                        merge = Some(match merge.take() {
+                            Some(first) => MergeReport {
+                                from: first.from,
+                                lww: first.lww.into_iter().chain(step.lww).collect(),
+                                ..step
+                            },
+                            None => step,
+                        });
+                        (now, stepped, true, logical)
+                    }
+                };
                 Ok((root, candidate, current, moved, logical, lane))
             })();
             retained.storage = Some(super::producer::since(storage.diagnostics(), before));
@@ -398,6 +414,28 @@ impl BoundWorkspace {
             capture: retained.capture.expect("known capture"),
             namespace: None,
             replaced,
+        })
+    }
+
+    /// Logical size of `after`, from `before`'s known size and the change
+    /// between them.
+    fn logical_after(
+        &self,
+        storage: &layerfs_storage::Storage,
+        before: layerfs_content::ObjectId,
+        after: FilesystemRootId,
+        known: u64,
+    ) -> Result<u64, CommitError> {
+        let reader = storage.reader().map_err(CommitError::Storage)?;
+        layerfs_content::filesystem::statistics::logical_size_after(
+            &reader,
+            FilesystemRootId(before),
+            after,
+            known,
+        )
+        .map_err(|error| CommitError::Content {
+            error,
+            provider: None,
         })
     }
 }

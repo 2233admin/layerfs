@@ -115,14 +115,48 @@ once recorded.
 - Schema tests updated for the two tables: `sqlite_publication.rs` (19
   tables), `old_format_open.rs`, `lineage_backfill.rs`.
 
+## (c) The lane holds only the publish and the in-lane step
+
+Watch-out S2 risk 1: a Commit's merge and everything that grows with the
+Commit used to run inside the publication lane. After (b) the merge itself
+is before the lane; (c) moves the rest out (`store/commit.rs`):
+
+- Before the lane: the Save's `finish`, the head's logical size, the
+  Commit's logical count (`logical_size_after` from the head merged with) and
+  the binding hints (`record_new_bindings`).
+- In the lane: the head read, and only when it moved again the in-lane
+  step. That step has its own small Save, and its logical count and hints
+  cover only the step's change to the result (`root` → stepped root), so the
+  lane's work follows what landed in between. Then validation of the final
+  root (one root inode lookup and a rebind), the atomic publish, and the drop
+  of the lane.
+
+**Smaller side.** The issue asks for candidates named from the side with
+fewer changes. With the two-stage merge the lane already works from the
+smaller side by construction: the in-lane step names its paths from the
+`H0`→`H1` changes only. The stage before the lane still names paths from
+the Workspace's changes and builds on the head. Choosing the smaller side
+there would build the result on ours when theirs is larger, which assigns
+serials differently and so changes the merged root's identity; that would
+break "results equal to today's below the caps" (the 35 recorded replay
+merges compare roots). It is left as is, and it runs outside the lane.
+
+**Test.** `lane_merge.rs::the_lane_hold_follows_what_landed_not_the_commit`:
+a 1,000-file Workspace Commit and a one-file Commit, each with one file
+landing before its lane, hold the lane for about the same statements.
+
 ## Measurements so far (one sample each, Disposable, macOS host, not quiet-window receipts)
+
+Lane holds are timed by the test's catalog wrapper from `publish_lane`
+returning to the hold's drop, with the writer session's statements over it.
 
 | Case | Figure |
 | --- | --- |
 | Small SDK merge (`sdk_merge_paths`, trees of 20/200/2,000 dirs) | 13 record reads, 5 write transactions, ~0.45 ms total writer hold, max ~0.2 ms; constant across tree sizes |
 | A3, 100,000 moved files (SDK merge) | merge 47.3 s; 1,206,308 record reads; 104,824 write transactions; writer hold 5.16 s total, max 8.3 ms; 2,676,603 statements |
-| Commit, head unmoved (`lane_merge.rs`, from lane release) | 5.1 ms, 112 writer-session statements |
-| Commit, head moved by one Commit in the lane (2 paths decided) | 4.1 ms, 140 writer-session statements |
+| Lane hold, Commit with head unmoved (`lane_merge.rs`, after (c)) | 0.97 ms, 15 writer statements |
+| Lane hold, head moved by one Commit (2 paths in the lane step) | 2.47 ms, 105 writer statements |
+| Lane hold, 1-file vs 1,000-file Workspace Commit, one file landed | 2.64 ms / 105 vs 3.77 ms / 108 statements |
 
 The A3 figure is the backed route's cost per moved entry (~12 record reads
 and ~1 write transaction each, ~0.47 ms); before (b) the same merge was

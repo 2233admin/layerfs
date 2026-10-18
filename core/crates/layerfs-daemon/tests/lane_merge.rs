@@ -67,7 +67,10 @@ impl Gate {
         }
     }
     fn arm(&self) {
-        self.state.lock().unwrap().armed = true;
+        *self.state.lock().unwrap() = State {
+            armed: true,
+            ..State::default()
+        };
     }
     fn release(&self) {
         self.state.lock().unwrap().released = true;
@@ -78,6 +81,25 @@ impl Gate {
 struct Gated {
     handles: Arc<Handles>,
     gate: Arc<Gate>,
+    holds: Arc<Mutex<Vec<(f64, u64)>>>,
+}
+
+/// One lane hold, timed from acquisition to drop, with the writer session's
+/// statements over it.
+struct Timed {
+    _lane: PublishLane,
+    handles: Arc<Handles>,
+    start: Instant,
+    statements: u64,
+    holds: Arc<Mutex<Vec<(f64, u64)>>>,
+}
+
+impl Drop for Timed {
+    fn drop(&mut self) {
+        let ms = self.start.elapsed().as_secs_f64() * 1000.0;
+        let statements = self.handles.diagnostics().unwrap().statements - self.statements;
+        self.holds.lock().unwrap().push((ms, statements));
+    }
 }
 
 macro_rules! forward {
@@ -117,7 +139,14 @@ impl HistoryCatalog for Gated {
     }
     fn publish_lane(&self) -> HistoryResult<PublishLane> {
         self.gate.hold();
-        self.handles.history.publish_lane()
+        let lane = self.handles.history.publish_lane()?;
+        Ok(PublishLane::new(Box::new(Timed {
+            _lane: lane,
+            handles: self.handles.clone(),
+            start: Instant::now(),
+            statements: self.handles.diagnostics().unwrap().statements,
+            holds: self.holds.clone(),
+        })))
     }
 }
 
@@ -127,8 +156,8 @@ struct Fixture {
     sdk: support::Fixture,
     service: Service,
     store: Arc<Store>,
-    handles: Arc<Handles>,
     gate: Arc<Gate>,
+    holds: Arc<Mutex<Vec<(f64, u64)>>>,
 }
 
 fn fixture(label: &str) -> Fixture {
@@ -150,9 +179,11 @@ fn fixture(label: &str) -> Fixture {
     });
     let control = factory(0).unwrap();
     let gate = Arc::new(Gate::default());
+    let holds = Arc::new(Mutex::new(Vec::new()));
     let history = Gated {
         handles: handles.clone(),
         gate: gate.clone(),
+        holds: holds.clone(),
     };
     let store = Arc::new(
         Store::new(
@@ -172,8 +203,15 @@ fn fixture(label: &str) -> Fixture {
         sdk,
         service,
         store,
-        handles,
         gate,
+        holds,
+    }
+}
+
+impl Fixture {
+    /// The last lane hold: milliseconds and writer statements.
+    fn last_hold(&self) -> (f64, u64) {
+        *self.holds.lock().unwrap().last().expect("a lane hold")
     }
 }
 
@@ -183,6 +221,16 @@ fn mounted_write(
     id: u8,
     name: &str,
     bytes: &[u8],
+) -> layerfs_bridge::control::WorkspaceToken {
+    mounted_writes(fixture, id, &[(name.to_owned(), bytes.to_vec())])
+}
+
+/// Mounts a Workspace on the lane and writes each `/name`, without
+/// committing.
+fn mounted_writes(
+    fixture: &Fixture,
+    id: u8,
+    files: &[(String, Vec<u8>)],
 ) -> layerfs_bridge::control::WorkspaceToken {
     let bound = fixture
         .service
@@ -222,30 +270,32 @@ fn mounted_write(
         }
     };
     let parent = view.root_serial();
-    let name = PathName::new(name).unwrap();
-    let serial = match view.lookup(operation.overlay(), parent, &name) {
-        Ok(found) => found.serial,
-        Err(_) => {
-            apply(Operation::Create {
-                parent,
-                name,
-                mode: 0o644,
-            })
-            .expect("created inode")
-            .serial
-        }
-    };
-    apply(Operation::SetAttributes {
-        serial,
-        mode: None,
-        mtime: None,
-        size: Some(0),
-    });
-    apply(Operation::Write {
-        serial,
-        position: Position::At(0),
-        data: bytes.to_vec().into(),
-    });
+    for (name, bytes) in files {
+        let name = PathName::new(name).unwrap();
+        let serial = match view.lookup(operation.overlay(), parent, &name) {
+            Ok(found) => found.serial,
+            Err(_) => {
+                apply(Operation::Create {
+                    parent,
+                    name,
+                    mode: 0o644,
+                })
+                .expect("created inode")
+                .serial
+            }
+        };
+        apply(Operation::SetAttributes {
+            serial,
+            mode: None,
+            mtime: None,
+            size: Some(0),
+        });
+        apply(Operation::Write {
+            serial,
+            position: Position::At(0),
+            data: bytes.clone().into(),
+        });
+    }
     drop(view);
     operation
         .overlay()
@@ -279,12 +329,11 @@ fn read(fixture: &Fixture, path: &str) -> Option<String> {
         .and_then(|value| value.get_text("text").map(str::to_owned))
 }
 
-/// What the held Commit did once released: its reply, wall time from the
-/// release, and the writer session's statements over that time.
+/// What the held Commit did once released: its reply and wall time from
+/// the release to the reply.
 struct Held {
     reply: Result<Reply, String>,
     ms: f64,
-    statements: u64,
 }
 
 /// Commits `token` with its lane held, runs `land` while it is held, then
@@ -312,14 +361,12 @@ fn commit_held(
             "the Commit reached the lane"
         );
         land();
-        let before = fixture.handles.diagnostics().unwrap().statements;
         let start = Instant::now();
         fixture.gate.release();
         let reply = worker.join().unwrap();
         Held {
             reply,
             ms: start.elapsed().as_secs_f64() * 1000.0,
-            statements: fixture.handles.diagnostics().unwrap().statements - before,
         }
     });
     fixture
@@ -334,7 +381,6 @@ fn commit_held(
 
 /// An uncontended Commit of the same shape, for the lane hold beside it.
 fn commit_plain(fixture: &Fixture, token: layerfs_bridge::control::WorkspaceToken) -> Held {
-    let before = fixture.handles.diagnostics().unwrap().statements;
     let start = Instant::now();
     let reply = fixture
         .service
@@ -348,7 +394,6 @@ fn commit_plain(fixture: &Fixture, token: layerfs_bridge::control::WorkspaceToke
     let held = Held {
         reply,
         ms: start.elapsed().as_secs_f64() * 1000.0,
-        statements: fixture.handles.diagnostics().unwrap().statements - before,
     };
     fixture
         .service
@@ -370,12 +415,14 @@ fn a_commit_landing_before_the_lane_is_merged_in_the_lane() {
     let plain = mounted_write(&fixture, 80, "plain.txt", b"plain\n");
     let plain = commit_plain(&fixture, plain);
     assert!(published(&plain.reply), "{:?}", plain.reply);
+    let plain_hold = fixture.last_hold();
     let token = mounted_write(&fixture, 81, "a.txt", b"a\n");
     // The head moves before the Commit reads it: the first stage merges.
     write(&fixture, "/c.txt", "c\n");
     let before = fixture.store.save_counters().merge;
     let held = commit_held(&fixture, token, || write(&fixture, "/b.txt", "b\n"));
     assert!(published(&held.reply), "{:?}", held.reply);
+    let moved_hold = fixture.last_hold();
     let after = fixture.store.save_counters().merge;
     assert_eq!(after.lane_steps - before.lane_steps, 1);
     assert_eq!(after.lane_refused, before.lane_refused);
@@ -385,9 +432,38 @@ fn a_commit_landing_before_the_lane_is_merged_in_the_lane() {
         assert_eq!(read(&fixture, path).as_deref(), Some(text), "{path}");
     }
     println!(
-        "LANE_MERGE uncontended_ms={:.1} uncontended_statements={} moved_head_ms={:.1} \
-         moved_head_statements={} lane_paths={paths} samples=1",
-        plain.ms, plain.statements, held.ms, held.statements
+        "LANE_MERGE lane_hold uncontended_ms={:.2} uncontended_statements={} \
+         moved_head_ms={:.2} moved_head_statements={} lane_paths={paths}; \
+         release_to_reply uncontended_ms={:.1} moved_head_ms={:.1} samples=1",
+        plain_hold.0, plain_hold.1, moved_hold.0, moved_hold.1, plain.ms, held.ms
+    );
+    fixture.sdk.cleanup();
+}
+
+/// The lane's work follows what landed in between, not the Commit: a
+/// Workspace Commit of 1,000 files with one file landing before its lane
+/// holds the lane for about as many statements as a one-file Commit.
+#[test]
+fn the_lane_hold_follows_what_landed_not_the_commit() {
+    let fixture = fixture("lane-merge-size");
+    let mut holds = Vec::new();
+    for (id, count) in [(84u8, 1usize), (85, 1000)] {
+        let files: Vec<_> = (0..count)
+            .map(|n| (format!("w{id}-{n:04}.txt"), format!("{n}\n").into_bytes()))
+            .collect();
+        let token = mounted_writes(&fixture, id, &files);
+        let landed = format!("/landed{id}.txt");
+        let held = commit_held(&fixture, token, || write(&fixture, &landed, "x\n"));
+        assert!(published(&held.reply), "{:?}", held.reply);
+        holds.push((count, fixture.last_hold()));
+        let steps = fixture.store.save_counters().merge.lane_steps;
+        assert_eq!(steps as usize, holds.len(), "each Commit took a lane step");
+    }
+    println!("LANE_MERGE_SIZE holds={holds:?} samples=1");
+    let (small, large) = (holds[0].1 .1, holds[1].1 .1);
+    assert!(
+        large <= small + small / 2,
+        "1,000 files held the lane for {large} statements, one file for {small}"
     );
     fixture.sdk.cleanup();
 }
