@@ -706,6 +706,32 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
   assert.deepEqual(calls, ["mount", "store?", "unmount"], "no install without the store mount");
 });
 
+test("one-shot probe split (lead, after 013.a1): mount + unmount judged as before; the exec by its LayerFS share, its wall not scaled", async () => {
+  const { oneshotSplit } = await import("../steps.mjs");
+  const { probeSeries } = await import("../gates.mjs");
+  const sql = (vm) => ({ writer: { statements: 1, vm_steps: vm }, readers: {} });
+  const lines = [
+    { method: "sandbox.mount", ms: 8, daemon: [{ sql: sql(100), timing: [{ name: "mount", ms: 7 }] }] },
+    { method: "sandbox.exec", ms: 62.4, daemon: [{ sql: sql(0), timing: [{ name: "observe.before", ms: 0.004 }, { name: "observe.after", ms: 1.304 }], fuse: { getattr: 0, served: 0 } }] },
+    { method: "sandbox.unmount", ms: 6.25, daemon: [{ sql: sql(30), fuse: { getattr: 1, served: 1 } }] },
+  ];
+  const s = oneshotSplit(lines);
+  assert.equal(s.oneshot_mount_unmount.ms, 14.25);
+  assert.equal(s.oneshot_mount_unmount.counters.vm_steps, 130, "the mount's and unmount's counters, as before");
+  assert.deepEqual([s.oneshot_exec.ms, s.oneshot_exec.wallMs, s.oneshot_exec.fuseRequests, s.oneshot_exec.untimed], [1.308, 62.4, 0, undefined], "the launch (62 ms) is the Sandbox's; LayerFS's share is its spans");
+  assert.equal(oneshotSplit(lines.slice(0, 2)), null, "an incomplete sequence gives nothing");
+  const noSpans = oneshotSplit([lines[0], { ...lines[1], daemon: [{ sql: sql(0) }] }, lines[2]]);
+  assert.equal(noSpans.oneshot_exec.ms, null, "a daemon that traced no exec spans gives no point, never 0");
+  const busy = oneshotSplit([lines[0], { ...lines[1], daemon: [{ ...lines[1].daemon[0], fuse: { getattr: 3, lookup: 1 } }] }, lines[2]]);
+  assert.deepEqual([busy.oneshot_exec.fuseRequests, busy.oneshot_exec.untimed], [4, true]);
+  const m = { range: 5, depth: { after: 10 }, probes: { oneshot_exec: busy.oneshot_exec } };
+  assert.match(probeSeries("oneshot_exec", m, [m]).note, /4 FUSE request\(s\) during the exec, whose time is not traced/);
+  // a new name: the old series never shares a fit with the new ones
+  const old = { range: 4, depth: { after: 8 }, probes: { oneshot_mount_exec: { ms: 50 } } };
+  const now = { range: 5, depth: { after: 10 }, probes: { oneshot_mount_unmount: s.oneshot_mount_unmount } };
+  assert.equal(probeSeries("oneshot_mount_unmount", now, [old, now]).pts.length, 1);
+});
+
 test("closure development checks (owner 2026-10-18): a clean reinstall of the unchanged lockfile, and the build again after a remount", async () => {
   const packages = new Set(["packages/a", "packages/b"]), tsconfigs = new Set(["packages/a"]);
   const steps = closureSteps({ packages, tsconfigs, changed: ["packages/a/src/x.ts"], installed: false, milestone: false, run: ["packages/a/t.spec.ts"], checks: true });

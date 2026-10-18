@@ -58,7 +58,7 @@ import {
   binaries, closure, consolidate, expectCall, HISTORY, Mismatch, probeFixture, probes, readTrace, REPO, Run,
   sandboxHealth, setup, sha256, step, teardown, verify, versionStats, writeJson,
 } from "./lib.mjs";
-import { addDelta, checkpointDiff, deltaSummary, deltaWork, diskGuard, diskModel, EXIT, nextPhase, pad, PHASES, phaseOps, Tree } from "./steps.mjs";
+import { addDelta, checkpointDiff, deltaSummary, deltaWork, diskGuard, diskModel, EXIT, nextPhase, oneshotSplit, pad, PHASES, phaseOps, Tree } from "./steps.mjs";
 import { consolidateLanes, playAgents, pool, startRange } from "./agents.mjs";
 import { buildOverview, callTable } from "./stats.mjs";
 import { area } from "./plan-range.mjs";
@@ -450,6 +450,9 @@ async function playRange(run, k, mode) {
   const oracle = JSON.parse(readFileSync(join(run.manifest.oracle, `oracle-${pad(k)}.json`), "utf8"));
   m.inputs = { tree: { files: oracle.files, bytes: oracle.bytes } };
   m.probes = Object.fromEntries(Object.entries(probeOut).map(([name, p]) => [name, { ms: p.ms, ...(p.version ? { version: p.version } : {}), ...(p.input ? { input: p.input } : {}), ...(p.error ? { error: p.error } : {}), counters: t.probe[name] ?? {} }]));
+  // the one-shot probe split (steps.mjs oneshotSplit): both values from the trace, the sequence's client wall kept
+  const split = m.probes.oneshot_mount_unmount && !m.probes.oneshot_mount_unmount.error ? oneshotSplit(t.all.filter((l) => /^probe:oneshot_(mount_unmount|exec)$/.test(String(l.step)))) : null;
+  if (split) Object.assign(m.probes, { oneshot_mount_unmount: { ...split.oneshot_mount_unmount, sequenceMs: m.probes.oneshot_mount_unmount.ms }, oneshot_exec: split.oneshot_exec });
   const open = snap?.sandboxes?.reduce((n, s) => n + (s.workspaces?.length ?? 0), 0) ?? null;
   const hl = await sandboxHealth(run);
   m.health = { workspacesOpen: open, overlaysLeft: hl?.overlaysLeft ?? null, daemonRssMb: hl?.daemonRssMb ?? null, openFiles: hl?.openFiles ?? null, sandboxes: hl ? `${hl.sandboxes} of ${hl.of}` : null };

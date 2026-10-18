@@ -2,7 +2,7 @@
 // Writes the range reports (#352 SPEC §3, ranges/TEMPLATE.md) and the index:
 //   node dsh/tools/history/report.mjs --metrics <dir> --plan <dir> --docs <core/docs/issues/352> [--range N]
 //   node dsh/tools/history/report.mjs check <NNN> [--metrics <dir>] [--docs <dir>]   (reportcheck.mjs: F1–F8)
-//   node dsh/tools/history/report.mjs regate --metrics <dir>   (dry run: today's gates over recorded metrics; prints only, F2)
+//   node dsh/tools/history/report.mjs regate --metrics <dir> [--split-oneshot]   (dry run: today's gates over recorded metrics; prints only, F2)
 //   node dsh/tools/history/report.mjs records [--docs <dir>]   (every fixes/ record states its REBUILD.md §4 kind fields)
 //   node dsh/tools/history/report.mjs baseline --run <id> --metrics <dir> --ranges 2-4 [--out <dir>] [--phase pN --note <why>]   (one daemon's, or daemon+addon+phase's, speed baseline)
 //   node dsh/tools/history/report.mjs stats --metrics <dir> --docs <dir>   (STATS.md alone, e.g. its backfill)
@@ -27,7 +27,7 @@ import { aggregate, BASELINE_MIN_N, buildBaseline, evaluate, exponent, MINIMUM_P
 import { categoryOf, derivedOverview, renderOverview, renderStats } from "./stats.mjs";
 import { FINDINGS, loadIssues, renderFormat } from "./format.mjs";
 import { change, loadFindings, REBUILD_KINDS } from "./findings.mjs";
-import { changedDirs, withDirs } from "./steps.mjs";
+import { changedDirs, oneshotSplit, withDirs } from "./steps.mjs";
 import { diffTrees } from "./git.mjs";
 import { HISTORY as HISTORY_DIR, readTrace } from "./lib.mjs";
 import { legacyGates, parseReport, storedGate, storeGate } from "./frozen.mjs";
@@ -451,11 +451,27 @@ export function withDirsFromGit(m, { repo, planDir }) {
 const traceOf = (m, history = HISTORY_DIR) => join(history, "runs", String(m.run), "trace", `range-${pad(m.range)}.a${m.attempt}.jsonl`);
 
 /**
+ * The one-shot probe split (steps.mjs oneshotSplit) for an attempt recorded
+ * before it: its `oneshot_mount_exec` sequence re-read from its stored trace
+ * into the two new probes, in memory only (`derived: "trace"`); the old
+ * probe's recorded value and verdict stay. Without the trace it is unchanged.
+ */
+/**
  * SPEC §5 (uncontended vs contended): an attempt recorded before the split
  * gets `opsTrace`, its calls classed from its stored trace alone (overlap and
  * outcome from the trace; sizes the trace carries). Without the trace it is
  * returned unchanged, and Speed against a re-derived baseline is not judged.
  */
+export function withSplitProbe(m, history = HISTORY_DIR) {
+  if (!m.probes?.oneshot_mount_exec || m.probes.oneshot_mount_unmount) return m;
+  const file = traceOf(m, history);
+  if (!existsSync(file)) return m;
+  const split = oneshotSplit(readTrace(file).all.filter((l) => l.step === "probe:oneshot_mount_exec"));
+  if (!split) return m;
+  const { oneshot_mount_exec: old, ...rest } = m.probes;
+  return { ...m, probes: { ...rest, oneshot_mount_unmount: { ...split.oneshot_mount_unmount, derived: "trace" }, oneshot_exec: { ...split.oneshot_exec, derived: "trace" } } };
+}
+
 export function withTraceOps(m, history = HISTORY_DIR) {
   if (m.opsTrace) return m;
   const file = traceOf(m, history);
@@ -483,9 +499,9 @@ export function rederiveBaseline(b, run, history = HISTORY_DIR) {
   return { ...b, ops: fresh.ops, previousOps: b.previousOps ?? b.ops, derivation: "trace", derived: { ...(b.derived ?? {}), series: `SPEC §5: uncontended/contended classes re-derived from ${run}'s stored traces (classes from the trace alone)` } };
 }
 
-export function regate({ metricsDir, oracleDir, baselinesDir = metricsDir, repo = null, planDir = null }) {
+export function regate({ metricsDir, oracleDir, baselinesDir = metricsDir, repo = null, planDir = null, split = false }) {
   const attempts = loadAttempts(metricsDir);
-  const last = [...attempts.values()].map((ys) => ys.at(-1)).map((m) => withTraceOps(withInputs(m, oracleDir)))
+  const last = [...attempts.values()].map((ys) => ys.at(-1)).map((m) => (split ? withSplitProbe(m) : m)).map((m) => withTraceOps(withInputs(m, oracleDir)))
     .map((m) => (repo && planDir ? withDirsFromGit(m, { repo, planDir }) : m));
   const pilotFile = join(baselinesDir, "baseline.json");
   const pilot = existsSync(pilotFile) ? JSON.parse(readFileSync(pilotFile, "utf8")) : null;
@@ -496,7 +512,8 @@ export function regate({ metricsDir, oracleDir, baselinesDir = metricsDir, repo 
     const rank = { pass: 0, watch: 1, optimize: 2, stop: 3 };
     const worst = g.checks.reduce((w, c) => (rank[c.result] > rank[w.result] ? c : w), { name: "—", result: "pass", value: "" });
     return { range: m.range, attempt: m.attempt, run: m.run, daemon: String(m.binary?.daemon ?? "?").slice(0, 8), stored: m.gate?.verdict ?? "—", verdict: g.verdict,
-      worst: { name: worst.name, result: worst.result, value: String(worst.value) } };
+      worst: { name: worst.name, result: worst.result, value: String(worst.value) },
+      ...(split ? { oneshot: g.checks.filter((c) => /oneshot_(mount|exec)/.test(`${c.name} ${c.value}`)).map((c) => `${c.name} ${c.result}: ${c.value}`) } : {}) };
   });
 }
 
@@ -577,9 +594,12 @@ async function main() {
     const metricsDir = opt("--metrics");
     if (!metricsDir) { console.error("usage: report.mjs regate --metrics <dir> [--oracle <dir>] [--baselines <dir>]"); process.exit(2); }
     const H = join(process.env.HOME, "lfs-history");
-    const rows = regate({ metricsDir, oracleDir: opt("--oracle") ?? join(H, "oracle"), baselinesDir: opt("--baselines") ?? join(H, "metrics"), repo: opt("--repo") ?? join(H, "dsh.git"), planDir: opt("--plan") ?? join(H, "plan") });
+    // --split-oneshot: earlier attempts' one-shot probe re-read from their traces as the split probes (withSplitProbe)
+    const split = args.includes("--split-oneshot");
+    const rows = regate({ metricsDir, oracleDir: opt("--oracle") ?? join(H, "oracle"), baselinesDir: opt("--baselines") ?? join(H, "metrics"), repo: opt("--repo") ?? join(H, "dsh.git"), planDir: opt("--plan") ?? join(H, "plan"), split });
     console.log("| Range | Run | Daemon | Stored | Now | Worst check |\n| --- | --- | --- | --- | --- | --- |");
     for (const r of rows) console.log(`| ${pad(r.range)}.a${r.attempt} | ${r.run} | ${r.daemon} | ${r.stored} | ${r.verdict} | ${r.worst.name} ${r.worst.result}: ${r.worst.value} |`);
+    if (split) for (const r of rows) for (const c of r.oneshot ?? []) console.log(`${pad(r.range)} ${c}`);
     return;
   }
   if (args[0] === "fix-overview") {

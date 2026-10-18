@@ -216,7 +216,9 @@ export const FIXED_INPUT = new Set(["stat", "read", "list_small", "grep_scoped",
  */
 export function probeSeries(name, m, all) {
   const p = m.probes[name], v = p.version ?? 1;
-  const same = all.filter((x) => x.probes?.[name] && (x.probes[name].version ?? 1) === v);
+  // the one-shot exec's LayerFS share leaves out FUSE time, which the trace does not carry (steps.mjs oneshotSplit)
+  if (p.untimed) return { pts: [], note: `${p.fuseRequests} FUSE request(s) during the exec, whose time is not traced: its LayerFS share is not judged` };
+  const same = all.filter((x) => x.probes?.[name] && (x.probes[name].version ?? 1) === v && !x.probes[name].untimed);
   let pts = same;
   if (FIXED_INPUT.has(name) && p.input == null) return { pts: [], note: "input not recorded (before F-014): a fixed input cannot be confirmed" };
   if (SCOPED[name] && !(SCOPED[name](m) > 0)) return { pts: [], note: `its own input (${SCOPE_UNIT[name]}s) is not recorded: a growing probe is fitted per unit of it` };

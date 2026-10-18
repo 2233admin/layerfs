@@ -544,7 +544,15 @@ export async function probes(run, k, { branch, tree }) {
       await lf.fs.apply(`probe-${r}-b`, [{ op: "mkdir", path: `${P}/m` }, { op: "write", path: `${P}/m/b1.txt`, content: `b1 ${r}\n` }, { op: "write", path: `${P}/m/b2.txt`, content: `b2 ${r}\n` }], "probe b");
       return lf.branch.merge(`probe-${r}-a`, `probe-${r}-b`, `probe-${r}-m`, "probe merge");
     }, { input: () => ({ filesPerSide: 2 }) }],
-    ["oneshot_mount_exec", async () => { const ws = await lf.sandbox.mount(sb, `probe-${r}`); await lf.sandbox.exec(sb, ws, "true"); return lf.sandbox.unmount(sb, ws, true); }],
+    // split by owner after 013.a1 (steps.mjs oneshotSplit): mount + unmount, and the exec under its own
+    // label; the metrics take both values from the trace (the old `oneshot_mount_exec` series ends here)
+    ["oneshot_mount_unmount", async () => {
+      const ws = await lf.sandbox.mount(sb, `probe-${r}`);
+      run.label("probe:oneshot_exec");
+      await lf.sandbox.exec(sb, ws, "true");
+      run.label("probe:oneshot_mount_unmount");
+      return lf.sandbox.unmount(sb, ws, true);
+    }],
     ["oneshot_commit", async () => {
       const ws = await lf.sandbox.mount(sb, `probe-${r}`);
       await lf.sandbox.exec(sb, ws, `mkdir -p ${PROBE_DIR}/c && head -c 2048 /dev/zero | tr '\\0' p > ${PROBE_DIR}/c/one.txt`);

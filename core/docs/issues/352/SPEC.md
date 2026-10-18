@@ -472,7 +472,8 @@ per 2 writes). In addition, the **scale probes** run once per range:
 | `merge` with a fixed small change on each side | 2 + 2 files | history depth, tree size, distance to the merge base |
 | `list_commits` first page | page of 20 | history depth |
 | `fork` and `publish` | — | history depth, tree size |
-| one-shot `mount` + `exec true` + `unmount` | — | tree size, history depth |
+| one-shot `mount` + `unmount` (around an `exec true`) | — | tree size, history depth |
+| the `exec true` between them: its LayerFS share | — | tree size, history depth |
 | one-shot `commit` of one 2 KiB file | one file | tree size, history depth |
 
 > **As built (F-014, 2026-10-18).** Each fixed-input probe records its input
@@ -491,6 +492,23 @@ per 2 writes). In addition, the **scale probes** run once per range:
 > are exempt. The other probes' inputs were already fixed. Recorded values and
 > verdicts stay as recorded; `report.mjs regate` re-evaluates recorded metrics
 > and prints only.
+
+> **As built (one-shot split, lead 2026-10-18, after 013.a1).** Launching
+> the command belongs to the Sandbox, not LayerFS: 013.a1's optimize came
+> from `exec true` (33 → 49 → 62 ms, no FUSE requests), while mount and
+> unmount were flat. So the probe `oneshot_mount_exec` is replaced by two
+> probes with new names. The old series ends, and no fit mixes old and new.
+> - **`oneshot_mount_unmount`:** the traced ms of the mount and the unmount,
+>   and their SQL counters, judged and scaled as before.
+> - **`oneshot_exec`:** the exec's LayerFS share, judged and scaled. The
+>   share is the daemon's traced spans for the exec (its bookkeeping). The
+>   trace counts the exec's FUSE requests but does not time them, so a point
+>   with any FUSE request is not judged (watch). The exec's wall time
+>   (`wallMs`) is reported and never scaled.
+>
+> Thresholds and the one-sample rule are unchanged. 013.a1's record and
+> verdict stay. `report.mjs regate --split-oneshot` re-reads earlier attempts'
+> sequences from their stored traces, in memory only.
 
 ### d. Storage
 

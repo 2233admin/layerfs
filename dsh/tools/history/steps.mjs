@@ -362,6 +362,34 @@ export function sqlCounters(line) {
   return out;
 }
 
+/**
+ * The one-shot probe split by owner (lead 2026-10-18, after 013.a1): launching
+ * a command belongs to the Sandbox, not LayerFS. From the trace lines of one
+ * one-shot sequence (mount, exec, unmount):
+ * - `oneshot_mount_unmount`: the mount's and the unmount's traced ms, and
+ *   their SQL counters. Judged and scaled as the old probe was.
+ * - `oneshot_exec`: the exec's LayerFS share, the daemon's traced spans for
+ *   the exec (its bookkeeping), as `ms`. The FUSE requests served during the
+ *   exec are counted from the exec's own daemon record; their time is not
+ *   traced, so a point with any is `untimed` (not judged). The exec's wall
+ *   time is `wallMs`, reported and never scaled.
+ * Returns null when the lines hold no complete sequence.
+ */
+export function oneshotSplit(lines) {
+  const by = (m) => lines.find((l) => l.method === m);
+  const mount = by("sandbox.mount"), exec = by("sandbox.exec"), unmount = by("sandbox.unmount");
+  if (!mount || !exec || !unmount || mount.ms == null || unmount.ms == null) return null;
+  const add = (a, b) => Object.fromEntries(Object.keys(a).map((k) => [k, a[k] + (b[k] ?? 0)]));
+  // a daemon that traced no spans for the exec (before 6d467539) gives no share: null, never a 0 point
+  const timed = (exec.daemon ?? []).some((d) => (d.timing ?? []).length);
+  const span = (exec.daemon ?? []).reduce((n, d) => n + (d.timing ?? []).reduce((x, t) => x + (t.ms ?? 0), 0), 0);
+  const fuse = (exec.daemon ?? []).reduce((n, d) => n + FUSE_OPCODES.reduce((x, k) => x + (d.fuse?.[k] ?? 0), 0), 0);
+  return {
+    oneshot_mount_unmount: { ms: +(mount.ms + unmount.ms).toFixed(3), counters: add(sqlCounters(mount), sqlCounters(unmount)) },
+    oneshot_exec: { ms: timed ? +span.toFixed(3) : null, wallMs: exec.ms ?? null, fuseRequests: fuse, ...(fuse ? { untimed: true } : {}), counters: sqlCounters(exec) },
+  };
+}
+
 const DELTA_KEYS = {
   payload: ["prepared_full", "trials", "prefix_selected", "full_losses", "no_candidate", "absent_candidates", "ineligible_candidates", "depth_capped", "work_exceeded"],
   metadata: ["leaves", "delta_leaves", "full_leaves", "trials", "depth_capped", "work_exceeded"],
