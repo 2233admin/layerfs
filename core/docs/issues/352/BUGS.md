@@ -174,3 +174,8 @@
   on the current route until the switch). Kind 1. Spec:
   [DIRECT_STORE_IMPL.md](DIRECT_STORE_IMPL.md); record:
   [fixes/007-a1-f020-direct-store-access.md](fixes/007-a1-f020-direct-store-access.md).
+- **F-021 · F4 judged the with-vs-without table by the before/after shape
+  (tooling, builder, 2026-10-18, range 007 attempt 2).** The check read every
+  table line after the before/after header, so the attempt-vs-rerun table
+  failed the eight-column rule. **Fixed** (builder, `f061aab65`): each Finding
+  table is checked by its own shape (REPORT_FORMAT.md §5 Findings items 3–4).
