@@ -14,10 +14,10 @@
 | Kind | 1 forward-only (REBUILD.md) for fixes 1–4: code paths only, Store format unchanged. Fix 4's optional `content_signature(stamp)` index is **not** proposed (it would change the stored schema definition) |
 | Old Stores | open unchanged |
 | Old data | still read as before |
-| Compatibility test | *pending*: the newest `p2-main-c` snapshot written by `58a60046` opens on the new daemon and passes `compat.mjs` |
-| Binaries | daemon `58a60046…` (and the evidence from `c25119ac…`) → *pending* |
-| Commits | *pending*: one commit per fix, each with its production LOC line |
-| Regression tests | *pending*, listed under Proof |
+| Compatibility test | fix 0: **passed**. A fresh fork of `p2-main-c`'s range-11 snapshot (written by `58a60046`) passes `compat.mjs` range 11 on daemon `bd6fbeee`: 1,057 files, 296 ids, paths ok. Fixes 1–4: *pending* |
+| Binaries | daemon `58a60046…` (and the evidence from `c25119ac…`) → fix 0: `bd6fbeee08156326895e16c1e0a688854f004231d55e0c359ea7ec8af256972a`, kept in `core/target/issue352/daemon-bd6fbeee/` (addon unchanged, `799e3ca6`). Fixes 1–4: *pending* |
+| Commits | fix 0: the commit that adds its section below, on branch `dsh-352-f025-fix0`. Fixes 1–4: *pending* |
+| Regression tests | fix 0: `core/crates/layerfs-daemon/tests/sdk_timing_coverage.rs`. Others *pending*, listed under Proof |
 | Recovery | fork the newest good `p2-main-c` snapshot; rerun the range that trips next (or the next unplayed range) measured on the new daemon. No rebuild |
 | Order | **fix 1 first** (the cause that grows), then 2, 3, 4. Each lands, is proved, and is measured old vs new before the next |
 
@@ -120,6 +120,86 @@ thin baseline): the fixer checks it with the same probe.
 Add timer nodes for the untraced spans of a file call (the admission wait in
 each writer transaction, overlay template copy and open, reader open) so the
 50–175 ms gaps are attributed. Code path only.
+
+#### Fix 0 · result (done, daemon `bd6fbeee`)
+
+**What changed (code paths only, Store format unchanged).**
+
+- Every span of an SDK file call is a timing root: `files.resolve` (project
+  and Branch lookups), `files.bind`, `files.change` (the overlay changes),
+  `commit` and `files.close`.
+- The bind has nested roots for the reader open (`bind.reader`), the Branch
+  snapshot, the root check and the overlay open (`bind.overlay`).
+- A traced request reports its observation's own spans, `observe.before` and
+  `observe.after` (counter snapshots and diagnostic records).
+- Waiting is a node below the phase that waited. A thread's time queued for
+  the Store writer's admission (`wait.writer`), a read-only connection's
+  admission (`wait.reader`) or the shared read session's lock
+  (`wait.read_session`) is added to a per-thread total
+  (`layerfs_telemetry::timer::waits`). Each phase and root reports what it
+  waited and no inner span already reported, when at least 50 µs. An
+  uncontended entry records nothing.
+- Untraced calls create no nodes; the per-thread total costs one addition
+  per actual wait.
+
+**Proof.** `sdk_timing_coverage.rs`, written first; it failed on the old code
+(`no files.resolve root`). Another thread holds the publication lane for
+400 ms while an `fs.apply` runs traced. The test asserts the five roots, at
+most 25 ms of the call outside them, and `wait.writer` nodes of at least
+200 ms. Also: the daemon, persistence and telemetry suites pass, except
+`host_handoff` (needs Docker inside the test) and
+`huge_kernel_namespace_is_complete_after_install` (needs
+`LAYERFS_Q1_PREPARED`), both environmental. Clippy `-D warnings` is clean.
+
+**Old vs new.** A probe (`core/target/f009/diag/f025-probe.mjs`, in the
+fixer's worktree): on a fork of `p2-main-c`'s range-11 snapshot, fork one
+Branch from `main`, one warm write, then six concurrent writers (the addon's
+six control connections) write 20 new 16-byte files each into existing
+directories at depths 1–4. One sample per arm, each on its own fresh fork
+(`f025-0-old`, `f025-0-new`), addon `799e3ca6`.
+
+| Measure (120 writes; 119 merged in both arms) | Old `58a60046` | New `bd6fbeee` |
+| --- | --- | --- |
+| client ms p50 / p95 / max | 206.7 / 344.4 / 402.7 | 208.1 / 356.3 / 430.0 |
+| outside `files.bind` + `commit` (minus client queue), p50 / p95 / max | 47.6 / 66.4 / 104.3 | 46.5 / 81.2 / 143.7 |
+| outside every root, p50 / p95 / max | same as above | **2.2 / 4.2 / 7.6** |
+| `files.change` p50 / p95 / max | not timed | 38.8 / 73.7 / 131.2 |
+| `observe.after` p50 / p95 | not timed | 2.1 / 3.9 |
+| `files.resolve`, `files.close` p50 | not timed | 0.0, 0.3 |
+
+Latency is unchanged within one sample. Mean `wait.writer` per write on the
+new daemon, by where it waited:
+
+| Where | ms |
+| --- | --- |
+| `commit/construct/captured.namespace` | 100.3 |
+| `files.change` (the gap) | 29.1 |
+| `commit/begin` | 13.5 |
+| `commit/producer` | 10.7 |
+| `commit/lane` | 7.1 |
+| total, of ~208 ms p50 per write | 160.7 |
+
+**What it shows.**
+
+- The untraced 50–175 ms was `files.change`. Almost all of it (29.1 of
+  33.8 ms mean) is waiting for the writer. A new file in a fresh private
+  Workspace reserves inode serials (`history.reserve_inodes`, a writer
+  transaction), and that queues behind the lane holder.
+- In this load a write spends three quarters of its time queued for the
+  writer, and the largest share is construct's Save work. That confirms the
+  code study's spreading mechanism.
+- Merges in the lane hold the writer for 27.3 ms per write on average
+  (`merge`, 119 of 120 merged): about 3.2 s of the probe's 6.2 s wall time.
+- This is the input to fix 1 (a shorter merge), fix 3 (construct's reads off
+  the queue) and fix 4 (the serial reservation per create).
+
+**Cost.** Production LOC 96,477 → 96,596 (+119): the timing roots, the
+per-thread wait totals, and `files.rs` split into resolve, change and close.
+No storage change.
+
+**Process note.** The first `compat.mjs` attempt passed git commit ids where
+it takes LayerFS heads (`NoSuchBranch`, nothing played). The second, with
+`p2-main-c`'s range-10 and range-11 heads, is the result above.
 
 ### Fix 1 · Merge names changed paths by a top-down difference (first)
 

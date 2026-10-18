@@ -171,6 +171,7 @@ impl Application {
                 None,
             );
         };
+        let observing = std::time::Instant::now();
         let service = self
             .state
             .lock()
@@ -197,9 +198,11 @@ impl Application {
             .then(|| self.observed_store(|opened| opened.store.clone()))
             .flatten();
         let saves_before = saves.as_ref().map(|store| store.save_counters());
+        let observed_before = observing.elapsed();
         let recording = traced.then(crate::telemetry::Recording::start);
         let outcome = self.control_operation(operation, slot, bodies);
         let reports = recording.map(crate::telemetry::Recording::finish);
+        let observed_after = std::time::Instant::now();
         let sql = sessions
             .as_ref()
             .zip(before)
@@ -320,7 +323,18 @@ impl Application {
         match reports {
             // The SDK trace route reports a failed diagnostic write beside
             // the reply and keeps its connection.
-            Some(reports) => {
+            Some(mut reports) => {
+                // The observation's own spans around the operation: its
+                // counter snapshots before, and after it the diagnostic
+                // records and counters.
+                for (name, elapsed) in [
+                    ("observe.before", observed_before),
+                    ("observe.after", observed_after.elapsed()),
+                ] {
+                    reports.push(layerfs_telemetry::timer::TimingReport::from_root(
+                        layerfs_telemetry::timer::TimingNode::new(name, elapsed),
+                    ));
+                }
                 let telemetry = crate::telemetry::value(
                     reports,
                     &outcome,

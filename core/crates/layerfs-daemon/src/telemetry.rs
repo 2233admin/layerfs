@@ -14,11 +14,13 @@ use layerfs_bridge::control::SdkValue;
 use layerfs_persistence::SqlWork;
 use layerfs_storage::encoding::delta::select::DepthHistogram;
 use layerfs_telemetry::timer::{
+    waits::{self, WAITS, WAIT_NAMES},
     Active, NodeOutcome, Timing, TimingNode, TimingReport, TimingScope,
 };
 use std::{
     cell::{Cell, RefCell},
     marker::PhantomData,
+    time::Duration,
 };
 
 /// Most finished root reports one traced request keeps.
@@ -26,8 +28,13 @@ const REPORTS: usize = 16;
 /// Most timing nodes one reply carries; the rest are counted as omitted.
 const NODES: usize = 256;
 
+/// Shortest wait reported as a `wait.*` node.
+const WAIT_NODE: Duration = Duration::from_micros(50);
+
 thread_local! {
     static RECORDING: Cell<bool> = const { Cell::new(false) };
+    /// Wait already reported by a node on this thread, by kind.
+    static ATTRIBUTED: Cell<[u64; WAITS]> = const { Cell::new([0; WAITS]) };
     static FINISHED: RefCell<Vec<TimingReport>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -57,6 +64,41 @@ impl Drop for Recording {
     }
 }
 
+/// This thread's wait totals when a timed span started.
+struct WaitMark {
+    totals: [u64; WAITS],
+    attributed: [u64; WAITS],
+}
+impl WaitMark {
+    fn now() -> Self {
+        Self {
+            totals: waits::totals(),
+            attributed: ATTRIBUTED.get(),
+        }
+    }
+    /// Reports below `scope` each kind of wait this span spent that no inner
+    /// span reported, as one `wait.*` node.
+    fn attach(self, scope: &TimingScope<'_, Active>) {
+        let totals = waits::totals();
+        let mut attributed = ATTRIBUTED.get();
+        for kind in 0..WAITS {
+            let inner = attributed[kind].wrapping_sub(self.attributed[kind]);
+            let own = totals[kind]
+                .wrapping_sub(self.totals[kind])
+                .saturating_sub(inner);
+            let own = Duration::from_nanos(own);
+            if own >= WAIT_NODE {
+                scope.attach(Some(TimingReport::from_root(TimingNode::new(
+                    WAIT_NAMES[kind],
+                    own,
+                ))));
+                attributed[kind] = attributed[kind].wrapping_add(own.as_nanos() as u64);
+            }
+        }
+        ATTRIBUTED.set(attributed);
+    }
+}
+
 /// True while this thread serves a traced request.
 pub fn recording() -> bool {
     RECORDING.get()
@@ -70,7 +112,12 @@ pub fn timed<T, E>(
     if !recording() {
         return Timing::disabled(name, operation).0;
     }
-    let (result, report) = Timing::record(name, operation);
+    let (result, report) = Timing::record(name, |scope| {
+        let mark = WaitMark::now();
+        let result = operation(scope);
+        mark.attach(scope);
+        result
+    });
     FINISHED.with_borrow_mut(|finished| {
         if finished.len() < REPORTS {
             finished.push(report);
@@ -86,14 +133,17 @@ pub fn phase<T, E>(
     operation: impl FnOnce() -> Result<T, E>,
 ) -> Result<T, E> {
     scope.child(name).run(|phase| {
-        let mark = phase.is_recording().then(|| FINISHED.with_borrow(Vec::len));
+        let mark = phase
+            .is_recording()
+            .then(|| (FINISHED.with_borrow(Vec::len), WaitMark::now()));
         let result = operation();
-        if let Some(mark) = mark {
+        if let Some((mark, waited)) = mark {
             let inner =
                 FINISHED.with_borrow_mut(|finished| finished.split_off(mark.min(finished.len())));
             inner
                 .into_iter()
                 .for_each(|report| phase.attach(Some(report)));
+            waited.attach(phase);
         }
         result
     })
