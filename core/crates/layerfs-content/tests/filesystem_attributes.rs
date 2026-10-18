@@ -875,3 +875,76 @@ fn every_attribute_descent_rejects_same_or_skipped_child_levels() {
         );
     }
 }
+
+/// `same_metadata` and `same_inode` compare by decoded portable value, not
+/// form: a root-form row and an inline row of the same mode and mtime are
+/// equal, while a differing mtime or content root is a change.
+#[test]
+fn the_metadata_forms_compare_by_value() {
+    use layerfs_content::compare::tree::{same_inode, same_metadata};
+    use layerfs_content::object::inode_leaf::{InodeMetadata, InodeValue};
+    let mut store = TreeStore::new();
+    let portable = PortableMetadata {
+        mode: 0o644,
+        mtime_seconds: 7,
+        mtime_nanoseconds: 9,
+    };
+    let root = with_objects(&mut store, |objects| {
+        let mode = emit_value(objects, &portable.mode_bytes(InodeKind::RegularFile).unwrap()).unwrap();
+        let time = emit_value(objects, &portable.mtime_bytes().unwrap()).unwrap();
+        build_attribute_tree(
+            objects,
+            [
+                Ok(AttributeEntry {
+                    key: AttributeKey::new("portable".into(), b"mode".to_vec()).unwrap(),
+                    value_root: mode,
+                }),
+                Ok(AttributeEntry {
+                    key: AttributeKey::new("portable".into(), b"mtime".to_vec()).unwrap(),
+                    value_root: time,
+                }),
+            ]
+            .into_iter(),
+        )
+        .map(|(root, _)| root)
+    })
+    .unwrap();
+    let (rooted, inlined) = (
+        InodeMetadata::Root(root),
+        InodeMetadata::Inline(portable),
+    );
+    let mut work = AttributeReadWork::default();
+    assert!(same_metadata(
+        &store,
+        InodeKind::RegularFile,
+        rooted,
+        inlined,
+        &mut work
+    )
+    .unwrap());
+    let content = ObjectId::for_bytes(b"content");
+    let (a, b) = (
+        InodeValue {
+            kind: InodeKind::RegularFile,
+            namespace_ref_count: 1,
+            content_root: content,
+            metadata_root: rooted,
+        },
+        InodeValue {
+            metadata_root: inlined,
+            ..InodeValue {
+                kind: InodeKind::RegularFile,
+                namespace_ref_count: 1,
+                content_root: content,
+                metadata_root: rooted,
+            }
+        },
+    );
+    assert!(same_inode(&store, &a, &b, &mut work).unwrap());
+    let mut earlier = b;
+    earlier.metadata_root = InodeMetadata::Inline(PortableMetadata {
+        mtime_seconds: 6,
+        ..portable
+    });
+    assert!(!same_inode(&store, &a, &earlier, &mut work).unwrap());
+}

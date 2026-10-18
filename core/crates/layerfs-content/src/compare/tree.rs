@@ -124,6 +124,23 @@ pub fn same_inode(
     )?)
 }
 
+/// Whether two metadata fields decode to the same portable value, with the
+/// strict byte fast path first. Use where the form may differ but the value
+/// must mean the same thing.
+pub fn same_metadata(
+    reader: &dyn AuthenticatedObjects,
+    kind: crate::object::inode_leaf::InodeKind,
+    left: crate::object::inode_leaf::InodeMetadata,
+    right: crate::object::inode_leaf::InodeMetadata,
+    work: &mut crate::filesystem::attributes::AttributeReadWork,
+) -> ContentResult<bool> {
+    if left == right {
+        return Ok(true);
+    }
+    Ok(crate::filesystem::attributes::read_portable(reader, left, kind, work)?
+        == crate::filesystem::attributes::read_portable(reader, right, kind, work)?)
+}
+
 /// Every inode whose value differs between two roots, in serial order.
 pub fn inode_changes(
     reader: &dyn AuthenticatedObjects,

@@ -8,7 +8,7 @@
 | Old Stores | read unchanged: the root form is byte-identical to every leaf written before this change |
 | Old data | not migrated; root-form rows keep their form and bytes until a row really changes |
 | Binaries | daemon `76fbb78b`, addon `f7c97bd6` under `core/target/issue360/`; Init-inline rebuild pending |
-| Commits | `8aed51d60` + Init-inline follow-up on `issue360-storage` |
+| Commits | `8aed51d60` + `683666d45` (Init inline) + diff-semantics follow-up on `issue360-storage` |
 | Regression test | `layerfs-content/tests/inode_leaf.rs` (both forms, mixed leaf, padding/kind/value rejection, pooled inline), `layerfs-workspace/tests/captured_namespace_inline.rs` (mtime-only, identical rewrite, net-zero directory → kept base root; one real change → exactly one inline inode) |
 | Recovery | none needed: decode dispatches on the byte-0 tag bit |
 
@@ -68,6 +68,24 @@ column as `mode u32 BE | mtime_seconds i64 BE | mtime_nanoseconds u32 BE |
 `schema.sql` and the stored schema source are byte-identical. `scan.rs` no
 longer emits attribute objects at all and `namespace.rs` writes
 `InodeMetadata::Inline`.
+
+## Defect found by the owner proof (item-2 follow-up)
+
+The §4 boundary proof's chmod round-trip on an old-form base reported 1,259
+paths as `Modified` after mode restoration: the Store-service diff walk and
+the daemon operator compared inode values byte-wise, so a form-only
+difference (root-form base, inline-form Commit) listed as a change even
+though the decoded portable values were equal. Fixed the same way
+`same_inode` settled the compare walk: every same-serial comparison now goes
+through `same_inode` / `same_metadata` (strict byte fast path first), the
+`metadata` flag is true only when the decoded mode/mtime differ, and a
+directory whose decoded metadata matches lists only its children
+(`children_only`). Sites: `sdk/compare.rs` (`change()`, `emit()`) and
+`daemon/operator/workspace.rs`; the oracle test's own walk mirrors them.
+Audited and clean: `sdk/blame.rs` (kind only), `diff_files`/`body` compare
+`content_root`, history has no `metadata_root` use, merge candidate naming
+uses hints — merge `build.rs`'s strict `same_value` is the #353-owned
+serial-reuse check, reported, not edited.
 
 ## Tests
 
