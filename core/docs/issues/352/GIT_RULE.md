@@ -132,9 +132,8 @@ dsh trees and commits are written and packed inside one Workspace before its
 Commit.
 
 For range 15 that gives about 12–13 MB with every lane index fully
-deduplicated, and up to about 33 MB with none deduplicated. Range 15's
-Store growth without `.git` was 7.8 MiB (RANGES.md, range 14 for
-comparison).
+deduplicated, and up to about 33 MB with none deduplicated. For comparison, range 14, without `.git`, stored 7.8 MiB
+new (RANGES.md).
 
 ### Differences from Part B's table in F031_DESIGN
 
