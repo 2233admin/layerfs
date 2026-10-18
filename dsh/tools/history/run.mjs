@@ -627,7 +627,7 @@ export function options(argv) {
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const o = options(rest);
-  if (!o.run) process.exit(usage());
+  if (!o.run && cmd !== "rebaseline") process.exit(usage());
   const code = cmd === "new" ? (await cmdNew(o), EXIT.done) : cmd === "play" ? await cmdPlay(o) : cmd === "phase" ? cmdPhase(o) : cmd === "fork" ? (await cmdFork(o), EXIT.done) : cmd === "cleanup" ? await cmdCleanup(o) : cmd === "rebaseline" ? await cmdRebaseline(o) : usage();
   process.exit(code);
 }
