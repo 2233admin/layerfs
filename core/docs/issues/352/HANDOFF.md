@@ -103,7 +103,9 @@ pointed at this file and the records.
    over 30 calls.
 4. F-025 fix 4 (inode reservation pool, designed in F-020).
 5. F-027 items 1 → 2 (mtime-only) → 3.
-6. Storage counters from the builder's note (`builder-storage-counters.md` in the
+6. F-033 lineage caps (after the scale-experiments session confirms the cases;
+   must be merged before range 90), then F-032 (`rm -rf` over FUSE).
+7. Storage counters from the builder's note (`builder-storage-counters.md` in the
    shared notes).
 
 **Builder:**
