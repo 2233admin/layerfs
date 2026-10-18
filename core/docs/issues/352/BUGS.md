@@ -262,3 +262,4 @@
   clean `git status`. See [SPEC §2, `.git` in Workspaces](SPEC.md). Owner: the
   builder, after the P3 dev checks, measuring Store growth per git commit
   (index, loose objects, packs) and the wall time added per range.
+  **Design gate (owner, 2026-10-18): F-031 is not built until a short design is approved by the owner.** It must say (1) how lanes commit: which Workspace and Branch runs each `git commit`, and on which Git branch; (2) how a LayerFS merge of two Branches that both changed `.git` treats `.git/index`, `HEAD`, refs, `logs/`, `ORIG_HEAD` and packs written by auto-repack (conflict, rule or rebuild, with no retry or guessed resolution); (3) how dsh's merge commits are reproduced with their original parents (both parents' objects in one `.git`). The design names its proof and its expected Store and wall-time cost.

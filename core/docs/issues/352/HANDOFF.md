@@ -111,7 +111,7 @@ pointed at this file and the records.
    (SCRIPTS.md, RESULTS 2026-10-18). P2 played one Sandbox and daemon per
    agent, contrary to SPEC §2. Prove it on the P3 dev range with concurrent
    mounts in one Sandbox.
-3. F-031 revised (`.git` from P3), with its dev-range measurements (Store growth
+3. F-031 revised (`.git` from P3). **Design gate (owner, 2026-10-18): F-031 is not built until a short design is approved by the owner.** It must say (1) how lanes commit: which Workspace and Branch runs each `git commit`, and on which Git branch; (2) how a LayerFS merge of two Branches that both changed `.git` treats `.git/index`, `HEAD`, refs, `logs/`, `ORIG_HEAD` and packs written by auto-repack (conflict, rule or rebuild, with no retry or guessed resolution); (3) how dsh's merge commits are reproduced with their original parents (both parents' objects in one `.git`). The design names its proof and its expected Store and wall-time cost. Then build it, with its dev-range measurements (Store growth
    per git commit split into index, loose objects, packs; wall time added).
 4. Metrics the P2 close found missing: per-Commit lane hold and uncontended
    `wait.writer` in range metrics (needed for DEFER D-1/D-2's triggers), and
@@ -120,7 +120,7 @@ pointed at this file and the records.
 5. Calibrate ranges 30–50 before P4.
 
 **Entry criteria for measured P3 (range 15):** F-025 fix 1 proven; F-029 merged
-(shared Sandboxes depend on it); F-027 items 1–3 merged; the 4-Sandbox pool; F-031 implemented and its dev range clean; P3 dev checks pass; then
+(shared Sandboxes depend on it); F-027 items 1–3 merged; the 4-Sandbox pool; F-031's design approved by the owner, then implemented and its dev range clean; P3 dev checks pass; then
 one P3 re-baseline (`run.mjs rebaseline --phase p3`) on the final binaries, with
 `.git` in place. Ranges 15–29 (SPEC §9).
 

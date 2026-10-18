@@ -79,6 +79,8 @@ From P3 on, the replay's Workspaces carry a real `.git`, as AGENTS requires
 was checked out with `--git-dir`/`--work-tree` from a bare clone
 ([BUGS.md F-031](BUGS.md)). Ranges 0–14 keep their recorded workload.
 
+**Design gate (owner, 2026-10-18): F-031 is not built until a short design is approved by the owner.** It must say (1) how lanes commit: which Workspace and Branch runs each `git commit`, and on which Git branch; (2) how a LayerFS merge of two Branches that both changed `.git` treats `.git/index`, `HEAD`, refs, `logs/`, `ORIG_HEAD` and packs written by auto-repack (conflict, rule or rebuild, with no retry or guessed resolution); (3) how dsh's merge commits are reproduced with their original parents (both parents' objects in one `.git`). The design names its proof and its expected Store and wall-time cost.
+
 - **Seed:** the full history up to the P3 start commit only: every commit,
   tree and blob reachable from range 15's start commit (`6e5c908a1`, range 14's
   checkpoint), with refs and HEAD at that commit and nothing later. The bare
