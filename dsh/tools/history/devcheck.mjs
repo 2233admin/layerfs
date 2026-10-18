@@ -35,7 +35,9 @@ function rangeMetrics(dir, k) {
 export async function devcheck(run, k) {
   if (run.manifest.label !== "dev") throw new Mismatch(`devcheck runs on dev runs only (run ${run.manifest.run} is ${run.manifest.label})`);
   if (run.state.dirty != null || run.state.next !== k + 1) throw new Mismatch(`run ${run.manifest.run} stands at range ${run.state.next}${run.state.dirty != null ? `, dirty at ${run.state.dirty}` : ""}; devcheck needs range ${k} published and clean`);
-  const m = rangeMetrics(run.manifest.outputs.metrics, k);
+  // a fast dev range has no metrics; its closure steps and rows are in fast/range-k.json
+  const fast = join(run.dir, "fast", `range-${pad(k)}.json`);
+  const m = existsSync(run.manifest.outputs.metrics) && readdirSync(run.manifest.outputs.metrics).some((f) => f.startsWith(`range-${pad(k)}.a`)) ? rangeMetrics(run.manifest.outputs.metrics, k) : JSON.parse(readFileSync(fast, "utf8"));
   const steps = devSteps(m.closure);
   const out = { range: k, run: run.manifest.run, at: new Date().toISOString(), steps: steps.map((s) => s.kind) };
   if (!steps.length) return out;
