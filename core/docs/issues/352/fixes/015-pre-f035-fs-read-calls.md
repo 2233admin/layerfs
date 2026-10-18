@@ -253,3 +253,131 @@ that is safe is stated on `Session::read_immutable` and in the `0b0a883f0`
 message (insert-only locations, trigger-immutable packs, a pack id counter
 that never goes back, page-only reclamation). Reads that pick a snapshot keep
 their transaction. That argument is flagged for the owner.
+
+## Continuation results (2026-10-18)
+
+Full record: [#354 continuation findings](../../354/FINDINGS-20261018.md).
+The text above is unchanged.
+
+**Load labels.** The statement, object and pack-byte tables above and below
+are deterministic counts, so host load does not change them. Only the timing
+tables are load-sensitive:
+
+- the 17:26 pass: load 8.8–10.3, not quiet;
+- the final-identity pass: load 7.1–7.3 over 1 minute and about 10 over 5 minutes, with declared interference (#353's `sdk_merge_scale`, fseventsd, mds_stores).
+
+Both are diagnostic on macOS. No timing on this branch is qualified.
+
+**`b83871223`: inode-value reads without BEGIN/COMMIT.**
+
+- `inode_value` is insert-only.
+  - Writes: one plain INSERT per ordinal at publish, and a second INSERT of the same ordinal fails.
+  - No production UPDATE or DELETE exists. The only ones are the test's deliberate corruption at `sqlite_inode_values.rs:196` and `:207`. The liaison checked `dsh-history-replay` and `issue360-storage` too.
+  - `release_ordinals` gives back only an unwritten tail.
+- **Revisit trigger:** a change that updates or deletes `inode_value` rows (#360 item 3, any GC) must move `inode_values` back into a transaction.
+- Missing ordinals behave as before. At the port they are omitted (`sqlite_inode_values.rs:74-85`); a leaf read with a missing row still fails with "metadata ordinal missing" (`:205-215`).
+- The exact-count test changes from 3 statements and 1 transaction to 1 statement and 0 transactions. It is updated to match the new behaviour, not weakened.
+- Effect: fs.read on P3 drops from 42 to 29 statements per file.
+- Commit order: it follows item 3 (`0b0a883f0`) with only a docs commit between them, so it can be dropped together with that commit.
+
+**Final-identity proof** (product `b83871223`, old arm `2943275c8`):
+
+- **Statements per file, old → new:**
+  - P3 fs.read: 179.86 → 28.95; pack bytes 292,303 → 210,265 per file.
+  - Range-14 fs.read: 163.44 → 40.63; pack bytes 87,018 → 47,288.
+  - P3 grep: 15.40 → 0.80; pack bytes 12,126 → 447.
+  - Range-14 grep: 39.31 → 5.51; pack bytes 5,777 → 644.
+- **Delta depth or per-file overhead:** per-file overhead dominates. Chain depth adds about 6 statements per step, and only in the content phase.
+- **Equivalence:** every grep, glob, list and read battery on both trees is equal to the pre-#354 dumps.
+  - Range 14: full paging at page sizes 7 and 100 equals paging at 1,000 and the old dump.
+  - P3: full paging of two greps and a list equals old at page size 500.
+  - P3 glob `**` paging (49,710 items): the new arm is self-consistent, but the old arm cannot finish within the 120 s ceiling, so that comparison is NOT_RUN.
+- **Memory:** P3 grep peaks at 9.37 MB, inside the 9.44 MB sum of the declared holders, against 7.43 MB on range 14, a 32× smaller tree.
+- **Timing:** new grep 3.26 s and fs.read ×4,000 7.46 s.
+- **Checks:**
+  - Host `+1.85.1`: content, storage, persistence and store-service suites pass, each command ≤120 s, and clippy is clean.
+  - Linux: the same suites pass, plus daemon non-mount 28/28.
+  - The daemon mount tests are NOT_RUN: the container has no FUSE device.
+
+**Paging** is still count-based (O(R²/k)). Tokens are held; see the
+[cursor proposal](../../354/PAGE-CURSOR-PROPOSAL.md).
+
+**Choices where the brief was silent:**
+
+- inode values are read without a transaction, with byte-identical results, and the change adds no new code;
+- equivalence old dumps were reused, not regenerated (same old identity);
+- the old timed arms were not sampled again;
+- no cross-call cache was added (it is an owner memory decision).
+
+## A1: a Workspace reader keeps its storage caches (2026-10-18)
+
+**Cause** (found by the RCA agent). `ReadSession::objects` built a fresh
+storage `Reader` for every demand, so each FUSE request re-read, hashed and
+decoded a whole pack to take one small object.
+
+**Change.**
+
+- A Workspace reader keeps one `KeptReads` (pack bodies, decoded groups, pooled values) from its first object or length demand until it is released at unmount.
+- `objects` and `file_lengths` go through it, under the reader lock that the demand already held (`Storage::read_kept`, `lengths_kept`).
+- Each demand takes a fresh decode arena, allocated only if it decodes. An arena holds a raw zstd context and is not `Send`, and making it `Send` would widen storage's audited unsafe module, so the arena is not kept.
+
+**Bound.**
+
+- The kept caches hold at most 3 MiB between demands: 2 MiB pack bodies, 512 KiB decoded groups and 512 KiB pooled values (`KeptReads::ORDINARY_BYTES`).
+- On the read path the pool reader is given the shared pack cache, so its own pack cache stays empty.
+- A demand that fails, or that leaves an isolated singleton pack (up to 16 MiB), drops the whole cache, and the next demand starts empty.
+- With N mounted Workspaces this is up to N × 3 MiB.
+
+**Positive only.** The cache keeps rows that never change once visible
+(insert-only object locations, trigger-immutable packs, insert-only inode
+values). It never records an absence.
+
+**Lifetime.** The cache lives as long as the Workspace's reader: from the
+first demand to the release at unmount. A pooled SDK reader handed back to
+the idle list is released first, so it starts empty. The Store's control
+reader (session 0) serves every SDK call and keeps none, so SDK fs calls
+still use only their per-call caches; a cross-call SDK cache stays held for
+the owner. **Measured phases must declare this cache's state.** A phase that
+follows another in the same Workspace starts warm.
+
+**Measured** (Linux, real kernel mount, `ls -l` of a committed directory of
+10,000 files with distinct metadata, one sample per arm; ledger
+`receipts-20261018/A1-LISTING-MEASUREMENT.txt`):
+
+| Cold pass, 10,000 entries | Old (`b2549b33a`) | A1 |
+| --- | --- | --- |
+| listing digest | 66d15773311f4758 | 66d15773311f4758 (identical) |
+| statements | 90,792 (9.08 / entry) | 50,607 (5.06 / entry) |
+| object demands / ids | 40,235 / 40,395 | 40,235 / 40,395 (same demands) |
+| pack selections | 40,235 | 107 |
+| pack bytes | 468,079,142 (46,808 / entry) | 1,106,120 (111 / entry) |
+| VmRSS after (daemon in-process) | 50,184 KiB | 52,404 KiB (+2,220 KiB) |
+
+- **Run conditions:** load about 8 (1 minute), with other worktrees' agents active. The counts are deterministic; wall time is diagnostic.
+- **Steady pass:** 414 → 268 statements, and 146 → 0 pack selections.
+- **Ineligible first pair:** the first pair of runs used a fixture without fixed times. It is retained as INELIGIBLE: different digests, and metadata shared across files.
+- **What remains:** the 5 statements per entry are locates and inode-value reads, one per new object. #356's sibling-length demand addresses those.
+
+**A3 (pass the locate's PackInfo into `read_scoped_pack`): not done.**
+
+- It would change the Storage→Persistence port signature: storage `port/persistence.rs`, persistence `objects_selection.rs`, and every provider and test double, all outside this lane's files.
+- After A1 it would save one statement per pack selection, so at most 107 of the 50,607 statements here.
+
+**Tests.**
+
+- New `workspace_reader_cache` checks:
+  - a repeated object or length demand on a Workspace reader runs no statement and returns identical bytes;
+  - the control reader reads again;
+  - a reader closed and mounted again starts empty.
+- It fails with the cache disabled (mutant checked).
+- New Linux `mounted_listing_reads` is the measurement.
+
+**Checks.**
+
+- Host `+1.85.1`: storage 19 binaries and store-service 24 pass, each command ≤120 s, and clippy is clean.
+- Linux clippy is clean on storage, store-service and the daemon.
+- Linux daemon tests without a mount: 25/25 pass.
+- Linux mount tests in a FUSE container pass: `fp27_reader_health`, `mounted_store_read`, `mounted_concurrency`, `kernel_mount_routes`, `mounted_parallel_commits`, `mounted_cycles`, `mounted_listing_reads`.
+- `mounted_commit::r5_8` fails the same way **without A1** at `b2549b33a`: Commit history lists 3 of 5 records. That failure predates A1 and lies outside this lane (History). Receipts: `m-mounted_commit*.log`.
+
+No tests deleted.

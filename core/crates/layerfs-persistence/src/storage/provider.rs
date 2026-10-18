@@ -1,6 +1,7 @@
 //! Shared physical provider; Objects and Metadata use one transaction boundary.
-//! Object locates and pack reads see only immutable rows and run without one
-//! (`Session::read_immutable`); every other call keeps its transaction.
+//! Object locates, pack reads and inode-value reads see only immutable rows
+//! and run without one (`Session::read_immutable`); every other call keeps
+//! its transaction.
 use crate::{backend::Session, metadata, objects, publication};
 use layerfs_content::ObjectId;
 use layerfs_storage::{
@@ -66,7 +67,7 @@ impl PackPersistence for StorageProvider {
     ) -> Result<(), PersistenceError> {
         out.clear();
         self.session
-            .run(false, |tx| metadata::values::read(tx, ordinals, out))
+            .read_immutable(|tx| metadata::values::read(tx, ordinals, out))
     }
     fn signatures(&self, out: &mut Vec<SignatureRow>) -> Result<(), PersistenceError> {
         out.clear();

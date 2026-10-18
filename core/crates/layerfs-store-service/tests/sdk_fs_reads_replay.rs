@@ -26,6 +26,30 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+/// Live heap bytes and their peak, counted by a wrapper over the system
+/// allocator: the `calls` probe reports the heap a call adds, apart from
+/// allocator retention and SQLite's page cache that process RSS includes.
+struct HeapCount;
+static LIVE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static PEAK: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+unsafe impl std::alloc::GlobalAlloc for HeapCount {
+    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+        let ptr = unsafe { std::alloc::System.alloc(layout) };
+        if !ptr.is_null() {
+            let live =
+                LIVE.fetch_add(layout.size(), std::sync::atomic::Ordering::Relaxed) + layout.size();
+            PEAK.fetch_max(live, std::sync::atomic::Ordering::Relaxed);
+        }
+        ptr
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+        unsafe { std::alloc::System.dealloc(ptr, layout) };
+        LIVE.fetch_sub(layout.size(), std::sync::atomic::Ordering::Relaxed);
+    }
+}
+#[global_allocator]
+static ALLOCATOR: HeapCount = HeapCount;
+
 const PROJECT: &str = "dsh";
 const NEVER: &str = "LFS352_NEVER_PRESENT";
 
@@ -576,7 +600,15 @@ fn dump() {
         ("fs.list", vec![("path", SdkValue::text("/"))]),
     ]
     .into_iter()
-    .filter(|_| part("pages"))
+    .enumerate()
+    // `LFS354_PAGES` (comma list of indexes) selects some of these calls, so
+    // one command fits its limit on a large tree.
+    .filter(|(index, _)| {
+        part("pages")
+            && std::env::var("LFS354_PAGES")
+                .map_or(true, |v| v.split(',').any(|i| i == index.to_string()))
+    })
+    .map(|(_, call)| call)
     {
         let size = std::env::var("LFS354_PAGE").map_or(7, |s| s.parse().unwrap());
         let small = pages(&p, method, &base, size);
@@ -911,7 +943,9 @@ fn reuse() {
 /// call per regular file, for the first `LFS354_READS` files in walk order,
 /// and `stat` the same with fs.stat (the fixed part: snapshot, lookup, size);
 /// the others are one call over `/` (grep for a pattern that is never
-/// present, glob `**`, list `/`), each at `LFS354_PAGE` items.
+/// present unless `LFS354_PATTERN`, glob `**`, list `/`; `LFS354_ROOT`
+/// instead of `/`), each at `LFS354_PAGE` items. `heap_peak` is the most live
+/// heap the call held above its start, `heap_after` what it left.
 #[test]
 fn calls() {
     if std::env::var("LFS354_MODE").as_deref() != Ok("calls") {
@@ -937,11 +971,15 @@ fn calls() {
         storage(&p),
         p.service.store.work().object_ids,
     );
+    let heap0 = LIVE.load(std::sync::atomic::Ordering::Relaxed);
+    PEAK.store(heap0, std::sync::atomic::Ordering::Relaxed);
     let t = Instant::now();
     let mut calls = 0;
+    let pattern = std::env::var("LFS354_PATTERN").unwrap_or_else(|_| NEVER.into());
     let paged = |method: &str, extra: Vec<(&str, SdkValue)>| {
+        let root = std::env::var("LFS354_ROOT").unwrap_or_else(|_| "/".into());
         let mut fields = vec![
-            ("path", SdkValue::text("/")),
+            ("path", SdkValue::text(&root)),
             ("pageSize", SdkValue::Int(page)),
             ("pagePos", SdkValue::Int(0)),
         ];
@@ -949,7 +987,7 @@ fn calls() {
         p.call(method, fields).unwrap();
     };
     match kind.as_str() {
-        "grep" => paged("fs.grep", vec![("pattern", SdkValue::text(NEVER))]),
+        "grep" => paged("fs.grep", vec![("pattern", SdkValue::text(&pattern))]),
         "glob" => paged("fs.glob", vec![("pattern", SdkValue::text("**"))]),
         "list" => paged("fs.list", vec![]),
         "read" | "stat" => {
@@ -962,6 +1000,8 @@ fn calls() {
         other => panic!("unknown LFS354_CALL {other}"),
     }
     let elapsed = t.elapsed();
+    let heap_peak = PEAK.load(std::sync::atomic::Ordering::Relaxed) - heap0;
+    let heap_after = LIVE.load(std::sync::atomic::Ordering::Relaxed) as i64 - heap0 as i64;
     let (s1, d1, o1) = (
         p.statements(),
         storage(&p),
@@ -970,7 +1010,8 @@ fn calls() {
     let objects = o1 - o0;
     println!(
         "calls {kind} calls={calls} time={elapsed:?} statements={} object_ids={objects} \
-         statements_per_object={:.2} locates={} pack_selections={} pack_bytes={} pack_hits={} pack_misses={}",
+         statements_per_object={:.2} locates={} pack_selections={} pack_bytes={} pack_hits={} pack_misses={} \
+         heap_peak={heap_peak} heap_after={heap_after}",
         s1 - s0,
         (s1 - s0) as f64 / objects.max(1) as f64,
         d1.locate - d0.locate,
@@ -983,7 +1024,8 @@ fn calls() {
 
 /// The fixed part of one fs.read, step by step, summed over the first
 /// `LFS354_READS` regular files: snapshot open (project, root, tree table),
-/// path lookup and size. Statements, object ids, pack bytes and time per step.
+/// path lookup and size, then the content read, each as fs.read does it.
+/// Statements, object ids, pack bytes and time per step.
 #[test]
 fn fixed() {
     if std::env::var("LFS354_MODE").as_deref() != Ok("fixed") {
@@ -1002,48 +1044,81 @@ fn fixed() {
         })
         .unwrap();
     }
-    // Per step: statements, object ids, pack selections, pack bytes, ns.
-    let mut steps = [[0u64; 5]; 3];
+    // Per step, the counters in NAMES, then ns.
+    const NAMES: [&str; 12] = [
+        "statements",
+        "transactions",
+        "object_ids",
+        "demands",
+        "locates",
+        "locator_hits",
+        "locator_misses",
+        "pack_selections",
+        "whole_packs",
+        "inode_value_reads",
+        "pack_bytes",
+        "group_decodes",
+    ];
+    let mut steps = [[0u64; 13]; 4];
     let mark = |p: &Probe| {
         let d = storage(p);
+        let sql = p.service.opened.diagnostics().unwrap();
+        let transactions =
+            sql.writer.transactions + sql.readers.iter().map(|r| r.transactions).sum::<u64>();
+        let work = p.service.store.work();
         (
-            p.statements(),
-            p.service.store.work().object_ids,
-            d.read_pack_selections,
-            d.pack_read_bytes,
+            [
+                p.statements(),
+                transactions,
+                work.object_ids,
+                work.object_batches,
+                d.locate,
+                d.locator_hits,
+                d.locator_misses,
+                d.read_pack_selections,
+                d.read_packs,
+                d.value_groups,
+                d.pack_read_bytes,
+                d.prefetch_group_decodes,
+            ],
             Instant::now(),
         )
     };
-    let add = |row: &mut [u64; 5],
-               a: &(u64, u64, u64, u64, Instant),
-               b: &(u64, u64, u64, u64, Instant)| {
-        row[0] += b.0 - a.0;
-        row[1] += b.1 - a.1;
-        row[2] += b.2 - a.2;
-        row[3] += b.3 - a.3;
-        row[4] += (b.4 - a.4).as_nanos() as u64;
+    let add = |row: &mut [u64; 13], a: &([u64; 12], Instant), b: &([u64; 12], Instant)| {
+        for (i, cell) in row.iter_mut().take(12).enumerate() {
+            *cell += b.0[i] - a.0[i];
+        }
+        row[12] += (b.1 - a.1).as_nanos() as u64;
     };
     for path in &files {
         let m0 = mark(&p);
         let (_, reader, snap) = snapshot::open(&p.service.store, &p.args()).unwrap();
         let m1 = mark(&p);
-        let entry = snapshot::existing(reader.as_ref(), &snap, path).unwrap();
+        // As fs.read: the lookup through a memo over the call's caches, the
+        // content through the caches.
+        let cached = layerfs_store_service::sdk::cached::Cached::new(&reader).unwrap();
+        let entry = snapshot::existing(
+            &layerfs_content::compare::memo::Memo::new(&cached),
+            &snap,
+            path,
+        )
+        .unwrap();
         let m2 = mark(&p);
         snapshot::size(&reader, &entry).unwrap();
         let m3 = mark(&p);
+        // A refusal (Binary) is an answer too.
+        let _ = window::lines(&cached, &entry, 48 * 1024, 1, |n, _| Ok(n < 2000));
+        let m4 = mark(&p);
         add(&mut steps[0], &m0, &m1);
         add(&mut steps[1], &m1, &m2);
         add(&mut steps[2], &m2, &m3);
+        add(&mut steps[3], &m3, &m4);
     }
-    for (name, row) in ["open", "lookup", "size"].iter().zip(steps) {
-        println!(
-            "fixed {name} files={} statements={} object_ids={} pack_selections={} pack_bytes={} time={:?}",
-            files.len(),
-            row[0],
-            row[1],
-            row[2],
-            row[3],
-            Duration::from_nanos(row[4])
-        );
+    for (name, row) in ["open", "lookup", "size", "content"].iter().zip(steps) {
+        let mut line = format!("fixed {name} files={}", files.len());
+        for (counter, value) in NAMES.iter().zip(row) {
+            write!(line, " {counter}={value}").unwrap();
+        }
+        println!("{line} time={:?}", Duration::from_nanos(row[12]));
     }
 }

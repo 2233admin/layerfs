@@ -182,14 +182,17 @@ impl Session {
         result
     }
 
-    /// Reads of immutable objects only (#352 F-035): object locations and
-    /// published pack descriptors, units and bodies. `body` runs through the
+    /// Reads of immutable objects only (#352 F-035): object locations,
+    /// published pack descriptors, units and bodies, and stored inode values. `body` runs through the
     /// transaction facade with no BEGIN/COMMIT, so each of its statements and
     /// BLOB reads takes its own implicit snapshot. That is safe only because
     /// every row such a body reads never changes once visible:
     /// `object_location` is insert-only (`ON CONFLICT DO NOTHING`, no UPDATE
     /// or DELETE anywhere), `pack` and `pack_unit` refuse UPDATE and DELETE
-    /// by trigger, pack ids come from a counter that never goes back, and
+    /// by trigger, `inode_value` is written by one plain INSERT per ordinal
+    /// (never updated or deleted; a second INSERT of an ordinal fails), pack
+    /// ids come from a counter that never goes back, an ordinal is given
+    /// back only while nothing was written under it, and
     /// reclamation frees only empty pages. Two such reads can never see an
     /// inconsistent pair; a row not yet visible is simply absent. Anything
     /// that picks a snapshot (branch heads, roots, Layer and Commit rows) or
