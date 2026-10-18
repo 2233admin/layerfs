@@ -986,6 +986,25 @@ test("closure development checks (owner 2026-10-18): a clean reinstall of the un
   assert.deepEqual([rows[0].kind, rows[0].states, rows[0].nothingToBuild, rows[0].commit], ["rebuild", ["packages/a/tsconfig.json built"], false, "Committed"]);
 });
 
+test("devcheck (lead 2026-10-18, 120 s rule): dev checks after the publish; the verdicts; a native rerun equal to ours passes", async () => {
+  const { devSteps } = await import("../devcheck.mjs");
+  const { judgeDevChecks } = await import("../closure.mjs");
+  const ds = devSteps({ steps: ["incremental-install", "build", "test"], rows: [{ kind: "build", packages: ["packages/a"] }] });
+  assert.deepEqual(ds.map((x) => x.kind), ["reinstall-check", "rebuild"]);
+  assert.match(ds[0].command, /rm -rf node_modules && pnpm install --offline/);
+  assert.equal(ds[1].command, "./node_modules/.bin/tsc -b --verbose 'packages/a'");
+  assert.deepEqual(devSteps({ steps: ["test"], rows: [] }), [], "nothing installed or built: no checks");
+  const M = class extends Error {};
+  const groups = [{ g: "node_modules/x", digest: "d" }];
+  const ok = judgeDevChecks(16, [{ kind: "reinstall-check", ms: 5, groups, commit: "Committed" }, { kind: "rebuild", ms: 1, states: ["p up to date"], nothingToBuild: true }], { cleanOracle: { groups }, Mismatch: M });
+  assert.deepEqual([ok.reinstallCheck.oracleOk, ok.rebuild.nothingToBuild], [true, true]);
+  assert.throws(() => judgeDevChecks(16, [{ kind: "reinstall-check", groups: [] }], { cleanOracle: { groups }, Mismatch: M }), /clean reinstall differs/);
+  const built = [{ kind: "rebuild", states: ["p built"], nothingToBuild: false, packages: ["p"] }];
+  assert.equal(judgeDevChecks(16, built, { Mismatch: M, nativeRun: () => ({ states: ["p built"] }) }).rebuild.native[0], "p built", "equal to native passes (firstDifference returns \"none\")");
+  assert.throws(() => judgeDevChecks(16, built, { Mismatch: M, nativeRun: () => ({ states: ["p up to date"] }) }), /differs from native/);
+  assert.throws(() => judgeDevChecks(16, built, { Mismatch: M }), /no native rerun/);
+});
+
 test("reinstall gate (lead decision): changed lockfile packages and links, stored ÷ raw changed; none changed is judged absolutely", () => {
   const prev = `lockfileVersion: '9.0'
 

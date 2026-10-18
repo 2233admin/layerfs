@@ -228,14 +228,15 @@ export function oracleFiles(oracleDir, { lock, steps, chain = [], checkpoint }) 
   };
 }
 
-export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir, checks = false, native = nativeRebuild }) {
+export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir, checks = false }) {
   const git = (args) => execFileSync("git", ["--git-dir", run.repo, ...args], { encoding: "utf8", maxBuffer: 1 << 28 });
-  const planned = planClosure({ repo: run.repo, planDir: run.planDir, k, plan, prevCommit: run.state.prevCommit, installed: run.state.installed, checks });
+  // the development checks run after the publish, on a fork (devcheck.mjs; SCRIPTS.md, 120 s rule)
+  const planned = planClosure({ repo: run.repo, planDir: run.planDir, k, plan, prevCommit: run.state.prevCommit, installed: run.state.installed, checks: false });
   if (planned.skipped) return { skipped: planned.skipped };
   if (planned.missing) throw new Mismatch(planned.missing);
   const { lock, steps } = planned, chain = run.state.closureChain ?? [];
   const files = oracleFiles(oracleDir, { lock, steps, chain, checkpoint: plan.checkpoint });
-  for (const f of [files.install, steps.some((s) => s.kind === "reinstall-check") ? files.clean : null].filter(Boolean)) {
+  for (const f of [files.install].filter(Boolean)) {
     if (!existsSync(f)) throw new Mismatch(`range ${k}: no node_modules oracle ${f.split("/").at(-1)}; run closure.mjs oracle --run ${run.manifest.run ?? "<run>"} --range ${k} first`);
     if (JSON.parse(readFileSync(f, "utf8")).listerVersion !== LISTER_VERSION) throw new Mismatch(`range ${k}: the node_modules oracle ${f.split("/").at(-1)} predates lister version ${LISTER_VERSION}; rerun closure.mjs oracle --range ${k}`);
   }
@@ -244,7 +245,7 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
   const rows = await playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, roots, binCheck: checks });
   const out = { steps: steps.map((s) => s.kind), rows: rows.map(({ groups, ...r }) => r), oracleKind: files.kind,
     executed: steps.map((s, i) => ({ kind: s.kind, command: s.command, root: rows[i]?.root ?? null })) };
-  const done = rows.find((r) => /install/.test(r.kind) && r.kind !== "reinstall-check");
+  const done = rows.find((r) => /install/.test(r.kind));
   if (done) {
     const oracle = JSON.parse(readFileSync(files.install, "utf8"));
     out.earlierRoots = { roots, install: earlierRootCount(done.normalized), perFile: done.normalized?.earlierRoots ?? {}, binCheck: done.binCheck ?? null };
@@ -261,22 +262,33 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
     out.reinstall = { changedPackages: ch.count, rawChangedBytes: rawChangedBytes(ch, oracle.groups), changed: ch };
     out.prevGroups = run.state.nmGroupsFile ? JSON.parse(readFileSync(run.state.nmGroupsFile, "utf8")) : [];
     out.groups = done.groups;
-    const again = rows.find((r) => r.kind === "reinstall-check");
-    if (again) {
-      out.earlierRoots.reinstall = earlierRootCount(again.normalized);
-      const same = compareInstalled(JSON.parse(readFileSync(files.clean, "utf8")), again.groups);
-      out.reinstallCheck = { commit: again.commit ?? null, ms: again.ms, oracleOk: same.ok };
-      if (!same.ok) throw new Mismatch(`r${pad(k)} clean reinstall differs from native: ${JSON.stringify({ missing: same.missing.slice(0, 5), extra: same.extra.slice(0, 5), differ: same.differ.slice(0, 5) })}`);
-    }
+  }
+  return out;
+}
+
+/**
+ * The development checks' verdicts (owner 2026-10-18), played by devcheck.mjs
+ * on a fork of the published main: the clean reinstall against the clean
+ * oracle of the lockfile, and the build after a remount, which must find
+ * nothing to build or what a native rerun finds (design 8).
+ */
+export function judgeDevChecks(k, rows, { cleanOracle, Mismatch, nativeRun = null }) {
+  const out = {};
+  const again = rows.find((r) => r.kind === "reinstall-check");
+  if (again) {
+    const same = compareInstalled(cleanOracle, again.groups);
+    out.reinstallCheck = { commit: again.commit ?? null, ms: again.ms, oracleOk: same.ok, earlierRoots: earlierRootCount(again.normalized) };
+    if (!same.ok) throw new Mismatch(`r${pad(k)} clean reinstall differs from native: ${JSON.stringify({ missing: same.missing.slice(0, 5), extra: same.extra.slice(0, 5), differ: same.differ.slice(0, 5) })}`);
   }
   const rebuild = rows.find((r) => r.kind === "rebuild");
   if (rebuild) {
-    // nothing to build passes; otherwise the native rerun of the same build decides (a difference is a finding against design 8)
-    out.rebuild = { commit: rebuild.commit ?? null, states: rebuild.states, nothingToBuild: rebuild.nothingToBuild };
+    out.rebuild = { commit: rebuild.commit ?? null, ms: rebuild.ms, states: rebuild.states, nothingToBuild: rebuild.nothingToBuild };
     if (!rebuild.nothingToBuild) {
-      const n = native({ repo: run.repo, commit: plan.checkpoint, image: run.manifest.env.LAYERFS_IMAGE, volume: run.manifest.env.LAYERFS_PNPM_STORE ?? "layerfs-issue352-pnpm-store", packages: rebuild.packages });
+      if (!nativeRun) throw new Mismatch(`r${pad(k)} rebuild after remount found work to do and no native rerun is available here (design 8): ${rebuild.states.filter((l) => / (built|out of date)$/.test(l)).slice(0, 5).join("; ")}`);
+      const n = nativeRun(rebuild.packages);
       out.rebuild.native = n.states;
-      if (firstDifference(n.states.join("\n"), rebuild.states.join("\n"))) throw new Mismatch(`r${pad(k)} rebuild after remount differs from native (design 8): ${firstDifference(n.states.join("\n"), rebuild.states.join("\n"))}`);
+      const diff = firstDifference(n.states.join("\n"), rebuild.states.join("\n"));
+      if (diff !== "none") throw new Mismatch(`r${pad(k)} rebuild after remount differs from native (design 8): ${diff}`);
     }
   }
   return out;
@@ -561,12 +573,14 @@ function main() {
     const runDir = join(process.env.HOME, "lfs-history", "runs", opt("--run"));
     const state = JSON.parse(readFileSync(join(runDir, "state.json"), "utf8")), manifest = JSON.parse(readFileSync(join(runDir, "run.json"), "utf8"));
     if (state.next !== k) { console.error(`run ${opt("--run")} is at range ${state.next}, not ${k}`); process.exit(1); }
-    const planned = planClosure({ repo, planDir, k, plan, prevCommit: state.prevCommit, installed: state.installed, checks: manifest.label === "dev" });
+    const planned = planClosure({ repo, planDir, k, plan, prevCommit: state.prevCommit, installed: state.installed, checks: false });
     if (planned.skipped || planned.missing) { console.log(planned.skipped ?? planned.missing); return; }
     const files = oracleFiles(join(process.env.HOME, "lfs-history", "oracle"), { lock: planned.lock, steps: planned.steps, chain: state.closureChain ?? [], checkpoint: plan.checkpoint });
     const fresh = (f) => existsSync(f) && JSON.parse(readFileSync(f, "utf8")).listerVersion === LISTER_VERSION;
     mkdirSync(join(process.env.HOME, "lfs-history", "oracle", "node_modules"), { recursive: true });
     if (existsSync(join(process.env.HOME, "lfs-history", "fetch", "pending.json"))) { console.error("a pnpm fetch batch is pending; the oracle needs a quiescent store"); process.exit(1); }
+    // a dev run's devcheck compares its clean reinstall with the clean oracle of the lockfile, so a dev run needs it too
+    if (!files.clean && files.install && manifest.label === "dev") files.clean = join(process.env.HOME, "lfs-history", "oracle", "node_modules", `${planned.lock}.json`);
     if (files.clean && !fresh(files.clean)) {
       const n = nativeInstall({ repo, commit: plan.checkpoint, image: opt("--image"), volume: opt("--volume") });
       writeFileSync(`${files.clean}.tmp`, JSON.stringify({ lockfile: planned.lock, range: k, checkpoint: plan.checkpoint, image: opt("--image"), install: installCommand(), listerVersion: LISTER_VERSION, root: ORACLE_ROOT, ...n }, null, 1));

@@ -18,6 +18,7 @@
 // daemon's speed baseline beside the pilot's.
 //   node dsh/tools/history/run.mjs cleanup --run <id>
 //   node dsh/tools/history/run.mjs phase --run <id> --phase p2
+//   node dsh/tools/history/run.mjs devcheck --run <dev run> --range k   (devcheck.mjs: dev checks after the publish)
 // `phase` moves a run to the next phase (P1 → P2 …) at the range it stands
 // at, keeping its pinned binaries and its Store; the move is recorded in the
 // run's manifest (`phases`) and ledger. A dirty run cannot move.
@@ -64,6 +65,7 @@ import { buildOverview, callTable } from "./stats.mjs";
 import { area } from "./plan-range.mjs";
 import { nextChain, rangeClosure, studyMeasurements } from "./closure.mjs";
 import { versionStats } from "./version.mjs";
+import { devcheck } from "./devcheck.mjs";
 import { addedBySource, changedGroupBytes, cumulative, liveParts, sealedParts, seedBySource, stepSource, storageFigures } from "./storage.mjs";
 
 const here = new URL(".", import.meta.url).pathname;
@@ -436,10 +438,7 @@ async function playRange(run, k, mode) {
     const instSizes = inst ? commitOf(inst.kind)?.sizes ?? null : null;
     if (ctx.closure.reinstall && m.storage) m.storage.reinstall = { changedPackages: ctx.closure.reinstall.changedPackages, rawChangedBytes: ctx.closure.reinstall.rawChangedBytes, storedNewBytes: instSizes?.newStored ?? null };
     m.closure = { steps: ctx.closure.steps, rows: ctx.closure.rows, oracle: ctx.closure.oracle ?? null, oracleKind: ctx.closure.oracleKind ?? null, normalized: ctx.closure.normalized ?? null, earlierRoots: ctx.closure.earlierRoots ?? null };
-    // development checks (owner 2026-10-18): the unchanged lockfile's clean reinstall, and the build again after a remount
-    const again = commitOf("reinstall-check")?.sizes ?? null;
-    if (ctx.closure.reinstallCheck) m.closure.reinstallCheck = { ...ctx.closure.reinstallCheck, newMetadata: again?.newMetadata ?? null, newStored: again?.newStored ?? null };
-    if (ctx.closure.rebuild) m.closure.rebuild = ctx.closure.rebuild;
+    // the development checks run after the publish: run.mjs devcheck (devcheck.mjs)
     m.study = studyMeasurements({
       fsWrites: t.all.filter((l) => l.method === "fs.write" && l.sizes).map((l) => ({ sizes: l.sizes })),
       install: inst ? { sizes: instSizes, delta: deltaSummary(deltaWork(t.all.filter((l) => l.step === `r${pad(k)}.${inst.kind}`)), caps(run.manifest.policy)), prevGroups: ctx.closure.prevGroups, groups: ctx.closure.groups, changed: ctx.closure.reinstall?.changed } : null,
@@ -690,6 +689,23 @@ async function cmdFork(o) {
   console.log(JSON.stringify({ run: o.run, dir, volume, from: run.state.forkedFrom, next: run.state.next, store: join(dir, "store.json") }, null, 1));
 }
 
+/** The development checks of a played dev range, on a fork of its published main (devcheck.mjs). */
+async function cmdDevcheck(o) {
+  const run = new Run(join(HISTORY, "runs", o.run)), k = Number(o.range);
+  if (!Number.isInteger(k)) return usage();
+  try {
+    console.log(JSON.stringify(await devcheck(run, k)));
+    return EXIT.done;
+  } catch (error) {
+    console.error(error instanceof Mismatch ? `devcheck r${pad(k)}: ${error.message}` : (error.stack ?? error));
+    return error instanceof Mismatch ? EXIT.stop : EXIT.error;
+  } finally {
+    const problems = await teardown(run);
+    if (problems.length) console.error(`teardown: ${problems.join("; ")}`);
+    run.close();
+  }
+}
+
 /** Removes a run's resources by the literal names its ledger recorded. */
 async function cmdCleanup(o) {
   const dir = join(HISTORY, "runs", o.run);
@@ -714,7 +730,7 @@ async function cmdCleanup(o) {
 }
 
 function usage() {
-  console.error("usage: run.mjs new|play|fork|cleanup|phase … (see the file's header)");
+  console.error("usage: run.mjs new|play|fork|cleanup|phase|devcheck … (see the file's header)");
   return EXIT.usage;
 }
 
@@ -730,7 +746,7 @@ async function main() {
   if (!o.run && cmd !== "rebaseline") process.exit(usage());
   const outside = checkRunner(cmd, process.env);
   if (outside) { console.error(outside); process.exit(EXIT.guard); }
-  const code = cmd === "new" ? (await cmdNew(o), EXIT.done) : cmd === "play" ? await cmdPlay(o) : cmd === "phase" ? cmdPhase(o) : cmd === "fork" ? (await cmdFork(o), EXIT.done) : cmd === "cleanup" ? await cmdCleanup(o) : cmd === "rebaseline" ? await cmdRebaseline(o) : usage();
+  const code = cmd === "new" ? (await cmdNew(o), EXIT.done) : cmd === "play" ? await cmdPlay(o) : cmd === "phase" ? cmdPhase(o) : cmd === "fork" ? (await cmdFork(o), EXIT.done) : cmd === "cleanup" ? await cmdCleanup(o) : cmd === "devcheck" ? await cmdDevcheck(o) : cmd === "rebaseline" ? await cmdRebaseline(o) : usage();
   process.exit(code);
 }
 

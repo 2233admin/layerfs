@@ -438,3 +438,26 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   in derived ranges reads "—", and a total over both carries ‡ (measured
   ranges only).
 
+
+## 14. As built for P3 (2026-10-18)
+
+- **Development checks after the publish (lead, 2026-10-18): a departure
+  from the in-range checks.** A dev range used to run `reinstall-check` (a
+  clean reinstall, 79 s with its Commit) and `rebuild` inside its closure,
+  before the publish. That made a fast dev P3 range about 176 s, over the
+  120 s command rule. Its published `node_modules` also became the clean
+  reinstall's, not the measured route's. Now
+  `run.mjs devcheck --run <dev run> --range k` runs them after the publish,
+  as its own command, on a fork of the published main (`dev-r<k>`). Each
+  check runs in a one-shot Workspace with its own Commit (`devcheck.mjs`).
+  Results go to `metrics/devcheck-<k>.json` and the trace to
+  `trace/devcheck-<k>.jsonl`. The range's own closure no longer changes the
+  node_modules chain by a check. Every step stays at or under 120 s: the
+  longest is the reinstall at about 79 s. A dev run's `oracle --run` also
+  builds the clean oracle the reinstall check compares with. The in-range
+  dev-only step that remains is the F-034 fact: `./node_modules/.bin/tsc
+  --version` after an install on top.
+- **Dev P3 ranges are played fast** when bytes aren't the point. The
+  probes (about 49 s) and the version figures are measured-mode stages. A
+  dev step that can't fit 120 s is reported with its time, never run with a
+  longer ceiling.
