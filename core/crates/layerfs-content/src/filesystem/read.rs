@@ -52,8 +52,8 @@ pub struct Stat {
     pub namespace_ref_count: u64,
     /// Content root of the inode.
     pub content_root: ObjectId,
-    /// Attribute root of the inode.
-    pub metadata_root: ObjectId,
+    /// Metadata of the inode: an attribute root or the inline portable value.
+    pub metadata_root: crate::object::inode_leaf::InodeMetadata,
 }
 
 impl From<InodeValue> for Stat {
@@ -289,9 +289,15 @@ impl<'a> FilesystemRead<'a> {
         maximum_bytes: usize,
     ) -> ContentResult<Option<Vec<u8>>> {
         let resolved = self.resolve(path)?;
+        let Some(root) = resolved.value.metadata_root.root() else {
+            return resolved
+                .value
+                .metadata_root
+                .inline_value(key, resolved.value.kind);
+        };
         crate::filesystem::attributes::read::read_opaque(
             self.reader,
-            resolved.value.metadata_root,
+            root,
             key,
             maximum_bytes,
             &mut self.work.attributes,
@@ -307,11 +313,14 @@ impl<'a> FilesystemRead<'a> {
     /// work.
     pub fn attribute_keys(&mut self, path: &LogicalPath) -> ContentResult<Vec<AttributeKey>> {
         let resolved = self.resolve(path)?;
+        let Some(root) = resolved.value.metadata_root.root() else {
+            return resolved.value.metadata_root.inline_keys();
+        };
         let mut keys = Vec::new();
         let mut work = crate::filesystem::attributes::patch::AttributePatchWork::default();
         crate::filesystem::attributes::patch::visit_keys_counted(
             self.reader,
-            resolved.value.metadata_root,
+            root,
             &mut work,
             |key, _| {
                 if keys.len() == MAXIMUM_ATTRIBUTE_KEYS {

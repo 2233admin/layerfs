@@ -1,15 +1,18 @@
 //! One captured inode row to one typed value: file root, symlink target, metadata.
-use super::records::{add, Facts, Shared};
+use super::records::{add, key, read_number, Facts, Shared, HEADER};
 use crate::{
     BaseView, CapturedFileEdits, OverlayCapturedNamespace, OverlayOperationRecords, Workspace,
 };
 use layerfs_content::{
     filesystem::{
-        attributes::{portable_root, PortableMetadata},
+        attributes::{
+            patch::{visit_keys_counted, AttributePatchWork},
+            portable_root, read_portable, AttributeReadWork, PortableMetadata,
+        },
         symlink::emit_symlink,
         FilesystemObjects, SymlinkTarget,
     },
-    object::inode_leaf::{InodeKind as CanonicalKind, InodeValue},
+    object::inode_leaf::{InodeKind as CanonicalKind, InodeMetadata, InodeValue},
     AuthenticatedObjects, ConstructionCapacities, ConstructionPolicy, ContentError, ContentResult,
     FileView, FinalizedConsumer, ObjectId,
 };
@@ -72,9 +75,22 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
             (InodeKind::Directory, None) => ObjectId::from_bytes(&[0; 32])?,
             (_, Some(stored)) => stored.content_root,
         };
+        let live = PortableMetadata {
+            mode: u32::from(inode.mode),
+            mtime_seconds: inode.mtime_seconds,
+            mtime_nanoseconds: inode.mtime_nanoseconds,
+        };
+        // An inode whose live facts all match its base row keeps the row
+        // exactly - form and stored mtime included - so an mtime-only capture
+        // is not a change (STORAGE_BATCH_SPEC section 4.8).
+        if let Some(stored) = stored {
+            if self.unchanged(inode, root, kind, content_root, stored, live)? {
+                return Ok(stored);
+            }
+        }
         let metadata_root = self.metadata(
             kind,
-            inode,
+            live,
             stored.map(|stored| stored.metadata_root),
             consumer,
         )?;
@@ -84,6 +100,43 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
             content_root,
             metadata_root,
         })
+    }
+    /// True when every value-bearing fact of `inode` equals its base row:
+    /// content root (and, for a symlink, the decoded target), directory
+    /// entries (no header change record), mode and namespace count.
+    /// The stored mtime is deliberately not part of the check.
+    fn unchanged(
+        &self,
+        inode: &Inode,
+        root: bool,
+        kind: CanonicalKind,
+        content_root: ObjectId,
+        stored: InodeValue,
+        live: PortableMetadata,
+    ) -> ContentResult<bool> {
+        if content_root != stored.content_root {
+            return Ok(false);
+        }
+        if kind == CanonicalKind::Directory {
+            let header = self.shared.borrow_mut().get(key(HEADER, inode.serial))?;
+            let changed = header
+                .map(|raw| read_number(&raw, "captured namespace header"))
+                .transpose()?
+                .unwrap_or(0);
+            if changed != 0 {
+                return Ok(false);
+            }
+        }
+        if stored.namespace_ref_count != (if root { 0 } else { inode.nlink }) {
+            return Ok(false);
+        }
+        let portable = read_portable(
+            self.objects,
+            stored.metadata_root,
+            kind,
+            &mut AttributeReadWork::default(),
+        )?;
+        Ok(portable.mode == live.mode)
     }
     /// The existing changed-file constructor under its own file scope. It
     /// takes the new-file route itself and returns the base root when the
@@ -153,31 +206,41 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
         add(&mut self.shared.borrow_mut().work.symlinks, 1);
         Ok(root)
     }
-    /// Mode and mtime in Content's portable grammar. A base tree is patched so
-    /// every key this row does not carry keeps its stored value root.
+    /// Mode and mtime in Content's inline form. A stored root whose attribute
+    /// tree holds any key beyond the two portable ones keeps the root form,
+    /// patched so every key this row does not carry keeps its stored root.
     fn metadata(
         &self,
         kind: CanonicalKind,
-        inode: &Inode,
-        stored: Option<ObjectId>,
+        value: PortableMetadata,
+        stored: Option<InodeMetadata>,
         consumer: &mut dyn FinalizedConsumer,
-    ) -> ContentResult<ObjectId> {
-        let value = PortableMetadata {
-            mode: u32::from(inode.mode),
-            mtime_seconds: inode.mtime_seconds,
-            mtime_nanoseconds: inode.mtime_nanoseconds,
+    ) -> ContentResult<InodeMetadata> {
+        let Some(InodeMetadata::Root(root)) = stored else {
+            let mut owner = self.shared.borrow_mut();
+            add(&mut owner.work.metadata_built, 1);
+            return Ok(InodeMetadata::Inline(value));
         };
-        let mut objects = FilesystemObjects::new(self.objects, consumer);
-        let root = portable_root(self.objects, &mut objects, kind, value, stored)?;
-        let mut owner = self.shared.borrow_mut();
-        add(
-            if stored.is_some() {
-                &mut owner.work.metadata_patched
-            } else {
-                &mut owner.work.metadata_built
+        let (mut count, mut other) = (0usize, false);
+        visit_keys_counted(
+            self.objects,
+            root,
+            &mut AttributePatchWork::default(),
+            |key, _| {
+                count += 1;
+                other |= key.domain() != "portable" || !matches!(key.key(), b"mode" | b"mtime");
+                Ok(())
             },
-            1,
-        );
-        Ok(root)
+        )?;
+        if !other && count <= 2 {
+            let mut owner = self.shared.borrow_mut();
+            add(&mut owner.work.metadata_patched, 1);
+            return Ok(InodeMetadata::Inline(value));
+        }
+        let mut objects = FilesystemObjects::new(self.objects, consumer);
+        let root = portable_root(self.objects, &mut objects, kind, value, Some(root))?;
+        let mut owner = self.shared.borrow_mut();
+        add(&mut owner.work.metadata_patched, 1);
+        Ok(InodeMetadata::Root(root))
     }
 }

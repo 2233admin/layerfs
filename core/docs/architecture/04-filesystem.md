@@ -119,6 +119,20 @@ enforcement plainly:
    DEFAULT_PAGE_ITEMS = 234   (reserved row cells before rows are appended)
 ```
 
+The 73-byte inode value is `kind(1) | namespace_ref_count(8) | content_root(32)
+| metadata field(32)`. The metadata field has two row-level forms (owner
+decision 2026-10-18, STORAGE_BATCH_SPEC §4): the high bit of byte 0 tags them.
+Clear, the field is the original attribute-tree root id — byte-identical to
+every leaf written before the inline form existed. Set
+(`kind.code() | 0x80`), the field is the inline portable metadata: mode at
+41..45 (`u32` BE), mtime seconds at 45..53 (`i64` BE), mtime nanoseconds at
+53..57 (`u32` BE), 57..73 all zero. Decode rejects nonzero padding and inline
+values failing `PortableMetadata::validate(kind)`, so each form has one
+canonical encoding; both forms may coexist in one leaf. An inline inode
+contributes no metadata reference to reference walkers or admission, and every
+portable read goes through `read_portable`, which answers an inline value with
+zero object reads and walks the attribute tree for the root form.
+
 The header carries `level`, a recorded subtree entry `count` and a recorded
 subtree byte total. A single `Format` trait is implemented twice
 (`decode` / `encode` / `width` / `heap_bytes` / `decode_scratch` / `page_items` /

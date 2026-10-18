@@ -8,7 +8,7 @@ use layerfs_content::filesystem::{
     update_filesystem, DirectoryUpdate, FilesystemInput, FilesystemObjects, FilesystemResources,
     InodeUpdate,
 };
-use layerfs_content::object::inode_leaf::{InodeKind, InodeValue};
+use layerfs_content::object::inode_leaf::{InodeKind, InodeMetadata, InodeValue};
 use layerfs_content::ObjectId;
 use layerfs_workspace::{Refusal, WorkspaceError};
 use std::collections::BTreeSet;
@@ -146,13 +146,13 @@ fn known_install_folds_a_capture_and_keeps_later_namespace_changes() {
     let directory = InodeValue {
         kind: InodeKind::Directory,
         content_root: ObjectId::for_bytes(b"new-directory"),
-        metadata_root: metadata(store, InodeKind::Directory),
+        metadata_root: InodeMetadata::Root(metadata(store, InodeKind::Directory)),
         namespace_ref_count: 0,
     };
     let regular = InodeValue {
         kind: InodeKind::RegularFile,
         content_root: file(store, b""),
-        metadata_root: metadata(store, InodeKind::RegularFile),
+        metadata_root: InodeMetadata::Root(metadata(store, InodeKind::RegularFile)),
         namespace_ref_count: 0,
     };
     let inodes = [

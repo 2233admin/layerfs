@@ -266,7 +266,7 @@ pub fn filesystem_input(
                 kind: InodeKind::Directory,
                 namespace_ref_count: 0,
                 content_root: ObjectId::for_bytes(b"layerfs/history/dir/root"),
-                metadata_root: empty_metadata_root(),
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(empty_metadata_root()),
             },
         });
         new_inodes.push(ROOT_SERIAL);
@@ -319,7 +319,7 @@ pub fn filesystem_input(
                     content_root: ObjectId::for_bytes(
                         format!("layerfs/history/dir/{}", hex(directory)).as_bytes(),
                     ),
-                    metadata_root: empty_metadata_root(),
+                    metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(empty_metadata_root()),
                 },
             });
             new_inodes.push(serial);
@@ -366,7 +366,7 @@ pub fn filesystem_input(
                         kind: kind_of(changed.mode),
                         namespace_ref_count: 1,
                         content_root,
-                        metadata_root: empty_metadata_root(),
+                        metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(empty_metadata_root()),
                     },
                 });
                 bindings

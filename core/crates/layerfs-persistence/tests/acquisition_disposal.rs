@@ -44,7 +44,7 @@ fn root() -> NewEntry {
         },
         position: Some(0),
         kind: InodeKind::Directory,
-        metadata_root: ObjectId::for_bytes(b"metadata"),
+        metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(ObjectId::for_bytes(b"metadata")),
         target_root: None,
         host_path: Some(b"/source".to_vec()),
         host: None,
@@ -59,7 +59,7 @@ fn file(position: u64) -> NewEntry {
         },
         position: Some(position),
         kind: InodeKind::RegularFile,
-        metadata_root: ObjectId::for_bytes(b"metadata"),
+        metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(ObjectId::for_bytes(b"metadata")),
         target_root: None,
         host_path: Some(format!("/source/f{position}").into_bytes()),
         host: Some(HostIdentity {

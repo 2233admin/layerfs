@@ -223,7 +223,12 @@ fn portable_fields_round_trip_and_are_checked() {
     let reader = store.clone();
     let mut work = AttributeReadWork::default();
     let observed =
-        read_portable(&reader, root, InodeKind::RegularFile, &mut work).expect("reads portable");
+        read_portable(
+            &reader,
+            layerfs_content::object::inode_leaf::InodeMetadata::Root(root),
+            InodeKind::RegularFile,
+            &mut work,
+        ).expect("reads portable");
     assert_eq!(observed, metadata);
     assert_eq!(work.values_read, 2);
     // The value ropes stay extent-only: each is a file state over an extent leaf.
@@ -403,7 +408,7 @@ fn a_missing_or_foreign_attribute_tree_fails_explicitly() {
     let mut work = AttributeReadWork::default();
     let outcome = read_portable(
         &store,
-        synthetic("absent"),
+        layerfs_content::object::inode_leaf::InodeMetadata::Root(synthetic("absent")),
         InodeKind::RegularFile,
         &mut work,
     );
@@ -513,7 +518,7 @@ fn an_inode_attribute_tree_is_read_through_a_path() {
                 kind: InodeKind::Directory,
                 namespace_ref_count: 0,
                 content_root: synthetic("root-content"),
-                metadata_root: synthetic("root-meta"),
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(synthetic("root-meta")),
             },
         },
         InodeUpdate {
@@ -522,7 +527,7 @@ fn an_inode_attribute_tree_is_read_through_a_path() {
                 kind: InodeKind::RegularFile,
                 namespace_ref_count: 0,
                 content_root: synthetic("file-content"),
-                metadata_root: attribute_root,
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(attribute_root),
             },
         },
     ];
@@ -552,7 +557,7 @@ fn an_inode_attribute_tree_is_read_through_a_path() {
         "resolving a path must charge the directory pages it read"
     );
     assert_eq!(stat.kind, InodeKind::RegularFile);
-    assert_eq!(stat.metadata_root, attribute_root);
+    assert_eq!(stat.metadata_root.root().unwrap(), attribute_root);
     let _ = read.stat(&path).expect("second stat");
     assert!(
         read.work().directory.pages_read > after_first,
@@ -620,7 +625,7 @@ fn an_inode_attribute_tree_is_read_through_a_path() {
         InodeUpdate {
             serial: 2,
             value: InodeValue {
-                metadata_root: wide_root,
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(wide_root),
                 ..inodes[1].value
             },
         },

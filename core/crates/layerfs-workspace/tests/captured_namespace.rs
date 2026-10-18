@@ -170,13 +170,16 @@ fn changed_content_mode_and_time_of_each_kind() {
     d.append("alias", b" and a tail");
     d.chmod("file", 0o600);
     d.chmod("output", 0o700);
-    d.utimens("cache", (-5, 999_999_999));
-    // A symlink has no mode to change; its time is its only metadata change.
-    d.utimens("symlink", (77, 1));
     d.chmod("", 0o755);
     d.resize("node_modules/pkg", 399_000);
 
-    let built = d.build("changed");
+    // mtime-only captures are not changes: the model the walk checks is the
+    // one before them, and the rows keep the base's stored times.
+    let quiet = d.model.clone();
+    d.utimens("cache", (-5, 999_999_999));
+    d.utimens("symlink", (77, 1));
+
+    let built = producer::build_over(&b, &b.overlay, &quiet, "changed");
     let store = &b.fixture.store;
     let (old, new) = (
         |serial| value(store, b.fixture.root, serial),
@@ -185,17 +188,17 @@ fn changed_content_mode_and_time_of_each_kind() {
     // Content changes replace the file root; metadata changes never do.
     assert_ne!(new(2).content_root, old(2).content_root);
     assert_ne!(new(8).content_root, old(8).content_root);
-    for serial in [1, 3, 6, 7] {
+    for serial in [1, 7] {
         assert_ne!(new(serial).metadata_root, old(serial).metadata_root);
     }
     assert_eq!(new(3).content_root, old(3).content_root);
-    // Untouched inodes are the stored values.
-    for serial in [4, 5] {
+    // mtime-only and untouched inodes are the stored values.
+    for serial in [3, 4, 5, 6] {
         assert_eq!(new(serial), old(serial));
     }
     let work = built.work;
     assert_eq!((work.files_constructed, work.files_unchanged), (2, 0));
-    assert_eq!((work.metadata_built, work.metadata_patched), (0, 6));
+    assert_eq!((work.metadata_built, work.metadata_patched), (0, 4));
     assert_eq!((work.fresh_serials, work.symlinks), (0, 0));
     built.release(&b);
 }

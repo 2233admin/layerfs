@@ -397,7 +397,7 @@ fn updates_match_the_sealed_reference_operation() {
                 );
             }
             assert_eq!(
-                entry.metadata_root,
+                entry.metadata_root.root().unwrap(),
                 synthetic(record.metadata),
                 "case {}: serial {} metadata root",
                 case.name,

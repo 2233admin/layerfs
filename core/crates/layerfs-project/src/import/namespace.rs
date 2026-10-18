@@ -29,7 +29,7 @@ use layerfs_content::filesystem::directory::update::{build_directory, empty_dire
 use layerfs_content::filesystem::inode::update::build_table;
 use layerfs_content::filesystem::root::{profile_id, FilesystemRoot};
 use layerfs_content::filesystem::{FilesystemObjects, InodeScope, PathName};
-use layerfs_content::object::inode_leaf::{InodeKind, InodeValue};
+use layerfs_content::object::inode_leaf::{InodeKind, InodeMetadata, InodeValue};
 use layerfs_content::{AuthenticatedObjects, FinalizedObject, ObjectId, ObjectRole};
 use layerfs_storage::port::acquisition::WRITE_WINDOW_ROWS;
 use layerfs_storage::{Save, Storage};
@@ -207,7 +207,7 @@ fn table(
                         kind: entry.kind,
                         namespace_ref_count: count,
                         content_root: content_root.ok_or_else(malformed)?,
-                        metadata_root: entry.metadata_root,
+                        metadata_root: InodeMetadata::Root(entry.metadata_root),
                     },
                 )));
             }
