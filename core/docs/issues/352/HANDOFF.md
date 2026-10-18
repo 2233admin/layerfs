@@ -117,6 +117,12 @@ pointed at this file and the records.
 7. Storage counters from the builder's note (`builder-storage-counters.md` in the
    shared notes).
 
+Limits-audit findings F-037 to F-041 (BUGS, 6fb065e3b) have no fix owner until
+the owner assigns them; they are not in the fixer's queue. The replay works
+around them: the generated `/.lww` is written inline with no `%include` (F-039);
+Busy/EAGAIN in a range is recorded as F-040, not retried; LWW picks are counted
+from the merge result, not the `truncated` flag (F-041).
+
 **Builder:**
 1. P3 development checks (`040170cb3`, `a0a159a8d`): clean-reinstall metadata,
    `tsc -b` remount; one dev range with INSTALLS.
