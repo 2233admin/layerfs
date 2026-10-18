@@ -7,62 +7,93 @@
 > `issue352-uptodate` step and its checks, in "Addendum: `issue352-uptodate`"
 > at the top.
 
-## Addendum: re-run at the final heads (correctness lane, 2026-10-18, after the F-043 rework)
+## Addendum: re-run after the decode commit (correctness lane, 2026-10-18)
 
 The heads at this re-run:
 
 | Branch | Head |
 | --- | --- |
 | `dsh-history-replay` | `b885c55d4` |
-| correctness | `44cf6feaa` (F-043 reworked: `926543b10`) |
+| correctness | `2ee725aa0`; decode commit `f671d8ce7` |
 | #353 | `d37821838` |
 | `issue352-uptodate` | `7238e4551` |
-| `issue359-impl` | `2d84fe1bb` (moved from `f7cd6311b`) |
+| `issue359-impl` | `2d84fe1bb`, which contains `3be974923` (§4.8 (A)) and `38c72020e` (record corrections) |
 | cost-model | `331f2c173` |
+
+The dry run used merge-tree only.
 
 **Order (b′), proposed:** correctness → #353 → `issue352-uptodate` →
 `issue359-impl` → `issue359-cost-model`.
 
-| Step | Branch | Conflicts | Combined LOC |
-| --- | --- | --- | --- |
-| 1 | correctness | 0 | 97,285 (+66) |
-| 2 | #353 | 0 | 100,478 (+3,193) |
-| 3 | uptodate (c04 plus its test commit, on #353) | 0 | 100,511 (+33) |
-| 4 | 359-impl | **1, `core/docs/issues/352/BUGS.md` (docs)** | 101,771 (+1,260) |
-| 5 | cost-model | 0 | 101,771 (0) |
+| Step | Branch | Conflicts | Tree | Combined LOC |
+| --- | --- | --- | --- | --- |
+| 1 | correctness | 0 | `a6db2ecdfe4c` | 97,371 (+152) |
+| 2 | #353 | 0 | `c72258b5a880` | 100,564 (+3,193) |
+| 3 | uptodate | 0 | `33fc5b8f46c4` | 100,597 (+33) |
+| 4 | 359-impl | **2: `layerfs-storage/src/read/objects.rs` (code) and `BUGS.md` (docs)** | `b7172071d071` (with markers) | 101,867 (+1,270), counted with conflict markers; recount after resolving |
+| 5 | cost-model | 0 | `d33933ddd5ff` | 101,867 (0) |
 
-The final combined LOC is **97,219 → 101,771 (+4,552)**. The counter is
-`tools/production_loc.py --root` on `git archive` extracts of `core/crates`,
-`sdk/js` and `dsh/packages`. The subagent's per-branch tables below are at
-the earlier heads: correctness `c3b5f4d86` (+48) and 359-impl `f7cd6311b`
-(+1,213).
+Final combined LOC: **97,219 → about 101,867 (+4,648)**, to be recounted on
+the resolved tree. The counter is `tools/production_loc.py --root` on
+`git archive` extracts of `core/crates`, `sdk/js` and `dsh/packages`.
 
-**The BUGS.md conflict is a pure both-sides append after the F-043 entry.**
-- The correctness side extends the F-043 paragraph: the diagnostics, the
-  rework and the c43 ranges.
-- The 359-impl side appends new entries F-044, F-045 and F-046.
-- Resolution: keep both, the F-043 paragraph first, then F-044 onward.
+### Resolving step 4
 
-**Where the code meets:**
-- `encoding/codec.rs` auto-merges. The merged file has F-A4's `alloc_zeroed`
-  `workspace()` and correctness's `in_region` / `into_region` hook. The
-  regions in the idle list come from `workspace()`, so they are zeroed on
-  first allocation only.
-- A reused region is not zeroed. `tests/encode_region_reuse.rs` proves frames
-  are byte-identical for fresh, reused and poison-filled regions. Run it on
-  the merged tree with the whole `layerfs-storage` crate and
+**`read/objects.rs`, F-043 decode reuse against #354 A1.**
+- What conflicts: A1 (inside 359-impl) moved the decode workspace out of
+  `ReadState`. Callers now pass `&mut DecompressionWorkspace` to
+  `ReadState::read`, and `ReadState::new()` is infallible. Correctness made
+  `ReadState` own a `Decoder`, which reuses idle decode regions.
+- Resolution:
+  1. Take 359-impl's `ReadState`.
+  2. Keep correctness's `IDLE_DECODE` and `Decoder` in `objects.rs`, made
+     `pub(super)`.
+  3. At the three `DecompressionWorkspace::new()?` sites in 359-impl's
+     `read/provider.rs` (`Reader::new`, `ReadCache::new`, and `read_kept`'s
+     per-demand workspace), write `Decoder::new()?`. Deref coercion passes it
+     where `&mut DecompressionWorkspace` is taken.
+- **`read/provider.rs` is #354's held file.** The three-line change needs the
+  liaison's OK at integration.
+- Without it, reads do not reuse decode regions; Saves still do, through
+  `save/state.rs`, which auto-merges. The probe figure of 286 / 238 MB
+  assumes reads reuse too.
+- Then run `layerfs-storage` whole, including `encode_region_reuse` and
   `save_encoder_reuse` (Linux).
-- Correctness and c04 both change `daemon tests/support/mounted_commit.rs`:
-  `Rig::history` and `Rig::up_to_date` respectively. The hunks are disjoint
-  and auto-merge.
-- None of c04's files is touched by `issue359-impl` or cost-model.
 
-**E4, revised (F-A4 vs F-043).**
-- F-043 no longer keeps zstd contexts or decode arenas, and adds no
-  `unsafe`. The `Arena` and `Send` items described in E4 below are gone.
-- The idle list holds plain `Vec<u64>` encode regions, at most one per CPU.
-- F-A4's "the codec sees the same zeroed memory" holds for first allocations.
-  Reuse is shown to be content-independent.
+**`BUGS.md`.** Both sides append after F-043. Keep both: the F-043 paragraph
+first, then F-044 onward.
+
+**Rig helpers (agreed with the RCA agent).** After step 4,
+`daemon tests/support/mounted_commit.rs` has both:
+- correctness's `Rig::history`, which follows continuations to `HISTORY`
+  records;
+- 359-impl's `Rig::newest(count)`, which is the same page walk truncated to
+  `count` ids.
+
+They duplicate each other. Keep `history` and drop `newest`. Its two call
+sites become `rig.history().records.iter().take(n).map(|r| r.id)`:
+- `mounted_commit.rs` r5_8: `n` = 5;
+- `r5_5_install_survival.rs` steps: `n` = `positions.len()`.
+
+Both files auto-merge, so this is a follow-up edit in the integration
+commit, not a conflict. Then run `mounted_commit`, `r5_5_install_survival`
+and `mounted_install` (Linux).
+
+### Where the code meets
+
+- `encoding/codec.rs` auto-merges:
+  - F-A4's `alloc_zeroed` `workspace()`;
+  - the encode `in_region` / `into_region` hook, with encode regions reused
+    unzeroed (shown content-independent);
+  - the decode hook, which zeroes a reused region on hand-out (`fill(0)`),
+    because zstd's static decoder init does not clear its own struct.
+
+  So F-A4's "the codec sees zeroed memory" holds for every decode region, and
+  for encode regions on first allocation.
+- `save/state.rs` auto-merges.
+- Neither `issue359-impl` nor cost-model touches any c04 file.
+- `support/mounted_commit.rs` (`Rig::history` against `Rig::up_to_date`)
+  auto-merges.
 
 **E10 (new): #359 `4db0ceb9e` against c04.** That commit keeps an mtime-only
 change live until unmount, adding +47 LOC.
