@@ -2,7 +2,7 @@
 
 > **Status:** current rule, 2026-10-19, for ranges from P3 on. It applies the
 > owner-approved option (c) of [F031_DESIGN.md](F031_DESIGN.md). The design's
-> revision 3 questions Q1–Q7 are open, so the lane guard and the `/.lww`
+> revision 3 questions Q1–Q6 are open (Q7 declined), so the lane guard and the `/.lww`
 > exclusion below wait for the owner's answers. The range cycles it extends
 > are [SPEC §2, "The two nested cycles"](SPEC.md#the-two-nested-cycles).
 
@@ -127,7 +127,24 @@ Why the git counts differ:
   the replayed commits plus dsh's merges. Without the merges, HEAD would not
   be dsh's checkpoint.
 
-One git commit per dsh commit, with no lane commits, is F031_DESIGN Q7.
+**Expected lane commit count (owner, 2026-10-19).** Lane git commits per
+range are about lanes × dsh commits replayed × 0.3–0.7. The plans give:
+
+| Range | Lanes × dsh commits | Expected (0.3–0.7) | Lane git commits | Ratio |
+| --- | --- | --- | --- | --- |
+| 15 | 3 × 67 = 201 | 60–141 | 122 | 0.61 |
+| 16 | 4 × 88 = 352 | 106–246 | 174 | 0.49 |
+| 17 | 3 × 60 = 180 | 54–126 | 104 | 0.58 |
+| 18 | 3 × 67 = 201 | 60–141 | 133 | 0.66 |
+| 19 | 4 × 81 = 324 | 97–227 | 124 | 0.38 |
+| 20 | 3 × 60 = 180 | 54–126 | 82 | 0.46 |
+
+All six are inside the band. The ratio is the share of lanes a dsh commit
+touches. A played range whose lane git commit count falls outside the band
+is a finding about the plan or the player, recorded and not hidden.
+
+The owner keeps the lane commits: F031_DESIGN Q7 (one git commit per dsh
+commit, no lane commits) is declined.
 
 ### Sizes
 

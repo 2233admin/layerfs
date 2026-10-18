@@ -103,8 +103,9 @@ recommendation is declined).
   17–31 MB of raw lane index rewrites (GIT_RULE.md, Expected load). The
   proof is unchanged. The lane guard (A4) then allows only loose objects
   and the lane-end index. Lanes would no longer commit their own changes,
-  which option (c) asked for. **Recommendation: adopt it**, since git
-  commits then equal dsh's commits.
+  which option (c) asked for. **Owner decision 2026-10-19: declined.** The
+  lane commits stay. Lane git commits are expected at about lanes × dsh
+  commits × 0.3–0.7 per range (GIT_RULE.md); ranges 15–20 plan 0.38–0.66.
 
 Two items outside F-031 still gate measured range 15 and are not decided
 here: the owner's P3 wall budget (about 254 s projected per range without
