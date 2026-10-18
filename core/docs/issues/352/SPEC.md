@@ -55,6 +55,10 @@ bare clone of `https://github.com/deepseek-ai/deepseek-harness` at
 > **Installs** (owner decision 2026-10-18, firm): [INSTALLS.md](INSTALLS.md). Every
 > install is a real `pnpm install` by exec inside the Workspace, reading a pnpm
 > store mounted from outside it. It wins over this section where they differ.
+>
+> **From P3: [NODE_RULE.md](NODE_RULE.md)** (owner-approved 2026-10-19) is the
+> generic Node operation rule: installs, refreshes, builds, tests, merges and
+> proofs. It wins over this section and over INSTALLS.md where they differ.
 
 LayerFS stores everything `.gitignore` covers, so the replay makes those files as
 a real project would. They dominate the Store's growth (§7, Disk), so they follow
@@ -202,6 +206,12 @@ the metrics' `binary.image`).
    Merged) must match the plan.
 3. *On a mismatch:* stop and keep the run. Diagnose, fix, classify the fix, and
    recover (§6).
+
+### Git rule (from P3, F-031)
+
+From P3, every range also follows the [git rule](GIT_RULE.md). It says which
+cycle step runs which git commands, in which Workspace and on which Branch,
+and what each writes under `.git` (F-031).
 
 ### Agents and conflicts
 
