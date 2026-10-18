@@ -14,6 +14,7 @@
 | 007.a1 | D1 | `list_small` depth exponent 1.67, statements 3.252: no product change. The cost cycles with the metadata delta cap (blobs 60 → 228, +24 per Commit, reset every 8; 20-Commit series). The gate attribution is F-016 (builder) | — | [list_small is bounded and periodic](fixes/007-a1-list-small-chain-period.md) |
 | 007.a1 | D6 | F-017, range-8 play on the range-7 fork, old → new addon: `fs.read` p50 25.0 → 6.6 ms, `fs.grep` 32.2 → 12.4, `sandbox.commit` 14.4 → 13.4; client connection wait p95 0 ms. Cost: p95 `fs.read` 43 → 93, `sandbox.commit` 93 → 133 (Commit `begin` p95 26 → 69) | this commit | [Concurrent SDK calls take separate control connections](fixes/007-a1-f017-control-connections.md) |
 | 007.a1 | D6 | F-018, range-8 play on the range-7 fork, daemon `361bb09e` → `c25119ac` (addon `5baa0f5d`): `fs.read` p95 96.1 → 9.7 ms, `fs.stat` 46.6 → 7.1, `fs.grep` 100.1 → 63.6, all reads 90.4 → 24.9. Cost: span 14.8 → 17.1 s, in-lane merges 132 → 193 | this commit | [Reads stop queueing behind the publication lane](fixes/007-a1-f018-reads-behind-publication-lane.md) |
+| 009.a1 | D4 | `oneshot_mount_exec.vm_steps` 0.971 → 0 (`p2-main-b` r7/r9 forks: 1,923/2,331 → 1,140/1,140 VM steps); a mount looked its Branch up by listing every Branch | this commit | [A mount finds its Branch by name](fixes/009-a1-mount-branch-lookup.md) |
 
 ## Watch
 
@@ -28,3 +29,7 @@
   132 → 193 merges and 1.6 → 4.4 → 7.3 s per range-8 play. Span 15.7 → 14.8 →
   17.1 s. Moving merge work out of the lane is a design question for the
   lead. Judge span and merges per range on the rerun.
+- **`fs.rm` Commit phase (009.a1 S1).** 9.69× → 11.84× baseline. It is in-lane
+  merges: `fs.rm` calls that merged went 4 of 23 → 16 of 26 → 13 of 13 over
+  ranges 7–9, and merge p50 is 35 ms at range 9. This is the same cause as the
+  in-lane merge watch above.

@@ -27,6 +27,8 @@ pub struct Work {
     pub statements: u64,
     /// SQL rows returned to the daemon, writer and readers together.
     pub rows: u64,
+    /// SQLite VM steps, writer and readers together.
+    pub vm_steps: u64,
 }
 
 impl Fixture {
@@ -204,6 +206,12 @@ impl Fixture {
                     .iter()
                     .map(|reader| reader.returned_rows)
                     .sum::<u64>(),
+            vm_steps: sql.writer.vm_steps
+                + sql
+                    .readers
+                    .iter()
+                    .map(|reader| reader.vm_steps)
+                    .sum::<u64>(),
         }
     }
 
@@ -214,6 +222,7 @@ impl Fixture {
             object_ids: after.object_ids - before.object_ids,
             statements: after.statements - before.statements,
             rows: after.rows - before.rows,
+            vm_steps: after.vm_steps - before.vm_steps,
         }
     }
 

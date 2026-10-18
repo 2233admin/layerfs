@@ -54,18 +54,37 @@ fn side(
 pub(crate) fn list(store: &Arc<Store>, args: &SdkValue) -> Answer {
     let stack = args::project(store, args)?;
     let (limit, pos) = args::paging(args)?;
+    // `name`: that one Branch from the name index, never a listing (#352 009.a1).
+    if let Some(name) = args.get("name") {
+        let SdkValue::Text(name) = name else {
+            return Err(args::invalid("name must be text"));
+        };
+        let found = if name == MAIN {
+            Some(main_item(&stack))
+        } else {
+            match args::branch(store, &stack, name) {
+                Ok(branch) => Some(item(&branch)),
+                Err(refusal) if refusal.code == "NoSuchBranch" => None,
+                Err(refusal) => return Err(refusal),
+            }
+        };
+        let items: Vec<SdkValue> = found
+            .into_iter()
+            .filter(|_| pos == 0 && limit > 0)
+            .collect();
+        return Ok(SdkValue::map([
+            ("items", SdkValue::List(items)),
+            ("hasMore", SdkValue::Bool(false)),
+            ("nextPagePos", SdkValue::Null),
+        ]));
+    }
     let mut page = layerfs_history::Page {
         cursor: None,
         limit: MAXIMUM_PAGE_RECORDS,
     };
     let (mut seen, mut items, mut more, mut spent) = (0u64, Vec::new(), false, 0);
     // Main participates in the same byte-name ordering as the Branches.
-    let mut main = Some(SdkValue::map([
-        ("name", SdkValue::text(MAIN)),
-        ("id", SdkValue::Null),
-        ("base", SdkValue::text(hex(stack.head_layer.as_slice()))),
-        ("head", SdkValue::Null),
-    ]));
+    let mut main = Some(main_item(&stack));
     let mut add = |value: SdkValue| -> bool {
         if seen < pos {
             seen += 1;
@@ -93,22 +112,7 @@ pub(crate) fn list(store: &Arc<Store>, args: &SdkValue) -> Answer {
                     }
                 }
             }
-            let value = SdkValue::map([
-                ("name", SdkValue::text(branch.name.as_str())),
-                ("id", SdkValue::text(hex(branch.id.as_slice()))),
-                ("base", SdkValue::text(hex(branch.base_layer.as_slice()))),
-                (
-                    "head",
-                    SdkValue::opt_text(branch.head_commit.map(|id| hex(id.as_slice()))),
-                ),
-                (
-                    "forkedFrom",
-                    branch
-                        .forked_from
-                        .map_or(SdkValue::Null, |node| SdkValue::text(node_text(node))),
-                ),
-            ]);
-            if !add(value) {
+            if !add(item(&branch)) {
                 break 'pages;
             }
         }
@@ -128,6 +132,35 @@ pub(crate) fn list(store: &Arc<Store>, args: &SdkValue) -> Answer {
         ("hasMore", SdkValue::Bool(!matches!(next, SdkValue::Null))),
         ("nextPagePos", next),
     ]))
+}
+
+/// The listed form of the project's main line.
+fn main_item(stack: &layerfs_history::LayerStackRecord) -> SdkValue {
+    SdkValue::map([
+        ("name", SdkValue::text(MAIN)),
+        ("id", SdkValue::Null),
+        ("base", SdkValue::text(hex(stack.head_layer.as_slice()))),
+        ("head", SdkValue::Null),
+    ])
+}
+
+/// The listed form of one Branch.
+fn item(branch: &layerfs_history::BranchRecord) -> SdkValue {
+    SdkValue::map([
+        ("name", SdkValue::text(branch.name.as_str())),
+        ("id", SdkValue::text(hex(branch.id.as_slice()))),
+        ("base", SdkValue::text(hex(branch.base_layer.as_slice()))),
+        (
+            "head",
+            SdkValue::opt_text(branch.head_commit.map(|id| hex(id.as_slice()))),
+        ),
+        (
+            "forkedFrom",
+            branch
+                .forked_from
+                .map_or(SdkValue::Null, |node| SdkValue::text(node_text(node))),
+        ),
+    ])
 }
 
 /// `branch.fork(name, { from })`: metadata only.
