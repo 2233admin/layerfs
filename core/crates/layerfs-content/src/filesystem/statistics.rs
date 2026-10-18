@@ -10,7 +10,7 @@ use crate::{
         sorted::{difference, DifferenceWork},
         TreeTable,
     },
-    AuthenticatedObjects, ContentError, ContentResult, FileView,
+    AuthenticatedObjects, ContentError, ContentResult, FileView, ObjectId,
 };
 use layerfs_telemetry::timer::Timing;
 
@@ -46,12 +46,46 @@ pub fn logical_size(
     u64::try_from(sum).map_err(|_| ContentError::InvalidRecord("logical byte overflow"))
 }
 
+/// Changed file roots one length demand carries: a bounded resident window.
+pub const LENGTH_WINDOW: usize = 1024;
+
 /// Updates known logical size by page-skipping inode differences, including hardlink count changes.
+///
+/// Each file's length comes from opening its root, which reads a whole-file
+/// root's complete payload. [`logical_size_after_with`] asks a caller's
+/// batched length source instead.
 pub fn logical_size_after(
     reader: &dyn AuthenticatedObjects,
     before: FilesystemRootId,
     after: FilesystemRootId,
     known: u64,
+) -> ContentResult<u64> {
+    logical_size_after_with(reader, before, after, known, &mut |roots| {
+        roots
+            .iter()
+            .map(|root| {
+                Timing::disabled("filesystem.logical", |timing| {
+                    FileView::open(reader, *root, timing.child("length"))
+                        .map(|view| view.logical_len())
+                })
+                .0
+            })
+            .collect()
+    })
+}
+
+/// [`logical_size_after`] with file lengths from `lengths`, which answers a
+/// window of at most [`LENGTH_WINDOW`] regular-file content roots in order.
+///
+/// The changed rows are walked as before; the lengths of the regular files
+/// they name are asked a window at a time, so a Store can answer them from its
+/// catalogue in one demand instead of one payload read per file.
+pub fn logical_size_after_with(
+    reader: &dyn AuthenticatedObjects,
+    before: FilesystemRootId,
+    after: FilesystemRootId,
+    known: u64,
+    lengths: &mut dyn FnMut(&[ObjectId]) -> ContentResult<Vec<u64>>,
 ) -> ContentResult<u64> {
     if before == after {
         return Ok(known);
@@ -59,15 +93,58 @@ pub fn logical_size_after(
     let left = TreeTable::open(reader, before)?;
     let right = TreeTable::open(reader, after)?;
     let mut sum = i128::from(known);
+    let mut window = Window::default();
     difference::<CompactInodes>(
         reader,
         Some(left.table.root),
         Some(right.table.root),
         &mut DifferenceWork::default(),
         |_, before, after| {
-            sum += bytes(reader, after)? - bytes(reader, before)?;
+            for (value, sign) in [(after, 1), (before, -1)] {
+                if let Some(value) = value.filter(|value| value.kind == InodeKind::RegularFile) {
+                    window.push(value, sign);
+                    if window.roots.len() == LENGTH_WINDOW {
+                        sum += window.drain(lengths)?;
+                    }
+                }
+            }
             Ok(())
         },
     )?;
+    sum += window.drain(lengths)?;
     u64::try_from(sum).map_err(|_| ContentError::InvalidRecord("logical byte overflow"))
+}
+
+/// Pending file roots and each one's signed link count.
+#[derive(Default)]
+struct Window {
+    roots: Vec<ObjectId>,
+    weights: Vec<i128>,
+}
+impl Window {
+    fn push(&mut self, value: &InodeValue, sign: i128) {
+        self.roots.push(value.content_root);
+        self.weights
+            .push(sign * i128::from(value.namespace_ref_count));
+    }
+    fn drain(
+        &mut self,
+        lengths: &mut dyn FnMut(&[ObjectId]) -> ContentResult<Vec<u64>>,
+    ) -> ContentResult<i128> {
+        if self.roots.is_empty() {
+            return Ok(0);
+        }
+        let answered = lengths(&self.roots)?;
+        if answered.len() != self.roots.len() {
+            return Err(ContentError::InvalidRecord("file length cardinality"));
+        }
+        let sum = answered
+            .iter()
+            .zip(&self.weights)
+            .map(|(length, weight)| i128::from(*length) * weight)
+            .sum();
+        self.roots.clear();
+        self.weights.clear();
+        Ok(sum)
+    }
 }

@@ -454,7 +454,9 @@ impl BoundWorkspace {
     }
 
     /// Logical size of `after`, from `before`'s known size and the change
-    /// between them.
+    /// between them. File lengths come from the Store catalogue a window at
+    /// a time (`Reader::file_lengths`), never from reading file payloads; a
+    /// Storage refusal keeps its original error.
     fn logical_after(
         &self,
         storage: &layerfs_storage::Storage,
@@ -463,15 +465,26 @@ impl BoundWorkspace {
         known: u64,
     ) -> Result<u64, CommitError> {
         let reader = storage.reader().map_err(CommitError::Storage)?;
-        layerfs_content::filesystem::statistics::logical_size_after(
+        let mut refused = None;
+        let counted = layerfs_content::filesystem::statistics::logical_size_after_with(
             &reader,
             FilesystemRootId(before),
             after,
             known,
-        )
-        .map_err(|error| CommitError::Content {
-            error,
-            provider: None,
-        })
+            &mut |roots| {
+                reader.file_lengths(roots).map_err(|error| {
+                    refused = Some(error);
+                    layerfs_content::ContentError::OutputRejected
+                })
+            },
+        );
+        match (counted, refused) {
+            (Ok(size), _) => Ok(size),
+            (Err(_), Some(error)) => Err(CommitError::Storage(error)),
+            (Err(error), None) => Err(CommitError::Content {
+                error,
+                provider: None,
+            }),
+        }
     }
 }
