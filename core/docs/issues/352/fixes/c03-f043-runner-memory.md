@@ -1,6 +1,6 @@
 # c03 · F-043: replay runner memory is allocator retention of 16 MiB encode arenas
 
-> **Status:** fixed on branch `claude/issue352-correctness-644bbc` (correctness
+> **Status:** fixed (reworked to the liaison ruling; decode reuse and Store-close release pending) on branch `claude/issue352-correctness-644bbc` (correctness
 > lane, 2026-10-18). Not merged. Kind 1 (no format change). The proof uses an
 > in-process probe (below). No replay range was played on the fixed addon: see
 > "Not done".
@@ -79,42 +79,58 @@ trimmed below twice the threshold. So each arena keeps a zero-filled, resident
 16 MiB region. The 8-CPU VM allows up to 64 arenas: 64 × ~17 MiB ≈ 1.1 GB, the
 measured plateau.
 
-## 4. Fix
+## 4. Fix (reworked to the liaison's ruling, 2026-10-18)
 
-`encoding/codec.rs` keeps the zstd **arenas** (region plus static context) of
-dropped workspaces in two process-wide idle lists, one for encode and one for
-decode:
+The first version (`2f0d4378e`) kept whole zstd **contexts**, encode and
+decode, in process-wide lists, behind a new `unsafe impl Send`. The liaison's
+ruling replaced it:
 
-- `CompressionWorkspace::new` takes an idle arena if there is one, else
-  allocates.
-- `DecompressionWorkspace` takes an idle arena when it first decodes, else
-  allocates.
-- `Drop` returns the arena to its list.
+- **Encode regions only.**
+  - `save/state.rs` keeps the plain 16 MiB `Vec<u64>` regions of finished
+    Saves in `IDLE_ENCODE`. Its `Encoder` wrapper returns a region on drop.
+  - The list holds at most `available_parallelism()` regions (8 on the
+    runner VM, so 128 MiB). A region past that is freed.
+  - The hook in `encoding/codec.rs` is two functions:
+    `CompressionWorkspace::in_region(Vec<u64>)`, which builds the static
+    context in a given region, and `into_region(self)`.
+  - `workspace()` is unchanged.
+  - Only a `Vec<u64>` moves between threads, never a zstd pointer. So there
+    is **no new `unsafe`**, and the audited module is not widened.
+- **Decode reuse is withdrawn** until the liaison approves a design. The
+  decode arenas do contribute, about 82 MB anonymous (§5). The proposed design
+  is the same shape as encode: plain regions plus an `in_region` hook.
+- **Open (asked of the liaison):** releasing the list when the Store closes.
+  No Store-lifetime object is reachable from `SaveState` without touching
+  held files (`store/handle.rs`) or persistence. The list is process-wide and
+  bounded until that is decided.
 
-So retained memory is one arena per workspace alive at the same time (peak
-concurrent Saves and reads), whatever the Commit count or thread count. A
-reused context carries nothing over: every encode and decode entry point
-already resets `session_and_parameters` before use. `Arena<T>` is `Send` (its
-SAFETY note is in the code). No call site or type outside `codec.rs` changes.
-There is no cap: the lists hold what was in use at the peak, and nothing
-bounds them.
+**Reused bytes are identical.** `tests/encode_region_reuse.rs` encodes whole,
+PREFIX and group frames in three ways:
+- from a fresh workspace;
+- from one region reused four times;
+- from regions filled with `0xFF…`, `0xA5…` and `0x0123…`.
+
+Every frame is byte-identical across all three. zstd initialises what it
+uses, and every entry point resets the session first. A region of the wrong
+size is refused.
 
 Rejected options:
 - Capping arenas (`MALLOC_ARENA_MAX`, `mallopt`): the single-arena arm runs
   about 2× slower per round (1.4 s vs 0.7 s), and an addon must not change its
-  host process's allocator.
-- Reusing the per-Commit `Candidates` tables: measured, no effect on the
-  per-write growth. Reverted.
+  host process's allocator. `MALLOC_ARENA_MAX` and `MALLOC_MMAP_THRESHOLD_`
+  were diagnostics only (§3).
+- Reusing the per-Commit `Candidates` tables: measured, no effect. Reverted.
 
 ## 5. Proof
 
-| Probe (range-14 copy, 4 lanes) | Base `413ae60d` | Encode only `0eb6ed67` | Encode + decode `dc928427` (final) |
+| Probe (range-14 copy, 4 lanes) | Base `413ae60d` | Encode only `0eb6ed67` | Encode + decode `dc928427` (first version, superseded) |
 | --- | --- | --- | --- |
 | 720 writes: RSS / anonymous at end | 1,246 / 1,198 MB | 362 / 313 MB | 281 / 233 MB |
 | 3,600 writes (30 rounds): RSS, rounds 10 → 29 | 1,272 → 1,287 MB | — | 291 → 291 MB (round 15–25: 295) |
+| 720 writes, reworked fix `8a14c9b5` (encode regions only, bounded; host load 8.0, 23 containers): RSS / anonymous at end | — | — | 363 / 315 MB, the encode-only level; not run for 3,600 writes |
 | round time, 720-write probe (diagnostic) | 0.73–0.98 s | 0.66–0.77 s | 0.64–0.70 s |
 
-The final arm is flat over 3,600 writes, which is 3.6× the roughly 1,000
+The first version (`dc928427`) is flat over 3,600 writes, which is 3.6× the roughly 1,000
 `fs.write` of a fast dev range. Times are diagnostic only (host load 8–12,
 other lanes' containers running; recorded in `*.load`). No speed claim is made.
 
@@ -131,7 +147,7 @@ per arm, and `binaries.sha256` (addons `438bae05`, `413ae60d`, `0eb6ed67`,
 in this lane's volumes `layerfs-issue352c-mem14`, `-mem00` and `-mem-p3p-src`;
 dev352-p3p was only read.
 
-Checks: Linux `cargo test -p layerfs-storage` 62 passed, 0 failed. Clippy
+Checks (reworked fix): Linux `cargo test -p layerfs-storage` 64 passed, 0 failed (`save_encoder_reuse` 21 → 22 MiB; `encode_region_reuse` 2/2). Earlier version: 62 passed. Clippy
 `-D warnings` clean (host). rustfmt clean on changed files. Boundary guard
 unchanged (16 pre-existing violations, none in storage).
 

@@ -19,7 +19,57 @@ use layerfs_content::inode_leaf::INODE_VALUE_BYTES;
 use std::{
     cell::{RefCell, RefMut},
     collections::BTreeMap,
+    ops::{Deref, DerefMut},
+    sync::{Mutex, PoisonError},
 };
+
+/// Encode regions of finished Saves, kept for the next Save (F-043).
+///
+/// Each Save used to allocate and zero its own 16 MiB encode region and free
+/// it at the end. glibc then kept the freed region in the allocator arena of
+/// the thread that ran it, so a process making Commits on a thread pool held
+/// about one region per thread arena: 1.2 GB measured in the SDK runner. Only
+/// plain regions are kept, never a zstd context, and at most one per
+/// available CPU; a region past that is freed.
+static IDLE_ENCODE: Mutex<Vec<Vec<u64>>> = Mutex::new(Vec::new());
+
+/// The Save's encode workspace; its region returns to [`IDLE_ENCODE`].
+pub(super) struct Encoder(Option<CompressionWorkspace>);
+impl Encoder {
+    fn new() -> StorageResult<Self> {
+        let idle = IDLE_ENCODE
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .pop();
+        Ok(Self(Some(match idle {
+            Some(region) => CompressionWorkspace::in_region(region)?,
+            None => CompressionWorkspace::new()?,
+        })))
+    }
+}
+impl Deref for Encoder {
+    type Target = CompressionWorkspace;
+    fn deref(&self) -> &CompressionWorkspace {
+        self.0.as_ref().expect("encoder until drop")
+    }
+}
+impl DerefMut for Encoder {
+    fn deref_mut(&mut self) -> &mut CompressionWorkspace {
+        self.0.as_mut().expect("encoder until drop")
+    }
+}
+impl Drop for Encoder {
+    fn drop(&mut self) {
+        let Some(workspace) = self.0.take() else {
+            return;
+        };
+        let bound = std::thread::available_parallelism().map_or(1, usize::from);
+        let mut idle = IDLE_ENCODE.lock().unwrap_or_else(PoisonError::into_inner);
+        if idle.len() < bound {
+            idle.push(workspace.into_region());
+        }
+    }
+}
 
 /// Acknowledged admission and physical-selection counts; diagnostics, not timing.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -52,7 +102,7 @@ pub(super) struct State<'a> {
     pub(super) candidates: RefMut<'a, Candidates>,
     pub(super) signatures: RefCell<BTreeMap<usize, SignatureRow>>,
     pub(super) packer: Packer,
-    pub(super) compression: CompressionWorkspace,
+    pub(super) compression: Encoder,
     pub(super) decode: DecompressionWorkspace,
     pub(super) groups: GroupCache,
     pub(super) packs: crate::encoding::PackCache,
@@ -90,7 +140,7 @@ impl<'a> State<'a> {
             candidates,
             signatures: RefCell::new(BTreeMap::new()),
             packer: Packer::new(),
-            compression: CompressionWorkspace::new()?,
+            compression: Encoder::new()?,
             decode: DecompressionWorkspace::new()?,
             groups: GroupCache::new(),
             packs: crate::encoding::PackCache::new(),
