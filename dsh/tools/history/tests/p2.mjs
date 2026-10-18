@@ -641,6 +641,41 @@ test("P3 report (REPORT_FORMAT §8): git and Node parts render and pass the chec
   assert.ok(!("Git" in rows(base)));
 });
 
+test("p3record (REPORT_FORMAT §10.1): the p3 object filled from the play's git counters, Node points and proofs renders and passes the check", async () => {
+  const { fillP3, p3Raw } = await import("../p3record.mjs");
+  const base = formatMetrics(), ck = "c".repeat(40);
+  const version = { ...base.version, bytes: 1200, git: { files: 30, bytes: 200 } };
+  const storageReport = storageFigures({ parts: { exact: false, content: 900, metadata: 600, remainder: 3500, total: 5000 }, prevParts: null,
+    bySource: { tracked: { content: 800, metadata: 500 }, git: { content: 100, metadata: 100 } }, added: { tracked: { content: 200, metadata: 100 }, nodeModules: { content: 30, metadata: 10 }, build: { content: 5, metadata: 1 }, git: { content: 50, metadata: 20 } }, version, changed: { tracked: 150, git: 60 }, commits: 3 });
+  const git = { seed: { packBytes: 2e7, commits: 900, wallMs: 4000 }, lane: { execs: 3, commits: 3, wallMs: 3000 }, lanes: [{ lane: "L1", status: 3, diff: 3, add: 3, rm: 1, commits: 3, loose: 12, indexBytes: 9000, statusLstat: 3000, diffLstat: 3000, commitLstat: 3000 }],
+    timings: { status: [100, 120, 140], diff: [90], add: [30], rm: [10], commit: [200], exec: [900] }, guard: [{ lane: "L1", paths: 14, violations: [], ms: 40 }],
+    lead: { commits: 25, count: 25, head: ck, statusLines: 0, refreshMs: 50, repackMs: 300, writerMs: 2000, indexBytes: 28_000, newPackBytes: 9000, newIdxBytes: 1000, laneBytes_blob: 4000, wallMs: 6000 }, fresh: { statusLines: 0, sumScan: 0, statusMs: 600, wallMs: 900 } };
+  const proofsOf = (r) => Object.fromEntries(["P1", "P2", "P3", "P4", "P5", "P6"].map((id) => [id, { result: id === "P6" ? "n/a" : r }]));
+  const node = { points: [{ id: "lead.initial", lane: "lead", point: "initial", kind: "install", tree: "t".repeat(40), inputs: "i0", order: undefined, ms: 9000, install: { ms: 13000 }, tsc: { ms: 9800 } },
+    { id: "L1.mid", lane: "L1", point: "mid", kind: "refresh", order: 4, inputs: "i0", treeLfs: "u".repeat(40), ms: 20000, install: { ms: 3000 }, tsc: { ms: 5000 }, vitest: { ms: 5600, files: ["a.spec.ts"] } }],
+    lanes: { L1: { lane: "L1", installs: 0, refreshes: 1, tsc: 1, vitestPoints: 1, vitestFiles: 1, equal: null, run: null } }, inputs: { consistent: 3, total: 4 } };
+  const m0 = { ...base, phase: "p3", plan: { ...base.plan, checkpoint: ck }, version, storageReport, execs: { ...base.execs, git: 12, pnpm: 3, tsc: 2, vitest: 1, other: 4 }, git, node,
+    p3raw: p3Raw([{ phase: "end", method: "sandbox.commit", ok: true, sizes: { newStored: 1000, newMetadata: 200, newCanonical: 900 } }, { phase: "end", method: "sandbox.unmount", ok: true, ms: 30 }]), lww: { picks: [{ lane: "L1", picks: 5, nodeModules: 4 }] } };
+  const args = { plan: { ...plan, dsh: { first: "a".repeat(40), commits: 25 }, checkpoint: ck, milestone: false }, summary, gates: [gate("pass")] };
+  // played, proofs not run yet: every Node cell NOT_RUN, the report still passes its check
+  const unrun = { ...m0, p3: fillP3(m0) };
+  assert.equal(unrun.p3.git.commitsWritten, 25);
+  assert.deepEqual(unrun.p3.node.points.map((p) => p.proofs.P1.result), ["NOT_RUN", "NOT_RUN"]);
+  const t1 = renderFormat({ ...args, attempts: [unrun] });
+  assert.deepEqual(checkFormat(t1, unrun, []), []);
+  assert.equal(Object.fromEntries(evaluate(unrun).checks.map((r) => [r.name, r.result]))["Node proofs"], "watch");
+  // after nodeproof.mjs proofs: the judged cells, churn from the lister groups, native speed
+  const done = { ...m0, p3proofs: { "lead.initial": { tree: "t".repeat(40), cached: true, kind: "install", nativeInstallMs: 4100, nativeTscMs: 6400, proofs: { ...proofsOf("pass"), P3: { result: "n/a" }, P5: { result: "n/a" } } }, "L1.mid": { tree: "u".repeat(40), cached: false, kind: "refresh", nativeInstallMs: 1000, nativeVitestMs: 1500, proofs: proofsOf("pass") } } };
+  const groups = { "lead.initial": [{ g: "node_modules/a", digest: "1", bytes: 100 }], "L1.mid": [{ g: "node_modules/a", digest: "2", bytes: 100 }, { g: "node_modules/b", digest: "1", bytes: 50 }] };
+  const filled = { ...done, p3: fillP3(done, { groupsOf: (id) => groups[id] ?? null }) };
+  assert.deepEqual([filled.p3.node.churn.rewrittenBytes, filled.p3.node.churn.storedBytes], [250, 46], "100 B of the first install, then 150 B the refresh rewrote; stored node_modules + build");
+  assert.deepEqual([filled.p3.speed["pnpm.refresh"].lfs.p50, filled.p3.speed["pnpm.refresh"].native.p50, filled.p3.conflicts.installOutputs, filled.p3.conflicts.buildOutputs], [3000, 1000, 4, 1]);
+  const t2 = renderFormat({ ...args, attempts: [filled] });
+  for (const x of ["**Phase P3** · **Git ✓** · **Node ✓**", "| L1 | mid |", "| lead | initial |", "n/a", "| git status (steady) | 120 ms / 120 ms |", "**Execs by tool:** git 12 · pnpm 3 · tsc 2 · vitest 1 · other 4"]) assert.ok(t2.includes(x), x);
+  assert.deepEqual(checkFormat(t2, filled, []), []);
+  assert.equal(Object.fromEntries(evaluate(filled).checks.map((r) => [r.name, r.result]))["Node proofs"], "pass");
+});
+
 test("a finding in the binding format: pending, then every part, with vs without under two binaries", () => {
   const a1 = { ...formatMetrics(), attempt: 1, gate: gate("optimize") }, a2 = { ...formatMetrics(), attempt: 2, binary: { daemon: "7c2e9d40f1a3" }, gate: gate("pass") };
   const f = { range: 7, attempt: 1, verdict: "optimize", trigger: { check: "Scaling", value: "fit", threshold: "< 0.15" }, diagnosis: { step: "D4", summary: "a scan. more" },
@@ -929,7 +964,7 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
   assert.deepEqual(kinds({ changed: ["docs/x.md"], installed: true, milestone: true }), ["clean-install"]);
   assert.equal(installInputsChanged(["node_modules/x/package.json"]), false, "installed files are not inputs");
   const steps = closureSteps({ packages, tsconfigs, changed: ["packages/b/src/y.ts", "packages/a/q.ts", "packages/c/z.ts"], installed: true, milestone: true, run: ["packages/a/tests/t.spec.ts"] });
-  assert.match(steps[0].command, /find \. -name node_modules -type d -prune -exec rm -rf \{\} \+ && pnpm install --offline --frozen-lockfile --store-dir \/tmp\/pnpm-store --cache-dir \/tmp\/pnpm-cache --ignore-scripts$/);
+  assert.match(steps[0].command, /find \. -name node_modules -type d -prune -exec rm -rf \{\} \+ && pnpm install --offline --frozen-lockfile --store-dir \/tmp\/pnpm-store --cache-dir \/tmp\/pnpm-cache --ignore-scripts --fetch-retries=0 --fetch-timeout=3000$/, "NODE_RULE B3: a store gap fails at once");
   // the private writable layer over the read-only store, built by the shell on a fake store
   const fakeStore = mkdtempSync(join(tmpdir(), "store-"));
   mkdirSync(join(fakeStore, ".cache/v11"), { recursive: true }); mkdirSync(join(fakeStore, "v11/files"), { recursive: true });

@@ -44,10 +44,11 @@ export function gitOutcome(g) {
 
 /** Every test point's proofs: pass, stop and NOT_RUN counts over all point × proof cells. */
 export function proofTally(node) {
-  const t = { points: node?.points?.length ?? 0, pass: 0, stop: 0, notRun: 0, stops: [] };
+  const t = { points: node?.points?.length ?? 0, pass: 0, stop: 0, notRun: 0, na: 0, stops: [] };
   for (const p of node?.points ?? []) for (const id of PROOFS) {
     const r = p.proofs?.[id]?.result ?? "NOT_RUN";
-    if (r === "pass") t.pass++; else if (r === "stop") { t.stop++; t.stops.push(`${p.lane} ${p.point} ${id}`); } else t.notRun++;
+    // n/a: the proof does not apply at this point (a refresh's P3 at an install, P6 off the repair); never counted
+    if (r === "n/a") t.na++; else if (r === "pass") t.pass++; else if (r === "stop") { t.stop++; t.stops.push(`${p.lane} ${p.point} ${id}`); } else t.notRun++;
   }
   return t;
 }

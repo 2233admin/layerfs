@@ -22,6 +22,10 @@
 //   node dsh/tools/history/run.mjs play --run <id> --from k --to k --mode fast|measured --until lanes   then   … --resume
 //     (a range in two commands, each under 120 s: halves.mjs; the P3 command shape with git on)
 //   node dsh/tools/history/run.mjs git --run <dev run> --on   (F-031 option (c) from the next range; dev runs only until the dev proof is accepted)
+//   node dsh/tools/history/run.mjs node --run <dev run> --on [--inputs-rule plan] [--store-policy verified|release-age-off]
+//     (NODE_RULE from the next range: the lead's first install, lane test points, the lead's repair; §3 and the store
+//     policy are switches until the owner decides them; dev runs only)
+//   fork … --plan <dir> --oracle <dir>   (a dev run on a dev slice's plan and oracle, slice.mjs)
 // `phase` moves a run to the next phase (P1 → P2 …) at the range it stands
 // at, keeping its pinned binaries and its Store; the move is recorded in the
 // run's manifest (`phases`) and ledger. A dirty run cannot move.
@@ -66,6 +70,9 @@ import { addDelta, checkpointDiff, deltaSummary, deltaWork, diskGuard, diskModel
 import { ctxFromJson, dropHalf, loadHalf, saveHalf } from "./halves.mjs";
 import { consolidateLanes, playAgents, pool, startRange } from "./agents.mjs";
 import { gitFacts } from "./gitplay.mjs";
+import { checkNode, groupsFile, nodeOf } from "./nodelanes.mjs";
+import { fillP3, p3Raw } from "./p3record.mjs";
+import { STORE_POLICIES } from "./closure.mjs";
 import { buildOverview, callTable } from "./stats.mjs";
 import { area } from "./plan-range.mjs";
 import { nextChain, rangeClosure, studyMeasurements } from "./closure.mjs";
@@ -170,7 +177,28 @@ export function execFacts(lines) {
     // the trace shortens long commands, so the closure's installs are known by their step too (dev352-p3h: 0 counted)
     installs: ex.filter((l) => /pnpm (install|i)\b/.test(String(l.args?.command ?? "")) || /^r\d+\.(install|incremental-install|clean-install|reinstall-check)#/.test(String(l.step ?? "")) && /pnpm-store/.test(String(l.args?.command ?? "")) && !/^test -d /.test(String(l.args?.command ?? ""))).length, tests: ex.filter((l) => /vitest/.test(String(l.args?.command ?? ""))).length,
     // the version figures' own execs (version.mjs): tooling, inside the total
-    version: ex.filter((l) => /^r\d+\.version(#|$)/.test(String(l.step ?? ""))).length };
+    version: ex.filter((l) => /^r\d+\.version(#|$)/.test(String(l.step ?? ""))).length,
+    // REPORT_FORMAT §10.1: every exec by tool, summing to the total
+    ...execTools(ex) };
+}
+
+/**
+ * Execs by tool (REPORT_FORMAT §10.1 `m.execs`): git (a git exec of the seed,
+ * a lane, the lead or a check), pnpm (an install or refresh), tsc, vitest,
+ * other (file placing, listers, ids, scratch). The trace shortens long
+ * commands, so a step's label decides where its command's head cannot.
+ */
+export function execTools(ex) {
+  const out = { git: 0, pnpm: 0, tsc: 0, vitest: 0, other: 0 };
+  for (const l of ex) out[execTool(String(l.args?.command ?? ""), String(l.step ?? ""))]++;
+  return out;
+}
+export function execTool(command, step) {
+  if (/\bvitest\b/.test(command)) return "vitest";
+  if (/\btsc -b\b/.test(command)) return "tsc";
+  if (/pnpm install\b/.test(command) || (/(^|\.)(install|incremental-install|clean-install|reinstall-check|refresh|repair-install)(#\d+)?$/.test(step) && /pnpm-store/.test(command) && !/^test -d /.test(command))) return "pnpm";
+  if (/GIT_CONFIG_COUNT|(^|[;&|]\s*)git /.test(command) || /LEAD_WRITER|unpack-objects/.test(command)) return "git";
+  return "other";
 }
 
 const q = (xs, p) => { const v = [...xs].sort((a, b) => a - b); return v.length ? v[Math.min(v.length - 1, Math.floor((v.length - 1) * p))] : null; };
@@ -202,6 +230,14 @@ export function keyOps(calls, lines, log) {
   return { ops: key, commitPerFileMs: files ? +(commits.reduce((n, c) => n + c.ms, 0) / files).toFixed(2) : null, oneShotP50: q(totals, 0.5), oneShots: totals.length, slowest };
 }
 
+/** The range's Node facts for the metrics: the context without its plan copy, plus NODE_RULE §11 b's consistency when computed (nodeproof.mjs inputs). */
+export function nodeFacts(run, k, ctx) {
+  const { plan, done, ...rest } = ctx.node, f = join(run.planDir, `inputs-${pad(k)}.json`);
+  let inputs = null;
+  try { const x = JSON.parse(readFileSync(f, "utf8")); inputs = { consistent: x.consistent, total: x.total, states: x.states, policy: x.policy, rule: x.rule }; } catch { inputs = null; }
+  return { ...rest, inputs };
+}
+
 /** The next attempt number of range k in `metrics`. */
 export function nextAttempt(metrics, k) {
   if (!existsSync(metrics)) return 1;
@@ -209,7 +245,7 @@ export function nextAttempt(metrics, k) {
   return 1 + Math.max(0, ...readdirSync(metrics).map((f) => Number(re.exec(f)?.[1] ?? 0)));
 }
 
-function create({ id, phase, label, policy, image, daemon, addon = ADDON, sdk = SDK_JS, source }) {
+function create({ id, phase, label, policy, image, daemon, addon = ADDON, sdk = SDK_JS, source, plan = null, oracle = null }) {
   if (!RUN_ID.test(id)) throw new Error(`run id ${id}: lowercase letters, digits and -`);
   if (!PHASES[phase]) throw new Error(`phase ${phase} has no player yet (built: ${Object.keys(PHASES).join(", ")})`);
   const dir = join(HISTORY, "runs", id);
@@ -223,7 +259,7 @@ function create({ id, phase, label, policy, image, daemon, addon = ADDON, sdk = 
   };
   return { dir, volume, env, manifest: {
     run: id, phase, label, policyName: policy, policy: POLICIES[policy], project: "dsh", volume, env,
-    repo: join(HISTORY, "dsh.git"), plan: join(HISTORY, "plan"), oracle: join(HISTORY, "oracle"),
+    repo: join(HISTORY, "dsh.git"), plan: plan ?? join(HISTORY, "plan"), oracle: oracle ?? join(HISTORY, "oracle"),
     outputs: outputs(label, dir), created: new Date().toISOString(), source,
   } };
 }
@@ -461,7 +497,7 @@ async function playRange(run, k, mode, half = null) {
     const stages = { kind: "tooling", totalMs: Math.round(performance.now() - t0), ...wall };
     // a closure's steps and development checks are kept in fast mode too; their stored bytes need the trace (measured mode)
     const cl = ctx?.closure && !ctx.closure.skipped ? { steps: ctx.closure.steps, rows: ctx.closure.rows, oracleOk: ctx.closure.oracle?.ok ?? null, rebuild: ctx.closure.rebuild ?? null, reinstallCheck: ctx.closure.reinstallCheck ?? null } : null;
-    writeJson(join(run.dir, "fast", `range-${pad(k)}.json`), { range: k, mode, head, failure, calls: run.tally.calls, wall: stages, runnerMemory: runnerMemory(), ...(cl ? { closure: cl } : {}), ...(ctx?.git ? { git: gitFacts(ctx) } : {}), ...(ctx?.lww ? { lww: { ...ctx.lww, total: ctx.lww.picks.reduce((n, p) => n + p.picks, 0) } } : {}) });
+    writeJson(join(run.dir, "fast", `range-${pad(k)}.json`), { range: k, mode, head, failure, calls: run.tally.calls, wall: stages, runnerMemory: runnerMemory(), ...(cl ? { closure: cl } : {}), ...(ctx?.git ? { git: gitFacts(ctx) } : {}), ...(ctx?.node ? { node: nodeFacts(run, k, ctx) } : {}), ...(ctx?.lww ? { lww: { ...ctx.lww, total: ctx.lww.picks.reduce((n, p) => n + p.picks, 0) } } : {}) });
     console.log(`range ${k}: ${failure ? `STOP ${failure}` : "ok"} (${run.tally.calls} calls; tooling ${JSON.stringify(stages)})`);
     if (failure) { run.state.dirty = k; run.save(); return EXIT.stop; }
     advance(run, k, plan, head, layer, ctx, performance.now() - t0);
@@ -487,6 +523,9 @@ async function playRange(run, k, mode, half = null) {
   };
   // owner S4: the generated /.lww and the picks its rules made, per merge
   if (ctx?.git) m.git = gitFacts(ctx);
+  // NODE_RULE: the points as played (their proofs come from nodeproof.mjs proofs), the trace facts p3 needs
+  if (ctx?.node) m.node = nodeFacts(run, k, ctx);
+  if (m.phase === "p3") m.p3raw = p3Raw(t.all);
   if (ctx?.lww) m.lww = { ...ctx.lww, total: ctx.lww.picks.reduce((n, p) => n + p.picks, 0) };
   if (ctx?.closure && !ctx.closure.skipped) {
     // P3: storage by the step's own Commit (traced sizes), the reinstall gate, STORAGE_STUDY §8
@@ -494,7 +533,7 @@ async function playRange(run, k, mode, half = null) {
     const inst = ctx.closure.rows.find((r) => /install/.test(r.kind)), build = ctx.closure.rows.find((r) => r.kind === "build");
     const instSizes = inst ? commitOf(inst.kind)?.sizes ?? null : null;
     if (ctx.closure.reinstall && m.storage) m.storage.reinstall = { changedPackages: ctx.closure.reinstall.changedPackages, rawChangedBytes: ctx.closure.reinstall.rawChangedBytes, storedNewBytes: instSizes?.newStored ?? null };
-    m.closure = { lwwPicked: !!ctx?.lww?.picks.some((p) => p.picks > 0), steps: ctx.closure.steps, rows: ctx.closure.rows, oracle: ctx.closure.oracle ?? null, oracleKind: ctx.closure.oracleKind ?? null, normalized: ctx.closure.normalized ?? null, earlierRoots: ctx.closure.earlierRoots ?? null };
+    m.closure = { lwwPicked: !!ctx?.lww?.picks.some((p) => p.picks > 0), steps: ctx.closure.steps, rows: ctx.closure.rows, oracle: ctx.closure.oracle ?? null, oracleKind: ctx.closure.oracleKind ?? null, normalized: ctx.closure.normalized ?? null, earlierRoots: ctx.closure.earlierRoots ?? null, outputOk: ctx.closure.outputOk ?? null };
     // the development checks run after the publish: run.mjs devcheck (devcheck.mjs)
     m.study = studyMeasurements({
       fsWrites: t.all.filter((l) => l.method === "fs.write" && l.sizes).map((l) => ({ sizes: l.sizes })),
@@ -615,6 +654,8 @@ async function playRange(run, k, mode, half = null) {
       run.state.parts = parts; run.state.bySource = bySource;
     }
   }
+  // REPORT_FORMAT §10.1: the P3 object (proofs NOT_RUN until nodeproof.mjs proofs runs the native oracles)
+  if (m.phase === "p3") m.p3 = fillP3(m, { groupsOf: (id) => { try { return JSON.parse(readFileSync(groupsFile(run, k, id), "utf8")); } catch { return null; } } });
   m.wall = { kind: "tooling", totalMs: Math.round(performance.now() - t0), ...wall };
   const budget = loadBudget();
   if (budget) Object.assign(m.budget, { wallBudgetMs: budget.wallBudgetMs, ...wallProjection(readAttempts(outputs.metrics), m.phase, { range: k, totalMs: m.wall.totalMs }, budget.ranges) });
@@ -704,6 +745,22 @@ function cmdGit(o) {
   return EXIT.done;
 }
 
+/** Turns NODE_RULE on for a dev run in a closure phase, from the range it stands at (nodelanes.mjs), with its two switches. */
+function cmdNode(o) {
+  const dir = join(HISTORY, "runs", o.run), run = new Run(dir);
+  if (!("on" in o)) return usage();
+  if (run.manifest.label !== "dev") { console.error(`run ${o.run}: NODE_RULE churn is for dev runs until its dev range is accepted`); return EXIT.usage; }
+  if (!PHASES[run.manifest.phase]?.closure) { console.error(`run ${o.run}: NODE_RULE starts in a closure phase (P3)`); return EXIT.usage; }
+  const node = { on: true, inputsRule: o["inputs-rule"] ?? "plan", storePolicy: o["store-policy"] ?? "verified", atRange: run.state.next, at: new Date().toISOString() };
+  const why = checkNode(nodeOf({ node })) ?? (STORE_POLICIES[node.storePolicy] == null ? `store policy ${node.storePolicy}: one of ${Object.keys(STORE_POLICIES).join(", ")}` : null);
+  if (why) { console.error(`run ${o.run}: ${why}`); return EXIT.usage; }
+  run.manifest.node = node;
+  writeJson(join(dir, "run.json"), run.manifest);
+  run.note({ kind: "node", name: "NODE_RULE on", atRange: run.state.next, inputsRule: node.inputsRule, storePolicy: node.storePolicy });
+  console.log(JSON.stringify({ run: o.run, node }));
+  return EXIT.done;
+}
+
 /** The pilot lines a phase-matched re-baseline forks from, newest format first (their range-1 snapshot). */
 export const REBASELINE_SOURCES = ["p1-rebase-d", "p1-pilot-b"];
 
@@ -744,7 +801,9 @@ async function cmdFork(o) {
   const k = Number(o.range);
   const manifest = JSON.parse(readFileSync(manifestPath(source.manifest.outputs.snapshots, k, source.manifest.run), "utf8"));
   if (!manifest.state) throw new Error(`snapshot ${k} carries no runner state`);
-  const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), addon: resolve(o.addon ?? source.manifest.env.LAYERFS_NATIVE ?? ADDON), sdk: resolve(o.sdk ?? source.manifest.env.LAYERFS_SDK_JS ?? SDK_JS), source: { run: source.manifest.run, range: k } });
+  const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), addon: resolve(o.addon ?? source.manifest.env.LAYERFS_NATIVE ?? ADDON), sdk: resolve(o.sdk ?? source.manifest.env.LAYERFS_SDK_JS ?? SDK_JS), source: { run: source.manifest.run, range: k },
+    // a dev slice (slice.mjs): its own plan and oracle folders; never a measured run
+    ...(o.plan || o.oracle ? (o.label && o.label !== "dev" ? (() => { throw new Error("--plan/--oracle are for dev runs"); })() : { plan: resolve(o.plan), oracle: resolve(o.oracle) }) : {}) });
   runManifest.binary = binaries(env);
   runManifest.planVersion = source.manifest.planVersion;
   mkdirSync(dir, { recursive: true });
@@ -827,7 +886,7 @@ async function main() {
   if (!o.run && cmd !== "rebaseline") process.exit(usage());
   const outside = checkRunner(cmd, process.env);
   if (outside) { console.error(outside); process.exit(EXIT.guard); }
-  const code = cmd === "new" ? (await cmdNew(o), EXIT.done) : cmd === "play" ? await cmdPlay(o) : cmd === "phase" ? cmdPhase(o) : cmd === "fork" ? (await cmdFork(o), EXIT.done) : cmd === "cleanup" ? await cmdCleanup(o) : cmd === "devcheck" ? await cmdDevcheck(o) : cmd === "git" ? cmdGit(o) : cmd === "rebaseline" ? await cmdRebaseline(o) : usage();
+  const code = cmd === "new" ? (await cmdNew(o), EXIT.done) : cmd === "play" ? await cmdPlay(o) : cmd === "phase" ? cmdPhase(o) : cmd === "fork" ? (await cmdFork(o), EXIT.done) : cmd === "cleanup" ? await cmdCleanup(o) : cmd === "devcheck" ? await cmdDevcheck(o) : cmd === "git" ? cmdGit(o) : cmd === "node" ? cmdNode(o) : cmd === "rebaseline" ? await cmdRebaseline(o) : usage();
   process.exit(code);
 }
 
