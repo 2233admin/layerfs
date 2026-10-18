@@ -59,6 +59,8 @@ export async function pool(run, k, agents = 4) {
 async function checkIds(a, sb, ws, files, label) {
   a.rec.next = { kind: "files", n: files.length };
   const r = await expectCall(a, `${label} exec`, () => a.lf.sandbox.exec(sb, ws, `node -e ${quote(BLOB_IDS)} ${files.map((f) => quote(f.path)).join(" ")}`));
+  // a refused exec answers no exit code: name the refusal (dev352-p3l r016.s0159 read "exited undefined")
+  if (r.refused) throw new Mismatch(`${label} blob ids exec refused: ${r.refused.code ?? ""} ${String(r.refused.message ?? "").slice(0, 300)}`);
   if (r.exitCode !== 0 || r.truncated) throw new Mismatch(`${label} blob ids exited ${r.exitCode}: ${String(r.stderr ?? "").slice(0, 300)}`);
   const got = new Map(String(r.stdout).split("\n").filter(Boolean).map((l) => { const [, blob, ...p] = l.split(" "); return [p.join(" "), blob]; }));
   for (const f of files) if (got.get(f.path) !== f.blob) throw new Mismatch(`${label} ${f.path}: blob ${got.get(f.path) ?? "missing"}, the plan has ${f.blob}`);

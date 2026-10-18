@@ -269,6 +269,7 @@ export async function execAll(run, sb, ws, commands, label, files = 0) {
     for (const command of commands) {
       run.rec.next = { kind: "files", n: files };
       const r = await expectCall(run, `${label} exec`, () => run.lf.sandbox.exec(sb, ws, command));
+      if (r.refused) throw new Mismatch(`${label} exec refused: ${r.refused.code ?? ""} ${String(r.refused.message ?? "").slice(0, 300)}`);
       if (r.exitCode !== 0) throw new Mismatch(`${label} exec exited ${r.exitCode}: ${String(r.stderr ?? "").slice(0, 300)}`);
       results.push(r);
     }
