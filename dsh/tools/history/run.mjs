@@ -62,7 +62,7 @@ import { addDelta, checkpointDiff, deltaSummary, deltaWork, diskGuard, diskModel
 import { consolidateLanes, playAgents, pool, startRange } from "./agents.mjs";
 import { buildOverview, callTable } from "./stats.mjs";
 import { area } from "./plan-range.mjs";
-import { rangeClosure, studyMeasurements } from "./closure.mjs";
+import { nextChain, rangeClosure, studyMeasurements } from "./closure.mjs";
 import { versionStats } from "./version.mjs";
 import { addedBySource, changedGroupBytes, cumulative, liveParts, sealedParts, seedBySource, stepSource, storageFigures } from "./storage.mjs";
 
@@ -354,6 +354,8 @@ async function playRange(run, k, mode) {
       published = await consolidateLanes(run, k, plan, ctx, { beforePublish });
       branch = ctx.final;
       ctx.tree = ctx.mainTree;
+      // the node_modules chain since the last install proved equal to a clean one (closure.mjs nextChain)
+      if (ctx.closure?.executed) run.state.closureChain = nextChain(run.state.closureChain, k, plan.checkpoint, ctx.closure.executed);
       if (ctx.closure?.groups) {
         const file = join(run.dir, "closure", `groups-${pad(k)}.json`);
         writeJson(file, ctx.closure.groups);
@@ -433,7 +435,7 @@ async function playRange(run, k, mode) {
     const inst = ctx.closure.rows.find((r) => /install/.test(r.kind)), build = ctx.closure.rows.find((r) => r.kind === "build");
     const instSizes = inst ? commitOf(inst.kind)?.sizes ?? null : null;
     if (ctx.closure.reinstall && m.storage) m.storage.reinstall = { changedPackages: ctx.closure.reinstall.changedPackages, rawChangedBytes: ctx.closure.reinstall.rawChangedBytes, storedNewBytes: instSizes?.newStored ?? null };
-    m.closure = { steps: ctx.closure.steps, rows: ctx.closure.rows, oracle: ctx.closure.oracle ?? null, normalized: ctx.closure.normalized ?? null };
+    m.closure = { steps: ctx.closure.steps, rows: ctx.closure.rows, oracle: ctx.closure.oracle ?? null, oracleKind: ctx.closure.oracleKind ?? null, normalized: ctx.closure.normalized ?? null, earlierRoots: ctx.closure.earlierRoots ?? null };
     // development checks (owner 2026-10-18): the unchanged lockfile's clean reinstall, and the build again after a remount
     const again = commitOf("reinstall-check")?.sizes ?? null;
     if (ctx.closure.reinstallCheck) m.closure.reinstallCheck = { ...ctx.closure.reinstallCheck, newMetadata: again?.newMetadata ?? null, newStored: again?.newStored ?? null };

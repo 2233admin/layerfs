@@ -128,6 +128,12 @@ Proof:
     | pnpm's install output | the duration on the `Done in <duration> using pnpm` line | `<t>` | the install's wall time (since the oracle was built) |
     | pnpm's install output | `Progress: ` lines | dropped | progress redraws vary with timing (since the oracle was built) |
 
+    | `node_modules/.modules.yaml`, `node_modules/.pnpm-workspace-state-v1.json` and pnpm bin shims, as above | every occurrence of one recorded mount root of an earlier step in the node_modules chain, each root listed by exact string | `<root>` | a new directory per mount is the product's model (owner, F-034, 2026-10-18), so files pnpm wrote in an earlier mount keep that mount's root, as expected state (dev352-p3h r016: `/workspaces/23` in shims after a remount) |
+
+    The root substitutions match only at a path boundary: the next character
+    is not a letter, digit, `_`, `.` or `-`, so `/workspaces/2` never matches
+    inside `/workspaces/23`.
+
     Shims are the one entry that isn't a single path: pnpm writes one per
     bin, at the top level and inside each package with bin dependencies, so
     the set is the lockfile's bins. The shebang condition keeps any other
@@ -146,6 +152,29 @@ Proof:
     each install row's `normalized`), and the range report's "Installed tree"
     row shows them, so the comparison can't widen silently. An oracle from an
     older lister version is refused, never compared.
+- **The oracle of an install on top (lead rule, 2026-10-18, from dev352-p3h
+  r016).** An install over an existing `node_modules` keeps that tree's state.
+  That includes orphan `.pnpm` packages of the previous lockfile and the test
+  caches vitest wrote (`node_modules/.vite`, `.vite-temp`). So a clean native
+  install is the wrong oracle for it.
+  - The run records the node_modules chain (`state.closureChain`): every
+    closure step since the last install compared equal to the clean oracle (a
+    first install, a milestone clean install, the dev reinstall check), with
+    its checkpoint, command and mount root.
+  - The oracle for an install on top is a native replay of that chain plus
+    the install (`closure.mjs oracle --run <id> --range k`,
+    `nativeSequence`): one container at `/lfs352-native-root`. For each step
+    the tree is set to that step's checkpoint (the archive over the tree,
+    git's deletions removed, untracked output kept), then the step's command
+    runs. It is cached per chain as `seq-<key>.json`, where the key hashes
+    every checkpoint and command.
+  - First installs, milestone clean installs and the dev reinstall check keep
+    the clean native oracle of the lockfile.
+  - The earlier steps' mount roots are listed substitutions (the table
+    above). Any other difference is a mismatch.
+  - Dev runs also run `./node_modules/.bin/tsc --version` in the new mount
+    after an install on top and record its exit and output, as a fact, not a
+    gate (F-034).
 - **Timing:** FUSE ÷ native for the same install on the same tree (playbook D6),
   per install kind (first, incremental, clean). Speed findings are diagnosed, never
   avoided by changing the route.

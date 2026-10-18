@@ -413,6 +413,40 @@ test("version figures (lead 2026-10-18): the incremental manifest from diff_comm
   rmSync(dir, { recursive: true, force: true });
 });
 
+test("install on top (lead 2026-10-18, dev352-p3h r016): the chain, its oracle file, and earlier mount roots as listed substitutions", async () => {
+  const { nextChain, sequenceKey, oracleFiles, earlierRootCount, listerCommand: lc, parseLister: pl } = await import("../closure.mjs");
+  const ex = (kind, root) => ({ kind, command: `${kind} cmd`, root });
+  let chain = nextChain([], 15, "c15", [ex("install", "/workspaces/23"), ex("reinstall-check", "/workspaces/24"), ex("build", "/workspaces/25"), ex("test", "/workspaces/27")]);
+  assert.deepEqual(chain.map((e) => [e.range, e.kind, e.root]), [[15, "reinstall-check", "/workspaces/24"], [15, "build", "/workspaces/25"], [15, "test", "/workspaces/27"]], "the chain starts at the last clean install");
+  chain = nextChain(chain, 16, "c16", [ex("test", "/workspaces/31")]);
+  assert.equal(chain.length, 4);
+  assert.deepEqual(nextChain(chain, 17, "c17", [ex("clean-install", "/workspaces/40")]).map((e) => e.kind), ["clean-install"]);
+  const key = sequenceKey(chain, { checkpoint: "c17", command: "i" });
+  assert.equal(key, sequenceKey(JSON.parse(JSON.stringify(chain)).map((e) => ({ ...e, root: "/elsewhere" })), { checkpoint: "c17", command: "i" }), "roots don't change the key");
+  assert.notEqual(key, sequenceKey(chain, { checkpoint: "c17", command: "j" }));
+  const top = oracleFiles("/o", { lock: "L", steps: [{ kind: "incremental-install", command: "i" }, { kind: "reinstall-check" }], chain, checkpoint: "c17" });
+  assert.deepEqual([top.kind, top.install, top.clean], ["sequence", `/o/node_modules/seq-${key}.json`, "/o/node_modules/L.json"]);
+  const first = oracleFiles("/o", { lock: "L", steps: [{ kind: "install", command: "i" }], chain: [], checkpoint: "c15" });
+  assert.deepEqual([first.kind, first.install], ["clean", "/o/node_modules/L.json"]);
+  assert.equal(oracleFiles("/o", { lock: "L", steps: [{ kind: "incremental-install", command: "i" }], chain: [], checkpoint: "c" }).kind, "clean", "no chain: clean");
+  // the lister: the current root and each listed earlier root at a path boundary; /workspaces/2 never matches inside /workspaces/23
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "lfs352-roots-")));
+  const mk = (name, shimRoot) => {
+    const root = join(dir, name); mkdirSync(join(root, "node_modules/.bin"), { recursive: true });
+    writeFileSync(join(root, "node_modules/.bin/tsc"), `#!/bin/sh\nexport NODE_PATH="${shimRoot}/node_modules/.pnpm/node_modules:${shimRoot}2/x"\n`);
+    return root;
+  };
+  const a = mk("a", join(dir, "old")), b = mk("b", join(dir, "b"));
+  const la = pl(execFileSync("sh", ["-c", lc([], { roots: [join(dir, "old"), join(dir, "ol")] })], { cwd: a, encoding: "utf8" }));
+  const lb = pl(execFileSync("sh", ["-c", lc()], { cwd: b, encoding: "utf8" }));
+  assert.deepEqual(la.normalized.earlierRoots, { "node_modules/.bin/tsc": { [join(dir, "old")]: 1 } }, "the old root at a boundary only; 'old2' and the prefix 'ol' are left");
+  assert.deepEqual(earlierRootCount(la.normalized), { files: 1, occurrences: 1 });
+  assert.equal(la.groups.find((g) => g.g === "node_modules/.bin").digest === lb.groups.find((g) => g.g === "node_modules/.bin").digest, false, "'old2' stays raw, so it still differs from 'b2'");
+  rmSync(dir, { recursive: true, force: true });
+  const shown = installedText({ oracleKind: "sequence", oracle: { ok: true, groups: 3, missing: [], extra: [], differ: [] }, normalized: { files: {}, outputRoot: 0 }, earlierRoots: { roots: ["/workspaces/23"], install: { files: 251, occurrences: 1753 }, binCheck: { command: "./node_modules/.bin/tsc --version", exitCode: 0 } } });
+  assert.match(shown, /^against the native replay of its chain · \*\*3 package groups equal to native\*\*.* · earlier mount roots ×1753 in 251 files \(1 roots\) · `\.\/node_modules\/\.bin\/tsc --version` in the new mount: exit 0$/);
+});
+
 test("per-call scratch (lead 2026-10-18): distinct folders; removed on success and after a failed exec", async () => {
   const { execAll, scratchDir } = await import("../lib.mjs");
   assert.notEqual(scratchDir(), scratchDir());
