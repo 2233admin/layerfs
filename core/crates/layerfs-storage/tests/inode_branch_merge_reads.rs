@@ -15,7 +15,7 @@ use layerfs_content::filesystem::{
     build_filesystem, scope_for_seed, update_filesystem, DirectoryUpdate, FilesystemInput,
     FilesystemObjects, FilesystemResources, FilesystemRootId, InodeScope, InodeUpdate, PathName,
 };
-use layerfs_content::merge::{merge_roots, MergeInput, RulesFrom};
+use layerfs_content::merge::{merge_roots, MergeInput, RulesFrom, Side};
 use layerfs_content::object::inode_leaf::{InodeKind, InodeMetadata, InodeValue};
 use layerfs_content::{
     AuthenticatedObjects, ConstructionPolicy, ContentResult, FinalizedConsumer, FinalizedObject,
@@ -269,8 +269,11 @@ fn a_merge_reconstructs_one_branch_chain_per_demanded_branch_page() {
                 policy,
                 capacities: &capacities,
                 hints: None,
+                decide_from: Side::Ours,
+                bound: None,
             },
             &mut fresh,
+            None,
             timing,
         )
     })
