@@ -13,3 +13,4 @@
 | 006 | 65 | 4,649 | **watch** | Speed | 2.9 MiB | [range-006](ranges/range-006.md) |
 | 007 | 60 | 5,186 | **watch** | Speed | 3.2 MiB | [range-007](ranges/range-007.md) |
 | 008 | 62 | 5,928 | **watch** | Speed | 4.4 MiB | [range-008](ranges/range-008.md) |
+| 009 | 61 | 6,385 | **optimize** | Counters | 2.6 MiB | [range-009](ranges/range-009.md) |
