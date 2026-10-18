@@ -331,11 +331,11 @@ const probeOf = (text) => {
   }
   return { ...v, fds };
 };
-/** Runs PROBE in Sandbox `sb`'s container (no Workspace needed, so it can run after unmount). */
+/** Runs PROBE in Sandbox `sb`'s container (no Workspace needed, so it can run after unmount); privileged, as smaps and fd links need ptrace access. */
 async function daemonProbe(home, sb) {
   const { api, demux } = await import(join(REPO, "dsh/tools/history/runner/docker-shim.mjs"));
   const id = readFileSync(join(home, "_sandboxes", sb, "container"), "utf8").trim();
-  const e = await api("POST", `/containers/${id}/exec`, { AttachStdout: true, AttachStderr: true, Tty: false, Cmd: ["sh", "-c", PROBE] });
+  const e = await api("POST", `/containers/${id}/exec`, { AttachStdout: true, AttachStderr: true, Tty: false, Privileged: true, Cmd: ["sh", "-c", PROBE] });
   const r = await api("POST", `/exec/${e.body.Id}/start`, { Detach: false, Tty: false }, { raw: true });
   return { at: new Date().toISOString(), ...probeOf(demux(r.body).stdout.toString("utf8")) };
 }
@@ -551,7 +551,6 @@ async function innerSerial(args, out) {
         record({ arm: "serial", case: id, pos: Number(pos), step, ...parse(r), daemonMem: m });
       }
       label("lfs.unmount"); await lf.sandbox.unmount(sb, ws, true); ws = null;
-      label("lfs.after-unmount"); await lf.sandbox.status(sb);
       record({ arm: "serial", case: id, pos: Number(pos), afterUnmount: await daemonProbe(home, sb) });
     } else if (what === "repeat") {
       // one case n times, each in a fresh Workspace on this daemon, the probe after each unmount
@@ -564,7 +563,6 @@ async function innerSerial(args, out) {
         const runs = [];
         for (const [step, cmd] of steps) { label(`r${i}.${step}.exec`); runs.push({ step, ...parse(await lf.sandbox.exec(sb, ws, timed(".", cmd, c.cmp))) }); }
         label(`r${i}.unmount`); await lf.sandbox.unmount(sb, ws, true); ws = null;
-        label(`r${i}.after-unmount`); await lf.sandbox.status(sb);
         record({ arm: "repeat", case: id, pos: Number(pos), i, runs: runs.map(({ head, ...r }) => r), afterUnmount: await daemonProbe(home, sb) });
       }
     } else if (what === "close") {
@@ -591,8 +589,9 @@ export function summarizeSerial(out, st) {
     const arms = existsSync(join(out, `arms-${c.pos}.json`)) ? JSON.parse(readFileSync(join(out, `arms-${c.pos}.json`), "utf8")) : [{ error: "no arms" }];
     for (const a of arms) {
       if (a.afterUnmount) {
-        // the daemon's own record of the status taken right after the unmount
-        const g = byStep(a.arm === "repeat" ? `r${a.i}.after-unmount` : "lfs.after-unmount")[0], gs = g && byTrace.get(g.id)?.sections;
+        // the daemon's own Unmount record (written after the Workspace's reader and overlay closed);
+        // sandbox.status needs a Workspace path, so there is no status call after the unmount
+        const g = byStep(a.arm === "repeat" ? `r${a.i}.unmount` : "lfs.unmount")[0], gs = g && byTrace.get(g.id)?.sections;
         rows.push({ ...a, cache: gs?.immutable_cache ?? null, readers: gs?.store_readers ?? null, kernelMount: gs?.kernel_mount ?? null });
         continue;
       }

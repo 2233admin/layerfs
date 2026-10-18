@@ -9,16 +9,6 @@
 | Binaries | release, `--locked --offline -j 6`, image `layerfs-307-fuser-patch-clippy:1.85.1` (`378b799ef433`), pinned under `core/target/issue359-warm/` with a `SOURCE` file each, registered in `~/lfs-history/runs/issue359/binaries.json`. base: daemon `cc185d13` / addon `66d774c8` (record 026's head build; my rebuild of `615bf75f2` produced the same bytes). a32: `42c19a39` / `3ad548df`. a64: `42c19a39` / `6ae65f16` (id `w64-6ae65f16`; the daemon does not use its own default, the budget is the addon's setup). b32: `afeb92f6` / `ea7bb1dc`. a64+b32: `ecf5dea6` / `b65ef9f6` |
 | Status | **decided.** Owner, 2026-10-19: "Set the daemon CanonicalCache to 64 MiB and drop prototype (b), the shared pack tier." The branch carries 64 MiB (SDK setup in `sdk/js/native/src/sandbox.rs`, daemon default in `install_types.rs`); (b) is removed and `layerfs-storage` and `layerfs-store-service` are byte-identical to `issue359-impl` (`7dc323574`). Pushed to the branch only; nothing merged |
 
-> **Old golden, superseded (owner, 2026-10-19).** Every sample number in this
-> record (seq 347–644) was taken on the cost golden `layerfs-issue359-prep`,
-> whose attributes are in the Root form from before #360. The owner retired it
-> for new samples: "we need to drop the old store and use the latest one and do
-> not get confused". These numbers keep their verdicts (COMPLETE or FAILED) but
-> are labeled **old golden, superseded** and are never compared unlabeled with
-> samples on the current-format golden (`layerfs-issue359-golden-current-*`).
-> S2, R and the paired 8/64 MiB cp-rm-nm samples are to be rerun there; the 64
-> MiB decision itself is unchanged.
-
 ## Decision
 
 - **CanonicalCache: 64 MiB**, by owner decision 2026-10-19. It replaces 8 MiB
@@ -57,8 +47,6 @@
 - **RSS:** the daemon's VmRSS from `/proc` read by an extra exec right after the step, outside the step's counters. VmHWM was equal to VmRSS in every row. It is a point sample, not a peak claim.
 
 ## Samples
-
-*Old golden (`layerfs-issue359-prep`), superseded.*
 
 - base 8 MiB: seq 407–437
 - a32: seq 439–469
@@ -248,8 +236,6 @@ One run each, under a 115 s alarm (host) or `timeout 100` (Linux), built
 
 ## Serial operations on one daemon (owner request 2026-10-19)
 
-*Old golden (`layerfs-issue359-prep`), superseded.*
-
 **Question:** is the 64 MiB cache shared across different operations? The
 owner asked: "test against those operations ... and see if the cache is cross
 shared between operations (we can have one workspace execute on one
@@ -384,17 +370,8 @@ left entries it used.
 - **Daemon RSS** climbs across the sequence: S2 84 → 150 MB, R 19 → 127 MB.
   That is above the 64 MiB cache: per-case allocations are not all returned
   to the OS. It is a point sample after each step.
-- **cp-rm-nm at 64 MiB, unresolved.**
-  - cp took 107–118 s at 64 MiB (s611, S case 6) against 40–49 s at 8 MiB
-    (s347, s405).
-  - The Store counts are about the same: statements 223k vs 226k, requests
-    236k vs 238k.
-  - Evictions are higher (248k–394k vs 323k), and kernel-served time is
-    about 3× higher.
-  - rm-created, which does no Store or cache work, is equally about 3× slower
-    (25 s vs 8.3 s). That points to host load (46–52, and 11–23 with the
-    integration build), not to the cache size, but no clean comparison was
-    run. It is noted here, not attributed.
+- **cp-rm-nm at 64 MiB:** settled by the paired samples below: not a cache-size
+  regression.
 
 **Harness lines touched on this branch** (`dsh/tools/history/cost.mjs` at
 `35d2e3373`, new-file line numbers; the RCA session also edits this file):
@@ -411,12 +388,169 @@ left entries it used.
   `summarizeSerial`) 449–553;
 - `main` dispatch 563–564.
 
+Since `35d2e3373` (`e938e8436` and the probe fix; new-file line numbers at
+the probe-fix commit):
+- `PREPARED` with `COST_PREPARED` 43–45;
+- `PROBE`, `probeOf` and `daemonProbe` 318–341;
+- `serial repeat` host side 506–512, and the usage 525;
+- `innerSerial`: trace and arms naming 531–534, the post-unmount probe and
+  the repeat loop 554–567;
+- `summarizeSerial` probe rows 591–597, and the verdict 605.
+
+## Daemon RSS after unmount (liaison request 2026-10-19)
+
+**Question:** daemon RSS climbed case after case in S2 and R (to 150 and
+127 MB), well above the 64 MiB cache, although every Workspace was unmounted.
+Does it plateau, or grow with each Workspace?
+
+**Design:**
+- Sample s667 (`warm-s667-serial-S2-probe2`), binary `w64-6ae65f16`, Store
+  `layerfs-issue359-prep`.
+- S2's nine cases in S2's order. Then, on the same daemon, `serial repeat
+  first-stat --n 20`: twenty fresh Workspaces in one command (6.5 s).
+- After every unmount, a probe runs in the Sandbox container with no
+  Workspace (privileged exec; smaps and fd links need ptrace access). It
+  records `/proc/<daemon>/status`, `smaps_rollup`, open fds by target,
+  FUSE mounts and anonymous mappings.
+- The CanonicalCache and Store-reader numbers are the daemon's own Unmount
+  record, written after that Workspace's reader and overlay closed.
+- glibc's allocator has no external statistics. The count of anonymous
+  mappings stands in for its arenas.
+- Harness: commit `e938e8436` plus the fix in this commit.
+
+**Failed attempt:** s662 FAILED after case 1. The first harness version
+called `sandbox.status` after the unmount, and status needs a Workspace path.
+Recorded FAILED and closed; s667 is a new sample after the harness fix, not
+a rerun for load. In s667, case 1's in-harness probe lacked the smaps and fd
+fields (the exec was not yet privileged). Its full probe was taken by hand
+right after the case, with the daemon idle and unchanged
+(`probe-1-supplement.json`); RSS is the same 85,092 kB in both.
+
+Host load (one minute) was 14–31 throughout.
+
+| # | Case | VmRSS MB | Anonymous MB | Pss_File MB | anon maps | fds | FUSE mounts | readers | cache charged | cached objects | evictions (total) |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | rm-rf-nm | 85.1 | 77.2 | 7.2 | 27 | 11 | 0 | 1 | 64.0 MiB | 137,888 | 80,923 |
+| 2 | find | 96.0 | 88.1 | 6.9 | 29 | 14 | 0 | 1 | 64.0 MiB | 137,816 | 103,726 |
+| 3 | git | 111.3 | 103.4 | 6.9 | 29 | 14 | 0 | 1 | 64.0 MiB | 136,378 | 114,725 |
+| 4 | tsc-b | 119.8 | 111.9 | 6.9 | 29 | 14 | 0 | 1 | 64.0 MiB | 115,281 | 145,679 |
+| 5 | node-require | 119.8 | 111.9 | 6.9 | 29 | 14 | 0 | 1 | 64.0 MiB | 115,095 | 146,024 |
+| 6 | folder-10000-ls | 119.8 | 111.9 | 6.9 | 29 | 14 | 0 | 1 | 64.0 MiB | 115,951 | 200,342 |
+| 7 | vitest | 146.7 | 138.8 | 6.9 | 29 | 14 | 0 | 1 | 64.0 MiB | 56,952 | 284,432 |
+| 8 | first-stat | 146.8 | 138.9 | 6.9 | 29 | 14 | 0 | 1 | 64.0 MiB | 56,952 | 284,432 |
+| 9 | first-stat-deep | 148.5 | 140.6 | 6.9 | 29 | 14 | 0 | 1 | 64.0 MiB | 56,970 | 284,443 |
+| 10 | first-stat × 20 | 148.5 each | 140.6 each | 6.9 | 29 | 14 | 0 | 1 | 64.0 MiB | 56,970 | 284,443 |
+
+(RSS in MB is kB / 1000. Case 1's anonymous/file/maps/fds come from the
+hand-taken supplement.)
+
+- The fds after each unmount are the same set every time:
+  - the Store file three times, with its WAL twice and its SHM once;
+  - the overlay template `overlay.sqlite` once;
+  - `/dev/null`, two pipes and the control sockets.
+
+  No per-Workspace overlay file, `/dev/fuse` or reader connection stays open.
+  The baseline of 11 at the repeat's start becomes 14 after the first
+  Workspace, through three extra sockets, and stays 14.
+- The cache counts reproduce S2 (s635) exactly: the same 284,443 evictions
+  and 56,970 objects at the end.
+
+**Reading:**
+- **No per-Workspace leak.** Twenty fresh Workspaces after S2 leave VmRSS at
+  148,468 kB every time, with the same fds, mappings, readers (1, the control
+  reader), FUSE mounts (0) and cache state. No new finding is filed.
+- **The growth is anonymous memory and comes in steps, not per Workspace.**
+  - The cache is full (64.0 MiB charged) from the first case on, so the cache
+    itself does not grow.
+  - RSS rises only on cases that do new heavy work: find +10.9, git +15.4,
+    tsc -b +8.5 and vitest +26.8 MB.
+  - It is flat on node-require, `ls -l` 10k (40k statements, but every
+    allocation size already seen), first stat and deep stat.
+  - File-backed memory stays at 6.9 MB, and the number of anonymous mappings
+    stays at 29.
+  - This is what allocator retention looks like: glibc keeps freed heap for
+    reuse, and the high-water mark rises only when a case's transient
+    allocation pattern exceeds what was retained. Evidence by elimination:
+    allocator counters are not readable from outside the process.
+- **What is not shown:** whether a daemon running for hours plateaus once
+  every kind of case has run. This sample shows flat RSS for repeated light
+  cases and step increases from heavy ones. A heavy-case repeat (vitest × N)
+  would test the plateau directly; it was not run.
+
+## cp-rm-nm 8 vs 64 MiB, paired cold samples (liaison request 2026-10-19)
+
+**Design:**
+- One cold sample per arm, back to back: base `cc185d13` (8 MiB) as s669,
+  then a64 `w64-6ae65f16` as s671. Same Store clone source
+  (`layerfs-issue359-prep`), same steps (cp, then rm-created), each its own
+  command under the 115 s alarm.
+- The Docker VM's `free -m` and `/proc/pressure/{memory,io,cpu}` were read
+  before and after each sample (`~/lfs-history/runs/issue359/vm-probes-031.log`).
+- The harness cannot run cp and rm-created as separate commands, so the case
+  ran whole; it fitted. Both samples COMPLETE.
+- Host load (one minute) 26–28 during base, 26–42 during a64. `scale-s4-a/b`
+  ran throughout.
+
+| | base 8 MiB (s669) | a64 (s671) | a64 earlier (s611, FAILED, over budget) |
+| --- | ---: | ---: | ---: |
+| cp ms | 48,386 | 62,961 | 106,721 |
+| rm-created ms | 34,409 | 18,159 | 35,880 |
+| cp + rm-created ms | 82,795 | 81,120 | 142,601 |
+| cp Store statements | 226,325 | 223,252 | 223,255 |
+| cp cache misses | 245,343 | 241,377 | 241,382 |
+| cp evictions | 323,200 | 247,980 | 247,982 |
+| cp authenticated MB | 425.8 | 394.8 | 394.8 |
+| cp kernel-served ns | 30.9e9 | 36.8e9 | 81.1e9 |
+| cp owner lock hold ns | 6.7e9 | 8.3e9 | 23.7e9 |
+| daemon RSS after, MB | 56.7 | 114.0 | 114.4 |
+| VM memory available, before → after, MB | 3,115 → 3,060 | 3,071 → 3,102 | not captured |
+| VM memory PSI stall during sample (total delta) | 1.9 ms | 3.6 ms | not captured |
+| VM io PSI "some" during sample (total delta) | 1.8 s | 2.1 s | not captured |
+
+**Reading:**
+- **Memory pressure is not supported.**
+  - The VM had about 3.0–3.1 GB available before and after both samples.
+  - Memory stall time was 2–4 ms over each 87 s sample, and io stall about 2 s.
+  - The 57 MB of extra daemon RSS at 64 MiB did not squeeze the page cache
+    here (buff/cache 1.18–1.21 GB).
+  - This covers these two samples only: the VM state during s611 and arm S
+    was not captured.
+- **A cache-size regression is not supported.**
+  - At 64 MiB, cp does slightly less Store work than at 8 MiB: 3,073 fewer
+    statements, 75k fewer evictions and 31 MB less authenticated.
+  - The same a64 binary did identical Store work in s611 and s671 (223,255 vs
+    223,252 statements). Yet its cp took 106.7 s in s611 and 63.0 s now, and
+    its rm-created 35.9 s and 18.2 s.
+  - rm-created does no cache work. It went 34.4 s → 18.2 s between the paired
+    arms, the opposite direction to cp, and the two steps together are equal
+    (82.8 s vs 81.1 s).
+  - The earlier 3× slowdown is therefore host contention: identical counts,
+    walls within a 1.7–2× band across samples.
+- **Undecided:** whether a64's cp is about 30% slower (48.4 → 63.0 s) for a
+  reason inside the daemon. Its kernel-served time is 19% higher with less
+  Store work. But step walls on this host vary by up to 2× with identical
+  counts, as rm-created shows, so one pair cannot attribute a 30% difference.
+
+## Build attempt not used
+
+On the liaison's first instruction (later cancelled by the owner's "golden
+switch cancelled"), a base8 scratch commit `38584c271` (d679c84ee with
+`cache_bytes` 8 MiB in `install_types.rs` and `sandbox.rs`) was made on the
+local branch `issue359-scratch-base8-d679c84ee`, never pushed. Its builds did
+not complete: the first failed offline because this lane's cargo-home volume
+was empty, and the second was stopped when the cancellation arrived. The
+cargo home was refilled by copying `layerfs-issue359-impl-cargo-home`
+(read-only) into this lane's volume. No binary from d679c84ee was built or
+used; all samples above use the pinned 2d84fe1bb builds.
+
 ## Not run, and gaps
 
 - The other daemon test targets, the fuse, overlay and workspace suites (untouched crates), and the SDK check set.
 - pnpm, grep-r, du-s and the other cost cases outside the requested set.
 - Durable: `NOT_RUN — disabled by owner until explicit reauthorization`.
-- The union working set was sampled later in the serial arms S2 and R (see "Serial operations"). cp-rm-nm is left out of them: it cannot fit a 2-minute command on this host, and its 64 MiB slowdown is unattributed.
+- The union working set was sampled later in the serial arms S2 and R (see "Serial operations"). cp-rm-nm is left out of them, as it could not fit a 2-minute command inside a sequence on this host. Its 64 MiB slowdown is resolved as host contention by the paired samples; a residual 30% on cp alone is undecided.
+- A heavy-case repeat (vitest × N) to test the RSS plateau directly.
+- VM memory state during s611 and arm S.
 - Shared-tier counters were never published in daemon telemetry (the tier is dropped).
 - RSS is a point sample after the step, not a peak.
 - Wall times across arms were taken at different host loads (see Conditions).
@@ -437,7 +571,9 @@ Scope and method for every line: `tools/production_loc.py --root` on `git archiv
 | `419f771bf` decision docs | 98479 → 98479 (delta 0) | |
 | `35d2e3373` serial harness | 98479 → 98479 (delta 0) | `dsh/tools` is not in a production scope |
 | serial results docs commit | 98479 → 98479 (delta 0) | |
-| old-golden label docs commit | 98479 → 98479 (delta 0) | |
+| `b56088ffd` old-golden label (removed again: golden switch cancelled by owner 2026-10-19) | 98479 → 98479 (delta 0) | |
+| `e938e8436` post-unmount probe harness | 98479 → 98479 (delta 0) | `dsh/tools` is not in a production scope |
+| probe fix and RSS/cp results docs | 98479 → 98479 (delta 0) | |
 
 Net over the base `46e17bdf3`: 98479 → 98479 (delta 0). The kept product
 change is the `cache_bytes` value and its comment.
