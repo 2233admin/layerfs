@@ -1,8 +1,8 @@
 # F-031 design · `.git` in Workspaces from P3
 
-> **Status:** proposal (builder, 2026-10-18), for owner approval under the
-> F-031 design gate ([BUGS.md F-031](BUGS.md), [SPEC §2](SPEC.md)). Not built.
-> No measured play uses it until it is approved and proved on a dev range.
+> **Status:** approved by the owner with the liaison's revision (2026-10-18,
+> HANDOFF "Owner decisions", BUGS F-031), revised below. To be proved on a dev
+> range before any measured P3 range uses it.
 
 ## The constraint that shapes it
 
@@ -25,39 +25,56 @@ So the design splits `.git` by what can merge:
 - **The single files** are written only by the lead, once per range, after
   every merge.
 
-## 1. How lanes commit
+## 1. How lanes commit (owner revision)
 
 There is one git exec per replayed dsh commit, by the agent that replayed it,
 in a one-shot Workspace on its lane Branch, right after the step's files land.
 It gets its own LayerFS Commit, so every replayed dsh commit adds one exec and
 one Commit, as SPEC §2 "Counts change" expects. The exec runs real git over
-FUSE:
+FUSE with a lane-private index,
+`GIT_INDEX_FILE=.git/lanes/<lane>/index`:
 
-1. `git hash-object -w` on each path the commit changed, run in the
-   Workspace. Each printed id must equal the plan's blob id, which also proves
-   the bytes.
-2. `git hash-object -w -t tree --stdin` for each tree object the commit added,
-   and `-t commit` for the commit itself. Their raw bytes come from `dsh.git`
-   (`git cat-file`), sent like Sandbox file bytes (base64 chunks into the
-   step's own `/tmp` scratch). Copying the raw commit keeps the message,
-   author, committer, dates, signature and parents exactly, so the printed id
-   equals the dsh commit id.
-3. `git update-ref refs/heads/lanes/<lane> <id>`. This ref file belongs to that
-   lane alone.
+1. `git read-tree <dsh parent>`: the index is set to the dsh commit's first
+   parent's tree. Its objects are in `.git`, from the seed, an earlier range,
+   or this lane's own earlier commit.
+2. Real `git add -- <paths>` for the paths the commit added or changed, and
+   `git rm --cached -q -- <paths>` for the ones it removed. git hashes the
+   Workspace's bytes, so each blob is the replay's own writing.
+3. Real `git write-tree`. The printed tree id must equal the dsh commit's
+   tree; a different id is a stop finding.
+4. `git commit-tree <tree> -p <parent>…` with the original author,
+   committer, dates and message (`GIT_AUTHOR_*`, `GIT_COMMITTER_*`, `-F` with
+   the raw message bytes). The printed id must equal the dsh commit's.
+   - No post-seed commit is signed: 20,850 commits after `6e5c908a1`, with no
+     `gpgsig` or `mergetag` header (builder check).
+   - Four carry an `encoding` header. Those run with
+     `-c i18n.commitEncoding=<their encoding>`, so the header is reproduced.
+5. `git update-ref refs/heads/lanes/<lane> <id>`.
 
-The lane writes nothing else under `.git`. The player checks every path a lane
-Commit changed under `.git/`: anything outside `objects/` and its own
-`refs/heads/lanes/<lane>` is a stop finding.
+The lane writes only these under `.git/`:
+- loose objects;
+- its own `lanes/<lane>/index`;
+- its own `refs/heads/lanes/<lane>`.
+
+The player checks every path a lane Commit changed under `.git/`. Anything
+else there is a stop finding.
+
+**`git status --porcelain` share.** One in ten one-shot Workspaces (the
+step's sequence number mod 10 = 0) also runs `git status --porcelain` with
+the shared index, after its own command. The output is recorded. It must be
+empty only in the lead's checkpoint Workspace. In a lane it lists that lane's
+uncommitted state and is reported, not judged. Its time is reported as its
+own series.
 
 ## 2. How a LayerFS merge treats `.git`
 
 | Path | Written by | Merge outcome |
 | --- | --- | --- |
 | `objects/xx/<id>` (loose) | lanes, add-only | Clean. Two lanes adding the same object add identical bytes at the same path, because the same git version in the same image compresses deterministically. A conflict on any object path is a stop finding, not a resolution. |
-| `refs/heads/lanes/<lane>` | its lane only | Clean: different paths. The lead deletes them at range end. |
+| `refs/heads/lanes/<lane>`, `lanes/<lane>/index` | its lane only | Clean: different paths. The lead deletes them at range end. |
 | `index`, `HEAD`, `refs/heads/main`, `packed-refs` | the lead only, after all merges | Never changed on two sides. |
 | `logs/`, `ORIG_HEAD`, `FETCH_HEAD` | nobody | The seed sets `core.logAllRefUpdates=false`, and only plumbing that writes none of them is used: no `reset`, `merge`, `pull` or `commit` porcelain. |
-| packs from auto-repack or `gc` | nobody | The seed sets `gc.auto=0` and `maintenance.auto=false`, so no command repacks on its own. The seed's one pack stays as is. |
+| packs from auto-repack or `gc` | nobody | The seed sets `gc.auto=0` and `maintenance.auto=false`, so no command repacks on its own: a recorded departure from a developer's git, where auto-gc would repack in whichever Workspace crosses its threshold. The seed's one pack stays as is. |
 | `objects/pack/pack-<id>.*` of a range | the lead only, after all merges (§3) | Never changed on two sides. The lane Branches are done by then. |
 
 Any LayerFS merge conflict under `.git/` is a stop finding (D0), never
@@ -126,6 +143,25 @@ Its Commit's sizes are recorded in the fork manifest.
   `dist` and `tsbuildinfo`. If it doesn't, that is a finding about the
   replay's assumptions, recorded and not hidden.
 
+## 5a. Storage reporting and the dev-range proof (owner revision)
+
+The storage cost is accepted. `.git` bytes are reported separately from the
+range's other storage, by source:
+- the shared index;
+- lane indexes;
+- loose objects;
+- packs;
+- refs.
+
+These are new and stored bytes, from each git Commit's traced sizes.
+
+The dev range proves it before any measured use. It reports:
+- every lane git exec's tree and commit ids against dsh;
+- the stored bytes per index rewrite, lane and shared;
+- `git status --porcelain` time in a fresh one-shot Workspace;
+- the lead's checkpoint checks;
+- the wall time added per range.
+
 ## 6. Expected cost
 
 The figures below are estimates until the dev range measures them.
@@ -177,9 +213,14 @@ Store grows by about 8–9 MiB per range plus the pack.
 - **Loose objects kept, no repack.** It is simpler, but it is about 4× the
   live `.git` growth (55.6 MB against 13.0 MB over ranges 15–20), and git's
   own read cost grows with loose objects.
-- **`git add` + `git commit` per lane**, with a lane-private index
-  (`GIT_INDEX_FILE`) and lane refs. Commit ids differ from dsh, so HEAD never
-  equals the checkpoint, and the index still conflicts unless it is private.
+- **`git commit` porcelain per lane.** It stamps the current time and
+  takes HEAD as its parent, so commit ids differ from dsh and HEAD never
+  equals the checkpoint. The revision keeps the real `git add` and
+  `git write-tree`, and replaces only the porcelain commit with
+  `git commit-tree` and the original metadata.
+- **Raw tree and commit bytes via `hash-object` (the first draft).** The
+  ids match, but no real git index or tree writing would run in the
+  Workspaces. The owner chose the revision.
 - **The lead commits everything at range end.** One exec per range instead of
   one per dsh commit. It is cheaper, but it isn't "one git commit per replayed
   dsh commit", and lanes would then never touch `.git`.
