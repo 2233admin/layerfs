@@ -229,6 +229,17 @@ after item 1, 1.44 MiB after 1–3).
 The remaining lever is outside storage: ~11 Commits per git commit, each still
 ~1.8 KB fixed after items 1–3. It is workload, not a defect.
 
+**Owner decision, 2026-10-18: one Commit per file stays.** The replay is a
+load test, so each `fs.write` in a step remains its own LayerFS Commit (SPEC
+§2, inner cycle). A liaison check measured what this costs against one Commit
+per tool-call step: at ranges 9–11, 1,873 Commits against 418 (77.7% extra)
+[E]; across the plan, ~249k against ~26k [E]; storage about 32% of the
+range-11 Store and ~0.4–1.7 GB at range 201 [I] (evidence
+`scratchpad/commit-model/A`, liaison session). The forecast in §5 keeps the
+per-file count. A product that commits once per tool call would store less
+than this forecast; do not read the replay's per-Commit totals as the
+per-tool-call product cost.
+
 **Owner decisions these need:** item 2 reverses the recorded note in
 `attributes/value.rs` that no metadata-specific file format is introduced, so it
 is the owner's call. Items 1 and 3 are kind 1 and have no correctness effect on
