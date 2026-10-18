@@ -25,7 +25,7 @@ import { checkRoute, loadBudget, wallProjection } from "../run.mjs";
 import { runnerArgs } from "../runner.mjs";
 import { demux, parseRun } from "../runner/docker-shim.mjs";
 import {
-  attributeFuse, callOf, changedDirs, outcomeOf, checkpointDiff, consolidationSteps, withDirs, decoyBytes, nextPhase, p2Plan, route, sandboxCommands, STEP_KINDS, Tree,
+  attributeFuse, callOf, diskGuard, diskModel, changedDirs, outcomeOf, checkpointDiff, consolidationSteps, withDirs, decoyBytes, nextPhase, p2Plan, route, sandboxCommands, STEP_KINDS, Tree,
 } from "../steps.mjs";
 import {
   buildOverview, callTable, categoryOf, withoutProbeSetupCommits, categoryRows, CATEGORIES, checkOverview, derivedOverview, renderOverview, renderStats, stageSplit, tenths, timeLine,
@@ -722,6 +722,21 @@ snapshots:
   assert.deepEqual([0.5, 2, 17].map((mib) => gate({ changedPackages: 0, rawChangedBytes: 0, storedNewBytes: mib * 2 ** 20 }).result), ["pass", "watch", "optimize"]);
   assert.equal(gate(null).result, "pass");
   assert.equal(gate({ changedPackages: 2, rawChangedBytes: 10, storedNewBytes: null }).result, "watch");
+});
+
+test("disk projection: the study model's estimate beside the guard's floor", () => {
+  const ranges = Array.from({ length: 202 }, (_, r) => ({ range: r, lfsCommits: 402 }));
+  const m = diskModel({ storeBytes: 100 * 2 ** 20, k: 14, perCommitBytes: 5000, ranges });
+  // 187 ranges left, each 400 + 2 Commits at the study's 9.0 KB after the first install
+  assert.equal(m.commitsLeft, 187 * 402);
+  assert.equal(m.commitBytes, Math.round(187 * 402 * 9216));
+  assert.equal(Math.round(m.installBytes / 2 ** 20), 1159, "the study's expected installs, all bands");
+  assert.equal(Math.round(m.buildBytes / 2 ** 20), 120);
+  const later = diskModel({ storeBytes: 0, k: 100, perCommitBytes: 7000, ranges });
+  assert.equal(later.commitBytes, 101 * 402 * 7000, "after range 15 the run's measured cost");
+  assert.equal(Math.round(later.installBytes / 2 ** 20), 290 + 370);
+  const floor = diskGuard({ storeBytes: 0, growthBytes: 2 ** 20, dockerFree: 2 ** 40, hostFree: 2 ** 40, rangesLeft: 10 });
+  assert.equal(floor.projected, 10 * 256 * 2 ** 20, "the guard keeps its 256 MiB floor");
 });
 
 // the runner stays last: a test registered after it never runs

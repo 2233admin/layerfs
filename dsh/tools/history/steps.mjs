@@ -500,5 +500,35 @@ export function diskGuard({ storeBytes, growthBytes, installPeak = 0, dockerFree
   };
 }
 
+/**
+ * The study's disk model (STORAGE_STUDY.md §3–§5, §9), an estimate beside the
+ * guard's floor: per-Commit cost × the plan's remaining Commits, plus the
+ * install and build forecasts for the remaining ranges. Planned Commits per
+ * range are the plan's lfsCommits − 2 (observed in every P2 range) + 2 from
+ * range 15 (the build and test one-shot Workspaces). The per-Commit cost is
+ * this run's measured cost (new stored bytes ÷ Commits) once a range after the
+ * first install (15) has one; before that, the measured cost for ranges up to
+ * 14 and the study's expected 9.0 KB after the first install (§3b). Installs:
+ * the study's expected stored MiB per band, spread evenly over the band's
+ * ranges (§3c); build output 120 MiB over ranges 15–201 (§3d). The guard's
+ * stop rule does not use it.
+ */
+export const STUDY = {
+  afterInstallPerCommit: 9.0 * 1024,
+  installBands: [[15, 29, 255], [30, 50, 45], [51, 100, 199], [101, 150, 290], [151, 201, 370]],
+  build: { from: 15, to: 201, mib: 120 },
+};
+export function diskModel({ storeBytes, k, perCommitBytes, ranges, last = 201 }) {
+  const left = ranges.filter((r) => r.range > k && r.range <= last);
+  const commits = (r) => Math.max(0, (r.lfsCommits ?? 0) - 2) + (r.range >= 15 ? 2 : 0);
+  const cost = (r) => (k >= 15 || r.range < 15 ? perCommitBytes ?? STUDY.afterInstallPerCommit : STUDY.afterInstallPerCommit);
+  const commitBytes = left.reduce((n, r) => n + commits(r) * cost(r), 0);
+  const spread = (from, to, mib) => left.filter((r) => r.range >= from && r.range <= to).length * (mib * 2 ** 20) / (to - from + 1);
+  const installBytes = STUDY.installBands.reduce((n, [a, b, mib]) => n + spread(a, b, mib), 0);
+  const buildBytes = spread(STUDY.build.from, STUDY.build.to, STUDY.build.mib);
+  return { estimate: Math.round(storeBytes + commitBytes + installBytes + buildBytes), commitsLeft: left.reduce((n, r) => n + commits(r), 0),
+    perCommitBytes: perCommitBytes ?? null, commitBytes: Math.round(commitBytes), installBytes: Math.round(installBytes), buildBytes: Math.round(buildBytes) };
+}
+
 /** The runner's exit codes, one per way it stops. */
 export const EXIT = { done: 0, error: 1, usage: 2, optimize: 3, stop: 4, guard: 5 };

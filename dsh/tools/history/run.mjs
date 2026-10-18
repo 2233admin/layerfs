@@ -54,7 +54,7 @@ import {
   binaries, closure, consolidate, HISTORY, Mismatch, probeFixture, probes, readTrace, REPO, Run,
   sandboxHealth, sha256, step, teardown, verify, versionStats, writeJson,
 } from "./lib.mjs";
-import { addDelta, checkpointDiff, deltaSummary, diskGuard, EXIT, nextPhase, pad, PHASES, phaseOps, Tree } from "./steps.mjs";
+import { addDelta, checkpointDiff, deltaSummary, diskGuard, diskModel, EXIT, nextPhase, pad, PHASES, phaseOps, Tree } from "./steps.mjs";
 import { consolidateLanes, playAgents, pool, startRange } from "./agents.mjs";
 import { buildOverview, callTable } from "./stats.mjs";
 import { area } from "./plan-range.mjs";
@@ -460,7 +460,8 @@ async function playRange(run, k, mode) {
     tests: tests ?? { equal: 0, run: 0 },
   };
   lap("metricsMs", since);
-  m.budget = { diskProjected: guard.projected, diskBudget: free.dockerFree + (run.state.storeBytes ?? 0) };
+  m.budget = { diskProjected: guard.projected, diskBudget: free.dockerFree + (run.state.storeBytes ?? 0),
+    diskModel: diskModel({ storeBytes: m.storage?.file ?? run.state.storeBytes ?? 0, k, perCommitBytes: m.storage?.newStored && m.work?.lfsCommits ? m.storage.newStored / m.work.lfsCommits : null, ranges: JSON.parse(readFileSync(join(run.planDir, "plan.json"), "utf8")).ranges }) };
   if (!failure && m.snapshotDue) {
     try {
       const sealed = await seal(run);
