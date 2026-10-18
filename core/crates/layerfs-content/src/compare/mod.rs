@@ -4,12 +4,14 @@
 
 pub mod changes;
 pub mod memo;
+pub mod named;
 pub mod sorted;
 pub mod text;
 pub mod tree;
 
 pub use changes::{BindingHints, ChangeWalk, Pair, Plan, MAXIMUM_CHANGED};
 pub use memo::{Memo, MEMO_PAGES};
+pub use named::name_from_hints;
 pub use sorted::DifferenceWork;
 pub use text::{
     as_text, line_diff, lines, match_lines, DiffLine, LineOp, MAXIMUM_DIFF_CELLS,

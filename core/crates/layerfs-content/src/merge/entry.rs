@@ -28,6 +28,7 @@ pub fn merge_roots(
         lww: Vec::new(),
         decided: 0,
         work: DifferenceWork::default(),
+        hinted: false,
     };
     if input.ours == input.base || input.ours == input.theirs {
         return Ok(outcome);
@@ -40,9 +41,10 @@ pub fn merge_roots(
     if resolver.trees[decide::OURS].root.scope() != resolver.trees[decide::THEIRS].root.scope() {
         return Err(crate::ContentError::InvalidRecord("merge scope"));
     }
-    let candidates = timing
+    let (candidates, hinted) = timing
         .child("merge.paths")
-        .run(|_| decide::candidates(&resolver, &mut outcome.work))?;
+        .run(|_| decide::candidates(&resolver, input.hints, &mut outcome.work))?;
+    outcome.hinted = hinted;
     let rules_side = match input.rules_from {
         RulesFrom::Ours => decide::OURS,
         RulesFrom::Theirs => decide::THEIRS,

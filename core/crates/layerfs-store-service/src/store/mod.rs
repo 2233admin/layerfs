@@ -18,6 +18,7 @@ pub mod types;
 pub use bind::checked_base;
 pub use commit_merge::{Stale, StaleError};
 pub use hints::record_new_bindings;
+pub use hints::CatalogHints;
 
 pub use commit_types::{
     CapturedConstruction, CommitError, CommitFailure, CommitOptions, CommitPhase, CommitSuccess,

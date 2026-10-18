@@ -18,7 +18,7 @@ use super::text::{deletion_markers, merge3, Hunk};
 use super::{Conflict, ConflictKind, LwwDecision};
 use crate::compare::text::{as_text, MAXIMUM_TEXT_BYTES};
 use crate::compare::tree::{binding_changes, join, locate, subtree, EntryFacts, TreeTable};
-use crate::compare::DifferenceWork;
+use crate::compare::{BindingHints, DifferenceWork};
 use crate::error::{ContentError, ContentResult};
 use crate::filesystem::attributes::{read_portable, AttributeReadWork};
 use crate::filesystem::directory::read::lookup;
@@ -127,10 +127,14 @@ fn capacity(what: &'static str, actual: usize) -> ContentError {
 }
 
 /// Every path whose entry may differ between the base and ours.
+/// With `hints`, the changed inodes are named from recorded bindings when
+/// that names all of them; otherwise, and without hints, by the
+/// breadth-first walk. The second value is true when the hints named them.
 pub(super) fn candidates(
     resolver: &Resolver<'_>,
+    hints: Option<&dyn BindingHints>,
     work: &mut DifferenceWork,
-) -> ContentResult<BTreeSet<String>> {
+) -> ContentResult<(BTreeSet<String>, bool)> {
     let reader = resolver.reader;
     let [base, ours, _] = resolver.trees;
     let mut changed = Vec::new();
@@ -144,8 +148,22 @@ pub(super) fn candidates(
         .iter()
         .map(|(serial, _, _)| *serial)
         .collect::<BTreeSet<_>>();
-    let in_ours = locate(reader, &ours, &wanted, MAXIMUM_MERGE_PATHS)?;
-    let in_base = locate(reader, &base, &wanted, MAXIMUM_MERGE_PATHS)?;
+    let hinted = match hints {
+        Some(hints) => match crate::compare::name_from_hints(reader, hints, &ours, &wanted)? {
+            Some(in_ours) => crate::compare::name_from_hints(reader, hints, &base, &wanted)?
+                .map(|in_base| (in_ours, in_base)),
+            None => None,
+        },
+        None => None,
+    };
+    let named = hinted.is_some();
+    let (in_ours, in_base) = match hinted {
+        Some(found) => found,
+        None => (
+            locate(reader, &ours, &wanted, MAXIMUM_MERGE_PATHS)?,
+            locate(reader, &base, &wanted, MAXIMUM_MERGE_PATHS)?,
+        ),
+    };
     if in_ours.len() < wanted.len() || in_base.len() < wanted.len() {
         return Err(capacity("merge.locate", MAXIMUM_MERGE_PATHS));
     }
@@ -189,7 +207,7 @@ pub(super) fn candidates(
             return Err(capacity("merge.paths", out.len()));
         }
     }
-    Ok(out)
+    Ok((out, named))
 }
 
 /// Everything one decision pass needs besides the resolver.

@@ -1,6 +1,6 @@
 //! Merge requests, outcomes and conflict records.
 
-use crate::compare::DifferenceWork;
+use crate::compare::{BindingHints, DifferenceWork};
 use crate::filesystem::FilesystemRootId;
 use crate::policy::{ConstructionCapacities, ConstructionPolicy};
 
@@ -89,6 +89,9 @@ pub struct MergeInput<'a> {
     pub policy: ConstructionPolicy,
     /// Construction capacities of merged files.
     pub capacities: &'a ConstructionCapacities,
+    /// Recorded name bindings that name the changed inodes top down; without
+    /// them, or when they cannot name every one, a breadth-first walk does.
+    pub hints: Option<&'a dyn BindingHints>,
 }
 
 /// One completed merge.
@@ -104,6 +107,8 @@ pub struct MergeOutcome {
     pub decided: usize,
     /// Sorted-tree work.
     pub work: DifferenceWork,
+    /// True when recorded bindings named the changed inodes.
+    pub hinted: bool,
 }
 
 impl MergeOutcome {

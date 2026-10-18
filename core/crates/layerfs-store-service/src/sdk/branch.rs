@@ -374,6 +374,7 @@ pub fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
     };
     let policy = store.policy().construction();
     let capacities = policy.capacities();
+    let hints = crate::store::CatalogHints::new(catalog);
     let input = MergeInput {
         base: FilesystemRootId(root(store, base_node)?),
         ours: FilesystemRootId(root(store, ln)?),
@@ -382,11 +383,15 @@ pub fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
         rules_from: RulesFrom::Ours,
         policy,
         capacities: &capacities,
+        hints: Some(&hints),
     };
     let merged = crate::telemetry::timed("branch.merge", |timing| {
         merge_roots(&save, &mut save.sink(), &input, &mut fresh, timing)
     });
-    let merged = merged.map_err(args::content)?;
+    let merged = merged.map_err(|error| match hints.failure.take() {
+        Some(failure) => history(failure),
+        None => args::content(error),
+    })?;
     let lww = layerfs_bridge::sdk_values::lww(&merged.lww);
     if !merged.clean() {
         // Nothing is created: the unfinished Save is dropped.
