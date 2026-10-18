@@ -328,3 +328,17 @@
   test. **Owner: the fixer, queued after that confirmation**; the lead
   places it in the item order. See
   [crazy_work_load_watch_out.md](crazy_work_load_watch_out.md) S1.
+- **F-034 · a fresh mount path per mount leaves absolute paths stale (product,
+  builder, P3 dev range r016, 2026-10-18).** `sandbox.mount` takes no path, and
+  the daemon picks a fresh directory for each mount and never reuses one
+  (`layerfs-daemon/src/control/serving.rs:31`). Tools that record absolute paths
+  in the tree keep the previous mount's root after a remount. pnpm's
+  `node_modules/.bin` shims and workspace state are examples; so would be a Python
+  venv, or any config holding `$PWD`. In `dev352-p3h`, r016's install on top of
+  r015's committed `node_modules` left untouched shims pointing at `/workspaces/23`,
+  a path that no longer exists. Per-tool-call mounting is the expected common case
+  (AGENTS), so this affects ordinary agent work. **Owner decision needed:** a stable
+  path per Workspace identity (for example, a mount path the caller names, or a
+  stable bind such as `/workspace` inside the Sandbox onto the fresh directory),
+  or accept it and document it. Until then dev runs count stale roots as their
+  own category, and measured P3 does not start with it open.
