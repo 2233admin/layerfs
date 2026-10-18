@@ -50,9 +50,7 @@ Raw: `core/target/f020/d013-exec10.txt` in the fixer's worktree.
 - The probe split (mount+unmount judged as before; exec judged by its FUSE
   and daemon share; exec wall time reported, not scaled) is the builder's,
   per RESULTS.md 2026-10-18.
-- `findings.mjs checkFinding` requires a fix kind 1–3, so it cannot express a
-  finding closed without a product change (records already allow
-  `Kind: none`). No `finding-013.a1.json` is written until the tooling takes
-  one. This is a builder item.
-- Diagnostic volumes `layerfs-issue352-f020-d013-r11` and `-r13`, kept until
-  this record is accepted.
+- Finding: `~/lfs-history/metrics/finding-013.a1.json` (fix kind "none";
+  `checkFinding` takes it since `e78bbaa42`).
+- Diagnostic volumes `layerfs-issue352-f020-d013-r11` and `-r13` were removed
+  after this record was accepted.

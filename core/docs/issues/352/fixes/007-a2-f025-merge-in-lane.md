@@ -17,7 +17,7 @@
 | Compatibility test | fix 0: **passed**. A fresh fork of `p2-main-c`'s range-11 snapshot (written by `58a60046`) passes `compat.mjs` range 11 on daemon `bd6fbeee`: 1,057 files, 296 ids, paths ok. Fixes 1–4: *pending* |
 | Binaries | daemon `58a60046…` (and the evidence from `c25119ac…`) → fix 0: `bd6fbeee08156326895e16c1e0a688854f004231d55e0c359ea7ec8af256972a`, kept in `core/target/issue352/daemon-bd6fbeee/` (addon unchanged, `799e3ca6`). Fixes 1–4: *pending* |
 | Commits | fix 0: the commit that adds its section below, on branch `dsh-352-f025-fix0`. Fixes 1–4: *pending* |
-| Regression tests | fix 0: `core/crates/layerfs-daemon/tests/sdk_timing_coverage.rs`. Others *pending*, listed under Proof |
+| Regression tests | fix 0: `core/crates/layerfs-daemon/tests/sdk_timing_coverage.rs` (moved to `layerfs-store-service` by F-020). Fix 1: `layerfs-store-service/tests/sdk_merge_paths.rs` (bound) and `history_diff_oracle.rs` (naming equals the walk). Others *pending*, listed under Proof |
 | Recovery | fork the newest good `p2-main-c` snapshot; rerun the range that trips next (or the next unplayed range) measured on the new daemon. No rebuild |
 | Order | **fix 1 first** (the cause that grows), then 2, 3, 4. Each lands, is proved, and is measured old vs new before the next |
 
@@ -241,6 +241,33 @@ it takes LayerFS heads (`NoSuchBranch`, nothing played). The second, with
 - **Expected:** `merge.paths` from 29–56 ms p50 toward a few ms; the lane hold of
   a merging Commit shrinks by the same, and the waits it causes shrink with it.
 
+#### Fix 1 as built (fixer, `3dff9c5cb`, branch `dsh-352-f025-fix1-topdown`)
+
+- **How the changed inodes are named.** `candidates`
+  (`layerfs-content/src/merge/decide.rs`) names them with
+  `compare::name_from_hints` (`compare/named.rs`). This uses the same recorded
+  bindings as the F-003 change walk (`Plan::make`):
+  - each changed inode's `(parent, name)` hints are checked against the tree
+    and climbed to the root, with no directory listed;
+  - it takes the path `locate` would reach first (fewest components, then
+    name order), so a hard link or a serial with two names keeps the
+    first-path rule;
+  - if any inode's bindings are incomplete, or the depth or path bounds are
+    passed, the answer is `None` and `locate` runs as before.
+- **Wiring.** `CatalogHints` moved to `layerfs-store-service/src/store/hints.rs`
+  and is passed to both merge sites (Commit merge-at-publish and
+  `branch.merge`). A catalog failure answers with its own cause.
+- **The bound measured.** One file changed at depth 6, merged beside 20, 200
+  and 2,000 directories: 198, 216 and 234 statements. Each lookup in the climb
+  gains one B-tree level per 10×, so growth is logarithmic. The breadth-first
+  walk took 225, 852 and 7,584. So the bound is O(changed × depth) lookups,
+  each O(log tree), and no listings. The spec's "independent of tree size" is
+  met for directory listings, not for B-tree page reads.
+- **Daemon.** The daemon runs Workspace Commits through store-service's
+  `commit_merge`, so fix 1 changes the daemon binary. The new daemon id,
+  the Linux build, `compat.mjs` and the old vs new table wait for the Docker
+  host to be cleared (coordinator hold, 2026-10-18).
+
 ### Fix 2 · Narrow the publication lane
 
 - **Old design:** the lane is held from `lane` through merge, finish,
@@ -301,9 +328,25 @@ new table, not by a gate change.
    traces: base, ours, theirs roots), plus synthetic deep and wide trees,
    merged by the old and new `candidates`: identical candidate sets, picks,
    conflicts and merged roots.
+   - **Fix 1, synthetic (done):** `history_diff_oracle.rs` covers 3 seeds ×
+     120 random-history diffs, with writes, edits, removals, renames, copies,
+     forks and merges. Every inode changed on both sides (882) is named alike
+     by `name_from_hints` and `locate` in both trees. The hints were complete
+     every time. `candidates` depends on the trees only through those names,
+     so its candidate set, and the picks, conflicts and merged root that
+     follow, are unchanged.
+   - **Recorded merges (pending):** the Store is Linux-only, so this waits for
+     the Docker clear.
 2. **Bound test:** a merge of one changed file at depth 6, on trees of 1×, 10×
    and 100× the directory count: `merge.paths` directory listings equal across
    tree sizes (counter, not time).
+   - **Fix 1 (done):** `sdk_merge_paths.rs` measures statements, because the
+     merge's listings have no counter of their own. With 20, 200 and 2,000
+     directories it gives 198, 216 and 234 statements.
+   - The bound allows at most +24 per 10× (one B-tree level per climb lookup),
+     and 100× must stay within 125% of 1×.
+   - Revert check: with naming forced back to `locate`, the counts are 225,
+     852 and 7,584, and the test fails.
 3. **Lane hold (fix 2):** an unmerged Commit's lane span excludes validate; a
    concurrent Commit's head refusal still behaves as F-008.
 4. **Reads off the writer (fix 3):** during a held lane, another Commit's Save
