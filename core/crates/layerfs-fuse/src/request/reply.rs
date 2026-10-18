@@ -7,11 +7,15 @@ use crate::{
     RequestDisposition,
 };
 use fuser::{
-    Errno, FileHandle, FopenFlags, Generation, ReplyAttr, ReplyData, ReplyEntry, ReplyOpen,
+    Errno, FileAttr, FileHandle, FileType, FopenFlags, Generation, INodeNo, ReplyAttr, ReplyData,
+    ReplyEntry, ReplyOpen,
 };
 use layerfs_overlay::KernelMount;
 use layerfs_workspace::{KernelReadOperation, Refusal};
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, UNIX_EPOCH},
+};
 /// Entry and attribute lifetime of every reply. It bounds how long the kernel
 /// may answer without asking; it is never what makes an answer correct.
 pub(super) const TTL: Duration = Duration::from_secs(60);
@@ -109,11 +113,18 @@ impl ReadReply {
         let value = match answer.value() {
             Ok(value) => value,
             Err(reason) => {
-                // Only LOOKUP carries the entry reply; Missing answers ENOENT.
-                if matches!(self, Self::Entry(_)) && reason == Refusal::Missing {
-                    accounting.lookup_missing();
+                match self {
+                    // A missing name is a negative entry the kernel keeps for
+                    // TTL. It takes no lookup reference. Every create, link,
+                    // mkdir, symlink and rename through the mount replaces it
+                    // in the kernel, and a merged install invalidates every
+                    // added name (`control/invalidate.rs`).
+                    Self::Entry(reply) if reason == Refusal::Missing => {
+                        accounting.lookup_missing();
+                        reply.entry_with_ttls(&Duration::ZERO, &TTL, &missing(), Generation(0));
+                    }
+                    reply => reply.error(refusal(reason)),
                 }
-                self.error(refusal(reason));
                 return dispose(answer).await;
             }
         };
@@ -153,6 +164,27 @@ impl ReadReply {
             }
         }
         dispose(answer).await
+    }
+}
+/// The entry of a name that does not exist: node id 0, which the kernel
+/// treats as ENOENT with a valid entry lifetime. No attribute is read.
+fn missing() -> FileAttr {
+    FileAttr {
+        ino: INodeNo(0),
+        size: 0,
+        blocks: 0,
+        atime: UNIX_EPOCH,
+        mtime: UNIX_EPOCH,
+        ctime: UNIX_EPOCH,
+        crtime: UNIX_EPOCH,
+        kind: FileType::RegularFile,
+        perm: 0,
+        nlink: 0,
+        uid: 0,
+        gid: 0,
+        rdev: 0,
+        blksize: 4096,
+        flags: 0,
     }
 }
 async fn dispose(answer: KernelRead) -> RequestDisposition {

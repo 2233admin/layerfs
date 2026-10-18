@@ -301,6 +301,25 @@ requires for an install that is not identical. See
 [architecture 81](81-compare-and-merge.md#merge-on-commit), step 6. An ordinary
 Commit installs the Workspace's own captured view and still sends nothing.
 
+#359 update, 2026-10-18 (negative entries): a LOOKUP whose name is `Missing`
+is answered with an entry of node id 0, attribute lifetime 0 and the usual
+60 s entry lifetime ([`reply.rs`](../../crates/layerfs-fuse/src/request/reply.rs)),
+which the kernel keeps as a negative dentry instead of asking again on every
+probe. Other refusals stay errors (`ENOTDIR`, `EACCES`, …). A negative entry
+takes no lookup reference, so there is nothing to forget or drain. It needs no
+new notification:
+- every create, mknod, mkdir, symlink, link and rename of the mount reaches the
+  daemon as a request and replaces the negative dentry in the kernel;
+- a merged install already notifies every name that differs in a directory
+  present in both roots, added names included (`binding_changes`);
+- an in-flight LOOKUP decided before that install holds the parent's `i_rwsem`
+  shared until its dentry is hashed, and the kernel's entry invalidation takes
+  it exclusively, so the notification drops the new negative dentry too;
+- an ordinary or known install does not change the view.
+
+The mounted proof is
+[`negative_entries.rs`](../../crates/layerfs-daemon/tests/negative_entries.rs).
+
 ## Removed references
 
 Kernel lookup custody, open handles and processing sources are independent

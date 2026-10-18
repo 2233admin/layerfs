@@ -203,7 +203,9 @@ Apply long TTL, cached reads, stable identity, bounded immutable base caching,
 event-driven lifecycle and removal of unnecessary per-entry bookkeeping only
 under their corresponding correctness/resource proofs.
 
-Investigate negative entries, adaptive READDIRPLUS, directory cache, FLUSH elision,
+Negative entries are implemented (#359, 2026-10-18; see
+[architecture 77](../../architecture/77-native-mutation-coherence.md#coherence-without-notifications)).
+Investigate adaptive READDIRPLUS, directory cache, FLUSH elision,
 larger requests and more dispatch/background concurrency prospectively. Handle-free
 opens require a replacement exact orphan/reference lifetime model. Reject kernel
 writeback for the acknowledged-write contract, mutable-file passthrough bypassing
