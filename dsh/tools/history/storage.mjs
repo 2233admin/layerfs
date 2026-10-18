@@ -77,7 +77,7 @@ export function addedBySource(lines, sourceOf) {
 /** The source of a Commit's line by the step that made it (P3 closure steps; everything else tracked). */
 export const stepSource = (k) => (l) => {
   const step = String(l.step ?? "");
-  return /\.(install|incremental-install|clean-install)$/.test(step) ? "nodeModules" : /\.build$/.test(step) ? "build" : "tracked";
+  return /\.(install|incremental-install|clean-install|reinstall-check)$/.test(step) ? "nodeModules" : /\.(build|rebuild)$/.test(step) ? "build" : "tracked";
 };
 
 /** node_modules bytes changed by an install: package folders added or rewritten against the previous install's lister groups. */

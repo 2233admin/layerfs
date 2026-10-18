@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fetchScript } from "../fetch-store.mjs";
 import { addedBySource, changedGroupBytes, cumulative, liveParts, sealedParts, seedBySource, stepSource, storageFigures, storageProblems } from "../storage.mjs";
-import { buildBytes, buildListCommand, changedPackages, CLOSURE_OUTPUT, closureSteps, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, playClosure } from "../closure.mjs";
+import { buildBytes, buildListCommand, changedPackages, CLOSURE_OUTPUT, closureSteps, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, nothingToBuild, playClosure, tscStates } from "../closure.mjs";
 import { aggregate, buildBaseline, reinstallGate, evaluate, probeSeries, thinClass } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
@@ -704,6 +704,30 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
   calls.length = 0;
   await assert.rejects(playClosure(fake(false), 15, steps.slice(0, 1), deps), /no pnpm store at \/pnpm-store/);
   assert.deepEqual(calls, ["mount", "store?", "unmount"], "no install without the store mount");
+});
+
+test("closure development checks (owner 2026-10-18): a clean reinstall of the unchanged lockfile, and the build again after a remount", async () => {
+  const packages = new Set(["packages/a", "packages/b"]), tsconfigs = new Set(["packages/a"]);
+  const steps = closureSteps({ packages, tsconfigs, changed: ["packages/a/src/x.ts"], installed: false, milestone: false, run: ["packages/a/t.spec.ts"], checks: true });
+  assert.deepEqual(steps.map((s) => s.kind), ["install", "reinstall-check", "build", "rebuild", "test"]);
+  assert.match(steps[1].command, /rm -rf node_modules && pnpm install --offline/);
+  assert.equal(steps[3].command, "./node_modules/.bin/tsc -b --verbose 'packages/a'");
+  assert.deepEqual(closureSteps({ packages, tsconfigs, changed: ["docs/x.md"], installed: true, milestone: false, checks: true }).map((s) => s.kind), [], "nothing installed or built: no checks");
+  assert.deepEqual(closureSteps({ packages, tsconfigs, changed: ["packages/a/src/x.ts"], installed: false, milestone: false }).map((s) => s.kind), ["install", "build"], "measured runs carry no checks");
+  // tsc -b --verbose: states only, the clock and the tree's folder dropped
+  const fresh = "[10:01:02 AM] Projects in this build: \n    * packages/a/tsconfig.json\n\n[10:01:02 AM] Project 'packages/a/tsconfig.json' is up to date because newest input 'packages/a/src/x.ts' is older than output 'packages/a/dist/x.js'\n";
+  assert.deepEqual(tscStates(fresh, "/workspaces/1"), ["packages/a/tsconfig.json up to date"]);
+  assert.equal(nothingToBuild(tscStates(fresh)), true);
+  const stale = "[10:01:02 AM] Project 'packages/a/tsconfig.json' is out of date because output 'packages/a/dist/x.js' is older than input 'packages/a/src/x.ts'\n\n[10:01:02 AM] Building project '/workspaces/1/packages/a/tsconfig.json'...\n";
+  assert.deepEqual(tscStates(stale, "/workspaces/1"), ["packages/a/tsconfig.json built"]);
+  assert.deepEqual(tscStates(stale.replaceAll("/workspaces/1", "/w"), "/w"), tscStates(stale, "/workspaces/1"), "the same states natively under /w");
+  assert.equal(nothingToBuild(tscStates(stale, "/workspaces/1")), false);
+  // playing the rebuild row: its states from the output, in its own one-shot Workspace with its own Commit
+  const fake = { label: () => {}, lf: { sandbox: { mount: async () => "/workspaces/1", unmount: async () => {},
+    exec: async (sb, ws, c) => ({ exitCode: 0, stdout: c === "pwd" ? "/workspaces/1\n" : c.includes("--verbose") ? stale : "" }),
+    commit: async () => ({ kind: "Committed" }) } } };
+  const rows = await playClosure(fake, 12, [steps[3]], { sb: 1, branch: "b", expectCall: (r, l, w) => w(), Mismatch: class extends Error {} });
+  assert.deepEqual([rows[0].kind, rows[0].states, rows[0].nothingToBuild, rows[0].commit], ["rebuild", ["packages/a/tsconfig.json built"], false, "Committed"]);
 });
 
 test("reinstall gate (lead decision): changed lockfile packages and links, stored ÷ raw changed; none changed is judged absolutely", () => {

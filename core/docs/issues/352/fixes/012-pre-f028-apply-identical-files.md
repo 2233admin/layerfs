@@ -3,12 +3,12 @@
 | | |
 | --- | --- |
 | Trigger | Lead, from the liaison's Commit-model reading: r012.s0021 (one file, `expect: UpToDate`) would return Committed, and the player throws Mismatch. No range played or measured with this script |
-| Kind | harness only (owner-approved); no product change, no Store or daemon change |
+| Kind | none: harness (owner-approved). No product, daemon or Store change |
 | Old Stores | unaffected |
 | Fix kind (SPEC §6) | the player's Sandbox apply script (tooling) |
 | Binaries | unchanged |
 | Commits | the commit that adds this file; unit test `dsh/tools/history/tests/runner.mjs` ("F-028: …"); replay check `dsh/tools/history/check-apply.mjs` |
-| Recovery | none needed: ranges 0–11 have no affected apply step that played; range 12 plays with the fix |
+| Recovery | none needed. Ranges 0–11 have no all-identical apply step. The one mixed step there, r004.s0016, committed as expected; only its 4 identical files took a new mtime. Range 12 plays with the fix |
 
 ## Finding
 

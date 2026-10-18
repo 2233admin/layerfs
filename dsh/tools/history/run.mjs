@@ -344,7 +344,7 @@ async function playRange(run, k, mode) {
       await playAgents(run, k, ctx);
       lap("playMs", since);
       since = performance.now();
-      const beforePublish = phase.closure ? async (cur) => rangeClosure(run, k, plan, cur, { sb: await setup(run), expectCall, Mismatch, oracleDir: run.manifest.oracle }) : null;
+      const beforePublish = phase.closure ? async (cur) => rangeClosure(run, k, plan, cur, { sb: await setup(run), expectCall, Mismatch, oracleDir: run.manifest.oracle, checks: run.manifest.label === "dev" }) : null;
       published = await consolidateLanes(run, k, plan, ctx, { beforePublish });
       branch = ctx.final;
       ctx.tree = ctx.mainTree;
@@ -426,6 +426,10 @@ async function playRange(run, k, mode) {
     const instSizes = inst ? commitOf(inst.kind)?.sizes ?? null : null;
     if (ctx.closure.reinstall && m.storage) m.storage.reinstall = { changedPackages: ctx.closure.reinstall.changedPackages, rawChangedBytes: ctx.closure.reinstall.rawChangedBytes, storedNewBytes: instSizes?.newStored ?? null };
     m.closure = { steps: ctx.closure.steps, rows: ctx.closure.rows, oracle: ctx.closure.oracle ?? null };
+    // development checks (owner 2026-10-18): the unchanged lockfile's clean reinstall, and the build again after a remount
+    const again = commitOf("reinstall-check")?.sizes ?? null;
+    if (ctx.closure.reinstallCheck) m.closure.reinstallCheck = { ...ctx.closure.reinstallCheck, newMetadata: again?.newMetadata ?? null, newStored: again?.newStored ?? null };
+    if (ctx.closure.rebuild) m.closure.rebuild = ctx.closure.rebuild;
     m.study = studyMeasurements({
       fsWrites: t.all.filter((l) => l.method === "fs.write" && l.sizes).map((l) => ({ sizes: l.sizes })),
       install: inst ? { sizes: instSizes, delta: deltaSummary(deltaWork(t.all.filter((l) => l.step === `r${pad(k)}.${inst.kind}`)), caps(run.manifest.policy)), prevGroups: ctx.closure.prevGroups, groups: ctx.closure.groups, changed: ctx.closure.reinstall?.changed } : null,

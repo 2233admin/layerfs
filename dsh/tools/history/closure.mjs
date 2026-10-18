@@ -56,6 +56,28 @@ export function installCommand({ store = STORE_MOUNT, clean = false } = {}) {
   return `${storeSetup(store)} && ${clean ? "rm -rf node_modules && " : ""}${install}`;
 }
 export const buildCommand = (packages) => `./node_modules/.bin/tsc -b ${packages.map(quote).join(" ")}`;
+/** The rebuild check's command: the same build again, reporting each project's state (owner 2026-10-18, design 8). */
+export const rebuildCommand = (packages) => `./node_modules/.bin/tsc -b --verbose ${packages.map(quote).join(" ")}`;
+
+/**
+ * What `tsc -b --verbose` says about each project: up to date, out of date or
+ * built, by tsconfig path relative to `root` (the tree's folder), sorted.
+ * The reasons name files chosen by mtime, so only the states are compared;
+ * the clock prefix is dropped.
+ */
+export function tscStates(text, root = "") {
+  const out = new Map();
+  for (const raw of String(text).split("\n")) {
+    const l = raw.replace(/^\[[^\]]*\]\s*/, "").replaceAll(root ? `'${root}/` : "\0", "'");
+    let m = /^Project '([^']+)' is (up to date|out of date)/.exec(l);
+    if (m) { if (out.get(m[1]) !== "built") out.set(m[1], m[2]); continue; }
+    m = /^Building project '([^']+)'/.exec(l);
+    if (m) out.set(m[1], "built");
+  }
+  return [...out].sort(([a], [b]) => a.localeCompare(b)).map(([project, state]) => `${project} ${state}`);
+}
+/** True when a rebuild reports nothing to build. */
+export const nothingToBuild = (states) => states.every((l) => !/ (built|out of date)$/.test(l));
 
 /**
  * The closure steps of one range, in order: install (first, incremental where
@@ -63,13 +85,17 @@ export const buildCommand = (packages) => `./node_modules/.bin/tsc -b ${packages
  * packages that have a tsconfig.json, then the calibrated tests.
  * @param {{ changed: string[], packages: Set<string>, tsconfigs: Set<string>, milestone: boolean, installed: boolean, run: string[] }} r
  */
-export function closureSteps({ changed, packages, tsconfigs, milestone, installed, run = [], store = STORE_MOUNT }) {
+export function closureSteps({ changed, packages, tsconfigs, milestone, installed, run = [], store = STORE_MOUNT, checks = false }) {
   const steps = [];
   if (milestone && installed) steps.push({ kind: "clean-install", command: installCommand({ store, clean: true }) });
   else if (!installed) steps.push({ kind: "install", command: installCommand({ store }) });
   else if (installInputsChanged(changed)) steps.push({ kind: "incremental-install", command: installCommand({ store }) });
+  // development checks (owner 2026-10-18): a clean reinstall of the unchanged lockfile, whose Commit's metadata bytes are recorded
+  if (checks && steps.length) steps.push({ kind: "reinstall-check", command: installCommand({ store, clean: true }) });
   const built = [...new Set(changed.map((p) => packageOf(p, packages)).filter((d) => d && tsconfigs.has(d)))].sort();
   if (built.length) steps.push({ kind: "build", command: buildCommand(built), packages: built });
+  // and the same build again after its Commit, unmount and a fresh mount: it must find nothing to build, or what native finds
+  if (checks && built.length) steps.push({ kind: "rebuild", command: rebuildCommand(built), packages: built });
   if (run.length) steps.push({ kind: "test", command: vitestCommand(run), files: run });
   return steps;
 }
@@ -103,6 +129,11 @@ export async function playClosure(run, k, steps, { sb, branch, expectCall, Misma
         row.output = normalizeOutput(`${r.stdout ?? ""}${r.stderr ?? ""}`);
         row.groups = String((await run.lf.sandbox.exec(sb, ws, listerCommand())).stdout).split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l));
       }
+      if (s.kind === "rebuild") {
+        row.output = `${r.stdout ?? ""}${r.stderr ?? ""}`.slice(-20_000);
+        row.states = tscStates(row.output, String((await run.lf.sandbox.exec(sb, ws, "pwd")).stdout).trim());
+        row.nothingToBuild = nothingToBuild(row.states);
+      }
       if (s.kind === "build") row.bytes = buildBytes((await run.lf.sandbox.exec(sb, ws, buildListCommand(s.packages))).stdout, s.packages);
       if (s.kind === "test") {
         const root = String((await run.lf.sandbox.exec(sb, ws, "pwd")).stdout).trim();
@@ -130,7 +161,7 @@ export const CLOSURE_OUTPUT = /(^|\/)node_modules(\/|$)|(^|\/)dist\/|\.tsbuildin
  * the reinstall input (changed packages and their raw bytes); the caller adds
  * the stored bytes from the install Commit's traced sizes.
  */
-export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir }) {
+export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir, checks = false, native = nativeRebuild }) {
   const git = (args) => execFileSync("git", ["--git-dir", run.repo, ...args], { encoding: "utf8", maxBuffer: 1 << 28 });
   const tree = lsTree(run.repo, plan.checkpoint).files;
   const lock = tree.get("pnpm-lock.yaml")?.blob;
@@ -140,7 +171,7 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
   if (!existsSync(calFile)) throw new Mismatch(`range ${k} has no calibration (${calFile})`);
   const cal = JSON.parse(readFileSync(calFile, "utf8"));
   const changed = git(["diff", "--name-only", run.state.prevCommit, plan.checkpoint]).split("\n").filter(Boolean);
-  const steps = closureSteps({ changed, packages: dirsWith("package.json"), tsconfigs: dirsWith("tsconfig.json"), milestone: !!plan.milestone, installed: !!run.state.installed, run: cal.run });
+  const steps = closureSteps({ changed, packages: dirsWith("package.json"), tsconfigs: dirsWith("tsconfig.json"), milestone: !!plan.milestone, installed: !!run.state.installed, run: cal.run, checks });
   const install = steps.find((s) => /install/.test(s.kind));
   const oracleFile = join(oracleDir, "node_modules", `${lock}.json`);
   if (install && !existsSync(oracleFile)) throw new Mismatch(`range ${k}: no node_modules oracle for lockfile ${lock.slice(0, 12)}; run closure.mjs oracle --range ${k} first`);
@@ -158,6 +189,22 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
     out.reinstall = { changedPackages: ch.count, rawChangedBytes: rawChangedBytes(ch, oracle.groups), changed: ch };
     out.prevGroups = run.state.nmGroupsFile ? JSON.parse(readFileSync(run.state.nmGroupsFile, "utf8")) : [];
     out.groups = done.groups;
+    const again = rows.find((r) => r.kind === "reinstall-check");
+    if (again) {
+      const same = compareInstalled(oracle, again.groups);
+      out.reinstallCheck = { commit: again.commit ?? null, ms: again.ms, oracleOk: same.ok };
+      if (!same.ok) throw new Mismatch(`r${pad(k)} clean reinstall differs from native: ${JSON.stringify({ missing: same.missing.slice(0, 5), extra: same.extra.slice(0, 5), differ: same.differ.slice(0, 5) })}`);
+    }
+  }
+  const rebuild = rows.find((r) => r.kind === "rebuild");
+  if (rebuild) {
+    // nothing to build passes; otherwise the native rerun of the same build decides (a difference is a finding against design 8)
+    out.rebuild = { commit: rebuild.commit ?? null, states: rebuild.states, nothingToBuild: rebuild.nothingToBuild };
+    if (!rebuild.nothingToBuild) {
+      const n = native({ repo: run.repo, commit: plan.checkpoint, image: run.manifest.env.LAYERFS_IMAGE, volume: run.manifest.env.LAYERFS_PNPM_STORE ?? "layerfs-issue352-pnpm-store", packages: rebuild.packages });
+      out.rebuild.native = n.states;
+      if (firstDifference(n.states.join("\n"), rebuild.states.join("\n"))) throw new Mismatch(`r${pad(k)} rebuild after remount differs from native (design 8): ${firstDifference(n.states.join("\n"), rebuild.states.join("\n"))}`);
+    }
   }
   return out;
 }
@@ -324,6 +371,20 @@ export function nativeInstall({ repo, commit, image, volume, name = "layerfs-iss
     groups: lines.filter((l) => l.startsWith("{")).map((l) => JSON.parse(l)),
     ms: Date.now() - t0,
   };
+}
+
+/**
+ * The native rerun of one build (owner 2026-10-18): the checkpoint's tree in
+ * the image, network off, installed, built with `tsc -b`, then built again
+ * with --verbose; the second run's project states (tscStates).
+ */
+export function nativeRebuild({ repo, commit, image, volume, packages, name = "layerfs-issue352-oracle" }) {
+  const script = `mkdir /w && tar -x -C /w && cd /w && (${installCommand()}) > /dev/null 2>&1 && ${buildCommand(packages)} > /dev/null 2>&1; ${rebuildCommand(packages)} > /tmp/o 2>&1; echo "@@exit $?"; sed 's/^/@@out /' /tmp/o`;
+  const archive = execFileSync("git", ["--git-dir", repo, "archive", commit], { maxBuffer: 1 << 30 });
+  const r = spawnSync("docker", ["run", "--rm", "-i", "--name", name, "--network", "none", "-v", `${volume}:${STORE_MOUNT}:ro`, "--entrypoint", "sh", image, "-c", script], { input: archive, encoding: "utf8", maxBuffer: 1 << 28 });
+  if (r.status !== 0) throw new Error(`native rebuild container exited ${r.status}: ${String(r.stderr).slice(-300)}`);
+  const output = r.stdout.split("\n").filter((l) => l.startsWith("@@out ")).map((l) => l.slice(6)).join("\n");
+  return { exit: Number(/@@exit (\d+)/.exec(r.stdout)?.[1] ?? NaN), states: tscStates(output, "/w"), output };
 }
 
 function main() {
