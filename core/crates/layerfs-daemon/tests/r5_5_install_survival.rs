@@ -250,8 +250,10 @@ fn r5_5_access_time_is_the_modification_time_and_unchanged_by_reads_and_two_inst
     let (_, forced) = tables(mount, "the mounted base");
     times_of_the_model(&base, &forced, "the mounted base");
 
+    let base_inodes = model::inode_numbers(mount);
     passed(&bash_in(COMMAND, mount, FIRST), "first changes");
     let expected = host(mount);
+    let expected_inodes = model::inode_numbers(mount);
     assert_eq!(
         at(&expected, "node_modules/pkg/package.json").mtime,
         (1_000_000_000, 123_456_789)
@@ -283,10 +285,14 @@ fn r5_5_access_time_is_the_modification_time_and_unchanged_by_reads_and_two_inst
     let (read_cached, read_forced) = tables(mount, "after reading every file");
     same_table(&after_cached, &read_cached, "reads: lstat table");
     same_table(&after_forced, &read_forced, "reads: forced stat table");
-    assert_same(&expected, &rig.published(first.root), "the first root");
+    // §4.8: history keeps the base's time for an mtime-only edit (`touch -d`
+    // of an unchanged file); the same mount keeps its own until unmount.
+    let one = model::committed_view(&expected, &expected_inodes, &rig.base, &base_inodes);
+    assert_same(&one, &rig.published(first.root), "the first root");
 
     passed(&bash_in(COMMAND, mount, SECOND), "second changes");
     let later = host(mount);
+    let later_inodes = model::inode_numbers(mount);
     assert_eq!(at(&later, "src/main.rs").mtime, (1_286_705_410, 1));
     let (before_cached, before_forced) = tables(mount, "before the second Commit");
     times_of_the_model(&later, &before_forced, "before the second Commit");
@@ -299,19 +305,27 @@ fn r5_5_access_time_is_the_modification_time_and_unchanged_by_reads_and_two_inst
         &after_forced,
         "second install: forced stat table",
     );
-    assert_same(&later, &rig.published(second.root), "the second root");
+    let two = model::committed_view(&later, &later_inodes, &one, &expected_inodes);
+    assert_same(&two, &rig.published(second.root), "the second root");
     rig.unmount(&ready);
 
     let fresh = rig.mount(2);
     let again = root(&fresh);
-    assert_same(&later, &host(again), "the fresh mount");
+    assert_same(&two, &host(again), "the fresh mount");
     let (fresh_cached, fresh_forced) = tables(again, "the fresh mount");
-    times_of_the_model(&later, &fresh_forced, "the fresh mount");
-    // The times a fresh mount reports are the times the first mount reported.
+    times_of_the_model(&two, &fresh_forced, "the fresh mount");
+    // The times a fresh mount reports are the times the first mount
+    // reported, except an mtime-only edit's, which is the committed time.
     for (path, row) in &fresh_forced {
         let old = after_forced[path];
-        assert_eq!((row.atime, row.mtime), (old.atime, old.mtime), "{path:?}");
-        assert_eq!(fresh_cached[path].atime, old.atime, "{path:?}");
+        let committed = two[path.as_os_str().as_bytes()].mtime;
+        let time = if committed == old.mtime {
+            old.atime
+        } else {
+            committed
+        };
+        assert_eq!((row.atime, row.mtime), (time, committed), "{path:?}");
+        assert_eq!(fresh_cached[path].atime, time, "{path:?}");
     }
     println!(
         "R5-5-ATIME noatime=true paths(base={} first={} second={}) tables=lstat,forced atime_equals_mtime=every_path installs=2 table_changes_at_install=0 table_changes_by_reads=0 files_read_o_direct={} direct_bytes={direct_bytes}",
@@ -369,10 +383,12 @@ fn r5_5_every_model_file_reads_exactly_with_o_direct_after_install_with_no_kept_
     let rig = Rig::new("r5-5-direct");
     let ready = rig.mount(1);
     let mount = root(&ready);
+    let base_inodes = model::inode_numbers(mount);
     passed(&bash_in(COMMAND, mount, FIRST), "first changes");
     // The model reads every file once through the page cache, so the cache
     // holds the bytes of before the install.
     let expected = host(mount);
+    let expected_inodes = model::inode_numbers(mount);
     let mut guide = pattern(10, 5_000);
     guide[2_000..2_007].copy_from_slice(b"CHANGED");
     same_bytes(
@@ -392,10 +408,13 @@ fn r5_5_every_model_file_reads_exactly_with_o_direct_after_install_with_no_kept_
     );
     let first = rig.committed(ready.token, "R5-5 direct first");
     let one = every_file_direct(&rig, &ready, &expected, "after the first install");
-    assert_same(&expected, &rig.published(first.root), "the first root");
+    // §4.8: history keeps the base's time for an mtime-only edit.
+    let first_view = model::committed_view(&expected, &expected_inodes, &rig.base, &base_inodes);
+    assert_same(&first_view, &rig.published(first.root), "the first root");
 
     passed(&bash_in(COMMAND, mount, SECOND), "second changes");
     let later = host(mount);
+    let later_inodes = model::inode_numbers(mount);
     guide.resize(70_000, 0);
     same_bytes(file(&later, "docs/guide.md"), &guide, "extended file");
     same_bytes(
@@ -412,7 +431,8 @@ fn r5_5_every_model_file_reads_exactly_with_o_direct_after_install_with_no_kept_
     let second = rig.committed(ready.token, "R5-5 direct second");
     assert_eq!(second.parent, Some(first.id));
     let two = every_file_direct(&rig, &ready, &later, "after the second install");
-    assert_same(&later, &rig.published(second.root), "the second root");
+    let second_view = model::committed_view(&later, &later_inodes, &first_view, &expected_inodes);
+    assert_same(&second_view, &rig.published(second.root), "the second root");
     assert_same(&later, &host(mount), "the same mount");
     rig.unmount(&ready);
 
@@ -422,7 +442,7 @@ fn r5_5_every_model_file_reads_exactly_with_o_direct_after_install_with_no_kept_
         second.root
     );
     let three = every_file_direct(&rig, &fresh, &later, "the fresh mount");
-    assert_same(&later, &host(root(&fresh)), "the fresh mount");
+    assert_same(&second_view, &host(root(&fresh)), "the fresh mount");
     println!(
         "R5-5-DIRECT kept_descriptors=0 after_first_install(files={} bytes={} requests={}) after_second_install(files={} bytes={} requests={}) fresh_mount(files={} bytes={} requests={})",
         one.0, one.1, one.2, two.0, two.1, two.2, three.0, three.1, three.2
@@ -520,8 +540,10 @@ fn r5_5_shared_mappings_held_across_two_installs_keep_exact_content_and_coherenc
 
     // Before the first install: a store, written back, and changes beside.
     stored.store(3 * PAGE + 17, b"stored-before-the-first-install");
+    let base_inodes = model::inode_numbers(mount);
     passed(&bash_in(COMMAND, mount, FIRST), "first changes");
     let expected = host(mount);
+    let expected_inodes = model::inode_numbers(mount);
     same_bytes(
         file(&expected, "target/debug/app"),
         &stored.bytes,
@@ -535,7 +557,10 @@ fn r5_5_shared_mappings_held_across_two_installs_keep_exact_content_and_coherenc
     let first = rig.committed(ready.token, "R5-5 map first");
     untouched.coherent("after the first install");
     stored.coherent("after the first install");
-    assert_same(&expected, &rig.published(first.root), "the first root");
+    // §4.8: history keeps the base's time for an mtime-only edit; the same
+    // mount keeps its own.
+    let first_view = model::committed_view(&expected, &expected_inodes, &rig.base, &base_inodes);
+    assert_same(&first_view, &rig.published(first.root), "the first root");
     assert_same(&expected, &host(mount), "the same mount, first install");
 
     // The same mappings after the first install: a store across a page
@@ -544,6 +569,7 @@ fn r5_5_shared_mappings_held_across_two_installs_keep_exact_content_and_coherenc
     stored.coherent("a store after the first install");
     passed(&bash_in(COMMAND, mount, SECOND), "second changes");
     let later = host(mount);
+    let later_inodes = model::inode_numbers(mount);
     same_bytes(
         file(&later, "target/debug/app"),
         &stored.bytes,
@@ -555,7 +581,8 @@ fn r5_5_shared_mappings_held_across_two_installs_keep_exact_content_and_coherenc
     untouched.coherent("after the second install");
     stored.coherent("after the second install");
     let published = rig.published(second.root);
-    assert_same(&later, &published, "the second root");
+    let second_view = model::committed_view(&later, &later_inodes, &first_view, &expected_inodes);
+    assert_same(&second_view, &published, "the second root");
     same_bytes(
         file(&published, "target/debug/app"),
         &stored.bytes,
@@ -574,9 +601,11 @@ fn r5_5_shared_mappings_held_across_two_installs_keep_exact_content_and_coherenc
     stored.coherent("a store after the second install");
     untouched.coherent("at the end");
     let last = host(mount);
+    let last_inodes = model::inode_numbers(mount);
     let third = rig.committed(ready.token, "R5-5 map third");
     assert_eq!(third.parent, Some(second.id));
-    assert_same(&last, &rig.published(third.root), "the third root");
+    let third_view = model::committed_view(&last, &last_inodes, &second_view, &later_inodes);
+    assert_same(&third_view, &rig.published(third.root), "the third root");
     stored.coherent("after the third install");
     let Held {
         map: untouched_map,
@@ -599,13 +628,13 @@ fn r5_5_shared_mappings_held_across_two_installs_keep_exact_content_and_coherenc
 
     let fresh = rig.mount(2);
     let again = root(&fresh);
-    assert_same(&last, &host(again), "the fresh mount");
+    assert_same(&third_view, &host(again), "the fresh mount");
     same_bytes(
         &direct(&again.join("target/debug/app")),
         &stored_bytes,
         "fresh mount, daemon read",
     );
-    assert_kernel(&last, &kernel(again), "R5-5 map fresh mount");
+    assert_kernel(&third_view, &kernel(again), "R5-5 map fresh mount");
     println!(
         "R5-5-MAP mappings=2 installs_under_the_mappings=3 stores=3 store_units={stores} coherent(mapping,kept_descriptor,cached,o_direct)=after_every_install paths={}",
         last.len()
@@ -772,6 +801,7 @@ fn r5_5_a_commit_at_each_parked_step_of_a_writer_is_exact_on_the_same_and_a_fres
     let ready = rig.mount(1);
     let mount = root(&ready);
     let mut parent = rig.harness.status(ready.token).binding.branch.head_commit;
+    let mut inodes = model::inode_numbers(mount);
     passed(
         &bash_in(
             COMMAND,
@@ -781,6 +811,8 @@ fn r5_5_a_commit_at_each_parked_step_of_a_writer_is_exact_on_the_same_and_a_fres
         "prepare",
     );
     let mut writer = Stepper::spawn(mount);
+    // What history holds after each Commit (§4.8), over the previous one.
+    let mut committed = rig.base.clone();
     let mut positions = Vec::new();
     let mut tag = 2;
     for round in 1..=ROUNDS {
@@ -789,6 +821,7 @@ fn r5_5_a_commit_at_each_parked_step_of_a_writer_is_exact_on_the_same_and_a_fres
             writer.parked(&format!("{step}{round}"));
             // The tree at this position; the writer is blocked in `read`.
             let expected = host(mount);
+            let expected_inodes = model::inode_numbers(mount);
             let state = writer_state(&expected, &what);
             let wanted = match step {
                 // Created and still open in the writer, nothing written.
@@ -804,8 +837,10 @@ fn r5_5_a_commit_at_each_parked_step_of_a_writer_is_exact_on_the_same_and_a_fres
             assert_eq!(record.parent, parent, "{what}: parent is the previous head");
             parent = Some(record.id);
             assert!(writer.alive(), "{what}: the writer outlived the Commit");
+            committed = model::committed_view(&expected, &expected_inodes, &committed, &inodes);
+            inodes = expected_inodes;
             let published = rig.published(record.root);
-            assert_same(&expected, &published, &format!("{what}: published root"));
+            assert_same(&committed, &published, &format!("{what}: published root"));
             assert_eq!(
                 writer_state(&published, &what),
                 wanted,
@@ -820,9 +855,9 @@ fn r5_5_a_commit_at_each_parked_step_of_a_writer_is_exact_on_the_same_and_a_fres
                 record.root
             );
             let again = host(root(&fresh));
-            assert_same(&expected, &again, &format!("{what}: fresh mount"));
+            assert_same(&committed, &again, &format!("{what}: fresh mount"));
             assert_eq!(writer_state(&again, &what), wanted);
-            assert_kernel(&expected, &kernel(root(&fresh)), &what);
+            assert_kernel(&committed, &kernel(root(&fresh)), &what);
             rig.unmount(&fresh);
             println!(
                 "{what}: numbered_files={} log_lines={} pending={} paths={} oracles=published,same_mount,fresh_mount",
@@ -847,13 +882,7 @@ fn r5_5_a_commit_at_each_parked_step_of_a_writer_is_exact_on_the_same_and_a_fres
         rig.up_to_date(ready.token, "R5-5 steps after the writer"),
         (Some(last.id), last.root)
     );
-    let newest: Vec<_> = rig
-        .history()
-        .records
-        .iter()
-        .take(positions.len())
-        .map(|record| record.id)
-        .collect();
+    let newest = rig.newest(positions.len());
     let made: Vec<_> = positions.iter().rev().map(|record| record.id).collect();
     assert_eq!(newest, made, "one record per position, newest first");
     println!(

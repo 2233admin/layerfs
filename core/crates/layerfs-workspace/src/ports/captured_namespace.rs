@@ -40,6 +40,10 @@ pub trait OverlayCapturedNamespace: OverlayCapturedRuns {
     ) -> WorkspaceResult<Option<DirectoryEntry>>;
     /// The exact captured target of a live symlink in the reader's sealed range.
     fn captured_symlink(&self, reader: CapturedReader, serial: u64) -> WorkspaceResult<Vec<u8>>;
+    /// Keeps a kept-base (mtime-only) inode's live row past the install:
+    /// one write, and none when the active generation already has a row
+    /// (STORAGE_BATCH_SPEC §4.8). True when a row was written.
+    fn keep_live_row(&self, reader: CapturedReader, serial: u64) -> WorkspaceResult<bool>;
 }
 
 impl OverlayCapturedNamespace for layerfs_overlay::Overlay {
@@ -87,5 +91,9 @@ impl OverlayCapturedNamespace for layerfs_overlay::Overlay {
 
     fn captured_symlink(&self, reader: CapturedReader, serial: u64) -> WorkspaceResult<Vec<u8>> {
         self.reader_symlink(reader, serial).map_err(Into::into)
+    }
+
+    fn keep_live_row(&self, reader: CapturedReader, serial: u64) -> WorkspaceResult<bool> {
+        layerfs_overlay::Overlay::keep_live_row(self, reader, serial).map_err(Into::into)
     }
 }

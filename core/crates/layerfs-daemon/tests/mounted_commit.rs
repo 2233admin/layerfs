@@ -253,11 +253,13 @@ fn r5_1_external_bash_changes_of_every_kind_are_committed_and_read_back_on_a_fre
     let mount = root(&first);
     let base_root = rig.harness.status(first.token).binding.effective_root;
     assert_same(&rig.base, &host(mount), "the mounted base");
+    let base_inodes = model::inode_numbers(mount);
 
     // The same script, by the same unregistered identity: on the mount, and
     // on a kernel directory the same builder filled.
     passed(&bash_in(COMMAND, mount, EVERY_KIND), "script on the mount");
     let expected = host(mount);
+    let expected_inodes = model::inode_numbers(mount);
     every_kind_happened(&expected);
     let replay = rig.replay();
     passed(&bash_in(COMMAND, &replay, EVERY_KIND), "script on the copy");
@@ -286,8 +288,12 @@ fn r5_1_external_bash_changes_of_every_kind_are_committed_and_read_back_on_a_fre
     let before = kernel(mount);
     let record = rig.committed(first.token, "R5-1");
     assert_ne!(record.root, base_root);
+    // §4.8: history keeps the base's time for the mtime-only edits
+    // (`touch -d` of unchanged files and directories); the same mount keeps
+    // its own until unmount.
+    let committed = model::committed_view(&expected, &expected_inodes, &rig.base, &base_inodes);
     let published = rig.published(record.root);
-    assert_same(&expected, &published, "the published root, fresh bind");
+    assert_same(&committed, &published, "the published root, fresh bind");
     assert_same(&expected, &host(mount), "the same mount after install");
     let after = kernel(mount);
     let moved: Vec<String> = before
@@ -304,9 +310,9 @@ fn r5_1_external_bash_changes_of_every_kind_are_committed_and_read_back_on_a_fre
         record.root
     );
     let again = host(root(&fresh));
-    assert_same(&expected, &again, "the fresh mount");
+    assert_same(&committed, &again, "the fresh mount");
     let table = kernel(root(&fresh));
-    assert_kernel(&expected, &table, "R5-1 fresh mount");
+    assert_kernel(&committed, &table, "R5-1 fresh mount");
     let same_inodes = table
         .iter()
         .filter(|(path, stat)| after.get(*path).is_some_and(|old| old.ino == stat.ino))
@@ -571,6 +577,11 @@ fn r5_8_five_incremental_commits_on_one_mount_each_read_back_completely() {
     let mount = root(&ready);
     let mut parent = rig.harness.status(ready.token).binding.branch.head_commit;
     let mut expected = host(mount);
+    // What history holds after each round: §4.8 keeps the base's time for
+    // an mtime-only change, so each round's committed view is taken over
+    // the previous one; the same mount keeps its own times.
+    let mut committed = expected.clone();
+    let mut inodes = model::inode_numbers(mount);
     let mut records = Vec::new();
     for (round, script) in ROUNDS.iter().enumerate() {
         let what = format!("R5-8 round {}", round + 1);
@@ -578,10 +589,13 @@ fn r5_8_five_incremental_commits_on_one_mount_each_read_back_completely() {
         let changed = host(mount);
         assert!(changed != expected, "{what}: the round changed nothing");
         expected = changed;
+        let changed_inodes = model::inode_numbers(mount);
         let record = rig.committed(ready.token, &what);
         assert_eq!(record.parent, parent, "{what}: parent is the previous head");
+        committed = model::committed_view(&expected, &changed_inodes, &committed, &inodes);
+        inodes = changed_inodes;
         let published = rig.published(record.root);
-        assert_same(&expected, &published, &format!("{what}: published root"));
+        assert_same(&committed, &published, &format!("{what}: published root"));
         // The mount is still mounted and serves the same tree after install.
         assert_same(&expected, &host(mount), &format!("{what}: same mount"));
         println!(
@@ -627,13 +641,7 @@ fn r5_8_five_incremental_commits_on_one_mount_each_read_back_completely() {
             "dist/bundle.js",
         ],
     );
-    let page = rig.history();
-    let newest: Vec<_> = page
-        .records
-        .iter()
-        .take(5)
-        .map(|record| record.id)
-        .collect();
+    let newest = rig.newest(5);
     let made: Vec<_> = records.iter().rev().map(|record| record.id).collect();
     assert_eq!(newest, made, "five records, newest first");
     let last = records.last().unwrap().root;
@@ -641,12 +649,12 @@ fn r5_8_five_incremental_commits_on_one_mount_each_read_back_completely() {
 
     let fresh = rig.mount(2);
     assert_eq!(rig.harness.status(fresh.token).binding.effective_root, last);
-    assert_same(&expected, &host(root(&fresh)), "the fresh mount");
-    assert_kernel(&expected, &kernel(root(&fresh)), "R5-8 fresh mount");
+    assert_same(&committed, &host(root(&fresh)), "the fresh mount");
+    assert_kernel(&committed, &kernel(root(&fresh)), "R5-8 fresh mount");
     println!(
         "R5-8 commits={} history_records={} final_paths={}",
         records.len(),
-        page.records.len(),
+        newest.len(),
         expected.len()
     );
     rig.unmount(&fresh);
@@ -815,5 +823,70 @@ fn the_kernel_replay_starts_from_the_same_tree_as_the_mounted_base() {
         rig.base.len(),
         table.len()
     );
+    rig.finish();
+}
+
+/// STORAGE_BATCH_SPEC §4.8, both halves on one file. An mtime-only edit is
+/// not a change: the Commit beside it keeps the base's time in history while
+/// the same mount keeps its own. A later real change to that file (its mode)
+/// commits the live time with it, and a fresh mount then shows both.
+#[test]
+fn an_mtime_only_edit_stays_live_and_a_later_real_change_commits_its_time() {
+    const TOUCHED: (i64, u32) = (1_046_660_583, 300_000_000);
+    let rig = Rig::new("r5-mtime");
+    let ready = rig.mount(1);
+    let mount = root(&ready);
+    let base_inodes = model::inode_numbers(mount);
+    passed(
+        &bash_in(
+            COMMAND,
+            mount,
+            "set -euo pipefail; umask 022; printf 'new\\n' > made.txt
+touch -d '2003-03-03 03:03:03.3 UTC' src/main.rs",
+        ),
+        "an mtime-only edit beside a real one",
+    );
+    let live = host(mount);
+    let live_inodes = model::inode_numbers(mount);
+    assert_eq!(at(&live, "src/main.rs").mtime, TOUCHED);
+    let first = rig.committed(ready.token, "R5-mtime first");
+    let published = rig.published(first.root);
+    assert_eq!(
+        at(&published, "src/main.rs").mtime,
+        at(&rig.base, "src/main.rs").mtime,
+        "history keeps the base's time"
+    );
+    assert_same(
+        &model::committed_view(&live, &live_inodes, &rig.base, &base_inodes),
+        &published,
+        "the first root",
+    );
+    assert_same(&live, &host(mount), "the same mount keeps its own time");
+
+    passed(
+        &bash_in(COMMAND, mount, "chmod 0600 src/main.rs"),
+        "a real change to the same file",
+    );
+    let changed = host(mount);
+    assert_eq!(at(&changed, "src/main.rs").mode, 0o600);
+    assert_eq!(at(&changed, "src/main.rs").mtime, TOUCHED);
+    let second = rig.committed(ready.token, "R5-mtime second");
+    assert_eq!(second.parent, Some(first.id));
+    let published = rig.published(second.root);
+    assert_eq!(
+        (
+            at(&published, "src/main.rs").mode,
+            at(&published, "src/main.rs").mtime
+        ),
+        (0o600, TOUCHED),
+        "the real change carries the live time"
+    );
+    assert_same(&changed, &host(mount), "the same mount after the change");
+    rig.unmount(&ready);
+
+    let fresh = rig.mount(2);
+    assert_same(&published, &host(root(&fresh)), "the fresh mount");
+    assert_eq!(at(&host(root(&fresh)), "src/main.rs").mtime, TOUCHED);
+    rig.unmount(&fresh);
     rig.finish();
 }

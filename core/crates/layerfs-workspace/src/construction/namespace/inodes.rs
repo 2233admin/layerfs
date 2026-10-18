@@ -84,7 +84,20 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
         // exactly - form and stored mtime included - so an mtime-only capture
         // is not a change (STORAGE_BATCH_SPEC section 4.8).
         if let Some(stored) = stored {
-            if self.unchanged(inode, root, kind, content_root, stored, live)? {
+            if let Some(base) = self.unchanged(inode, root, kind, content_root, stored, live)? {
+                // The live Workspace still shows its own time until unmount
+                // (§4.8): the row outlives the install that keeps the base.
+                if (base.mtime_seconds, base.mtime_nanoseconds)
+                    != (live.mtime_seconds, live.mtime_nanoseconds)
+                {
+                    let kept = self
+                        .provider
+                        .keep_live_row(self.facts.reader, inode.serial)
+                        .map_err(|original| self.shared.borrow_mut().original(original))?;
+                    if kept {
+                        add(&mut self.shared.borrow_mut().work.live_rows_kept, 1);
+                    }
+                }
                 return Ok(stored);
             }
         }
@@ -101,10 +114,11 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
             metadata_root,
         })
     }
-    /// True when every value-bearing fact of `inode` equals its base row:
-    /// content root (and, for a symlink, the decoded target), directory
-    /// entries (no header change record), mode and namespace count.
-    /// The stored mtime is deliberately not part of the check.
+    /// The base row's portable metadata when every value-bearing fact of
+    /// `inode` equals that row: content root (and, for a symlink, the
+    /// decoded target), directory entries (no header change record), mode
+    /// and namespace count. The stored mtime is deliberately not part of the
+    /// check.
     fn unchanged(
         &self,
         inode: &Inode,
@@ -113,9 +127,9 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
         content_root: ObjectId,
         stored: InodeValue,
         live: PortableMetadata,
-    ) -> ContentResult<bool> {
+    ) -> ContentResult<Option<PortableMetadata>> {
         if content_root != stored.content_root {
-            return Ok(false);
+            return Ok(None);
         }
         if kind == CanonicalKind::Directory {
             let header = self.shared.borrow_mut().get(key(HEADER, inode.serial))?;
@@ -124,11 +138,11 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
                 .transpose()?
                 .unwrap_or(0);
             if changed != 0 {
-                return Ok(false);
+                return Ok(None);
             }
         }
         if stored.namespace_ref_count != (if root { 0 } else { inode.nlink }) {
-            return Ok(false);
+            return Ok(None);
         }
         let portable = read_portable(
             self.objects,
@@ -136,7 +150,7 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
             kind,
             &mut AttributeReadWork::default(),
         )?;
-        Ok(portable.mode == live.mode)
+        Ok((portable.mode == live.mode).then_some(portable))
     }
     /// The existing changed-file constructor under its own file scope. It
     /// takes the new-file route itself and returns the base root when the

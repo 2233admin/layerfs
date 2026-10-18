@@ -190,6 +190,32 @@ impl Rig {
             })
             .unwrap()
     }
+    /// The newest `count` Commit ids, head first, read across pages. A page
+    /// is byte-bounded: since #327 a CommitRecord encodes at up to 4,510
+    /// bytes, so one 16 KiB page holds three whatever `limit` asks.
+    pub fn newest(&self, count: usize) -> Vec<CommitId> {
+        let mut ids = Vec::new();
+        let mut cursor = None;
+        while ids.len() < count {
+            let page = self
+                .store
+                .history()
+                .commit_history(&CommitHistoryRequest {
+                    branch: self.harness.branch,
+                    start: None,
+                    cursor: cursor.take(),
+                    limit: HISTORY,
+                })
+                .unwrap();
+            ids.extend(page.records.iter().map(|record| record.id));
+            match page.continuation {
+                Some(next) => cursor = Some(next),
+                None => break,
+            }
+        }
+        ids.truncate(count);
+        ids
+    }
     /// A plain kernel copy of the base tree, made by running the builder
     /// again, owned by the command identity. Never read by the daemon.
     pub fn replay(&self) -> PathBuf {

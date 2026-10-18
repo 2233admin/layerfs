@@ -100,6 +100,9 @@ fn a_file_created_held_written_unlinked_and_written_again_is_never_constructed()
     never_constructed(&b, &built, &recording, serial, "created and held");
     // Only the touched root has a value: its time changed, its names did not.
     assert_eq!(built.work.values_written, 1);
+    // Spec §4.8, live half: the install keeps the root's live time on the
+    // mount, so its row stays in the active generation.
+    assert_eq!(built.work.live_rows_kept, 1);
     drop(recording);
     built.install(&b);
     drain(&b);
@@ -115,7 +118,11 @@ fn a_file_created_held_written_unlinked_and_written_again_is_never_constructed()
         "R3 row 1 next capture: inode_rows={} entry_rows={} tombstones_skipped={}",
         again.work.inode_rows, again.work.entry_rows, again.work.tombstones_skipped
     ));
-    assert_eq!((again.work.inode_rows, again.work.entry_rows), (0, 0));
+    // The kept root row was captured again and is still mtime-only (§4.8):
+    // it builds nothing, and is carried into the new active generation once
+    // more so the mount keeps its live time.
+    assert_eq!((again.work.inode_rows, again.work.entry_rows), (1, 0));
+    assert_eq!(again.work.live_rows_kept, 1);
     assert_eq!(again.work.files_constructed, 0);
     assert_eq!(recording.log.borrow().file_calls(), 0);
     never_constructed(&b, &again, &recording, serial, "next capture");
