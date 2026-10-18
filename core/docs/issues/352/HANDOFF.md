@@ -85,6 +85,12 @@ SDK (F-020, Linux only); the daemon serves Workspace calls.
 | fs-bench-pro frozen and left broken | root AGENTS.md |
 | Migrations delete hard-to-adapt tests, re-cover surviving contracts | root AGENTS.md §4 |
 | F-031 revised: from P3, full `dsh.git` clone and one git commit per replayed dsh commit | SPEC §2 "`.git` in Workspaces", BUGS F-031 |
+| F-031 design approved with the liaison's revision: lane-private index, real `git add`/`git rm --cached` and `git write-tree`, `git commit-tree` with the original metadata and parents, lane-own ref; lead writes merge commits, main, index and the one explicit repack; auto-gc off as a recorded departure; `git status --porcelain` in a fixed share of one-shot calls; storage cost accepted with `.git` bytes reported separately; proved on a dev range first | BUGS F-031, [F031_DESIGN.md](F031_DESIGN.md) |
+| `grep_tree` from P3: option (a), tracked files only, as a new labelled series; one labelled whole-tree sample at milestones tracks `fs.grep` throughput | RESULTS, SPEC §5 probes |
+| Two-sided `node_modules` merges (watch-out S4): use the product's existing last-writer-wins rule file `/.lww` with `%include .gitignore`, so paths both sides changed under ignored, regenerated state (`node_modules`, build output) take the newer side instead of conflicting; the merged result then re-runs `pnpm install` in a Workspace, as developers do after `git merge`, checked by the on-top install oracle. `/.lww` is replay infrastructure, excluded from the tree check like `.lfs-probe/`. Counted per merge as its own category; any conflict outside `.gitignore`d paths stays a finding | [crazy_work_load_watch_out.md](crazy_work_load_watch_out.md) S4, `layerfs-content/src/merge/lww.rs` |
+| F-032 (`rm -rf` of a base tree) is fixed before measured range 15, per-op timing first | BUGS F-032 |
+| F-034: a new directory per mount is the model; no product change | BUGS F-034 |
+| F-033: no history walk may fail `Capacity` on history or Commit counts; only resource limits remain; gate: merged before range 90 | BUGS F-033 |
 
 ## Crew queues (in order)
 

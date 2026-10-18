@@ -290,7 +290,7 @@
   clean `git status`. See [SPEC §2, `.git` in Workspaces](SPEC.md). Owner: the
   builder, after the P3 dev checks, measuring Store growth per git commit
   (index, loose objects, packs) and the wall time added per range.
-  **Design gate (owner, 2026-10-18): F-031 is not built until a short design is approved by the owner.** It must say (1) how lanes commit: which Workspace and Branch runs each `git commit`, and on which Git branch; (2) how a LayerFS merge of two Branches that both changed `.git` treats `.git/index`, `HEAD`, refs, `logs/`, `ORIG_HEAD` and packs written by auto-repack (conflict, rule or rebuild, with no retry or guessed resolution); (3) how dsh's merge commits are reproduced with their original parents (both parents' objects in one `.git`). The design names its proof and its expected Store and wall-time cost.
+  **Design gate (owner, 2026-10-18): F-031 is not built until a short design is approved by the owner.** It must say (1) how lanes commit: which Workspace and Branch runs each `git commit`, and on which Git branch; (2) how a LayerFS merge of two Branches that both changed `.git` treats `.git/index`, `HEAD`, refs, `logs/`, `ORIG_HEAD` and packs written by auto-repack (conflict, rule or rebuild, with no retry or guessed resolution); (3) how dsh's merge commits are reproduced with their original parents (both parents' objects in one `.git`). The design names its proof and its expected Store and wall-time cost. **Owner decision 2026-10-18: design approved with a revision** ([F031_DESIGN.md](F031_DESIGN.md) `4b7a3ec1a`). Per replayed dsh commit, in its lane's one-shot Workspace: a lane-private index (`GIT_INDEX_FILE` under `.git/lanes/<lane>/`) set to the dsh parent with `git read-tree`, real `git add` / `git rm --cached` of the commit's changed paths, real `git write-tree` (tree ids must equal dsh), then `git commit-tree` with the original author, committer, dates, message and parents (the id must equal dsh; no commit after the seed is signed) and `git update-ref` of the lane's own ref. The lead's end-of-range exec is as designed (merge commits, main, shared index, one explicit `repack -d`). Auto-gc stays off, recorded as a departure from git defaults. A fixed share of one-shot calls runs `git status --porcelain` (agents do), which also checks that fresh mounts keep stat fields stable. Storage cost accepted; `.git` bytes are reported separately by source. Proof on a dev range first, adding stored bytes per index rewrite and `git status` time in a fresh one-shot Workspace.
 - **F-032 · deleting a base tree over FUSE costs ~0.7 ms per entry (product,
   builder, item 9 dev range, 2026-10-18).** On dev fork `dev352-p3f`, range 15,
   the clean reinstall's `rm -rf node_modules` made 40,145 unlinks and 6,187
@@ -302,6 +302,8 @@
   milestones in measured ranges, but agents' `rm -rf` of large trees is
   ordinary work. Owner: the fixer, after item 7, with per-op timing first
   (D0). Not folded into F-027.
+  **Owner decision 2026-10-18:** fixed before measured range 15 (moved ahead
+  of measured P3; per-op timing first).
 - **F-033 · `MAXIMUM_LINEAGE_ROWS` (4,096) refuses history walks with
   `Capacity` (product, liaison research, owner decision 2026-10-18).** The
   constant (`layerfs-history/src/contract/records.rs:24`) bounds three walks,
