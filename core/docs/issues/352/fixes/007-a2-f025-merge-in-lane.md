@@ -15,7 +15,7 @@
 | Old Stores | open unchanged |
 | Old data | still read as before |
 | Compatibility test | fix 0: **passed**. A fresh fork of `p2-main-c`'s range-11 snapshot (written by `58a60046`) passes `compat.mjs` range 11 on daemon `bd6fbeee`: 1,057 files, 296 ids, paths ok. Fixes 1–4: *pending* |
-| Binaries | daemon `58a60046…` (and the evidence from `c25119ac…`) → fix 0: `bd6fbeee08156326895e16c1e0a688854f004231d55e0c359ea7ec8af256972a`, kept in `core/target/issue352/daemon-bd6fbeee/` (addon unchanged, `799e3ca6`). Fixes 1–4: *pending* |
+| Binaries | daemon `58a60046…` (and the evidence from `c25119ac…`) → fix 0: `bd6fbeee08156326895e16c1e0a688854f004231d55e0c359ea7ec8af256972a`, kept in `core/target/issue352/daemon-bd6fbeee/` (addon unchanged, `799e3ca6`). Fix 1: daemon `dbf906df…`, addon `59f7f8dd…` (below). Fixes 2–4: *pending* |
 | Commits | fix 0: the commit that adds its section below, on branch `dsh-352-f025-fix0`. Fixes 1–4: *pending* |
 | Regression tests | fix 0: `core/crates/layerfs-daemon/tests/sdk_timing_coverage.rs` (moved to `layerfs-store-service` by F-020). Fix 1: `layerfs-store-service/tests/sdk_merge_paths.rs` (bound) and `history_diff_oracle.rs` (naming equals the walk). Others *pending*, listed under Proof |
 | Recovery | fork the newest good `p2-main-c` snapshot; rerun the range that trips next (or the next unplayed range) measured on the new daemon. No rebuild |
@@ -263,10 +263,17 @@ it takes LayerFS heads (`NoSuchBranch`, nothing played). The second, with
   walk took 225, 852 and 7,584. So the bound is O(changed × depth) lookups,
   each O(log tree), and no listings. The spec's "independent of tree size" is
   met for directory listings, not for B-tree page reads.
-- **Daemon.** The daemon runs Workspace Commits through store-service's
-  `commit_merge`, so fix 1 changes the daemon binary. The new daemon id,
-  the Linux build, `compat.mjs` and the old vs new table wait for the Docker
-  host to be cleared (coordinator hold, 2026-10-18).
+- **Binaries.** The daemon runs Workspace Commits through store-service's
+  `commit_merge`, and the SDK runs `branch.merge` and merge-at-publish
+  in-process, so fix 1 changes both:
+  - daemon `dbf906df0bcd956b9f2c9ca6df3c63e88404b521904cd148b50ac44de08ce24e`
+    (`core/target/issue352/daemon-dbf906df/`);
+  - Linux addon `59f7f8dd9e0214bf9d4257e20c868eb0a6c482cb02047386d0f43d35130f51e8`
+    (`sdk-linux-59f7f8dd/`).
+  Both are built from `3dff9c5cb`, warm on the `layerfs-issue352-cargo-target`
+  volume (32 s and 17 s). `compat.mjs`, the recorded-merge replay and the
+  old vs new table wait for "lane idle". Overlap, declared: the two builds ran
+  03:22:31–03:23:57Z, as ranges 13–14 began.
 
 ### Fix 2 · Narrow the publication lane
 
