@@ -8,7 +8,7 @@
 | Old Stores | not involved |
 | Old data | Sandbox and mount records unchanged; old records read as before |
 | Compatibility test | not applicable: the records' format is unchanged, and the test's child process reads the records the parent wrote |
-| Binaries | daemon `57141b57` unchanged; addon `438bae05` → `2e0c53dfdaa8a64cf0b9a38aacc59a773c53067548754e3a94ddf59069ea0b3d` (`core/target/issue352/sdk-linux-2e0c53df/`, from `3e632716a`, 3.5 s warm) |
+| Binaries | daemon `57141b57` unchanged; addon `438bae05` → `2e0c53dfdaa8a64cf0b9a38aacc59a773c53067548754e3a94ddf59069ea0b3d` (`sdk-linux-2e0c53df/`, from `3e632716a`, measured below) → `05b8bd075a959ec23c7d29e32a755b4ae85ab38f25fc4f8825ed6442df42b28a` (`sdk-linux-05b8bd07/`, with the lead's stale-entry refresh; the hot path is unchanged, so not re-timed). Each 3.5 s warm |
 | Commits | fix `3e632716a` on branch `dsh-352-f029-discovery` |
 | Regression test | `sdk/js/test/verify/exec_mount_lookup_real.mjs` |
 | Recovery | none needed: no Store change. Runs pick up the new addon at the next re-baseline |
@@ -31,9 +31,13 @@ removed (F-017). An exec needs only its own mount's directory.
   `SandboxState::mounted(path)`:
   - **Known path, record present:** used directly. The record is one local
     `stat`.
-  - **Known path, record gone:** another process unmounted it. It is dropped
-    from the table and refused `NotMounted`, as the full refresh answered
-    before.
+  - **Known path, record gone:** another process unmounted it. One full
+    refresh (lead review, `REVIEWSHA`), which replaces the table, then the
+    lookup: whatever is mounted there now, else `NotMounted`. The daemon
+    never reuses a namespace or its directory
+    (`layerfs-daemon/src/control/serving.rs:31`), so today that path stays
+    unmounted. The refresh keeps the answer right if a directory is ever
+    reused.
   - **Unknown path:** one full refresh, then the lookup. This covers a mount
     another process made.
 - `sandbox_refreshed()` keeps the full refresh for calls that need every
@@ -53,8 +57,12 @@ removed (F-017). An exec needs only its own mount's directory.
   carries its 1;
 - a child process sharing `LAYERFS_HOME` mounts a fifth Workspace and
   unmounts one of A's;
+- the child also mounts a sixth after its unmount; the sixth gets a new
+  directory, as the daemon never reuses one;
 - A then execs in the fifth (found from the shared records), is refused
-  `NotMounted` in the removed one, and still execs in the other three.
+  `NotMounted` in the removed one (after one refresh), execs in the sixth,
+  and still execs in the other three.
+- On `05b8bd07` the test passes in 2.8 s.
 
 Revert check: on addon `438bae05` the test fails at the exchange count. The
 exec line carries the per-mount status exchanges.

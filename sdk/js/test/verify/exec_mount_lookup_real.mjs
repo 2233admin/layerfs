@@ -9,7 +9,10 @@
 // (before F-029 it carried one status exchange per mount). A child process
 // sharing LAYERFS_HOME mounts a fifth Workspace and unmounts one of A's. A then
 // execs in the fifth (found from the shared records), is refused NotMounted in
-// the one the child removed, and still execs in the others. One attempt per
+// the one the child removed (after one read of the shared records), and still
+// execs in the others. The child's remount after its unmount gets a new
+// directory: the daemon never reuses one, so a stale path can't name a new
+// Workspace. One attempt per
 // step; nothing retried.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -31,7 +34,10 @@ async function inner([phase]) {
     const paths = JSON.parse(readFileSync(shared, "utf8"));
     const fifth = await layerfs.sandbox.mount("box", "work");
     await layerfs.sandbox.unmount("box", paths[1], true);
-    writeFileSync(shared, JSON.stringify([...paths, fifth]));
+    // a remount after that unmount: the daemon never reuses a namespace, so
+    // never its directory (layerfs-daemon control/serving.rs)
+    const sixth = await layerfs.sandbox.mount("box", "work");
+    writeFileSync(shared, JSON.stringify([...paths, fifth, sixth]));
     console.log("CHILD ok");
     return;
   }
@@ -59,13 +65,16 @@ async function inner([phase]) {
   console.log((child.stdout + child.stderr).trim());
   assert.equal(child.status, 0, "the child process passes");
   const all = JSON.parse(readFileSync(shared, "utf8"));
-  const fifth = all[MOUNTS];
+  const [fifth, sixth] = all.slice(MOUNTS);
+  assert.ok(!paths.includes(sixth) && sixth !== fifth, `a remount gets a new directory: ${sixth}`);
   assert.equal((await layerfs.sandbox.exec("box", fifth, "cat README.md")).exitCode, 0, "a mount another process made");
   let refused = null;
   try { await layerfs.sandbox.exec("box", paths[1], "true"); } catch (e) { refused = e; }
+  // the stale entry sends A to the shared records once; nothing is there now
   assert.equal(refused?.code, "NotMounted", `a mount another process removed: ${refused?.message}`);
+  assert.equal((await layerfs.sandbox.exec("box", sixth, "cat README.md")).exitCode, 0, "the other process's remount");
   for (const path of [paths[0], paths[2], paths[3]]) assert.equal((await layerfs.sandbox.exec("box", path, "true")).exitCode, 0);
-  for (const path of [paths[0], paths[2], paths[3], fifth]) await layerfs.sandbox.unmount("box", path, true);
+  for (const path of [paths[0], paths[2], paths[3], fifth, sixth]) await layerfs.sandbox.unmount("box", path, true);
   await layerfs.sandbox.close("box");
   console.log("MAIN ok");
 }

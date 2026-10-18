@@ -112,8 +112,10 @@ impl SandboxState {
     }
 
     /// `pick` from the mount at `path`. A mount this process knows is used
-    /// while its shared record exists; an unknown path reads the shared
-    /// records once, for a mount another process made.
+    /// while its shared record exists. Otherwise (an unknown path, or a
+    /// known one another process unmounted) the shared records are read
+    /// once, for whatever is mounted there now; the full refresh replaces
+    /// the table, so a stale entry goes with it.
     fn mounted<T>(&self, path: &str, pick: impl Fn(&Mount) -> T) -> Result<T, SdkRefusal> {
         let known = lock(&self.mounts)?
             .get(path)
@@ -122,11 +124,7 @@ impl SandboxState {
             Some((token, value)) if crate::discovery::mount_file(self, token).exists() => {
                 return Ok(value)
             }
-            // Unmounted by another process: its owner removed the record.
-            Some(_) => {
-                lock(&self.mounts)?.remove(path);
-            }
-            None => crate::discovery::refresh(self)?,
+            _ => crate::discovery::refresh(self)?,
         }
         lock(&self.mounts)?
             .get(path)
