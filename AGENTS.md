@@ -140,7 +140,9 @@ remains a separate MEMORY/OFF/EXCLUSIVE database file.
   concurrent Commits are expected to be uncommon; optimize the uncontended
   Commit and keep contention correct and bounded. Work that grows with tree
   size, history or Branch count inside the lane is a defect. See the
-  [Store concurrency model](core/docs/architecture/83-store-concurrency-model.md).
+  [Store concurrency model](core/docs/architecture/83-store-concurrency-model.md)
+  and the [global SQLite Store](core/docs/architecture/84-global-sqlite-store.md)
+  design reference.
   Immutable objects support reuse/distribution; authority, reference closure,
   mutable history, durability and safe GC still require exact contracts.
   Filesystem history is not a process, memory, socket or stdout/stderr

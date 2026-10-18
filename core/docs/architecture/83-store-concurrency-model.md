@@ -4,7 +4,7 @@
 > global Store and every writer of it (daemons and, after #352 F-020, the SDK
 > process). It records a decision, not new code: the locks it names exist
 > today (`core/AGENTS.md`, writer admission). Root AGENTS.md carries the
-> one-paragraph rule.
+> one-paragraph rule. The database itself: [Global SQLite Store](84-global-sqlite-store.md).
 
 ## 1. Decision
 
