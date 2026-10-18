@@ -53,6 +53,19 @@ cannot skip descendants: their inode values live in the filesystem's separate
 inode table. Numeric diff page positions still scan earlier paths; no cursor
 state or namespace-sized changed-path map is retained between calls.
 
+Issue #354 source update, 2026-10-18 (#352 F-035): `fs.read` and `fs.grep`
+scan a file's text in whole parts (one read pass per chunked file, a
+whole-file payload in place) with the standard library's substring search and
+a buffer-wide line counter; the NUL / invalid UTF-8 window boundary is
+unchanged. `fs.grep` scans each content id once per call (results kept within
+the reply budget) and reads a window of up to 64 files' roots in demands of
+at most 4 MiB, sized from their file lengths, so chain levels are resolved
+together. `fs.glob` starts at an anchored pattern's literal leading folders
+and skips folders it cannot match. Every read call keeps one set of storage
+read caches (`sdk/cached.rs`) and resolves its path through a memo over them;
+the walker memoizes directory pages and the inode table's upper pages. Results
+are byte-identical to the earlier calls; paging still counts positions.
+
 Diff omits a same-identity directory only when its metadata is also unchanged.
 Directory metadata changes occupy a returned item and therefore exactly one
 pagination position. This corrects the earlier mismatch where the scan counted

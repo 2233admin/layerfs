@@ -37,6 +37,28 @@ impl<'a> Reader<'a> {
         super::length::read(self.storage, ids, |states| self.read_objects(states))
     }
 }
+/// One caller's decode arena and bounded pack, group and pooled-value caches,
+/// kept across that caller's demands instead of a fresh [`Reader`]'s per
+/// demand. Pack ids come from a counter that never goes back and published
+/// packs never change, so a kept body stays valid; every object read through
+/// it is authenticated as before. The bounds are the [`Reader`]'s.
+pub struct ReadCache(ReadState);
+impl ReadCache {
+    /// Empty caches and a fresh decode arena.
+    pub fn new() -> StorageResult<Self> {
+        ReadState::new().map(Self)
+    }
+}
+impl Storage {
+    /// [`Reader::read_objects`] through caller-kept caches.
+    pub fn read_with(
+        &self,
+        cache: &mut ReadCache,
+        ids: &[ObjectId],
+    ) -> StorageResult<Vec<Vec<u8>>> {
+        cache.0.read(&self.source, &self.capacities(), ids)
+    }
+}
 impl AuthenticatedObjects for Reader<'_> {
     fn read_canonical_batch(&self, ids: &[ObjectId]) -> ContentResult<Vec<Vec<u8>>> {
         self.read_objects(ids).map_err(crate::error::provider_error)

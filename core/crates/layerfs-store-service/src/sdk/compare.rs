@@ -67,7 +67,7 @@ pub fn diff_files(store: &Arc<Store>, args: &SdkValue) -> Answer {
             &reader,
             selector.get_text("commit").unwrap_or(branch),
         )?;
-        let entry = existing(&reader, &snap, &path)?;
+        let entry = existing(reader.as_ref(), &snap, &path)?;
         if entry.value.kind == InodeKind::Directory {
             return Err(refuse(
                 "IsDirectory",

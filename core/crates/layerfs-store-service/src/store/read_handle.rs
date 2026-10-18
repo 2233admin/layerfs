@@ -2,7 +2,7 @@
 use super::{open::Counts, PortError, ReadAdmissionError};
 use layerfs_content::ObjectId;
 use layerfs_history::{BranchId, BranchSnapshot, HistoryCatalog};
-use layerfs_storage::{Diagnostics, Storage};
+use layerfs_storage::{Diagnostics, ReadCache, Storage};
 use std::{
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -111,6 +111,24 @@ impl ReadSession {
                 .storage
                 .reader()
                 .and_then(|r| r.read_objects(ids))
+                .map_err(PortError::Storage)
+        })
+    }
+    /// [`Self::objects`] through a caller's caches; the lock is held for
+    /// this one demand only.
+    pub fn objects_with(
+        &self,
+        cache: &mut ReadCache,
+        ids: &[ObjectId],
+    ) -> Result<Vec<Vec<u8>>, Arc<PortError>> {
+        self.attempt(|handle, counts| {
+            counts.objects.fetch_add(1, Ordering::Relaxed);
+            counts
+                .object_ids
+                .fetch_add(ids.len() as u64, Ordering::Relaxed);
+            handle
+                .storage
+                .read_with(cache, ids)
                 .map_err(PortError::Storage)
         })
     }

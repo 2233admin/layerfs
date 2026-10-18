@@ -11,4 +11,4 @@ mod units;
 
 pub use counters::Diagnostics;
 pub(crate) use fetch::Fetch;
-pub use provider::Reader;
+pub use provider::{ReadCache, Reader};

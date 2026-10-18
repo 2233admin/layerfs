@@ -12,7 +12,7 @@ use layerfs_content::compare::{as_text, EntryFacts, TreeTable, MAXIMUM_TEXT_BYTE
 use layerfs_content::filesystem::path::PathName;
 use layerfs_content::filesystem::FilesystemRootId;
 use layerfs_content::object::inode_leaf::InodeKind;
-use layerfs_content::{ContentError, ObjectId};
+use layerfs_content::{AuthenticatedObjects, ContentError, ObjectId};
 use layerfs_history::{LayerStackRecord, NodeId};
 use std::sync::Arc;
 
@@ -95,6 +95,15 @@ pub fn entry(
     tree: &TreeTable,
     path: &str,
 ) -> Result<Option<EntryFacts>, SdkRefusal> {
+    find(reader, tree, path)
+}
+
+/// [`entry`] through any object reader, such as a call's memo.
+pub fn find(
+    reader: &dyn AuthenticatedObjects,
+    tree: &TreeTable,
+    path: &str,
+) -> Result<Option<EntryFacts>, SdkRefusal> {
     let mut serial = tree.root_serial();
     for name in path.split('/').filter(|name| !name.is_empty()) {
         let name = PathName::new(name).map_err(|_| invalid(format!("`{path}` is not valid")))?;
@@ -110,8 +119,12 @@ pub fn entry(
 }
 
 /// The entry at a path, refused when absent.
-pub fn existing(reader: &StorePorts, snap: &Snap, path: &str) -> Result<EntryFacts, SdkRefusal> {
-    entry(reader, &snap.tree, path)?.ok_or_else(|| {
+pub fn existing(
+    reader: &dyn AuthenticatedObjects,
+    snap: &Snap,
+    path: &str,
+) -> Result<EntryFacts, SdkRefusal> {
+    find(reader, &snap.tree, path)?.ok_or_else(|| {
         refuse(
             "NoSuchPath",
             format!("{path} does not exist at {}", snap.label),

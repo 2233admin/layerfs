@@ -148,6 +148,17 @@ impl StorePorts {
         })
     }
 }
+impl StorePorts {
+    /// One object demand through caches the caller keeps across its demands,
+    /// under this operation's custody (#352 F-035).
+    pub fn objects_with(
+        &self,
+        cache: &mut layerfs_storage::ReadCache,
+        ids: &[ObjectId],
+    ) -> Result<Vec<Vec<u8>>, Arc<PortError>> {
+        self.attempt(|| self.reader()?.objects_with(cache, ids))
+    }
+}
 impl AuthenticatedObjects for StorePorts {
     fn read_canonical_batch(&self, ids: &[ObjectId]) -> ContentResult<Vec<Vec<u8>>> {
         self.attempt(|| {

@@ -11,10 +11,16 @@ application composition. Failure returns once, without conversion or fallback.
 
 One Store owns one byte-bounded CanonicalCache shared by all its Workspaces.
 Bind opens one read-only session for each Workspace before its root checks and
-readiness. Each provider demand holds only that Workspace reader lock and one
-short read transaction; no exclusive lease or transaction spans request steps. StorePorts forwards a complete object
+readiness. Each provider demand holds only that Workspace reader lock and at
+most one short read transaction; object locates and pack reads take none, each
+statement reading rows that never change in its own snapshot (#352 F-035). No
+exclusive lease or transaction spans request steps. StorePorts forwards a complete object
 or length batch to Reader, retaining order/cardinality and the existing4096-id,
 32MiB canonical demand bounds. These are windows, not file/namespace caps.
+`StorePorts::objects_with` serves the same demand through caches the caller
+keeps across its demands (`layerfs_storage::ReadCache`, the Reader's bounded
+decode arena and pack/group/pooled-value caches); an SDK read call keeps one
+for the call and drops it at the end (#352 F-035).
 A cached object invokes no Store port. The existing canonical object format and
 Storage locator/pack algorithms are unchanged. Adapter counters expose actual
 object/length demand counts and ids, and serial reservations; they are not a
