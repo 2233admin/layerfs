@@ -72,7 +72,7 @@ pub(crate) fn chains(
             .filter(|id| !visited.contains(id))
             .map(|id| {
                 source
-                    .location(id, i64::MAX)?
+                    .base_location(id, i64::MAX)?
                     .ok_or(StorageError::ObjectMissing(id))
             })
             .collect::<StorageResult<Vec<_>>>()?;

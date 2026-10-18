@@ -404,6 +404,14 @@
   (2026-10-18):** the fixer takes F-036 right after F-032; until then it only
   reads source, logs and REPRO-F036.md, with no product change; frozen-volume
   access goes through the lead. Measured P3 waits for it.
+  **Fixed (correctness lane, 2026-10-18, branch
+  `claude/issue352-correctness-644bbc`, unmerged):** cause proved. A Save's
+  per-wave "absent" cache answered a delta base that the other writer
+  published after the negative was taken, while that writer's PREFIX chain was
+  walked: `ObjectMissing(base)`. e8775b32 is a base of 11 of daemon a's chains;
+  daemon b's 1,610 sealed packs are the other block. Base lookups now re-ask.
+  A deterministic test fails without the fix. Record:
+  [fixes/c01-f036-stale-negative-base.md](fixes/c01-f036-stale-negative-base.md).
 - **Limits audit findings (owner decision 2026-10-18).** From the limits audit
   (branch `dsh-352-limits-audit`, `core/docs/issues/352/LIMITS_AUDIT.md` §1,
   `17148cacd`). The F-033 rule applies to each: no `Capacity` or `Busy` on a
