@@ -235,6 +235,15 @@ is the owner's call. Items 1 and 3 are kind 1 and have no correctness effect on
 old data. REBUILD.md §3: decide before P3 if at all, and batch, so the run
 never rebuilds for them; kind 1 means none of them needs a rebuild.
 
+**Owner decision, 2026-10-18:** item 2 is **approved**: mode and mtime are
+stored in the inode value. It changes the Content grammar, and readers accept
+both forms (old attribute-as-file objects and the new inline values), so old
+Stores open unchanged (kind 1, no rebuild). The fixer replaces the note in
+`attributes/value.rs` with this decision. Items 1, 2 and 3 are **batched** and
+land before P3, after F-020 and F-025's fixes; each keeps its own commit,
+compatibility test and old-vs-new table, and item 3 keeps the lead's speed
+condition (RESULTS.md).
+
 ## 7. Defect signatures
 
 "If a measure leaves its normal range, suspect the cause, check the first
