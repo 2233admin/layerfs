@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { exponent, opsOf, reinstallGate, sameBinary, uncontended } from "./gates.mjs";
+import { storageProblems } from "./storage.mjs";
 import { change, REBUILD_KINDS } from "./findings.mjs";
 import { activityTables, categoryOf, checkOverview, checkTimeLine, timeLine } from "./stats.mjs";
 
@@ -146,23 +147,27 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
   const perByte = s.changedBytes ? s.newStored / s.changedBytes : null;
   const split = (x) => (x ? `${bytes(x.bytes)} (${bytes(x.tracked.bytes)} / ${bytes(x.nodeModules.bytes)} / ${bytes(x.build.bytes)})` : "—");
   const counts = (x) => (x ? `${int(x.files)} / ${int(x.dirs)} / ${int(x.symlinks)}` : "—");
-  out.push("## 3. Storage", "", table(["", `Previous${prev ? ` (r${pad(prev.range)})` : ""}`, "Now", "Change"], [
+  const sr = m.storageReport, psr = prev?.storageReport;
+  const xv = (n) => (n == null || !v?.bytes ? "—" : `${num(n / v.bytes)}`);
+  const headCost = sr ? (m.storeDisk?.sealed ? "— (needs a reachability walk of the sealed file; not built)" : "— (not at a snapshot)") : "—";
+  out.push("## 3. Storage", "", "**3a. Overview**", "", table(["", `Previous${prev ? ` (r${pad(prev.range)})` : ""}`, "Now", "Change"], [
     ["Latest version (tracked / `node_modules` / build)", split(pv), split(v), pv && v ? signed(v.bytes - pv.bytes) : "—"],
     ["Files / directories / symlinks", counts(pv), counts(v), pv && v ? `${signed(v.files - pv.files, int)} / ${signed(v.dirs - pv.dirs, int)} / ${signed(v.symlinks - pv.symlinks, int)}` : "—"],
     ["Largest file / largest directory", pv ? `${bytes(pv.largestFile.bytes)} / ${int(pv.largestDir.entries)} entries` : "—", v ? `${bytes(v.largestFile.bytes)} (\`${v.largestFile.path}\`) / ${int(v.largestDir.entries)} entries (\`${v.largestDir.path}\`)` : "—", ""],
     [`**Store on disk** (allocated${m.storeDisk?.sealed ? ", sealed" : ", live: file + WAL"})`, bytes(storeOnDisk(prev)), bytes(store), prev?.storeDisk ? signed(store - storeOnDisk(prev)) : "—"],
-    ["**Space amplification**", prevAmp == null ? "—" : `${num(prevAmp)}×`, amp == null ? "—" : `${num(amp)}×`, prevAmp != null && amp != null ? num(amp - prevAmp) : "—"],
-    ["Content amplification", prev?.version ? `${num(prev.storage.stored / prev.version.bytes)}×` : "—", v ? `${num(s.stored / v.bytes)}×` : "—", ""],
-    ["Compression", prev?.storage?.stored ? `${num(prev.storage.canonical / prev.storage.stored)}×` : "—", s.stored ? `${num(s.canonical / s.stored)}×` : "—", ""],
+    ["**Space amplification** (total · tracked)", prevAmp == null ? "—" : `${num(prevAmp)}×${psr?.trackedAmplification != null ? ` · tracked ${num(psr.trackedAmplification)}×` : ""}`, amp == null ? "—" : `${num(amp)}×${sr?.trackedAmplification != null ? ` · tracked ${num(sr.trackedAmplification)}×` : ""}`, prevAmp != null && amp != null ? num(amp - prevAmp) : "—"],
+    ["Head cost / history cost", "", `${headCost} / —`, ""],
+    ["**Stored per byte changed** (content / metadata / shared)", "", sr?.perByteChanged ? `**${num(perByte)}** (${num(sr.perByteChanged.content)} / ${num(sr.perByteChanged.metadata)} / ${sr.perByteChanged.shared == null ? "—" : num(sr.perByteChanged.shared)})` : perByte == null ? "—" : `**${num(perByte)}**`, perByte != null && median ? `${num(perByte / median)}× the median range` : "median not yet"],
+    ["**Stored per Commit**", psr?.perCommit != null ? bytes(psr.perCommit) : "—", sr?.perCommit != null ? bytes(sr.perCommit) : "—", ""],
     ["Metadata share", prev?.storeDisk ? num(prev.storage.metadata / storeOnDisk(prev)) : "—", store ? num(s.metadata / store) : "—", `this range ${num(s.directoryShare)}`],
-    ["**Stored per byte changed**", "", perByte == null ? "—" : `**${num(perByte)} bytes**`, perByte != null && median ? `${num(perByte / median)}× the median range` : "median not yet"],
     ["History: Commits / Layers / Branches", prev ? `${int(prev.depth?.after)}` : "—", `${int(m.depth?.after)} / ${int(m.history?.layers)} / ${int(m.history?.branches)}`, `+${int(w.lfsCommits)}`],
     ["Projection at range 202 (estimate: study model, per-Commit cost × planned Commits + install and build forecast)", "", b.diskModel ? `${bytes(b.diskModel.estimate)} (Commits ${bytes(b.diskModel.commitBytes)} · installs ${bytes(b.diskModel.installBytes)} · build ${bytes(b.diskModel.buildBytes)})` : "—", ""],
     ["Disk guard floor at range 202 (headroom: 256 MiB per range minimum) / disk budget", "", `${bytes(b.diskProjected)} / ${b.diskBudget ? `${Math.round((b.diskProjected / b.diskBudget) * 100)}%` : "—"}`, ""],
     ["Snapshot", "", m.snapshot ? `r${pad(plan.range)}, ${bytes(m.snapshot.newBytes)} new blocks` : "none this range", ""],
-  ]), "", "**What's inside**", "", table(["Object", "Total", "Added", "Avg size", "Reused (dedupe hits)", "As delta"], insideRows(m)), "",
-  `Delta: ${num((s.delta?.atCap ?? 0) * 100, 1)}% at depth cap · ${num((s.delta?.byBudget ?? 0) * 100, 0)}% of refused bases stopped by budget · \`node_modules\` reinstall: ${s.reinstall == null ? "none this range" : reinstallGate(s.reinstall).value}`,
-  `**Added by source:** content ${bytes(s.newPacks)} · metadata ${bytes(s.newMetadata)}${v ? ` · tracked ${bytes(m.dsh?.changedBytes)} changed in git` : ""}`, "");
+  ]), "", "**3b. Where the bytes are**", "", sr ? partsTable(sr.parts, psr?.parts, v?.bytes) : "— (recorded before the storage revision, REPORT_FORMAT §3)", "",
+  "**3c. By source**", "", sr ? sourceTable(sr) : "— (recorded before the storage revision)", "",
+  "**3d. What's inside**", "", table(["Object", "Total", "Added", "Avg size", "Reused (dedupe hits)", "As delta"], insideRows(m)), "",
+  `Delta: ${num((s.delta?.atCap ?? 0) * 100, 1)}% at depth cap · ${num((s.delta?.byBudget ?? 0) * 100, 0)}% of refused bases stopped by budget · \`node_modules\` reinstall: ${s.reinstall == null ? "none this range" : reinstallGate(s.reinstall).value}`, "");
   // 4. Speed
   const k = m.key?.ops ?? {}, cell = (op) => (k[op] ? `${ms(k[op].p50)} / ${ms(k[op].p95)}` : "—");
   // SPEC §5: the ratio is the uncontended series' (rows recorded before the split: all of them)
@@ -198,7 +203,7 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
     latencyRows ? latencyRows(m, history, baseline) : "", "",
     table(["Method", "Category", "Calls", "Bytes in", "Bytes out", "Files / entries", "Outcomes"], Object.entries(m.calls).map(([meth, r]) => [meth, categoryOf(meth) ?? "unassigned", int(r.n), bytes(r.bytesIn), bytes(r.bytesOut), int(r.files), Object.entries(r.outcomes).map(([kk, n]) => `${kk} ${n}`).join(", ")])), "",
     APPENDIX[2], "", `Binary: daemon \`${id12(m.binary?.daemon)}\`.`, "", Object.keys(m.probes ?? {}).length ? table(["Probe", "ms", "Counters"], Object.entries(m.probes).map(([kk, p]) => [kk, p.ms, Object.entries(p.counters ?? {}).map(([cc, n]) => `${cc} ${n}`).join(", ")])) : "No probes recorded.", "",
-    APPENDIX[3], "", m.figures ? storageInternals(m.figures, plan.range) : "No snapshot this range: the sealed file's figures are read at snapshots.", "",
+    APPENDIX[3], "", m.figures ? storageInternals(m.figures, plan.range, m) : "No snapshot this range: the sealed file's figures are read at snapshots.", "",
     APPENDIX[4], "", timeLine(m.wall), "", stageLine ? stageLine(m.wall) : "", "",
     APPENDIX[5], "", table(["#", "Binary", "Started", "Result", "Reason"], attempts.map((a, i) => [String(a.attempt), gates[i].binary, gates[i].started, gates[i].verdict, gates[i].reason])), "",
     APPENDIX[6], "", ...attempts.map((a) => `- \`~/lfs-history/metrics/range-${pad(a.range)}.a${a.attempt}.json\``), ...findings.map((f) => `- \`~/lfs-history/metrics/finding-${pad(f.range)}.a${f.attempt}.json\``),
@@ -206,8 +211,34 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
   return out.join("\n");
 }
 
-function storageInternals(f, range) {
-  return [`From the sealed file at snapshot r${pad(range)}: ${int(f.pages)} pages of ${int(f.pageSize)} B, ${int(f.freePages)} free · Commits ${int(f.commits)} · Branches ${int(f.branches)} · Layers ${int(f.layers)}.`, "",
+/** 3b (REPORT_FORMAT §3): the five parts, × latest version, change; exact at snapshots, else content and metadata plus one live remainder. */
+function partsTable(p, prevP, versionBytes) {
+  const x = (n) => (n == null || !versionBytes ? "—" : `${num(n / versionBytes)}`);
+  const ch = (k) => (prevP && prevP[k] != null && p[k] != null ? signed(p[k] - prevP[k]) : "—");
+  const rows = p.exact
+    ? [["Content", p.content, "content"], ["Metadata", p.metadata, "metadata"], ["Index rows", p.indexRows, "indexRows"], ["Waste", p.waste, "waste"], ["Other", p.other, "other"]]
+    : [["Content", p.content, "content"], ["Metadata", p.metadata, "metadata"], ["Index rows + waste + other (live, not split)", p.remainder, "remainder"]];
+  return [table(["Part", "Bytes", "× latest version", "Change this range"], [...rows.map(([name, n, k]) => [name, bytes(n), x(n), ch(k)]),
+    ["**Total = Store on disk**", `**${bytes(p.total)}**`, `**= ${x(p.total)}** space amplification`, prevP ? signed(p.total - prevP.total) : "—"]]),
+  p.exact ? "Exact: from the sealed file." : "Live: content and metadata from the Commits' traced sizes; the remainder is the file + WAL less them."].join("\n\n");
+}
+
+/** 3c (REPORT_FORMAT §3): per source; Shared is shown and never divided. */
+function sourceTable(sr) {
+  const name = { tracked: "Tracked", nodeModules: "`node_modules`", build: "Build output" };
+  const rows = Object.entries(sr.sources).map(([k, x]) => [name[k], bytes(x.latest), `${bytes(x.stored)} (${bytes(x.content)} + ${bytes(x.metadata)})`, x.latest ? `${num(x.amplification)}×` : "—",
+    "—", x.added.content + x.added.metadata ? bytes(x.added.content + x.added.metadata) : "0", x.changed == null ? "—" : bytes(x.changed),
+    x.perByteChanged ? num(x.perByteChanged.content + x.perByteChanged.metadata) : "—"]);
+  const total = Object.values(sr.sources).reduce((n, x) => n + x.stored, 0);
+  return [table(["Source", "Latest version", "Stored (content + metadata)", "Amplification", "Head cost", "Added this range", "Changed this range", "Stored per byte changed"], [...rows,
+    ["Shared (index rows + waste + other)", "—", bytes(sr.shared.stored), "— (not divided)", "—", sr.shared.added == null ? "—" : bytes(sr.shared.added), "—", "—"],
+    ...(sr.unattributed ? [["Unattributed (Saves without traced sizes)", "—", bytes(sr.unattributed), "—", "—", "—", "—", "—"]] : []),
+    ["**Total**", "", `**${bytes(total + (sr.shared.stored ?? 0) + (sr.unattributed ?? 0))}**`, `**= ${num(sr.amplification)}×** space amplification`, "", "", "", ""]]),
+  "Sources by the Commit that wrote them (an install Commit is `node_modules`, a build Commit build output). Any comparison with git uses the Tracked row only."].join("\n\n");
+}
+
+function storageInternals(f, range, m) {
+  return [`From the sealed file at snapshot r${pad(range)}: ${int(f.pages)} pages of ${int(f.pageSize)} B, ${int(f.freePages)} free · Commits ${int(f.commits)} · Branches ${int(f.branches)} · Layers ${int(f.layers)}${m?.storage?.stored ? ` · compression ${num(m.storage.canonical / m.storage.stored)}× (canonical ÷ stored)` : ""}.`, "",
     table(["Role", "Objects", "Canonical bytes"], f.objects.map((o) => [o.role, int(o.n), bytes(o.canonical)])), "",
     table(["Pack domain", "Packs", "Bytes"], f.packs.map((p) => [p.domain, int(p.n), bytes(p.bytes)])), "",
     f.tables ? table(["Table or index", "Pages", "Bytes", "Unused"], f.tables.slice(0, 20).map((t) => [t.name, int(t.pages), bytes(t.bytes), bytes(t.unused)])) : "No dbstat in the image's SQLite."].join("\n");
@@ -289,7 +320,13 @@ export function checkFormat(text, m, issues = []) {
     if (ww && ww[1] === ww[2]) p.push(`Finding ${b.slice(0, 7)}: with and without name the same binary ${ww[1]}`);
   }
   for (const i of issues) if (!five.includes(`| ${i.id} |`)) p.push(`open finding ${i.id} is not listed in §5`);
-  const amp = /\| \*\*Space amplification\*\* \| [^|]* \| ([\d.]+)× \|/.exec(text);
+  const amp = /\| \*\*Space amplification\*\*[^|]* \| [^|]* \| ([\d.]+)×[^|]* \|/.exec(text);
+  // REPORT_FORMAT §7 storage sums, on the attempt's recorded figures, and the parts table
+  if (m.storageReport) {
+    p.push(...storageProblems(m.storageReport, storeOnDisk(m), m.version?.bytes).map((x) => `Storage: ${x}`));
+    for (const x of ["**3a. Overview**", "**3b. Where the bytes are**", "**3c. By source**", "**3d. What's inside**", "**Total = Store on disk**", "Shared (index rows + waste + other)"]) if (!text.includes(x)) p.push(`Storage lacks ${x}`);
+    if (/git/i.test(text.slice(text.indexOf("**3c. By source**"), text.indexOf("**3d."))) && !text.includes("Any comparison with git uses the Tracked row only")) p.push("Storage: a git comparison does not name the Tracked row");
+  }
   if (amp && m.version?.bytes && storeOnDisk(m) != null && Math.abs(Number(amp[1]) - storeOnDisk(m) / m.version.bytes) > 0.006) p.push(`space amplification ${amp[1]}× is not Store on disk ÷ latest version (${(storeOnDisk(m) / m.version.bytes).toFixed(3)})`);
   for (const h of ["## 4. Speed", APPENDIX[1], APPENDIX[2]]) {
     const at = text.indexOf(`\n${h}`), body = at < 0 ? "" : text.slice(at, text.indexOf("\n#", at + 2));

@@ -236,6 +236,44 @@ measurements. Where a number cannot come from the named source yet:
   attempt's `started` time in its metrics; one opened later, or not yet
   committed, is not required in an earlier report.
 
+- **Storage, §3 and §9 as built** (builder, 2026-10-18): `storage.mjs`,
+  recorded as `storageReport` in each metrics file from the first range played
+  after this change; earlier reports keep their old Storage section (F2).
+  - **3b parts.** At snapshots the parts come from the sealed file: pack
+    bodies by domain (Content = payload, Metadata = metadata), dbstat used
+    bytes of every table and index but `pack` (Index rows), and unused bytes
+    + free pages + the `pack` table's row overhead + allocation beyond the
+    pages (Waste). Other is the remainder; it is 0.6% of the latest version at
+    range 11, so the sum is exact.
+  - **Live ranges.** Content and metadata are the previous range's plus this
+    range's Commits' traced sizes (`sizes.newStored`, `newMetadata`, from the
+    Save outcome). The rest of the live file plus WAL is one remainder, marked
+    live and not split.
+  - **3c sources.** Sources are attributed by the Commit that wrote them: a
+    P3 install Commit is `node_modules`, a build Commit is build output, and
+    every other Commit is tracked. This differs from §9's path rule only for
+    the ancestor directories those Commits rewrite. The exact path counter is
+    specified for the fixer in the builder's notes.
+  - **Seeding.** Cumulative figures start at the first sealed snapshot, with
+    everything stored before it counted as tracked.
+  - **Unattributed.** Saves with no traced sizes (a merge's new Commit)
+    appear on an Unattributed row, so the column still sums to Store on disk.
+  - **Head cost** reads `— (needs a reachability walk of the sealed file;
+    not built)` until that walk exists, so history cost is not reported yet.
+  - **Changed bytes per source.** Tracked is git's changed bytes;
+    `node_modules` is the package folders that the lister finds added or
+    rewritten against the previous install; build is the built packages'
+    output bytes.
+  - **Compression** moves to appendix D. Content amplification is gone.
+  - **§7 checks** (`storageProblems`, in `checkFormat`) run on the recorded
+    figures:
+    - the parts sum to Store on disk exactly, and to space amplification
+      within rounding;
+    - sources + unattributed + shared = Store on disk;
+    - per-source latest versions sum to the total;
+    - 3a–3d and the Shared row are present;
+    - a git comparison names the Tracked row.
+
 ## 9. Storage formulas (owner direction 2026-10-18)
 
 All ratios divide by the latest version, the raw bytes of the head (per source

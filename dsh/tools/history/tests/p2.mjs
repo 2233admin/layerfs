@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlink
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fetchScript } from "../fetch-store.mjs";
+import { addedBySource, changedGroupBytes, cumulative, liveParts, sealedParts, seedBySource, stepSource, storageFigures, storageProblems } from "../storage.mjs";
 import { buildBytes, buildListCommand, changedPackages, CLOSURE_OUTPUT, closureSteps, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, playClosure } from "../closure.mjs";
 import { aggregate, buildBaseline, reinstallGate, evaluate, probeSeries, thinClass } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
@@ -368,13 +369,21 @@ test("renderFormat and checkFormat: the binding shape passes; a missing part or 
   const issues = [{ id: "F-005", title: "chunks", owner: "the fixer", next: "diagnose" }];
   const text = renderFormat({ plan: { ...plan, dsh: { first: "a".repeat(40), commits: 25 }, checkpoint: "b".repeat(40), milestone: false }, summary, attempts: [m], gates: [gate("pass")], issues });
   assert.ok(text.startsWith("# Range 007 · **pass** · attempt 1"), text.slice(0, 80));
-  assert.ok(text.includes("| **Space amplification** | — | 5.00× |"), "5,000 B on disk over 1,000 B");
+  assert.ok(text.includes("| **Space amplification** (total · tracked) | — | 5.00× |"), "5,000 B on disk over 1,000 B");
   assert.ok(text.includes(NONE_LINE) && text.includes("| F-005 | chunks | the fixer | diagnose |"));
   assert.deepEqual(checkFormat(text, m, issues), []);
-  assert.ok(checkFormat(text.replace("| **Space amplification** | — | 5.00× |", "| **Space amplification** | — | 0.50× |"), m, issues).some((p) => /amplification/.test(p)));
+  assert.ok(checkFormat(text.replace("| **Space amplification** (total · tracked) | — | 5.00× |", "| **Space amplification** | — | 0.50× |"), m, issues).some((p) => /amplification/.test(p)));
   assert.ok(checkFormat(text, m, [...issues, { id: "F-009" }]).some((p) => /F-009/.test(p)));
   assert.ok(checkFormat(text.replace("\n## 4. Speed", "\n## 4. Pace"), m, issues).some((p) => /4\. Speed/.test(p)));
   assert.ok(checkFormat(text.replace("**Moved most:**", "**Moved:**"), m, issues).some((p) => /Moved most/.test(p)));
+  // the storage revision's tables, and its sums checked on the recorded figures
+  const sm = { ...m, storageReport: storageFigures({ parts: { exact: false, content: 900, metadata: 600, remainder: 3500, total: 5000 }, prevParts: null,
+    bySource: { tracked: { content: 900, metadata: 600 }, nodeModules: { content: 0, metadata: 0 }, build: { content: 0, metadata: 0 } },
+    added: { tracked: { content: 200, metadata: 100 }, nodeModules: { content: 0, metadata: 0 }, build: { content: 0, metadata: 0 } }, version: m.version, changed: { tracked: 150 }, commits: 3 }) };
+  const st = renderFormat({ plan: { ...plan, dsh: { first: "a".repeat(40), commits: 25 }, checkpoint: "b".repeat(40), milestone: false }, summary, attempts: [sm], gates: [gate("pass")], issues });
+  for (const x of ["**3b. Where the bytes are**", "| Index rows + waste + other (live, not split) |", "**Total = Store on disk**", "| Shared (index rows + waste + other) |", "| **Stored per Commit** |"]) assert.ok(st.includes(x), x);
+  assert.deepEqual(checkFormat(st, sm, issues), []);
+  assert.ok(checkFormat(st, { ...sm, storageReport: { ...sm.storageReport, parts: { ...sm.storageReport.parts, remainder: 1 } } }, issues).some((x) => /Storage: the parts sum/.test(x)));
   const parsed = parseReport(text);
   assert.deepEqual([parsed.latest, parsed.checks.length], [1, 2]);
   assert.equal(leadNote(text.replace("- (none yet)", "- watch metadata")).trim(), "- watch metadata");
@@ -807,6 +816,32 @@ test("P3 proof: untracked closure output is no extra; a tracked file under it is
   const p3 = comparePaths(items, git, [".lfs-probe/"], CLOSURE_OUTPUT);
   assert.deepEqual([p3.ok, p3.extra, p3.missing], [true, [], []]);
   assert.equal(comparePaths(items, [...git, { path: "packages/c/dist/gone.js" }], [".lfs-probe/"], CLOSURE_OUTPUT).missing[0], "packages/c/dist/gone.js", "git's tracked output is still required");
+});
+
+test("storage revision (REPORT_FORMAT §3/§9): five parts sum to Store on disk; sources by Commit; shared never divided; the checks catch a broken sum", () => {
+  const f = { pageSize: 4096, pages: 100, freePages: 2, packs: [{ domain: 0, n: 3, bytes: 60000 }, { domain: 1, n: 2, bytes: 50000 }],
+    tables: [{ name: "pack", bytes: 200000, unused: 20000 }, { name: "object_location", bytes: 120000, unused: 10000 }, { name: "commit", bytes: 50000, unused: 5000 }] };
+  const parts = sealedParts(f, 100 * 4096 + 4096);
+  assert.deepEqual([parts.content, parts.metadata, parts.indexRows], [50000, 60000, 155000]);
+  assert.equal(parts.waste, 35000 + 2 * 4096 + (180000 - 110000) + 4096);
+  assert.equal(parts.content + parts.metadata + parts.indexRows + parts.waste + parts.other, parts.total);
+  const lines = [{ method: "fs.write", step: "r015.s0001", sizes: { newStored: 3000, newMetadata: 1000 } }, { method: "sandbox.commit", step: "r015.install", sizes: { newStored: 9000, newMetadata: 4000 } },
+    { method: "sandbox.commit", step: "r015.build", sizes: { newStored: 500, newMetadata: 100 } }, { method: "branch.merge", step: "r015.merge a", sizes: null }];
+  const added = addedBySource(lines, stepSource(15));
+  assert.deepEqual(added, { tracked: { content: 2000, metadata: 1000 }, nodeModules: { content: 5000, metadata: 4000 }, build: { content: 400, metadata: 100 } });
+  const seed = seedBySource(parts, added);
+  const bySource = cumulative(seed, added);
+  const version = { bytes: 100000, tracked: { bytes: 60000 }, nodeModules: { bytes: 39000 }, build: { bytes: 1000 } };
+  const st = storageFigures({ parts, prevParts: null, bySource, added, version, changed: { tracked: 4000, nodeModules: 20000, build: 1000 }, commits: 3 });
+  assert.equal(st.unattributed, 0);
+  assert.equal(st.sources.tracked.stored + st.sources.nodeModules.stored + st.sources.build.stored + st.shared.stored, parts.total, "sources + shared = Store on disk");
+  assert.deepEqual(storageProblems(st, parts.total, version.bytes), []);
+  assert.equal(st.sources.nodeModules.amplification, +(9000 / 39000).toFixed(3));
+  assert.ok(storageProblems({ ...st, parts: { ...parts, waste: parts.waste + 1 } }, parts.total, version.bytes).some((x) => /parts sum/.test(x)));
+  assert.ok(storageProblems(st, parts.total, version.bytes + 5).some((x) => /latest versions sum/.test(x)));
+  const live = liveParts(parts, { content: 100, metadata: 50 }, parts.total + 4096);
+  assert.deepEqual([live.exact, live.content, live.remainder], [false, 50100, parts.total + 4096 - 50100 - 60050]);
+  assert.equal(changedGroupBytes([{ g: "a", digest: "1", bytes: 5 }], [{ g: "a", digest: "1", bytes: 5 }, { g: "b", digest: "2", bytes: 7 }]), 7);
 });
 
 // the runner stays last: a test registered after it never runs

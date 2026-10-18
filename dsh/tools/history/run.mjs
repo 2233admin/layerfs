@@ -63,6 +63,7 @@ import { consolidateLanes, playAgents, pool, startRange } from "./agents.mjs";
 import { buildOverview, callTable } from "./stats.mjs";
 import { area } from "./plan-range.mjs";
 import { rangeClosure, studyMeasurements } from "./closure.mjs";
+import { addedBySource, changedGroupBytes, cumulative, liveParts, sealedParts, seedBySource, stepSource, storageFigures } from "./storage.mjs";
 
 const here = new URL(".", import.meta.url).pathname;
 const IMAGE = "sha256:d3773b4eac6a7a644887b17e36956cd1553786d47103f0170a3bb2b0ff6988de";
@@ -508,6 +509,21 @@ async function playRange(run, k, mode) {
     } catch (error) { failure = `snapshot: ${error.message}`; m.failure = failure; m.checks.history.ok = false; }
   }
   if (!m.storeDisk && !failure) { since = performance.now(); m.storeDisk = { ...liveDisk(run), sealed: false }; lap("diskMs", since); }
+  if (!failure && m.storeDisk) {
+    // REPORT_FORMAT §3/§9: parts, sources, per change and per Commit
+    const store = m.storeDisk.allocated + (m.storeDisk.walAllocated ?? 0);
+    const added = addedBySource(t.all, stepSource(k));
+    const total = (key) => Object.values(added).reduce((n, x) => n + x[key], 0);
+    const parts = m.figures ? sealedParts(m.figures, store) : liveParts(run.state.parts, { content: total("content"), metadata: total("metadata") }, store);
+    const prevBy = run.state.bySource ?? seedBySource(parts, added);
+    if (parts && prevBy) {
+      const bySource = cumulative(prevBy, added);
+      const changed = { tracked: m.storage?.changedBytes ?? 0, nodeModules: ctx?.closure?.groups ? changedGroupBytes(ctx.closure.prevGroups, ctx.closure.groups) : 0,
+        build: Object.values(ctx?.closure?.rows?.find((r) => r.kind === "build")?.bytes ?? {}).reduce((n, x) => n + x, 0) };
+      m.storageReport = storageFigures({ parts, prevParts: run.state.parts ?? null, bySource, added, version: m.version, changed, commits: m.work?.lfsCommits });
+      run.state.parts = parts; run.state.bySource = bySource;
+    }
+  }
   m.wall = { kind: "tooling", totalMs: Math.round(performance.now() - t0), ...wall };
   const budget = loadBudget();
   if (budget) Object.assign(m.budget, { wallBudgetMs: budget.wallBudgetMs, ...wallProjection(readAttempts(outputs.metrics), m.phase, { range: k, totalMs: m.wall.totalMs }, budget.ranges) });
