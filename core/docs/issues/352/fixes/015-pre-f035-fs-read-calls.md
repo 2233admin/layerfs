@@ -3,7 +3,11 @@
 | | |
 | --- | --- |
 | Trigger | `grep_tree` probe: one whole-tree `fs.grep` of 49.7k paths and 427 MB takes ~9.3 s (~46 MB/s) on dev range 15 (`dev352-p3f`, lead's tooling diagnosis, 2026-10-18) |
-| Kind | code path (no Store format change) |
+| Kind | 1 forward-only (REBUILD.md): SDK read-call code path only. No Store, daemon or record format change; only the page token's contents change (pending owner decision on the JS page token) |
+| Old Stores | not involved |
+| Old data | not involved |
+| Compatibility test | not applicable: no stored format changes. Results proved equal to the old code by the equivalence test |
+| Recovery | none: no Store change |
 | Owner decision | 2026-10-18: optimize the calls before adding any API option. The proposed opt-in `exclude` argument on `fs.grep` is dropped |
 | Issue | GitHub `Ephemeral-AI-Lab/layerfs#354` |
 | Branch | `issue354-fs-read-calls`, own worktree; merging into `dsh-history-replay` is a later owner decision |
