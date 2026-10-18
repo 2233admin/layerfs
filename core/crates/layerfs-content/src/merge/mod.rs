@@ -3,14 +3,15 @@
 //! Entry module: declarations and re-exports only.
 
 mod build;
-mod candidates;
 mod codec;
 mod decide;
 mod entry;
 pub mod lww;
 pub mod markers;
-mod revive;
+mod names;
+mod places;
 mod rows;
+mod serial;
 mod spill;
 pub mod text;
 mod types;

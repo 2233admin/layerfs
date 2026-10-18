@@ -12,6 +12,9 @@
 #[path = "support/installed_store.rs"]
 #[allow(dead_code)]
 mod installed;
+#[path = "support/view.rs"]
+#[allow(dead_code)]
+mod view;
 
 use layerfs_bridge::control::{SdkCall, SdkValue};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
@@ -102,6 +105,12 @@ fn recorded_branch_merges_merge_again() {
     )
     .unwrap();
     let service = StoreService::new(opened, &owner);
+    // With `LAYERFS_355_VIEW_DIR`, each merge's decoded view (or refusal) is
+    // written to `<index>.txt` there, for comparing two builds (#355 M1).
+    let views = std::env::var_os("LAYERFS_355_VIEW_DIR").map(std::path::PathBuf::from);
+    let viewer = views
+        .as_ref()
+        .map(|_| view::Viewer::open(&path, &binding, installed::CURSOR));
     let (mut same, mut merged_count) = (0, 0);
     for (index, (commit, parent, second, recorded)) in merges.iter().enumerate() {
         let (left, right) = (format!("replay-l{index}"), format!("replay-r{index}"));
@@ -136,6 +145,40 @@ fn recorded_branch_merges_merge_again() {
             }
             Err(refusal) => format!("refused={}:{}", refusal.code, refusal.message),
         };
+        if let (Some(views), Some(viewer)) = (&views, &viewer) {
+            let lines = match &merged {
+                Ok(reply) => viewer.view(reply.get_text("root").unwrap(), true),
+                Err(refusal) => vec![format!("refused {} {:?}", refusal.code, refusal.detail)],
+            };
+            std::fs::write(views.join(format!("{index}.txt")), lines.join("\n")).unwrap();
+            // The merge's inputs, for telling one side's change from both.
+            let sql = rusqlite::Connection::open(&path).unwrap();
+            let root_of = |node: &[u8]| -> Vec<u8> {
+                sql.query_row(
+                    "SELECT root_id FROM \"commit\" WHERE commit_id=?1
+                     UNION ALL SELECT root_id FROM layer WHERE layer_id=?1",
+                    [node],
+                    |row| row.get(0),
+                )
+                .unwrap()
+            };
+            let base = merged
+                .as_ref()
+                .ok()
+                .and_then(|reply| reply.get_text("mergeBase"))
+                .map(unhex);
+            for (label, node) in [
+                ("ours", Some(parent.clone())),
+                ("theirs", Some(second.clone())),
+                ("base", base),
+            ] {
+                if let Some(node) = node {
+                    let lines = viewer.view(&hex(&root_of(&node)), true);
+                    std::fs::write(views.join(format!("{index}.{label}.txt")), lines.join("\n"))
+                        .unwrap();
+                }
+            }
+        }
         println!(
             "REPLAY_MERGE {index} commit={} recorded={} {result}",
             hex(commit),

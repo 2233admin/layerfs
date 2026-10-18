@@ -18,9 +18,9 @@ use layerfs_workspace::{InodeSerials, WorkspaceError};
 const MERGE_SERIALS: u64 = 64;
 /// Changed paths a conflict reports as written into the Workspace.
 const WRITTEN_PATHS: usize = 4096;
-/// Paths the in-lane step may decide (#355): the lane's bound on merging
-/// what landed after the merge, so its hold stays short and grows with that
-/// change, never with the tree.
+/// Changed serials the in-lane step may decide (#355, by serial since M1):
+/// the lane's bound on merging what landed after the merge, so its hold
+/// stays short and grows with that change, never with the tree.
 pub const LANE_MERGE_PATHS: usize = 1024;
 
 /// A conflicted Workspace: its local base is the merge with markers, while
@@ -98,7 +98,7 @@ impl BoundWorkspace {
     /// The in-lane step (#355): the head moved from `merged_with` to
     /// `current` after the merge, so only the changes between those two heads
     /// are merged into `result`, in memory and without merge records. More
-    /// than [`LANE_MERGE_PATHS`] paths to decide is refused `LaneMerge`.
+    /// than [`LANE_MERGE_PATHS`] changed serials to decide is refused `LaneMerge`.
     pub(super) fn merge_in_lane(
         &self,
         save: &Save<'_>,

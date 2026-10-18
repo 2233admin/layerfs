@@ -1,10 +1,10 @@
-//! The merge entry point: candidates, decisions, revival and the build.
+//! The merge entry point: the merge by serial ([`super::serial`]) and its
+//! merged root.
 
 use layerfs_telemetry::timer::{Active, TimingScope};
 
-use super::codec::decided;
-use super::spill::{digest, Resident, RunWriter, Spill, ANCESTOR};
-use super::{build, candidates, decide, revive, MergeInput, MergeOutcome, Rules, RulesFrom, Side};
+use super::spill::{Resident, Spill};
+use super::{build, decide, serial, MergeInput, MergeOutcome, Rules, RulesFrom, Side};
 use crate::compare::DifferenceWork;
 use crate::error::{ContentError, ContentResult};
 use crate::filesystem::FilesystemObjects;
@@ -16,8 +16,8 @@ use crate::IndexedConstructionBacking;
 /// Merged and marker files are constructed into `consumer`, followed by the
 /// merged root's own objects; `reader` must read what `consumer` accepted.
 /// `fresh` returns one never-exposed serial of the roots' scope each call.
-/// `records` holds the merge's working state: its sorted runs, its plan and
-/// the update's validation and reference state (#355). The caller owns their
+/// `records` holds the merge's working state: its decisions, corrections,
+/// plan and the update's validation and reference state (#355). The caller owns their
 /// scope and releases it after this call returns. Without records the same
 /// state is kept in memory; a caller passes none only with a `bound`.
 pub fn merge_roots(
@@ -57,19 +57,6 @@ pub fn merge_roots(
         Some(records) => records,
         None => &mut resident,
     });
-    let (mut paths, hinted) = timing.child("merge.paths").run(|scope| {
-        candidates::candidates(
-            &resolver,
-            from,
-            input.bound,
-            input.hints,
-            &mut outcome.work,
-            &mut outcome.naming,
-            &spill,
-            scope,
-        )
-    })?;
-    outcome.hinted = hinted;
     let rules_side = match input.rules_from {
         RulesFrom::Ours => decide::OURS,
         RulesFrom::Theirs => decide::THEIRS,
@@ -86,53 +73,51 @@ pub fn merge_roots(
         decider.text(reader, entry)
     })?;
     decider.rules = &rules;
-    // Decisions in path order. Each decided path that has decided paths
-    // below it is also a point record, for revival's parent lookups; the
-    // decided ancestors of the current path are the stack's entries, which
-    // all prefix it.
-    let mut out = RunWriter::new(&spill);
-    let mut ancestors: Vec<(String, decide::Pick, bool)> = Vec::new();
-    let mut write = |bytes| spill.put_text(bytes);
-    while let Some(path) = paths.next(&spill)? {
-        let path =
-            String::from_utf8(path).map_err(|_| ContentError::InvalidRecord("merge path"))?;
-        let pick = decider.decide(&mut resolver, &path, &mut write)?;
-        let here = resolver.entry(into, &path)?;
-        while ancestors
-            .last()
-            .is_some_and(|(above, _, _)| !path.starts_with(above.as_str()))
-        {
-            ancestors.pop();
-        }
-        for (above, pick, recorded) in &mut ancestors {
-            let below = above == "/" || path.as_bytes().get(above.len()) == Some(&b'/');
-            if below && !*recorded {
-                spill.insert(ANCESTOR, digest(above), decided(above, pick, None)?)?;
-                *recorded = true;
-            }
-        }
-        out.push(&spill, &decided(&path, &pick, here.as_ref())?)?;
-        ancestors.push((path, pick, false));
-    }
-    let decisions = out.finish(&spill)?;
-    outcome.conflicts = std::mem::take(&mut decider.conflicts);
-    outcome.lww = std::mem::take(&mut decider.lww);
-    let (revived, count) = revive::revive(&mut resolver, decisions, into, &spill)?;
     let mut objects = FilesystemObjects::new_with_accepted(reader, consumer, reader);
-    let mut writer = build::Writer {
-        policy: input.policy,
-        capacities: input.capacities,
-        fresh,
-        timing,
-    };
-    outcome.root = build::build(
-        &mut objects,
-        &mut resolver,
-        (decisions, revived),
+    let mut ctx = serial::Ctx {
+        reader,
+        resolver,
+        from,
         into,
-        &spill,
-        &mut writer,
-    )?;
-    outcome.decided = count;
+        spill: &spill,
+        decider,
+        hints: input.hints,
+        naming: Default::default(),
+        hinted: true,
+        work: DifferenceWork::default(),
+        plan: build::Plan::new(&spill),
+        writer: build::Writer {
+            policy: input.policy,
+            capacities: input.capacities,
+            fresh,
+            timing,
+        },
+        objects: &mut objects,
+        paths: Default::default(),
+        decided: 0,
+        bound: input.bound,
+    };
+    ctx.run(timing)?;
+    let serial::Ctx {
+        resolver,
+        mut decider,
+        plan,
+        writer,
+        objects,
+        naming,
+        hinted,
+        work,
+        decided,
+        ..
+    } = ctx;
+    outcome.root = build::finish(objects, &resolver, into, plan, &writer)?;
+    decider.conflicts.sort_by(|x, y| x.path.cmp(&y.path));
+    decider.lww.sort_by(|x, y| x.path.cmp(&y.path));
+    outcome.conflicts = decider.conflicts;
+    outcome.lww = decider.lww;
+    outcome.decided = decided;
+    outcome.work = work;
+    outcome.naming = naming;
+    outcome.hinted = hinted && input.hints.is_some();
     Ok(outcome)
 }

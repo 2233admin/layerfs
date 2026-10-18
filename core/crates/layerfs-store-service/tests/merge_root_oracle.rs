@@ -10,6 +10,9 @@ mod installed;
 #[path = "support/sdk.rs"]
 #[allow(dead_code)]
 mod support;
+#[path = "support/view.rs"]
+#[allow(dead_code)]
+mod view;
 
 use layerfs_bridge::control::SdkValue;
 use std::fs;
@@ -67,10 +70,11 @@ fn cases() -> Vec<Case> {
             true,
         ),
         (
+            // Merged by serial (#355 M1): the edit follows the moved file.
             "move-and-edit-inside",
             vec![mv("/d1", "/moved")],
             vec![write("/d1/a.txt", "edited\n")],
-            false,
+            true,
         ),
         (
             "revive-deleted-parent",
@@ -162,6 +166,18 @@ fn merged_roots_of_every_rule_case() {
                     reply.get_text("root").unwrap(),
                     reply.get("lww")
                 );
+                // With `LAYERFS_355_VIEWS`, the decoded view without mtimes:
+                // compared across builds, whatever the root identities.
+                if std::env::var_os("LAYERFS_355_VIEWS").is_some() {
+                    let viewer = view::Viewer::open(
+                        &fixture.host.config.path,
+                        installed::BINDING,
+                        installed::CURSOR,
+                    );
+                    for line in viewer.view(reply.get_text("root").unwrap(), false) {
+                        println!("MERGE_VIEW {name} {line}");
+                    }
+                }
             }
             Err(refusal) => {
                 assert!(!merges, "{name} refused: {refusal:?}");

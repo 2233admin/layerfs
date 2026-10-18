@@ -1,19 +1,16 @@
-//! A merge's working state outside memory (#355): sorted runs of chunked
-//! blobs, a spilled stack and points, all in the caller's indexed records.
+//! A merge's working state outside memory (#355): runs of chunked entries,
+//! a spilled stack and points, all in the caller's indexed records.
 //!
-//! Paths a merge decides are written as sorted runs: entries collect in a
-//! buffer of at most [`RUN_BYTES`], are sorted and written as chunks of at
-//! most [`CHUNK_BYTES`]. Runs merge [`FAN_IN`] at a time as they accumulate,
-//! so a merge holds a bounded number of runs and reads one chunk of each run
-//! it merges. Chunks and points stay in memory up to [`HELD_BYTES`]; past it
-//! they go to the records, and a chunk read once is released at once. So a
-//! small merge writes none of its own state to the Store and a large one
-//! holds the same memory as any other. A merge without records (the in-lane
-//! step, bounded by its caller) uses [`Resident`] records instead.
+//! The serials a merge defers are written as one run of chunks of at most
+//! [`CHUNK_BYTES`], read once in order. Chunks and points stay in memory up
+//! to [`HELD_BYTES`]; past it they go to the records, and a chunk read once
+//! is released at once. So a small merge writes none of its own state to the
+//! Store and a large one holds the same memory as any other. A merge without
+//! records (the in-lane step, bounded by its caller) uses [`Resident`]
+//! records instead.
 
 use std::cell::RefCell;
-use std::cmp::Reverse;
-use std::collections::{BTreeMap, BinaryHeap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 
 use crate::error::{ContentError, ContentResult};
 use crate::{
@@ -26,8 +23,6 @@ use crate::{
 pub(super) const RUN: u32 = 0x4D47_0001;
 /// (stack, chunk) to one chunk of a spilled stack.
 pub(super) const STACK: u32 = 0x4D47_0002;
-/// Path digest to the decision of a path with decided paths below it.
-pub(super) const ANCESTOR: u32 = 0x4D47_0003;
 /// Parent serial to its change count and chunk count.
 pub(super) const HEADER: u32 = 0x4D47_0004;
 /// (parent, chunk) to one chunk of the parent's changed names.
@@ -40,15 +35,33 @@ pub(super) const VALUE: u32 = 0x4D47_0007;
 pub(super) const FRESH: u32 = 0x4D47_0008;
 /// Source serial to the values given to it and the serial each received.
 pub(super) const ASSIGNED: u32 = 0x4D47_0009;
-/// (text, chunk) to one chunk of a merged file's bytes.
-pub(super) const TEXT: u32 = 0x4D47_000A;
+/// A deleted `from` serial whose binding the merge keeps.
+pub(super) const CANCEL_REMOVE: u32 = 0x4D47_000B;
+/// A directory whose `from` move the merge cancels.
+pub(super) const CANCEL_MOVE: u32 = 0x4D47_000C;
+/// A directory `from` deleted that keeps some of its names.
+pub(super) const SURVIVE: u32 = 0x4D47_000D;
+/// A serial `into` lacks, revived with only what it keeps.
+pub(super) const REVIVE: u32 = 0x4D47_000E;
+/// A serial `into` deleted that `from` bound: resurrected as `from` holds it.
+pub(super) const REVIVE_ALL: u32 = 0x4D47_000F;
+/// Bindings of one directory outside its name points.
+pub(super) const EXTRA: u32 = 0x4D47_0010;
+/// A directory `from` moved: its new parent and name.
+pub(super) const MOVED: u32 = 0x4D47_0011;
+/// A directory merged into another at one name.
+pub(super) const ABSORB: u32 = 0x4D47_0012;
+/// A directory that absorbed another: the absorbed one and the base's.
+pub(super) const TARGET: u32 = 0x4D47_0013;
+/// One name's decided binding.
+pub(super) const NAMED: u32 = 0x4D47_0014;
+/// A directory whose header is written.
+pub(super) const DONE: u32 = 0x4D47_0015;
+/// A serial new on `from` that the merge leaves unbound.
+pub(super) const DROP: u32 = 0x4D47_0016;
 
 /// Bytes of one chunk record.
 pub(super) const CHUNK_BYTES: usize = 60 * 1024;
-/// Bytes of entries sorted in memory before they are written as one run.
-pub(super) const RUN_BYTES: usize = 1 << 20;
-/// Runs merged into one.
-pub(super) const FAN_IN: usize = 16;
 /// Bytes of chunks and points a merge holds in memory before the records
 /// take the rest.
 pub(super) const HELD_BYTES: usize = 8 << 20;
@@ -71,11 +84,6 @@ pub(super) fn single(a: u64) -> [u8; 32] {
 /// The first number of a key.
 pub(super) fn first(key: &[u8; 32]) -> u64 {
     u64::from_be_bytes(key[..8].try_into().expect("eight bytes"))
-}
-
-/// The digest key of a path.
-pub(super) fn digest(path: &str) -> [u8; 32] {
-    *blake3::hash(path.as_bytes()).as_bytes()
 }
 
 fn malformed() -> ContentError {
@@ -235,26 +243,6 @@ impl<'r> Spill<'r> {
         keys.dedup();
         keys.truncate(64);
         Ok(keys)
-    }
-
-    /// Spills a merged file's bytes in chunks and returns their number.
-    pub(super) fn put_text(&self, bytes: Vec<u8>) -> ContentResult<u64> {
-        let id = self.allocate();
-        for (index, chunk) in bytes.chunks(CHUNK_BYTES).enumerate() {
-            self.insert(TEXT, pair(id, index as u64), chunk.to_vec())?;
-        }
-        Ok(id)
-    }
-
-    /// The bytes of one spilled text.
-    pub(super) fn text(&self, id: u64) -> ContentResult<Vec<u8>> {
-        let mut out = Vec::new();
-        let mut index = 0;
-        while let Some(chunk) = self.get(TEXT, pair(id, index))? {
-            out.extend_from_slice(&chunk);
-            index += 1;
-        }
-        Ok(out)
     }
 
     /// The records as the update's backing, borrowed per call.
@@ -435,34 +423,21 @@ impl RunWriter {
     }
 }
 
-/// Reads one run forward, or backward from its last entry.
+/// Reads one run in order.
 pub(super) struct RunReader {
     run: Run,
     /// Chunks read so far.
     read: u64,
-    reverse: bool,
-    /// True when each chunk is released once read: the run's last reading.
-    release: bool,
     entries: VecDeque<Vec<u8>>,
 }
 
 impl RunReader {
-    /// The run's last reading.
-    pub(super) fn new(run: Run, reverse: bool) -> Self {
+    /// Reads the run once, releasing each chunk as it goes.
+    pub(super) fn new(run: Run) -> Self {
         Self {
             run,
             read: 0,
-            reverse,
-            release: true,
             entries: VecDeque::new(),
-        }
-    }
-
-    /// A reading that leaves the run for a later one.
-    pub(super) fn keeping(run: Run, reverse: bool) -> Self {
-        Self {
-            release: false,
-            ..Self::new(run, reverse)
         }
     }
 
@@ -471,145 +446,14 @@ impl RunReader {
             if self.read == self.run.chunks {
                 return Ok(None);
             }
-            let chunk = if self.reverse {
-                self.run.chunks - 1 - self.read
-            } else {
-                self.read
-            };
+            let chunk = self.read;
             self.read += 1;
-            let key = pair(self.run.id, chunk);
-            let bytes = if self.release {
-                spill.take(RUN, key)?
-            } else {
-                spill.get(RUN, key)?
-            };
-            let bytes = bytes.ok_or_else(malformed)?;
+            let bytes = spill
+                .take(RUN, pair(self.run.id, chunk))?
+                .ok_or_else(malformed)?;
             self.entries = decode_chunk(&bytes)?.into();
         }
-        Ok(if self.reverse {
-            self.entries.pop_back()
-        } else {
-            self.entries.pop_front()
-        })
-    }
-}
-
-/// Sorts entries by their bytes, without duplicates, through runs.
-pub(super) struct Sorter {
-    buffer: Vec<Vec<u8>>,
-    bytes: usize,
-    /// Runs by level: a level of [`FAN_IN`] runs merges into one above.
-    levels: Vec<Vec<Run>>,
-}
-
-impl Sorter {
-    pub(super) fn new() -> Self {
-        Self {
-            buffer: Vec::new(),
-            bytes: 0,
-            levels: Vec::new(),
-        }
-    }
-
-    pub(super) fn push(&mut self, spill: &Spill<'_>, entry: Vec<u8>) -> ContentResult<()> {
-        self.bytes += entry.len() + 24;
-        self.buffer.push(entry);
-        if self.bytes >= RUN_BYTES {
-            self.spill(spill)?;
-        }
-        Ok(())
-    }
-
-    fn spill(&mut self, spill: &Spill<'_>) -> ContentResult<()> {
-        let mut buffer = std::mem::take(&mut self.buffer);
-        self.bytes = 0;
-        buffer.sort_unstable();
-        buffer.dedup();
-        let mut writer = RunWriter::new(spill);
-        for entry in &buffer {
-            writer.push(spill, entry)?;
-        }
-        let run = writer.finish(spill)?;
-        self.add(spill, 0, run)
-    }
-
-    fn add(&mut self, spill: &Spill<'_>, level: usize, run: Run) -> ContentResult<()> {
-        if self.levels.len() == level {
-            self.levels.push(Vec::new());
-        }
-        self.levels[level].push(run);
-        if self.levels[level].len() == FAN_IN {
-            let runs = std::mem::take(&mut self.levels[level]);
-            let mut merged = Merge::new(runs);
-            let mut writer = RunWriter::new(spill);
-            while let Some(entry) = merged.next(spill)? {
-                writer.push(spill, &entry)?;
-            }
-            let run = writer.finish(spill)?;
-            self.add(spill, level + 1, run)?;
-        }
-        Ok(())
-    }
-
-    /// Every entry pushed, once each, in byte order.
-    pub(super) fn finish(mut self, spill: &Spill<'_>) -> ContentResult<Merge> {
-        let mut runs: Vec<Run> = self.levels.drain(..).flatten().collect();
-        if !self.buffer.is_empty() {
-            let mut buffer = std::mem::take(&mut self.buffer);
-            buffer.sort_unstable();
-            buffer.dedup();
-            let mut writer = RunWriter::new(spill);
-            for entry in &buffer {
-                writer.push(spill, entry)?;
-            }
-            runs.push(writer.finish(spill)?);
-        }
-        // Levels hold fewer than FAN_IN runs each, so this is a bounded
-        // number of runs: FAN_IN - 1 per level, one level per factor of 16.
-        Ok(Merge::new(runs))
-    }
-}
-
-/// The k-way merge of sorted runs, without duplicates.
-pub(super) struct Merge {
-    readers: Vec<RunReader>,
-    heap: BinaryHeap<Reverse<(Vec<u8>, usize)>>,
-    started: bool,
-    last: Option<Vec<u8>>,
-}
-
-impl Merge {
-    fn new(runs: Vec<Run>) -> Self {
-        Self {
-            readers: runs
-                .into_iter()
-                .map(|run| RunReader::new(run, false))
-                .collect(),
-            heap: BinaryHeap::new(),
-            started: false,
-            last: None,
-        }
-    }
-
-    pub(super) fn next(&mut self, spill: &Spill<'_>) -> ContentResult<Option<Vec<u8>>> {
-        if !self.started {
-            self.started = true;
-            for index in 0..self.readers.len() {
-                if let Some(entry) = self.readers[index].next(spill)? {
-                    self.heap.push(Reverse((entry, index)));
-                }
-            }
-        }
-        while let Some(Reverse((entry, index))) = self.heap.pop() {
-            if let Some(next) = self.readers[index].next(spill)? {
-                self.heap.push(Reverse((next, index)));
-            }
-            if self.last.as_ref() != Some(&entry) {
-                self.last = Some(entry.clone());
-                return Ok(Some(entry));
-            }
-        }
-        Ok(None)
+        Ok(self.entries.pop_front())
     }
 }
 

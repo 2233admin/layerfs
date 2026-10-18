@@ -1,9 +1,7 @@
-//! The decision at each candidate path ([`super::candidates`]).
-//!
-//! Every candidate is resolved by path in the base, ours and theirs and
-//! decided with the simulator's rules: an entry is its kind plus, for a file
-//! or symlink, its content (two directories are the same entry; their
-//! children decide).
+//! The decision between three entries, with the simulator's rules: an entry
+//! is its kind plus, for a file or symlink, its content (two directories are
+//! the same entry; their children decide). The entries are one serial on each
+//! side, or what one name binds on each side (#355 M1).
 
 use std::collections::HashMap;
 
@@ -193,17 +191,16 @@ impl Decider<'_> {
         }
     }
 
-    /// The pick at one candidate path.
-    /// `write` spills a merged file's bytes and returns their text number.
+    /// The pick between the base, ours and theirs entries `[b, o, t]`
+    /// reported at `path`: one serial on every side, or the entries one name
+    /// binds. `write` spills a merged file's bytes and returns their number.
     pub(super) fn decide(
         &mut self,
         resolver: &mut Resolver<'_>,
         path: &str,
+        [b, o, t]: [Option<EntryFacts>; 3],
         write: &mut dyn FnMut(Vec<u8>) -> ContentResult<u64>,
     ) -> ContentResult<Pick> {
-        let b = resolver.entry(BASE, path)?;
-        let o = resolver.entry(OURS, path)?;
-        let t = resolver.entry(THEIRS, path)?;
         let ours = || o.map_or(Pick::Absent, Pick::Take);
         if same(o, t) || same(b, o) {
             return Ok(Pick::Keep);
