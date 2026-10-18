@@ -173,6 +173,7 @@ impl Custody {
     async fn visit(&mut self) -> Result<Result<KernelReadValue, Refusal>, ServiceError> {
         let mut facts = Arc::new(VisitFacts::default());
         loop {
+            let started = std::time::Instant::now();
             let receipt = self
                 .services
                 .observe_visit(
@@ -183,7 +184,9 @@ impl Custody {
                     self.operation.clone(),
                     facts.clone(),
                 )
-                .await?;
+                .await;
+            crate::phase::charge(crate::phase::Phase::ReadVisit, started);
+            let receipt = receipt?;
             let original = receipt.get().clone();
             let needs = match (&original.result, &original.decision) {
                 (Ok(None), Some(KernelReadDecision::Value(inode))) => {
@@ -209,9 +212,11 @@ impl Custody {
             // The job and its receipt are gone before any provider wait.
             drop(receipt);
             // The receive worker running this request performs its provider read.
+            let started = std::time::Instant::now();
             let base = self.services.base().await?;
             let result = Arc::make_mut(&mut facts).supply(&base, needs, None);
             drop(base); // Return the actual reader before another SQL wait.
+            crate::phase::charge(crate::phase::Phase::ReadSupply, started);
             if let Err(error) = result {
                 return Err(self.services.failed_base_read(error.into()));
             }

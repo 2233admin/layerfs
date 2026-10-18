@@ -45,7 +45,7 @@ fn file(position: u64, path_bytes: usize) -> NewEntry {
         },
         position: Some(position),
         kind: InodeKind::RegularFile,
-        metadata_root: ObjectId::for_bytes(b"metadata"),
+        metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(ObjectId::for_bytes(b"metadata")),
         target_root: None,
         host_path: Some(vec![b'p'; path_bytes]),
         host: Some(HostIdentity {

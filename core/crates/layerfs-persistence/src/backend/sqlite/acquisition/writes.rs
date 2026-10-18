@@ -1,5 +1,6 @@
 //! Bounded write units: begin, append, place, record roots and advance.
 use super::accounting::{charge, entry_bytes, host_bytes, HOST_BYTES};
+use super::metadata_blob;
 use super::statements::{
     signed, unsigned, Failure, ADVANCE, BEGIN, BIND_HOST_FILE, CLAIM_EPOCH, COMPLETE_FILE,
     PLACE_ENTRY, SET_DIRECTORY_ROOT,
@@ -126,7 +127,7 @@ pub(crate) fn put_one(
             &position,
             &i64::from(entry.kind.code()),
             &first,
-            &entry.metadata_root.as_bytes().as_slice(),
+            &metadata_blob(&entry.metadata).as_slice(),
             &entry
                 .target_root
                 .as_ref()
@@ -152,6 +153,7 @@ pub(crate) fn well_formed(entry: &NewEntry) -> bool {
         && entry.key.parent.is_some() != (entry.position == Some(0))
         && entry.key.parent.is_some() != entry.key.name.is_empty()
         && (entry.key.parent.is_some() || entry.kind == InodeKind::Directory)
+        && entry.metadata.validate(entry.kind).is_ok()
 }
 
 /// Device, inode and evidence as one stored value.

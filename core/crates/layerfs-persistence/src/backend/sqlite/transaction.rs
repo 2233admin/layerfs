@@ -182,6 +182,59 @@ impl Session {
         result
     }
 
+    /// Reads of immutable objects only (#352 F-035): object locations,
+    /// published pack descriptors, units and bodies, and stored inode values. `body` runs through the
+    /// transaction facade with no BEGIN/COMMIT, so each of its statements and
+    /// BLOB reads takes its own implicit snapshot. That is safe only because
+    /// every row such a body reads never changes once visible:
+    /// `object_location` is insert-only (`ON CONFLICT DO NOTHING`, no UPDATE
+    /// or DELETE anywhere), `pack` and `pack_unit` refuse UPDATE and DELETE
+    /// by trigger, `inode_value` is written by one plain INSERT per ordinal
+    /// (never updated or deleted; a second INSERT of an ordinal fails), pack
+    /// ids come from a counter that never goes back, an ordinal is given
+    /// back only while nothing was written under it, and
+    /// reclamation frees only empty pages. Two such reads can never see an
+    /// inconsistent pair; a row not yet visible is simply absent. Anything
+    /// that picks a snapshot (branch heads, roots, Layer and Commit rows) or
+    /// writes must use [`Self::run`], never this.
+    pub(crate) fn read_immutable<T, E: From<BackendError> + OutcomeError>(
+        &self,
+        body: impl FnOnce(&Transaction<'_>) -> Result<T, E>,
+    ) -> Result<T, E> {
+        let _turn = self
+            .admission
+            .enter(Instant::now() + super::admission::WINDOW, self.wait_kind())
+            .map_err(E::from)?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| E::from(BackendError::Unknown))?;
+        if state.quarantined {
+            return Err(BackendError::Unknown.into());
+        }
+        // An earlier uncertain transaction cannot be inherited or guessed done.
+        if !state.connection.is_autocommit() {
+            state.quarantined = true;
+            return Err(BackendError::Unknown.into());
+        }
+        let tx = Transaction {
+            connection: &state.connection,
+            work: &state.work,
+            uncertain: Cell::new(false),
+            owner: self,
+        };
+        let result = body(&tx);
+        let uncertain =
+            tx.uncertain.get() || result.as_ref().err().is_some_and(OutcomeError::uncertain);
+        // Every statement and BLOB handle has been released: a read leaves
+        // autocommit intact, anything else keeps the session quarantined.
+        if uncertain || !state.connection.is_autocommit() {
+            state.quarantined = true;
+            return Err(BackendError::Unknown.into());
+        }
+        result
+    }
+
     pub(crate) fn run<T, E: From<BackendError> + OutcomeError>(
         &self,
         writable: bool,

@@ -72,7 +72,7 @@ fn file(content: &str) -> InodeValue {
         kind: InodeKind::RegularFile,
         namespace_ref_count: 0,
         content_root: synthetic(content),
-        metadata_root: synthetic("example/meta"),
+        metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(synthetic("example/meta")),
     }
 }
 
@@ -81,7 +81,7 @@ fn directory() -> InodeValue {
         kind: InodeKind::Directory,
         namespace_ref_count: 0,
         content_root: synthetic("example/unused"),
-        metadata_root: synthetic("example/dir-meta"),
+        metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(synthetic("example/dir-meta")),
     }
 }
 
@@ -251,7 +251,7 @@ fn base(
         bag.objects.extend(attribute_sink.objects);
         for update in &mut inodes {
             if update.serial == 1 {
-                update.value.metadata_root = metadata_root;
+                update.value.metadata_root = layerfs_content::object::inode_leaf::InodeMetadata::Root(metadata_root);
             }
         }
         stored_attribute_tree = Some(metadata_root);
@@ -461,7 +461,7 @@ fn main() {
                         let patched = apply_patches(
                             &staged,
                             &mut objects,
-                            value.metadata_root,
+                            value.metadata_root.root().unwrap(),
                             &[AttributePatch::Set {
                                 key: AttributeKey::new("user.example".to_owned(), b"note".to_vec())
                                     .map_err(|_| ContentError::InvalidRecord("attribute key"))?,
@@ -473,7 +473,7 @@ fn main() {
                     Some(AttributeRun {
                         root: patched_root.0,
                         work: patched_root.1,
-                        read_page_canonical: value.metadata_root,
+                        read_page_canonical: value.metadata_root.root().unwrap(),
                         inode_page,
                         objects: patch_work,
                     })

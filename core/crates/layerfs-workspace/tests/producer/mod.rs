@@ -942,6 +942,9 @@ impl OverlayCapturedNamespace for Recording<'_> {
         self.log.borrow_mut().symlinks.push(serial);
         OverlayCapturedNamespace::captured_symlink(self.overlay, reader, serial)
     }
+    fn keep_live_row(&self, reader: CapturedReader, serial: u64) -> WorkspaceResult<bool> {
+        OverlayCapturedNamespace::keep_live_row(self.overlay, reader, serial)
+    }
 }
 fn own(scope: IndexedOperationRecordScope) -> bool {
     scope.file_scope == 0
@@ -1164,6 +1167,9 @@ impl OverlayCapturedNamespace for Perturbed<'_> {
     }
     fn captured_symlink(&self, reader: CapturedReader, serial: u64) -> WorkspaceResult<Vec<u8>> {
         self.inner.captured_symlink(reader, serial)
+    }
+    fn keep_live_row(&self, reader: CapturedReader, serial: u64) -> WorkspaceResult<bool> {
+        self.inner.keep_live_row(reader, serial)
     }
 }
 impl OverlayOperationRecords for Perturbed<'_> {

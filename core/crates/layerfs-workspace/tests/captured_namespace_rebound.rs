@@ -255,6 +255,9 @@ fn a_base_directory_moved_away_and_back_keeps_its_stored_values_with_no_territor
     let mut d = Drive::new(&b);
     d.rename("cache", "output/c");
     d.rename("output/c", "cache");
+    // `output` ends with the names it began with: its new time is an
+    // mtime-only change and not a change (#360 F-027 item 2, spec §4.8).
+    d.model.utimens("output", oracle::BASE);
 
     let recording = Recording::new(&b.overlay);
     let built = build_over(&b, &recording, &d.model, "moved and returned");

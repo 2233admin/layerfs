@@ -34,12 +34,19 @@ impl FileView {
             let canonical = open
                 .child("edit.base_read")
                 .run(|_| reader.read_canonical(root))?;
-            let content = content::classify(&canonical)?;
-            Ok(Self {
-                root,
-                canonical,
-                content,
-            })
+            Self::from_canonical(root, canonical)
+        })
+    }
+
+    /// Classifies a base root already read: `canonical` must be the
+    /// authenticated canonical bytes of `root`, as a provider returned them,
+    /// for a caller that read several roots in one demand.
+    pub fn from_canonical(root: ObjectId, canonical: Vec<u8>) -> ContentResult<Self> {
+        let content = content::classify(&canonical)?;
+        Ok(Self {
+            root,
+            canonical,
+            content,
         })
     }
 

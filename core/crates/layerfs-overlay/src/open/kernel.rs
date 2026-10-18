@@ -24,6 +24,9 @@ pub(crate) struct OpenState {
     pub lookups: OwnerTable<i64, LookupOwner>,
     pub custody: JournalMap<i64, FileReferences>,
     pub orphans: JournalMap<i64, Orphan>,
+    /// Serials whose active row `keep_live_row` carried and nothing wrote
+    /// since: their only change is a live mtime, which is not counted dirty.
+    pub kept_live: JournalMap<i64, ()>,
     pub waits: JournalMap<(i64, i64), ()>,
     /// One attached/revoked mount, restored by whole-job rollback.
     pub mount: Option<(KernelMount, bool)>,
@@ -46,6 +49,7 @@ impl OpenState {
         self.lookups.commit();
         self.custody.commit();
         self.orphans.commit();
+        self.kept_live.commit();
         self.waits.commit();
         self.directories.commit();
         self.operations.commit();
@@ -62,6 +66,7 @@ impl OpenState {
         self.lookups.rollback();
         self.custody.rollback();
         self.orphans.rollback();
+        self.kept_live.rollback();
         self.waits.rollback();
         self.directories.rollback();
         self.operations.rollback();

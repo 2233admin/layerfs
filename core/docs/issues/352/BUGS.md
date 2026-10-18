@@ -501,3 +501,127 @@
 
   Record:
   [fixes/c03-f043-runner-memory.md](fixes/c03-f043-runner-memory.md).
+
+- **F-044 · a kernel reply computed before a merged install can land after
+  its invalidation (product, FUSE coherence; #359 D-9 sizing, 2026-10-18).**
+  - A merged install sends `inval_inode` / `inval_entry` for what changed
+    (store-service `commit_merge.rs`, `stale_after_install`).
+  - A LOOKUP, GETATTR or READDIR reply computed from the old view, but
+    delivered after that invalidation, is not fenced. The kernel caches the
+    stale answer.
+  - Entry and attribute replies carry a TTL, so their staleness is bounded by
+    it.
+  - A listing cached with `FOPEN_CACHE_DIR` (owner decision D-9) has no TTL.
+    The kernel's `iversion` check covers only changes made through the
+    mount, not installs. So after D-9 a stale listing could last until the
+    directory's next change, `inval_inode` or page reclaim.
+
+  Not observed in any sample or test; found by reading the order of reply
+  and invalidation. Needs a fence before D-9 is called exact: for example, a
+  per-mount install epoch checked before a listing reply is sent, with the
+  invalidation sent again when the epoch moved.
+  **Owner: #359** (D-9 lane).
+  [fixes/021-359-d9-sizing.md](fixes/021-359-d9-sizing.md).
+
+- **F-045 · hard-linked files are never entry-cached on the pinned image's
+  kernel (host behaviour, not LayerFS; #359 batch 4, 2026-10-18).**
+  - On `6.12.76-linuxkit` (Docker Desktop), a non-directory with
+    `nlink > 1` gets dentry time 0 on every LOOKUP reply, whatever entry TTL
+    is sent (7 s, 60 s and 300 s were tried).
+  - So every path resolution of a hard-linked file is a FUSE LOOKUP.
+  - Vanilla 6.12.76 `fs/fuse` has no such rule, and fuser 0.18 forwards the
+    TTL unchanged.
+  - Traced with a private ftrace instance and kprobes, removed afterwards
+    (`~/lfs-history/runs/issue359/batch4/trace*.sh`).
+
+  It matters for hard-link-heavy workloads (pnpm's store). Confirm or exclude
+  it on a vanilla kernel before attributing pnpm costs to LayerFS. No product
+  change.
+  [fixes/018-359-b4-readdirplus.md](fixes/018-359-b4-readdirplus.md).
+
+- **F-046 · a terminal unmount in two mount tests fails intermittently
+  (test or product, not yet diagnosed; #359 §4.8 test runs, 2026-10-18).**
+  - `tests/support/mounted.rs:133` (`unmount`, `try_unmount(..).unwrap()`)
+    panicked twice, in different targets. Both runs were on `4db0ceb9e`'s
+    test build in the pinned image, at host load 4.7–8:
+    - `mounted_commit`
+      `r5_9_stores_through_shared_mappings_are_committed_once_written_back`,
+      in a run where `r5_8` panicked in the same process;
+    - `mounted_cycles`
+      `a_caller_blocked_on_a_full_pipe_neither_blocks_commit_nor_is_touched_by_unmount`.
+  - **The error text was not captured.** The run script kept only the panic
+    line, and it now keeps the two lines after it.
+  - Each test passed on one diagnostic rerun, and the next full runs of both
+    targets passed. That does not close the finding and is not a pass.
+  - Both tests leave a process or a dirty shared mapping alive across the
+    unmount. The candidate is a refused or after-failure unmount
+    (`Failure::Rejected` / `Failure::After`) racing that process, not a
+    stale-share or build effect.
+
+  - **Third occurrence, error text captured** (`89a2aa480` test build,
+    2026-10-19, host load 4.6–5.6). `mounted_commit`
+    `r5_3_commit_captures_what_every_launch_published_whatever_became_of_the_process`:
+    `Kernel(KernelFailure { code: Busy, phase: "unmount:kernel", detail:
+    "kernel reported the mount busy; no terminal effect" })`. This is
+    `Detach::Busy` in `control/detach.rs`: the plain (not lazy) unmount got
+    EBUSY, and the mount was returned to the registry unchanged. So the
+    product refused correctly, and the kernel held a real reference into the
+    mount at that moment. It passed on one diagnostic rerun run alone (no
+    sibling test threads).
+  - **Candidate (inferred from source, not proven): a test-harness fork
+    race.** Every `bash` in the test is waited for before `unmount`. But
+    `support/mounted_commit.rs` `command()` sets `uid`/`gid`, so std's
+    `Command` forks rather than using `posix_spawn`. A fork in another test
+    thread of the same process copies the whole descriptor table, including
+    a mount file this test holds open for a moment (`fs::read`, the `host()`
+    walk). The child keeps the copy until its `exec`, which under load can
+    land after this test's unmount. Whether the same race explains the
+    two earlier occurrences is not known.
+  - **Fourth occurrence** (2026-10-19, scratch build `75bfde677`, record
+    029): `mounted_commit`
+    `r5_9_stores_through_shared_mappings_are_committed_once_written_back`,
+    with the same `Busy` / `unmount:kernel` text. Not rerun as a pass. The
+    liaison (2026-10-19) finds the fork race plausible and leaves the
+    finding with its owner, still unassigned.
+
+  **Status: OPEN. Owner: unassigned.** Next step: confirm or rule out the
+  fork race. One way is to run each affected target with
+  `--test-threads=1` once. Another is to record `/proc/*/fd` of the test
+  process's children at the Busy reply. Do not weaken the unmount
+  assertion.
+  [fixes/022-359-mtime-only-live-rows.md](fixes/022-359-mtime-only-live-rows.md).
+
+- **F-047 · `fp21_detach_stages` fails 0/2 after the A1 merge (test premise,
+  likely; #359 head run, 2026-10-18).**
+  - Both cases expire at "the request is inside its Store read"
+    (`fp21_detach_stages.rs:95`).
+  - The test stages a request inside a provider read by gating the Store
+    after a lookup. Under #354 A1, the Workspace reader keeps that lookup's
+    objects (`KeptReads`), so the later `open` or listing is served without
+    a provider call and never enters the gate.
+  - It passed 2/2 before the merge (record 018).
+  - The cause is inferred from source, not re-run on a pre-A1 build.
+    Product detach behaviour is not shown to be wrong.
+
+  Needs a stage that misses `KeptReads` (a test change). **Owner:
+  unassigned** (A1 owner #354 or the lead).
+  [fixes/026-359-head-full-sample.md](fixes/026-359-head-full-sample.md).
+
+- **F-048 · an Unmount without `discard` is refused after an mtime-only
+  Commit (product; #359 E10, 2026-10-19).**
+  - `keep_live_row` (§4.8 option A, record 022, `4db0ceb9e`) counted the
+    row it carries into the active generation as one dirty inode.
+  - So after a Commit whose only change to a file was its mtime,
+    `control/dirty.rs` reported the Workspace dirty. `Unmount { discard:
+    false }` answered `Dirty { paths: ["/src/main.rs"], inodes: 1 }`
+    although nothing uncommitted remained. §4.8's live time ends at
+    unmount.
+  - The same count kept c04's UpToDate shortcut from ever applying after
+    such a Commit.
+
+  **Status: FIXED** in `9bee52d27` (`issue359-impl`, not pushed): a
+  journaled `kept_live` set replaces the count, and every writer of a kept
+  serial counts it. Regression test: `mounted_commit`
+  `an_unmount_without_discard_succeeds_after_an_mtime_only_commit`. It fails
+  on the old code with the `Dirty` reply above.
+  [fixes/029-359-e10-kept-live-rows.md](fixes/029-359-e10-kept-live-rows.md).

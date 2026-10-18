@@ -30,9 +30,9 @@ static IDLE_DECODE: Mutex<Vec<Vec<u64>>> = Mutex::new(Vec::new());
 
 /// A decode workspace that takes an idle region when there is one (so its
 /// region is already resident) and returns its region when dropped.
-struct Decoder(Option<DecompressionWorkspace>);
+pub(super) struct Decoder(Option<DecompressionWorkspace>);
 impl Decoder {
-    fn new() -> StorageResult<Self> {
+    pub(super) fn new() -> StorageResult<Self> {
         let idle = IDLE_DECODE
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -67,22 +67,28 @@ impl Drop for Decoder {
     }
 }
 
+/// One owner's bounded pack, group and pooled-value caches. The decode
+/// arena is the caller's, passed to each read.
 pub(crate) struct ReadState {
-    workspace: Decoder,
     groups: GroupCache,
     pool: PoolReader,
     prefetch_pool: crate::encoding::pool::PoolReadCounters,
     packs: crate::encoding::PackCache,
 }
 impl ReadState {
-    pub(crate) fn new() -> StorageResult<Self> {
-        Ok(Self {
-            workspace: Decoder::new()?,
+    pub(crate) fn new() -> Self {
+        Self {
             groups: GroupCache::new(),
             pool: PoolReader::new(),
             prefetch_pool: crate::encoding::pool::PoolReadCounters::default(),
             packs: crate::encoding::PackCache::new(),
-        })
+        }
+    }
+    /// Body, decoded-group and pooled-value bytes kept now; the decode arena
+    /// is apart. The read path passes its pool reader the shared pack cache,
+    /// so the pool's own pack cache stays empty here.
+    pub(crate) fn retained_bytes(&self) -> usize {
+        self.packs.retained_bytes() + self.groups.retained_bytes() + self.pool.retained_bytes()
     }
     pub(crate) fn pooled_read_counters(&self) -> crate::encoding::pool::PoolReadCounters {
         let mut work = self.pool.counters();
@@ -91,6 +97,7 @@ impl ReadState {
     }
     pub(crate) fn read(
         &mut self,
+        workspace: &mut DecompressionWorkspace,
         source: &Fetch,
         capacities: &StorageCapacities,
         ids: &[ObjectId],
@@ -124,13 +131,8 @@ impl ReadState {
                 actual: bytes as u64,
             });
         }
-        let prefetch = prefetch::chains(
-            source,
-            &roots,
-            &mut self.packs,
-            &mut self.workspace,
-            &mut self.groups,
-        )?;
+        let prefetch =
+            prefetch::chains(source, &roots, &mut self.packs, workspace, &mut self.groups)?;
         self.prefetch_pool.accumulate(prefetch);
         let mut counters = ChainCounters::default();
         // Output slots preserve demand order, including repeated identities.
@@ -167,7 +169,7 @@ impl ReadState {
                         pool: &mut self.pool,
                     },
                     &mut self.groups,
-                    &mut self.workspace,
+                    workspace,
                     &mut counters,
                 )
                 .resolve_at(root)?;

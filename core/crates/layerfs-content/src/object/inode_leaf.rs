@@ -16,8 +16,20 @@
 //! canonical bytes and therefore different object identities for the same logical
 //! inode page. The field is validated directly on decode; there is no canonical
 //! re-encoding step.
+//!
+//! The metadata field of one value has two row-level forms (owner decision
+//! 2026-10-18, STORAGE_BATCH_SPEC §4). The high bit of byte 0 tags the inline
+//! form: `kind.code() | 0x80` with bytes 41..45 the mode (big-endian `u32`),
+//! 45..53 the mtime seconds (`i64`), 53..57 the mtime nanoseconds (`u32`) and
+//! 57..73 all zero. With the bit clear the form is the original root form:
+//! bytes 41..73 hold the attribute-tree root id, byte-identical to the encoding
+//! that predates the inline form. Decode rejects an unknown kind code, inline
+//! values failing `PortableMetadata::validate(kind)` and nonzero inline
+//! padding, so each logical value has one canonical encoding per form. Rows of
+//! both forms may coexist in one leaf.
 
 use crate::error::{ContentError, ContentResult};
+use crate::filesystem::attributes::PortableMetadata;
 use crate::object::ObjectId;
 
 /// Width of one inode value.
@@ -79,6 +91,61 @@ impl InodeKind {
     }
 }
 
+/// The metadata identity of one inode value.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InodeMetadata {
+    /// Root of the inode's attribute tree: the original form, byte-identical
+    /// to the encoding that predates the inline form.
+    Root(ObjectId),
+    /// The portable mode and mtime carried inside the value itself.
+    Inline(PortableMetadata),
+}
+
+impl InodeMetadata {
+    /// The attribute-tree root id, when this form carries one.
+    pub const fn root(&self) -> Option<ObjectId> {
+        match self {
+            Self::Root(root) => Some(*root),
+            Self::Inline(_) => None,
+        }
+    }
+
+    /// The bytes one opaque read of `key` returns for an inline value: the two
+    /// portable keys keep their grammar answers; anything else is absent.
+    pub fn inline_value(
+        &self,
+        key: &crate::filesystem::attributes::keys::AttributeKey,
+        kind: InodeKind,
+    ) -> ContentResult<Option<Vec<u8>>> {
+        match self {
+            Self::Root(_) => Ok(None),
+            Self::Inline(metadata) => {
+                if key.domain() != "portable" {
+                    return Ok(None);
+                }
+                match key.key() {
+                    b"mode" => Ok(Some(metadata.mode_bytes(kind)?.to_vec())),
+                    b"mtime" => Ok(Some(metadata.mtime_bytes()?.to_vec())),
+                    _ => Ok(None),
+                }
+            }
+        }
+    }
+
+    /// The attribute keys an inline value logically carries.
+    pub fn inline_keys(&self) -> ContentResult<Vec<crate::filesystem::attributes::keys::AttributeKey>>
+    {
+        use crate::filesystem::attributes::keys::AttributeKey;
+        match self {
+            Self::Root(_) => Ok(Vec::new()),
+            Self::Inline(_) => Ok(vec![
+                AttributeKey::new("portable".to_owned(), b"mode".to_vec())?,
+                AttributeKey::new("portable".to_owned(), b"mtime".to_vec())?,
+            ]),
+        }
+    }
+}
+
 /// One decoded inode value.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InodeValue {
@@ -88,8 +155,9 @@ pub struct InodeValue {
     pub namespace_ref_count: u64,
     /// Logical content root of the file.
     pub content_root: ObjectId,
-    /// Logical metadata root of the file.
-    pub metadata_root: ObjectId,
+    /// Logical metadata of the file. The name is historical: since the inline
+    /// form the field is not necessarily an attribute-tree root.
+    pub metadata_root: InodeMetadata,
 }
 
 impl InodeValue {
@@ -119,7 +187,15 @@ pub fn encode_inode_value(value: InodeValue) -> [u8; INODE_VALUE_BYTES] {
     bytes[0] = value.kind.code();
     bytes[1..9].copy_from_slice(&value.namespace_ref_count.to_be_bytes());
     bytes[9..41].copy_from_slice(value.content_root.as_bytes());
-    bytes[41..].copy_from_slice(value.metadata_root.as_bytes());
+    match value.metadata_root {
+        InodeMetadata::Root(root) => bytes[41..].copy_from_slice(root.as_bytes()),
+        InodeMetadata::Inline(metadata) => {
+            bytes[0] |= 0x80;
+            bytes[41..45].copy_from_slice(&metadata.mode.to_be_bytes());
+            bytes[45..53].copy_from_slice(&metadata.mtime_seconds.to_be_bytes());
+            bytes[53..57].copy_from_slice(&metadata.mtime_nanoseconds.to_be_bytes());
+        }
+    }
     bytes
 }
 
@@ -128,15 +204,42 @@ pub fn decode_inode_value(bytes: &[u8]) -> ContentResult<InodeValue> {
     if bytes.len() != INODE_VALUE_BYTES {
         return Err(ContentError::InvalidRecord("inode value width"));
     }
+    let kind = InodeKind::from_code(bytes[0] & 0x7f)?;
+    let metadata_root = if bytes[0] & 0x80 != 0 {
+        if bytes[57..].iter().any(|byte| *byte != 0) {
+            return Err(ContentError::InvalidRecord("inode inline padding"));
+        }
+        let metadata = PortableMetadata {
+            mode: u32::from_be_bytes(
+                bytes[41..45]
+                    .try_into()
+                    .map_err(|_| ContentError::UnexpectedEof)?,
+            ),
+            mtime_seconds: i64::from_be_bytes(
+                bytes[45..53]
+                    .try_into()
+                    .map_err(|_| ContentError::UnexpectedEof)?,
+            ),
+            mtime_nanoseconds: u32::from_be_bytes(
+                bytes[53..57]
+                    .try_into()
+                    .map_err(|_| ContentError::UnexpectedEof)?,
+            ),
+        };
+        metadata.validate(kind)?;
+        InodeMetadata::Inline(metadata)
+    } else {
+        InodeMetadata::Root(ObjectId::from_bytes(&bytes[41..])?)
+    };
     Ok(InodeValue {
-        kind: InodeKind::from_code(bytes[0])?,
+        kind,
         namespace_ref_count: u64::from_be_bytes(
             bytes[1..9]
                 .try_into()
                 .map_err(|_| ContentError::UnexpectedEof)?,
         ),
         content_root: ObjectId::from_bytes(&bytes[9..41])?,
-        metadata_root: ObjectId::from_bytes(&bytes[41..])?,
+        metadata_root,
     })
 }
 

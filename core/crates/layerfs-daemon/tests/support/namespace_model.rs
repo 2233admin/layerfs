@@ -96,6 +96,90 @@ pub fn assert_same(expected: &Flat, actual: &Flat, what: &str) {
     );
 }
 
+/// The inode number of every path under a mounted root, by `lstat`; the root
+/// itself is the empty path.
+pub fn inode_numbers(root: &Path) -> BTreeMap<Vec<u8>, u64> {
+    let mut found = BTreeMap::new();
+    let mut pending = vec![Vec::new()];
+    while let Some(path) = pending.pop() {
+        let full = root.join(std::ffi::OsStr::from_bytes(&path));
+        let metadata = fs::symlink_metadata(&full).unwrap();
+        if metadata.is_dir() {
+            for entry in fs::read_dir(&full).unwrap() {
+                let name = entry.unwrap().file_name();
+                let child = if path.is_empty() {
+                    name.as_bytes().to_vec()
+                } else {
+                    [&path[..], b"/", name.as_bytes()].concat()
+                };
+                pending.push(child);
+            }
+        }
+        found.insert(path, metadata.ino());
+    }
+    found
+}
+
+/// The committed view of a live tree over the view it was captured on
+/// (STORAGE_BATCH_SPEC §4.8). An mtime-only change is not a change: an inode
+/// whose kind, mode, links and bytes or target equal its row in `base`, and
+/// for a directory whose names bind the same inodes, keeps that row's time.
+/// Inodes are matched by number, both maps taken on the same mount (before
+/// and after the change), so a moved inode is the same inode. The live
+/// Workspace still shows its own time until unmount; history and a fresh
+/// mount show this view.
+pub fn committed_view(
+    live: &Flat,
+    live_inodes: &BTreeMap<Vec<u8>, u64>,
+    base: &Flat,
+    base_inodes: &BTreeMap<Vec<u8>, u64>,
+) -> Flat {
+    let paths: BTreeMap<u64, &Vec<u8>> = base_inodes
+        .iter()
+        .filter(|(path, _)| base.contains_key(*path))
+        .map(|(path, ino)| (*ino, path))
+        .collect();
+    // A directory's names, each with its inode number where the map has one.
+    let bindings = |flat: &Flat,
+                    inodes: &BTreeMap<Vec<u8>, u64>,
+                    path: &[u8]|
+     -> BTreeMap<Vec<u8>, Option<u64>> {
+        let prefix: Vec<u8> = if path.is_empty() {
+            Vec::new()
+        } else {
+            [path, b"/"].concat()
+        };
+        flat.keys()
+            .filter(|key| !key.is_empty() && key.starts_with(&prefix) && **key != *path)
+            .filter(|key| !key[prefix.len()..].contains(&b'/'))
+            .map(|key| (key[prefix.len()..].to_vec(), inodes.get(key).copied()))
+            .collect()
+    };
+    live.iter()
+        .map(|(path, seen)| {
+            let mut seen = seen.clone();
+            let stored = live_inodes
+                .get(path)
+                .and_then(|ino| paths.get(ino))
+                .map(|was| (*was, &base[*was]));
+            if let Some((was, stored)) = stored {
+                let same = Seen {
+                    mtime: stored.mtime,
+                    identity: stored.identity.clone(),
+                    ..seen.clone()
+                } == *stored;
+                if same
+                    && (seen.kind != DIRECTORY
+                        || bindings(live, live_inodes, path) == bindings(base, base_inodes, was))
+                {
+                    seen.mtime = stored.mtime;
+                }
+            }
+            (path.clone(), seen)
+        })
+        .collect()
+}
+
 #[derive(Clone, Debug)]
 pub struct Model {
     nodes: Vec<Option<Node>>,

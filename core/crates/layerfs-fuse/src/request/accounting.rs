@@ -1,5 +1,8 @@
 //! Per-mount opcode and disposal counts; one frame can carry several units.
+use crate::phase::{Phases, PHASES};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
 
 /// Every kernel operation the pinned adapter can receive on Linux.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -114,6 +117,10 @@ pub struct Accounting {
     store_units: AtomicU64,
     largest_read: AtomicU64,
     largest_write: AtomicU64,
+    lookup_missing: AtomicU64,
+    served_ns: AtomicU64,
+    nanos: [AtomicU64; OPCODES],
+    phases: Arc<Phases>,
 }
 /// Monotonic counters copied without a lock; fields are individually exact.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -133,6 +140,21 @@ pub struct OpcodeWork {
     /// maxima beside the negotiated ones. Zero until the first such frame.
     pub largest_read: u64,
     pub largest_write: u64,
+    /// LOOKUP requests whose decided reply was ENOENT, included in the lookup
+    /// opcode count above.
+    pub lookup_missing: u64,
+    /// Wall nanoseconds request workers spent inside `RequestOwner::serve`,
+    /// summed over every served unit. A pending future parks that worker, so
+    /// waits for service jobs are included; the request still runs to
+    /// completion on the worker that received it.
+    pub served_ns: u64,
+    /// Wall nanoseconds the receive workers spent inside each opcode's
+    /// callback, from entry to return (the reply is sent inside it). FORGET
+    /// charges every unit, so its time divides by `forget_units`.
+    pub nanos: [u64; OPCODES],
+    /// Count and nanoseconds of each [`Phase`] inside the callbacks.
+    pub phase_counts: [u64; PHASES],
+    pub phase_nanos: [u64; PHASES],
 }
 impl OpcodeWork {
     pub fn count(&self, opcode: Opcode) -> u64 {
@@ -151,12 +173,42 @@ impl Default for Accounting {
             store_units: AtomicU64::new(0),
             largest_read: AtomicU64::new(0),
             largest_write: AtomicU64::new(0),
+            lookup_missing: AtomicU64::new(0),
+            served_ns: AtomicU64::new(0),
+            nanos: std::array::from_fn(|_| AtomicU64::new(0)),
+            phases: Arc::new(Phases::default()),
         }
+    }
+}
+
+/// Charges the wall time from its creation to its drop to one opcode, and
+/// makes its accounting the current one for [`charge`] meanwhile.
+pub struct Timed {
+    accounting: Arc<Accounting>,
+    opcode: Opcode,
+    started: Instant,
+    previous: Option<Arc<Phases>>,
+}
+impl Drop for Timed {
+    fn drop(&mut self) {
+        let elapsed = u64::try_from(self.started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+        self.accounting.nanos[self.opcode as usize].fetch_add(elapsed, Ordering::Relaxed);
+        crate::phase::restore(self.previous.take());
     }
 }
 impl Accounting {
     pub(super) fn opcode(&self, opcode: Opcode) {
         self.opcodes[opcode as usize].fetch_add(1, Ordering::Relaxed);
+    }
+    /// Times one callback of `opcode` until the returned guard drops.
+    pub fn timed(self: &Arc<Self>, opcode: Opcode) -> Timed {
+        let previous = crate::phase::enter(self.phases.clone());
+        Timed {
+            accounting: self.clone(),
+            opcode,
+            started: Instant::now(),
+            previous,
+        }
     }
     pub(super) fn disposed(&self, disposal: Disposal) {
         self.disposals[disposal as usize].fetch_add(1, Ordering::Relaxed);
@@ -175,6 +227,15 @@ impl Accounting {
         self.largest_write
             .fetch_max(length as u64, Ordering::Relaxed);
     }
+    pub(super) fn lookup_missing(&self) {
+        self.lookup_missing.fetch_add(1, Ordering::Relaxed);
+    }
+    pub(super) fn served_ns(&self, elapsed: std::time::Duration) {
+        self.served_ns.fetch_add(
+            u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX),
+            Ordering::Relaxed,
+        );
+    }
     pub fn observe(&self) -> OpcodeWork {
         let disposal = |value: Disposal| self.disposals[value as usize].load(Ordering::Relaxed);
         OpcodeWork {
@@ -187,6 +248,11 @@ impl Accounting {
             store_units: self.store_units.load(Ordering::Relaxed),
             largest_read: self.largest_read.load(Ordering::Relaxed),
             largest_write: self.largest_write.load(Ordering::Relaxed),
+            lookup_missing: self.lookup_missing.load(Ordering::Relaxed),
+            served_ns: self.served_ns.load(Ordering::Relaxed),
+            nanos: std::array::from_fn(|index| self.nanos[index].load(Ordering::Relaxed)),
+            phase_counts: self.phases.counts(),
+            phase_nanos: self.phases.nanos(),
         }
     }
 }

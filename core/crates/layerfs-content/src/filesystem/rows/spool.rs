@@ -31,8 +31,7 @@ use super::{DirectoryRowSource, InodeRowSource, RowSource, SerialRowSource};
 use crate::error::{ContentError, ContentResult};
 use crate::filesystem::input::{DirectoryUpdate, InodeUpdate};
 use crate::filesystem::path::PathName;
-use crate::object::inode_leaf::{InodeKind, InodeValue};
-use crate::object::ObjectId;
+use crate::object::inode_leaf::InodeValue;
 
 /// Bytes one row occupies in the slot table.
 pub const SPOOL_SLOT_BYTES: u64 = 32;
@@ -161,9 +160,9 @@ impl RowSpool {
             .ok_or(ContentError::InvalidRecord("inode serial"))?;
         let mut payload = Vec::with_capacity(73);
         payload.extend_from_slice(&row.serial.to_be_bytes());
-        payload.push(row.value.kind.code());
-        payload.extend_from_slice(row.value.content_root.as_bytes());
-        payload.extend_from_slice(row.value.metadata_root.as_bytes());
+        let encoded = crate::object::inode_leaf::encode_inode_value(row.value);
+        payload.push(encoded[0]);
+        payload.extend_from_slice(&encoded[9..]);
         self.write_slot(KIND_INODE, row.serial, 0, &payload)
     }
 
@@ -327,24 +326,15 @@ impl RowSpool {
         let payload = self.read(slot)?;
         let mut reader = PayloadReader::new(&payload);
         let serial = reader.word()?;
-        let kind = InodeKind::from_code(reader.byte()?)
-            .map_err(|_| ContentError::InvalidRecord("inode kind"))?;
-        let content_root = ObjectId::from_bytes(reader.take(32)?)
-            .map_err(|_| ContentError::InvalidRecord("content root"))?;
-        let metadata_root = ObjectId::from_bytes(reader.take(32)?)
-            .map_err(|_| ContentError::InvalidRecord("metadata root"))?;
+        let mut value = [0_u8; crate::object::inode_leaf::INODE_VALUE_BYTES];
+        value[0] = reader.byte()?;
+        value[9..41].copy_from_slice(reader.take(32)?);
+        value[41..73].copy_from_slice(reader.take(32)?);
+        let value = crate::object::inode_leaf::decode_inode_value(&value)?;
         if !reader.is_empty() {
             return Err(ContentError::InvalidRecord("inode row"));
         }
-        Ok(InodeUpdate {
-            serial,
-            value: InodeValue {
-                kind,
-                namespace_ref_count: 0,
-                content_root,
-                metadata_root,
-            },
-        })
+        Ok(InodeUpdate { serial, value })
     }
 
     /// The slot of one key in a kind's run, by binary search over the run.

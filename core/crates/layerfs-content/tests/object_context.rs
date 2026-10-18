@@ -27,7 +27,7 @@ fn inode(kind: InodeKind, content: ObjectId, metadata: ObjectId, count: u64) -> 
         kind,
         namespace_ref_count: count,
         content_root: content,
-        metadata_root: metadata,
+        metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(metadata),
     }
 }
 

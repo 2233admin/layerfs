@@ -216,6 +216,23 @@ unchanged encoding caches; they do not select another algorithm. The already
 locked SHA-256 dependency is added directly to C2 without a package/version move.
 No write-path or engine implementation is claimed by this slice.
 
+### #354 call-owned read caches (2026-10-18)
+
+`ReadCache` makes the `Reader`'s state (decode arena, 2 MiB pack-body cache
+with its isolated singleton, 512 KiB decoded groups, 512 KiB pooled values)
+an owned value, and `Storage::read_with(&mut ReadCache, ids)` reads a demand
+through it, so a caller's later demands reuse the bodies an earlier one left.
+Bounds, chain resolution and authentication are the `Reader`'s; pack ids come
+from a counter that never goes back and published packs never change, so a
+kept body stays valid. The SDK read calls keep one per call (#352 F-035).
+`KeptReads` is the same caches without the decode arena, so an owner on
+another thread can keep them (`Send`); `Storage::read_kept` and
+`lengths_kept` read through them with a fresh arena per demand, allocated only
+if the demand decodes. A Workspace reader keeps one for its lifetime (#354
+A1). Without an isolated singleton the caches hold at most
+`KeptReads::ORDINARY_BYTES` = 3 MiB; on the read path the pool reader is
+given the shared pack cache, so its own stays empty.
+
 ### #302 encoding access seam (2026-10-03)
 
 This change is described against parent `15155598b`. `location.rs` owns engine-independent object, pooled catalogue and

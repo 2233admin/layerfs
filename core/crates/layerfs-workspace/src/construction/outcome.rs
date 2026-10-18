@@ -54,6 +54,9 @@ pub struct CapturedNamespaceWork {
     pub metadata_built: u64,
     /// Base metadata trees patched with the row's mode and mtime only.
     pub metadata_patched: u64,
+    /// Kept-base (mtime-only) inodes whose live row was carried past the
+    /// install (STORAGE_BATCH_SPEC §4.8).
+    pub live_rows_kept: u64,
     /// Record jobs of this adapter's normalization and cursor: a point the
     /// cursor answers from its retained window is not a job. Content's own
     /// state jobs in the same scope are in the records custody.

@@ -262,7 +262,7 @@ pub fn build_tree(entries: usize) -> Built {
                 kind: InodeKind::RegularFile,
                 namespace_ref_count: 0,
                 content_root: file_root,
-                metadata_root: attribute_root,
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(layerfs_content::object::inode_leaf::InodeMetadata::Root(attribute_root)),
             },
         },
         InodeUpdate {
@@ -271,7 +271,7 @@ pub fn build_tree(entries: usize) -> Built {
                 kind: InodeKind::RegularFile,
                 namespace_ref_count: 0,
                 content_root: file_root,
-                metadata_root: attribute_root,
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(layerfs_content::object::inode_leaf::InodeMetadata::Root(attribute_root)),
             },
         },
         InodeUpdate {
@@ -280,7 +280,7 @@ pub fn build_tree(entries: usize) -> Built {
                 kind: InodeKind::Symlink,
                 namespace_ref_count: 0,
                 content_root: symlink_root,
-                metadata_root: synthetic("pipeline/link-meta"),
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(synthetic("pipeline/link-meta")),
             },
         },
     ];
@@ -291,7 +291,7 @@ pub fn build_tree(entries: usize) -> Built {
                 kind: InodeKind::RegularFile,
                 namespace_ref_count: 0,
                 content_root: synthetic(&format!("pipeline/entry-{index:04}")),
-                metadata_root: synthetic("pipeline/entry-meta"),
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(synthetic("pipeline/entry-meta")),
             },
         });
     }
@@ -336,7 +336,7 @@ fn directory_value(label: &str) -> InodeValue {
         kind: InodeKind::Directory,
         namespace_ref_count: 0,
         content_root: synthetic("pipeline/unused"),
-        metadata_root: synthetic(&format!("pipeline/{label}-meta")),
+        metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(synthetic(&format!("pipeline/{label}-meta"))),
     }
 }
 

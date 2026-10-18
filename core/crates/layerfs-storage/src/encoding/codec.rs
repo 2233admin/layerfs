@@ -168,16 +168,25 @@ fn encode_checked(code: usize) -> StorageResult<usize> {
     checked(code)
 }
 
+/// A zeroed arena from one zeroed allocation: fresh pages are not written
+/// here, and the allocator maps them lazily where it can (#359 F-A4). The
+/// length, and so `workspace_bytes`, is the same as a filled one's.
 fn workspace(size: usize) -> StorageResult<Vec<u64>> {
     if size == 0 {
         return Err(resource());
     }
-    let mut words = Vec::new();
-    words
-        .try_reserve_exact(size.div_ceil(8))
-        .map_err(|_| resource())?;
-    words.resize(size.div_ceil(8), 0_u64);
-    Ok(words)
+    let words = size.div_ceil(8);
+    let layout = std::alloc::Layout::array::<u64>(words).map_err(|_| resource())?;
+    // SAFETY: the layout is non-zero in size. A non-null result is a zeroed
+    // block of `words` u64 values from the global allocator with u64's
+    // alignment, which is exactly what `Vec::from_raw_parts` takes over; zero
+    // is a valid u64.
+    let pointer = unsafe { std::alloc::alloc_zeroed(layout) }.cast::<u64>();
+    if pointer.is_null() {
+        return Err(resource());
+    }
+    // SAFETY: see above; length and capacity are both `words`.
+    Ok(unsafe { Vec::from_raw_parts(pointer, words, words) })
 }
 
 fn output(size: usize, limit: usize) -> StorageResult<Vec<u8>> {

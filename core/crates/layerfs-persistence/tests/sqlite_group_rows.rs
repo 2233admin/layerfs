@@ -183,7 +183,8 @@ fn complete_reads_reassemble_exact_bytes_and_digest_for_every_lane() {
         let mut out = Vec::new();
         let before = h.diagnostics().unwrap();
         h.storage.read_packs(&[id], &mut out).unwrap();
-        assert_eq!(h.diagnostics().unwrap().statements - before.statements, 5);
+        // Descriptor, units and body; no BEGIN/COMMIT for an immutable read.
+        assert_eq!(h.diagnostics().unwrap().statements - before.statements, 3);
         assert_eq!(out[0].info(), info);
         assert_eq!(out[0].body(), &body);
     }

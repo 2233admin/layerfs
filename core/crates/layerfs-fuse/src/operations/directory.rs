@@ -170,10 +170,13 @@ impl DirectoryStream {
         }
     }
     async fn visit(&mut self, after: Option<Vec<u8>>) -> Result<(), ServiceError> {
+        let started = std::time::Instant::now();
         let reply = self
             .services
             .directory_visit(self.mount, self.serial, self.handle, self.offset, after)
-            .await?;
+            .await;
+        crate::phase::charge(crate::phase::Phase::DirectoryVisit, started);
+        let reply = reply?;
         // The request's own copy: the job and its receipt are gone before any
         // provider wait and before the publishing visit.
         let window = KernelDirectoryWindow::clone(reply.get());
@@ -212,6 +215,7 @@ impl DirectoryStream {
             };
             // Only a window whose inherited names or kinds memory did not
             // hold leaves the receive loop and takes one Store reader.
+            let started = std::time::Instant::now();
             let base = if window.listing.is_none() {
                 // Provider reads never run on the loop that received the request.
                 Some(self.services.base().await?)
@@ -220,6 +224,7 @@ impl DirectoryStream {
             };
             let batch = window.finish(base.as_ref());
             drop(base); // Return the actual reader before another SQL job.
+            crate::phase::charge(crate::phase::Phase::DirectoryFinish, started);
             let batch = match batch {
                 Ok(batch) => batch,
                 Err(error) => return Err(self.services.failed_base_read(error.into())),

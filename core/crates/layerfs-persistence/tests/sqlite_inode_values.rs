@@ -38,7 +38,7 @@ fn value(seed: u64) -> [u8; 73] {
         kind: InodeKind::RegularFile,
         namespace_ref_count: 1,
         content_root: ObjectId::for_bytes(&seed.to_le_bytes()),
-        metadata_root: ObjectId::for_bytes(b"metadata"),
+        metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(ObjectId::for_bytes(b"metadata")),
     })
 }
 fn rows(ordinals: impl IntoIterator<Item = u32>) -> Vec<InodeValueRow> {
@@ -83,9 +83,9 @@ fn values_come_back_in_ordinal_order_from_one_statement_of_one_transaction() {
         let after = handles.storage.diagnostics().unwrap();
         let expected: Vec<_> = rows(wanted.iter().copied().filter(|n| stored.contains(n)));
         assert_eq!(found, expected, "{wanted:?}");
-        // The transaction's own begin and end, and the one read between them.
-        assert_eq!(after.statements - before.statements, 3, "{wanted:?}");
-        assert_eq!(after.transactions - before.transactions, 1, "{wanted:?}");
+        // One read and no BEGIN/COMMIT: stored inode values never change.
+        assert_eq!(after.statements - before.statements, 1, "{wanted:?}");
+        assert_eq!(after.transactions - before.transactions, 0, "{wanted:?}");
         assert_eq!(after.fullscan_steps - before.fullscan_steps, 0);
         assert_eq!(after.sorts - before.sorts, 0);
     }

@@ -4,7 +4,11 @@
 //! extent leaf: the regular-file small/large cutoff must not reclassify it, so a
 //! four-byte mode value is stored exactly like any other extent-backed value. The
 //! chunk payload, leaf and file-state objects are the existing canonical
-//! grammars; no second CDC path or metadata-specific file format is introduced.
+//! grammars; no second CDC path is introduced. Owner decision 2026-10-18
+//! (STORAGE_BATCH_SPEC section 4) made the inode value itself carry the
+//! portable mode and mtime: the value's metadata field has a root form - an
+//! attribute-tree root id, exactly this file's grammar - and an inline form
+//! with the portable bytes inside the value and no tree at all.
 
 use crate::error::{ContentError, ContentResult};
 use crate::file::mapping::{

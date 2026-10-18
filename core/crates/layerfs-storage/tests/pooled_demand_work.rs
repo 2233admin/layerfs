@@ -21,7 +21,7 @@ fn pooled_demand_reuses_one_checked_physical_reconstruction() {
                 kind: InodeKind::RegularFile,
                 namespace_ref_count: 1,
                 content_root: ObjectId::for_bytes(&serial.to_be_bytes()),
-                metadata_root: ObjectId::for_bytes(b"metadata"),
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(ObjectId::for_bytes(b"metadata")),
             }),
         })
         .collect::<Vec<_>>();
@@ -81,7 +81,7 @@ fn a_missing_stored_value_still_refuses_canonical_reconstruction() {
                 kind: InodeKind::Directory,
                 namespace_ref_count: 0,
                 content_root: ObjectId::for_bytes(b"content"),
-                metadata_root: ObjectId::for_bytes(b"metadata"),
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(ObjectId::for_bytes(b"metadata")),
             }),
         }],
     }
@@ -113,7 +113,7 @@ fn save_exact_reuse_consumes_the_group_already_acquired_by_discovery() {
                     kind: InodeKind::RegularFile,
                     namespace_ref_count: 1,
                     content_root: ObjectId::for_bytes(&serial.to_be_bytes()),
-                    metadata_root: ObjectId::for_bytes(b"metadata"),
+                    metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(ObjectId::for_bytes(b"metadata")),
                 }),
             })
             .collect(),

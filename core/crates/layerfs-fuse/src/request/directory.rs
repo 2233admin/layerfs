@@ -105,7 +105,10 @@ impl KernelFilesystem {
                     let services = services.request(&fence)?;
                     // One owner job finds the open descriptor and closes it.
                     // It only gives back, so a stopped mount never refuses it.
-                    drop(services.close_directory(mount, serial, handle.0).await?);
+                    let started = std::time::Instant::now();
+                    let closed = services.close_directory(mount, serial, handle.0).await;
+                    crate::request::charge(crate::request::Phase::CloseDirectory, started);
+                    drop(closed?);
                     Ok::<_, ServiceError>(())
                 }
                 .await;
