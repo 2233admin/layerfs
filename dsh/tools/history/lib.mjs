@@ -12,6 +12,7 @@
 // trace/. One attempt per call: no retry, no wait, no sleep. The first
 // outcome that differs from the plan throws Mismatch, which ends the range.
 import { createHash } from "node:crypto";
+import { loadavg } from "node:os";
 import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -537,25 +538,28 @@ export async function probes(run, k, { branch, tree }) {
       if (c.length !== 2 || c[1].id !== from) throw new Error(`probe diff_commits: the Commit after ${from} is not adjacent`);
       return { from, to: c[0].id };
     } }],
-    ["fork", () => lf.branch.fork(`probe-${r}`, "main")],
-    ["merge", async () => {
-      await lf.branch.fork(`probe-${r}-a`, "main"); await lf.branch.fork(`probe-${r}-b`, "main");
-      await lf.fs.apply(`probe-${r}-a`, [{ op: "mkdir", path: `${P}/m` }, { op: "write", path: `${P}/m/a1.txt`, content: `a1 ${r}\n` }, { op: "write", path: `${P}/m/a2.txt`, content: `a2 ${r}\n` }], "probe a");
-      await lf.fs.apply(`probe-${r}-b`, [{ op: "mkdir", path: `${P}/m` }, { op: "write", path: `${P}/m/b1.txt`, content: `b1 ${r}\n` }, { op: "write", path: `${P}/m/b2.txt`, content: `b2 ${r}\n` }], "probe b");
-      return lf.branch.merge(`probe-${r}-a`, `probe-${r}-b`, `probe-${r}-m`, "probe merge");
+    // samples after the first fork their own Branch (the first keeps `probe-<r>`, which the one-shot probes mount)
+    ["fork", (_, s) => lf.branch.fork(`probe-${r}${s.suffix}`, "main")],
+    ["merge", async (_, s) => {
+      const b = `probe-${r}${s.suffix}`;
+      await lf.branch.fork(`${b}-a`, "main"); await lf.branch.fork(`${b}-b`, "main");
+      await lf.fs.apply(`${b}-a`, [{ op: "mkdir", path: `${P}/m` }, { op: "write", path: `${P}/m/a1.txt`, content: `a1 ${r}\n` }, { op: "write", path: `${P}/m/a2.txt`, content: `a2 ${r}\n` }], "probe a");
+      await lf.fs.apply(`${b}-b`, [{ op: "mkdir", path: `${P}/m` }, { op: "write", path: `${P}/m/b1.txt`, content: `b1 ${r}\n` }, { op: "write", path: `${P}/m/b2.txt`, content: `b2 ${r}\n` }], "probe b");
+      return lf.branch.merge(`${b}-a`, `${b}-b`, `${b}-m`, "probe merge");
     }, { input: () => ({ filesPerSide: 2 }) }],
     // split by owner after 013.a1 (steps.mjs oneshotSplit): mount + unmount, and the exec under its own
     // label; the metrics take both values from the trace (the old `oneshot_mount_exec` series ends here)
-    ["oneshot_mount_unmount", async () => {
+    ["oneshot_mount_unmount", async (_, s) => {
       const ws = await lf.sandbox.mount(sb, `probe-${r}`);
-      run.label("probe:oneshot_exec");
+      run.label(`${s.prefix}:oneshot_exec`);
       await lf.sandbox.exec(sb, ws, "true");
-      run.label("probe:oneshot_mount_unmount");
+      run.label(`${s.prefix}:oneshot_mount_unmount`);
       return lf.sandbox.unmount(sb, ws, true);
     }],
-    ["oneshot_commit", async () => {
+    // each sample writes the same 2 KiB with its own byte (the first keeps `p`), so every sample commits a change
+    ["oneshot_commit", async (_, s) => {
       const ws = await lf.sandbox.mount(sb, `probe-${r}`);
-      await lf.sandbox.exec(sb, ws, `mkdir -p ${PROBE_DIR}/c && head -c 2048 /dev/zero | tr '\\0' p > ${PROBE_DIR}/c/one.txt`);
+      await lf.sandbox.exec(sb, ws, `mkdir -p ${PROBE_DIR}/c && head -c 2048 /dev/zero | tr '\\0' ${"pqrstuvwxy"[s.i] ?? "z"} > ${PROBE_DIR}/c/one.txt`);
       run.rec.next = { kind: "files", n: 1 };
       const c = await lf.sandbox.commit(sb, ws, "probe commit");
       await lf.sandbox.unmount(sb, ws, false);
@@ -563,20 +567,37 @@ export async function probes(run, k, { branch, tree }) {
     }, { input: () => ({ files: 1, bytes: 2048 }) }],
   ];
   const out = {};
-  // a probe's setup runs untimed under its own label (its counters are not the probe's); `version` marks a changed input
+  // a probe's setup runs untimed under its own label (its counters are not the probe's); `version` marks a changed input.
+  // PROBE_SAMPLES samples each (owner 2026-10-18): `ms` is their median; the first runs as `probe:<name>` and alone
+  // gives the counters (unchanged), the others as `probe-s<i>:<name>`; each sample records the 1-min load average.
   for (const [name, f, { version, setup, input } = {}] of list) {
     const v = version ? { version } : {};
     try {
       let prepared;
       if (setup) { run.label(`probe-setup:${name}`); prepared = await setup(); }
-      run.label(`probe:${name}`);
-      const t0 = performance.now();
-      const value = await f(prepared);
-      out[name] = { ms: +(performance.now() - t0).toFixed(3), ...v, ...(input ? { input: input(value, prepared) } : {}) };
+      const samples = [], load = [];
+      let first;
+      for (let i = 0; i < PROBE_SAMPLES; i++) {
+        const s = { i, prefix: i ? `probe-s${i}` : "probe", suffix: i ? `-s${i}` : "" };
+        run.label(`${s.prefix}:${name}`);
+        const t0 = performance.now();
+        const value = await f(prepared, s);
+        samples.push(+(performance.now() - t0).toFixed(3));
+        load.push(+loadavg()[0].toFixed(2));
+        if (!i) first = value;
+      }
+      out[name] = { ms: median(samples), samples, load, ...v, ...(input ? { input: input(first, prepared) } : {}) };
     } catch (e) { out[name] = { ms: null, ...v, error: `${e.code ?? ""} ${e.message}`.slice(0, 200) }; }
   }
   return out;
 }
+
+/** Samples per scale probe (owner 2026-10-18): the fit uses their median. */
+export const PROBE_SAMPLES = 5;
+/** The median of numbers (the mean of the middle two for an even count). */
+export const median = (xs) => { const s = [...xs].sort((a, b) => a - b), h = s.length >> 1; return s.length ? +(s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2).toFixed(3) : null; };
+/** The 1-min load average where the player runs (in the runner: the Docker VM's Linux kernel). */
+export const loadNow = () => +loadavg()[0].toFixed(2);
 
 /** Reads a range's trace file: the latency rows' input, and each probe's SQL counters. */
 export function readTrace(file, log = null) {
@@ -586,13 +607,13 @@ export function readTrace(file, log = null) {
   attributeFuse(lines);
   markContention(lines);
   const bySeq = new Map((log ?? []).map((e) => [e.seq, e]));
-  const isProbe = (l) => /^probe(-setup)?:/.test(String(l.step ?? ""));
+  const isProbe = (l) => /^probe(-setup|-s\d+)?:/.test(String(l.step ?? ""));
   const calls = lines.filter((l) => !isProbe(l)).map((l) => callOf(l, bySeq.get(l.seq)?.method === l.method ? bySeq.get(l.seq) : null));
   // the same calls classed from the trace alone (no call records): how stored traces are re-derived (SPEC §5)
   const callsTrace = lines.filter((l) => !isProbe(l)).map((l) => callOf(l));
   const probe = {};
   for (const l of lines.filter(isProbe)) {
-    if (l.step.startsWith("probe-setup:")) continue;
+    if (!l.step.startsWith("probe:")) continue;
     const name = l.step.slice(6), c = sqlCounters(l);
     probe[name] ??= {};
     for (const [key, n] of Object.entries(c)) probe[name][key] = (probe[name][key] || 0) + n;

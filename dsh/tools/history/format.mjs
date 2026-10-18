@@ -27,6 +27,9 @@ export const NONE_LINE = "**Optimization:** none — no problems found.";
 export const FINDINGS = "## 5. Findings and action";
 export const HEADLINE_CELLS = ["Latest version", "Store on disk", "Space amplification", "Added this range", "Commits", "Time"];
 
+/** The range's 1-min load average line (owner 2026-10-18), or why there is none. */
+export const hostLoadLine = (m) => (m?.hostLoad ? `Load average (1-min, ${m.hostLoad.where ?? "player"}): start ${m.hostLoad.start ?? "—"} · end ${m.hostLoad.end ?? "—"}.` : "Load average: not recorded (before 2026-10-18).");
+
 /** The Store on disk of an attempt: the allocated bytes of the Store file and its WAL (sealed: no WAL). */
 export const storeOnDisk = (m) => (m?.storeDisk ? m.storeDisk.allocated + (m.storeDisk.walAllocated ?? 0) : null);
 /** Space amplification (REPORT_FORMAT.md §4): Store on disk ÷ latest version. */
@@ -202,7 +205,10 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
     APPENDIX[1], "", `Binary: daemon \`${id12(m.binary?.daemon)}\` (attempt ${m.attempt}). Each call's own input is its size class; ×base compares the same operation and class only.`, "",
     latencyRows ? latencyRows(m, history, baseline) : "", "",
     table(["Method", "Category", "Calls", "Bytes in", "Bytes out", "Files / entries", "Outcomes"], Object.entries(m.calls).map(([meth, r]) => [meth, categoryOf(meth) ?? "unassigned", int(r.n), bytes(r.bytesIn), bytes(r.bytesOut), int(r.files), Object.entries(r.outcomes).map(([kk, n]) => `${kk} ${n}`).join(", ")])), "",
-    APPENDIX[2], "", `Binary: daemon \`${id12(m.binary?.daemon)}\`.`, "", Object.keys(m.probes ?? {}).length ? table(["Probe", "ms", "Counters"], Object.entries(m.probes).map(([kk, p]) => [kk, p.ms, Object.entries(p.counters ?? {}).map(([cc, n]) => `${cc} ${n}`).join(", ")])) : "No probes recorded.", "",
+    APPENDIX[2], "", `Binary: daemon \`${id12(m.binary?.daemon)}\`.`, "", hostLoadLine(m), "",
+    Object.keys(m.probes ?? {}).length ? table(["Probe", "ms (median)", "Samples", "Load 1-min", "Counters (first sample)"], Object.entries(m.probes).map(([kk, p]) => [kk, p.ms,
+      p.samples ? p.samples.join(" · ") : "1 (before 2026-10-18)", p.load ? `${Math.min(...p.load)}–${Math.max(...p.load)}` : "—",
+      Object.entries(p.counters ?? {}).map(([cc, n]) => `${cc} ${n}`).join(", ")])) : "No probes recorded.", "",
     APPENDIX[3], "", m.figures ? storageInternals(m.figures, plan.range, m) : "No snapshot this range: the sealed file's figures are read at snapshots.", "",
     APPENDIX[4], "", timeLine(m.wall), "", stageLine ? stageLine(m.wall) : "", "",
     APPENDIX[5], "", table(["#", "Binary", "Started", "Result", "Reason"], attempts.map((a, i) => [String(a.attempt), gates[i].binary, gates[i].started, gates[i].verdict, gates[i].reason])), "",

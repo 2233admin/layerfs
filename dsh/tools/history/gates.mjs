@@ -336,6 +336,35 @@ export const rising = (series, n = THRESHOLDS.rising) =>
 
 const band = (v, t, high = "optimize") => (v == null ? "pass" : v > t.act ? high : v > t.watch ? "watch" : "pass");
 
+/** True when every point of the series recorded the same SQL counters for `name` as `m` (and some). */
+export function sameCounters(name, m, pts) {
+  const c = m.probes?.[name]?.counters, key = JSON.stringify(c ?? {});
+  return !!c && Object.keys(c).length > 0 && pts.every((x) => x.probes?.[name]?.counters && JSON.stringify(x.probes[name].counters) === key);
+}
+
+/**
+ * Owner 2026-10-18: a time-only trip, where the probe's time trips while its
+ * SQL counters are identical at every point, reads watch. It escalates to
+ * optimize only when the same probe also tripped time-only at the previous
+ * range (the series without this point, ending at range k-1). Counter gates
+ * are untouched. Mutates the fit row `f` (its result and note).
+ */
+export function timeOnly(f, m, t = THRESHOLDS) {
+  if (!f.probe || !f.pts) return f;
+  const r = f.result ?? band(f.e, f.text ? BOUND.ms : t.depthExponent);
+  if (r !== "optimize" && r !== "stop") return f;
+  if (!sameCounters(f.probe, m, f.pts.filter((x) => x.probes?.[f.probe]))) return f;
+  const prior = f.pts.filter((x) => x.range < m.range);
+  const prev = prior.at(-1)?.range === m.range - 1 && prior.filter((x) => x.depth?.after > 0).length >= MINIMUM_POINTS ? f.timeAt(prior) : null;
+  const prevResult = prev ? prev.result ?? band(prev.e, prev.text ? BOUND.ms : t.depthExponent) : null;
+  const what = f.text ?? `depth exponent ${f.e}`;
+  f.result = r;
+  if (prevResult === "optimize" || prevResult === "stop") { f.text = `${what}; time-only (identical SQL counters), repeated: it also tripped at range ${m.range - 1}`; return f; }
+  f.result = "watch";
+  f.text = `${what}; time-only trip (identical SQL counters at every point): watch, optimize only if it repeats at range ${m.range + 1}`;
+  return f;
+}
+
 /**
  * The range's gate decision. `history` is the earlier ranges' metrics (last
  * attempt each, oldest first); `baseline` comes from buildBaseline; `seeds`
@@ -409,8 +438,10 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
     // F-014: only points of the same probe version, and for a fixed-input probe the same recorded input
     const { pts, note } = probeSeries(name, m, all);
     if (note) { probeFits.push({ name, e: null, result: "watch", note }); counterFits.push({ name, e: null, result: "watch", note }); continue; }
-    if (CHAIN.has(name)) { const b = chainBound(name, m, pts); probeFits.push(...b.probe); counterFits.push(...b.counters); continue; }
-    probeFits.push({ name: `${name}${unit(name)}`, e: exponent(pts.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.ms, true)])) });
+    // time rows carry their probe and a re-judge on fewer points (timeOnly: the previous range's own verdict)
+    const timeAt = (ps) => (CHAIN.has(name) ? chainBound(name, m, ps).probe[0] : { e: exponent(ps.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.ms, true)])) });
+    if (CHAIN.has(name)) { const b = chainBound(name, m, pts); probeFits.push(...b.probe.map((f) => ({ ...f, probe: name, pts, timeAt }))); counterFits.push(...b.counters); continue; }
+    probeFits.push({ name: `${name}${unit(name)}`, probe: name, pts, timeAt, e: exponent(pts.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.ms, true)])) });
     for (const k of Object.keys(m.probes[name].counters || {})) {
       counterFits.push({ name: `${name}.${k}${unit(name)}`, e: exponent(pts.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.counters?.[k], true)])) });
       if (TREE_FLAT.has(name)) counterFits.push({ name: `${name}.${k}`, against: "tree files", e: exponent(pts.map((x) => [treeFiles(x), x.probes?.[name]?.counters?.[k]])) });
@@ -430,6 +461,7 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
     const i = r.reduce((b, x, j) => (RANK[x] > RANK[r[b]] || (RANK[x] === RANK[r[b]] && (fits[j].e ?? -Infinity) > (fits[b].e ?? -Infinity)) ? j : b), 0);
     return { ...fits[i], result: worst(r) };
   };
+  for (const f of probeFits) timeOnly(f, m, t);
   const scale = top(probeFits, t.depthExponent), counter = top(counterFits, t.counterExponent);
   const fit = (f, what) => (fitted < MINIMUM_POINTS ? { value: insufficient(fitted), result: "watch" }
     : !f.name ? { value: `not judged: no ${what}`, result: "watch" }

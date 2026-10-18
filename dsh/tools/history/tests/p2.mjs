@@ -298,6 +298,23 @@ test("Scaling: a legacy per-page diff_commits series is not judged (F-013), neve
   assert.equal(row.result, "watch");
 });
 
+test("time-only trips (owner 2026-10-18): identical counters read watch; a repeat at the next range escalates; counter trips unchanged", () => {
+  const mk = (range, depth, ms, statements = 16) => ({ range, binary: { daemon: "d" }, depth: { after: depth }, checks: {}, probes: { fork: { ms, counters: { statements, vm_steps: 271 } } } });
+  const row = (xs, name = "Scaling") => evaluate(xs.at(-1), xs.slice(0, -1)).checks.find((c) => c.name === name);
+  // 013.a2's shape: 0.635, 0.477, 0.77 ms over three ranges, every counter identical
+  const once = [mk(11, 7783, 0.635), mk(12, 8519, 0.477), mk(13, 9385, 0.77)];
+  assert.equal(row(once).result, "watch", row(once).value);
+  assert.match(row(once).value, /fork: depth exponent [\d.]+; time-only trip \(identical SQL counters at every point\): watch, optimize only if it repeats at range 14/);
+  // it tripped time-only at range 12 too: the repeat escalates
+  const twice = [mk(10, 7000, 0.3), mk(11, 7783, 0.4), mk(12, 8519, 0.6), mk(13, 9385, 0.9)];
+  assert.equal(row(twice).result, "optimize", row(twice).value);
+  assert.match(row(twice).value, /time-only \(identical SQL counters\), repeated: it also tripped at range 12/);
+  // a gap (no range 12 point) is not a repeat
+  assert.equal(row([mk(9, 6000, 0.2), mk(10, 7000, 0.3), mk(11, 7783, 0.4), mk(13, 9385, 0.9)]).result, "watch");
+  // counters that move make it a real trip, judged as before
+  assert.equal(row([mk(11, 7783, 0.4, 16), mk(12, 8519, 0.6, 18), mk(13, 9385, 0.9, 20)]).result, "optimize");
+});
+
 test("F-014: probes fit only same-version, same-input points; growing probes are exempt; no input is not judged", () => {
   const mk = (range, depth, probes) => ({ range, binary: { daemon: "d" }, depth: { after: depth }, inputs: { tree: { files: 100 * (range + 1), bytes: 1e4 * (range + 1) } }, checks: {}, probes });
   const one = (ms, input, version) => ({ ms, counters: { statements: 100 }, ...(input ? { input } : {}), ...(version ? { version } : {}) });
@@ -316,7 +333,8 @@ test("F-014: probes fit only same-version, same-input points; growing probes are
   // a fixed-input probe without its input is not judged; a growing probe needs none and is fitted
   const legacy = [1, 2, 3].map((i) => mk(i, 1000 * i, { stat: one(3) }));
   assert.match(row(legacy).value, /stat: input not recorded/);
-  const grows = [1, 2, 3].map((i) => mk(i, 1000 * i, { list_largest: one(3 * i * i, { entries: 10 * i }) }));
+  // (its counters grow too: a time-only trip with identical counters reads watch, owner 2026-10-18)
+  const grows = [1, 2, 3].map((i) => mk(i, 1000 * i, { list_largest: { ...one(3 * i * i, { entries: 10 * i }), counters: { statements: 100 * i } } }));
   assert.equal(row(grows).result, "optimize", "list_largest is exempt from the same-input rule and fitted per entry");
   const perEntryFlat = [1, 2, 3].map((i) => mk(i, 1000 * i, { list_largest: { ...one(3 * i, { entries: 10 * i }), counters: { statements: 100 * i } } }));
   assert.equal(row(perEntryFlat).result, "pass", row(perEntryFlat).value);

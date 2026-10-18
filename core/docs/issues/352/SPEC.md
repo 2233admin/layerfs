@@ -510,6 +510,25 @@ per 2 writes). In addition, the **scale probes** run once per range:
 > verdict stay. `report.mjs regate --split-oneshot` re-reads earlier attempts'
 > sequences from their stored traces, in memory only.
 
+> **As built (probe samples, owner direction 2026-10-18).** Each scale probe
+> runs five samples after its untimed setup. The fit uses their median
+> (`probes.<name>.ms`); `samples` holds all five.
+> - **Counters:** only the first sample's (label `probe:<name>`), so counter
+>   gates read one sample as before. The other samples run as
+>   `probe-s<i>:<name>`.
+> - **Probes that make things:** each sample gets its own name. Fork and
+>   merge samples after the first make their own Branches (`-s<i>`), so a
+>   range adds 16 probe Branches more than before. Each `oneshot_commit`
+>   sample writes the same 2 KiB with its own byte.
+> - **One-shot split:** taken per sample from the trace, then the median.
+> - **Load average:** the 1-min load average is recorded beside each sample
+>   (`load`) and per range (`hostLoad.start`, `.end`). It is the load where
+>   the player runs; in the runner that is the Docker VM's kernel. Report
+>   appendix C shows it.
+>
+> Earlier ranges' single-sample points stay in the fits as recorded
+> (`Samples: 1`).
+
 ### d. Storage
 
 Read from `operator.store.stats()` and per-Commit `sizes`:
@@ -580,6 +599,16 @@ Storage work comes after speed. AGENTS.md §3.9 applies: reject a ~50% speed los
 for a ~5% storage gain. Report raw deltas for both.
 
 ## 5. Gates per range
+
+> **Time-only trips (owner direction 2026-10-18).** A probe's time trip
+> (Scaling) whose SQL counters are identical at every point of its series
+> reads **watch**. It escalates to optimize only when the same probe also
+> tripped time-only at the previous range (consecutive; a gap is not a
+> repeat). Counter gates and every threshold are unchanged. The probes' time
+> comes from five samples per probe (§3c). Earlier verdicts stay as
+> recorded. Validated by regate on ranges 11–14: 013.a2 (fork, counters
+> 16 / 271 at every point) reads watch; 014.a1 (checkpoint `diff_commits`
+> statements, a counter trip) stays optimize.
 
 > **Uncontended vs contended (owner direction 2026-10-18).** The headless
 > player has no delays, so contention is far above real use (agents' tool

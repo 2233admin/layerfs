@@ -55,7 +55,7 @@ import { due, manifestPath, rebuild } from "./snapshot.mjs";
 import { aggregate } from "./gates.mjs";
 import { PLAN_VERSION } from "./plan.mjs";
 import {
-  binaries, closure, consolidate, expectCall, HISTORY, Mismatch, probeFixture, probes, readTrace, REPO, Run,
+  binaries, closure, consolidate, expectCall, HISTORY, loadNow, median, Mismatch, probeFixture, probes, readTrace, REPO, Run,
   sandboxHealth, setup, sha256, step, teardown, verify, versionStats, writeJson,
 } from "./lib.mjs";
 import { addDelta, checkpointDiff, deltaSummary, deltaWork, diskGuard, diskModel, EXIT, nextPhase, oneshotSplit, pad, PHASES, phaseOps, Tree } from "./steps.mjs";
@@ -326,7 +326,9 @@ async function playRange(run, k, mode) {
   run.traceTo(traceFile, `r${pad(k)}`);
   const m = { range: k, attempt, run: run.manifest.run, phase: run.manifest.phase, label: run.manifest.label, mode, started: new Date().toISOString(),
     binary: run.manifest.binary, plan: { version: run.manifest.planVersion, checkpoint: plan.checkpoint }, policy: run.manifest.policyName,
-    runner: runnerFacts(process.env) };
+    runner: runnerFacts(process.env),
+    // owner 2026-10-18: the 1-min load average where the player runs, at the start and end of the range (end: metrics)
+    hostLoad: { where: "runner (Docker VM kernel)", start: loadNow() } };
   const before = measured ? await run.op.store.stats() : null;
   const { ops, reconcile, left } = p2 ? { ops: [], reconcile: [], left: {} } : phaseOps(plan, run.manifest.phase);
   let branch = `r${pad(k)}-lane`;
@@ -449,10 +451,23 @@ async function playRange(run, k, mode) {
   // the checkpoint tree the scoped probes read (gates.mjs SCOPED)
   const oracle = JSON.parse(readFileSync(join(run.manifest.oracle, `oracle-${pad(k)}.json`), "utf8"));
   m.inputs = { tree: { files: oracle.files, bytes: oracle.bytes } };
-  m.probes = Object.fromEntries(Object.entries(probeOut).map(([name, p]) => [name, { ms: p.ms, ...(p.version ? { version: p.version } : {}), ...(p.input ? { input: p.input } : {}), ...(p.error ? { error: p.error } : {}), counters: t.probe[name] ?? {} }]));
-  // the one-shot probe split (steps.mjs oneshotSplit): both values from the trace, the sequence's client wall kept
-  const split = m.probes.oneshot_mount_unmount && !m.probes.oneshot_mount_unmount.error ? oneshotSplit(t.all.filter((l) => /^probe:oneshot_(mount_unmount|exec)$/.test(String(l.step)))) : null;
-  if (split) Object.assign(m.probes, { oneshot_mount_unmount: { ...split.oneshot_mount_unmount, sequenceMs: m.probes.oneshot_mount_unmount.ms }, oneshot_exec: split.oneshot_exec });
+  m.probes = Object.fromEntries(Object.entries(probeOut).map(([name, p]) => [name, { ms: p.ms, ...(p.samples ? { samples: p.samples, load: p.load } : {}), ...(p.version ? { version: p.version } : {}), ...(p.input ? { input: p.input } : {}), ...(p.error ? { error: p.error } : {}), counters: t.probe[name] ?? {} }]));
+  // the one-shot probe split (steps.mjs oneshotSplit): both values from the trace, per sample, then their median;
+  // the counters stay the first sample's (as every probe's)
+  if (m.probes.oneshot_mount_unmount && !m.probes.oneshot_mount_unmount.error) {
+    const per = (m.probes.oneshot_mount_unmount.samples ?? [null]).map((_, i) => oneshotSplit(t.all.filter((l) => String(l.step) === `${i ? `probe-s${i}` : "probe"}:oneshot_mount_unmount` || String(l.step) === `${i ? `probe-s${i}` : "probe"}:oneshot_exec`))).filter(Boolean);
+    if (per.length) {
+      const med = (f) => median(per.map(f).filter((x) => x != null));
+      const [mu, ex] = [per[0].oneshot_mount_unmount, per[0].oneshot_exec];
+      const fuse = Math.max(...per.map((x) => x.oneshot_exec.fuseRequests));
+      Object.assign(m.probes, {
+        oneshot_mount_unmount: { ...mu, ms: med((x) => x.oneshot_mount_unmount.ms), samples: per.map((x) => x.oneshot_mount_unmount.ms), load: m.probes.oneshot_mount_unmount.load, sequenceMs: m.probes.oneshot_mount_unmount.ms },
+        oneshot_exec: { ...ex, ms: med((x) => x.oneshot_exec.ms), samples: per.map((x) => x.oneshot_exec.ms), wallMs: med((x) => x.oneshot_exec.wallMs), fuseRequests: fuse, ...(fuse ? { untimed: true } : { untimed: undefined }), load: m.probes.oneshot_mount_unmount.load },
+      });
+      if (!fuse) delete m.probes.oneshot_exec.untimed;
+    }
+  }
+  m.hostLoad = { ...m.hostLoad, end: loadNow() };
   const open = snap?.sandboxes?.reduce((n, s) => n + (s.workspaces?.length ?? 0), 0) ?? null;
   const hl = await sandboxHealth(run);
   m.health = { workspacesOpen: open, overlaysLeft: hl?.overlaysLeft ?? null, daemonRssMb: hl?.daemonRssMb ?? null, openFiles: hl?.openFiles ?? null, sandboxes: hl ? `${hl.sandboxes} of ${hl.of}` : null };

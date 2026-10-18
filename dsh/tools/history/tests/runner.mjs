@@ -130,6 +130,19 @@ test("F-028: an apply leaves a regular file equal to the lane's tree untouched, 
   assert.notEqual(statSync(join(ws, "d/same.txt")).mtimeMs, old.getTime());
 });
 
+test("probe samples (owner 2026-10-18): the median of five, the first sample alone gives the counters", async () => {
+  const { median, PROBE_SAMPLES, readTrace } = await import("../lib.mjs");
+  assert.equal(PROBE_SAMPLES, 5);
+  assert.deepEqual([median([0.77, 0.4, 0.5, 9, 0.45]), median([1, 2, 3, 4]), median([])], [0.5, 2.5, null]);
+  const sql = (n) => [{ sql: { writer: { statements: n, vm_steps: n }, readers: {} } }];
+  const f = join(dir, "samples.jsonl");
+  writeFileSync(f, [["probe:fork#1", 16], ["probe-s1:fork#2", 16], ["probe-s2:fork#3", 16], ["probe-setup:fork#4", 99]]
+    .map(([step, n]) => JSON.stringify({ step, method: "branch.fork", phase: "end", ms: 1, daemon: sql(n) })).join("\n"));
+  const t = readTrace(f);
+  assert.equal(t.probe.fork.statements, 16, "counters from the first sample only");
+  assert.equal(t.calls.length, 0, "samples are probe calls, not the replay's");
+});
+
 test("idBatches: paths split by bytes, none empty", () => {
   const b = idBatches(["aaaa", "bbbb", "cccc"], 16);
   assert.deepEqual(b, [["aaaa", "bbbb"], ["cccc"]]);
