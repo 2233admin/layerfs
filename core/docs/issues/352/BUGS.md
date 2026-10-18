@@ -302,3 +302,29 @@
   milestones in measured ranges, but agents' `rm -rf` of large trees is
   ordinary work. Owner: the fixer, after item 7, with per-op timing first
   (D0). Not folded into F-027.
+- **F-033 · `MAXIMUM_LINEAGE_ROWS` (4,096) refuses history walks with
+  `Capacity` (product, liaison research, owner decision 2026-10-18).** The
+  constant (`layerfs-history/src/contract/records.rs:24`) bounds three walks,
+  each failing `Capacity("lineage work")` past 4,096 rows:
+  (a) Commits since a Branch's base Layer, for publish and merge
+  (`layerfs-persistence/src/history/ancestry.rs:70, :220`); the replay's
+  forecast puts ranges 98, 112 and 129 over it with F-031;
+  (b) Layers between two sides (`ancestry.rs:105, :125`,
+  `layerstack.rs:389`), which grows with history: a Branch forked more than
+  4,096 publishes ago cannot merge;
+  (c) a Commit's first-parent depth (`commit.rs:68`), for fork-from-Commit
+  (`branch.rs:185`) and Commit start checks.
+  Finding 002 (`3f127ee3e`) removed the walks' growth with total history but
+  kept the bound; v0.1.7 kept it deliberately (validation H02); it is not in
+  the declared limits ([06-limits](../../architecture/06-limits.md)).
+  **Owner decision:** none of the three walks may fail `Capacity` on history
+  or Commit counts; only resource limits (disk, memory as admitted) remain.
+  Answers stay exact (no guessed or negative answer for an unfinished walk),
+  and the publication-lane work rule still holds (architecture 83): a fix may
+  not move history-sized work into the lane. Tests that assert the 4,096
+  refusal (v0.1.7 H02 and any successor) are deleted or replaced by tests of
+  the new behaviour. Evidence first: the scale-experiments session
+  (`dsh-352-scale-experiments`) confirms each case (a)–(c) with a bounded
+  test. **Owner: the fixer, queued after that confirmation**; the lead
+  places it in the item order. See
+  [crazy_work_load_watch_out.md](crazy_work_load_watch_out.md) S1.
