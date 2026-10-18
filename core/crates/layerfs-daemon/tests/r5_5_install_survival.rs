@@ -882,7 +882,13 @@ fn r5_5_a_commit_at_each_parked_step_of_a_writer_is_exact_on_the_same_and_a_fres
         rig.up_to_date(ready.token, "R5-5 steps after the writer"),
         (Some(last.id), last.root)
     );
-    let newest: Vec<_> = rig.history().records.iter().take(positions.len()).map(|r| r.id).collect();
+    let newest: Vec<_> = rig
+        .history()
+        .records
+        .iter()
+        .take(positions.len())
+        .map(|r| r.id)
+        .collect();
     let made: Vec<_> = positions.iter().rev().map(|record| record.id).collect();
     assert_eq!(newest, made, "one record per position, newest first");
     println!(
