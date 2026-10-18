@@ -1,7 +1,7 @@
 // @dsh-layerfs/model: the LayerFS × DSH view model. Events in (stories,
 // SDK trace lines, dsh records), what the views draw out: terminals, panes,
 // Branches, Sandboxes, agent places, poses, fan-out and attribution.
-// Framework-free ESM; the design preview and the dsh client both import it.
+// Framework-free ESM; the dsh client and Host import it.
 export * from "./terminals.js";
 export * from "./cli.js";
 export * from "./attribution.js";

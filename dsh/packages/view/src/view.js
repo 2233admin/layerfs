@@ -1,6 +1,6 @@
 // The LayerFS view, framework-free: it draws a model view (W, built by
-// @dsh-layerfs/model) into one root element. The design preview and the dsh
-// client plugin both use it, so they draw the same thing from the same W.
+// @dsh-layerfs/model) into one root element: the dsh client plugin's LayerFS
+// tab.
 //   tabs     main, then one chip per active Branch
 //   work     the main view (PROJECT terminal, Branches, Sandboxes, History or
 //            Files) or a Branch view (FS terminal, Workspace panes, History or Files)
@@ -311,7 +311,7 @@ export function createView(root, o) {
     requestAnimationFrame(placeCrabs);
   }
 
-  // ---------------------------------------------------------------- hover card (tui.html)
+  // ---------------------------------------------------------------- hover card
   // What a History node is, who made it, and which Workspaces are mounted on it.
   function wsRows(name, nodeId) {
     const W = v.W, s = W.engine.s, head = s.branches[name].head || "fork:" + name, rows = [];

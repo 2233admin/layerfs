@@ -24,6 +24,10 @@ simplification.
 | Cluster two | Workspace, FUSE, daemon, execution and Commit/runtime integration design and implementation | [Current design index](core/docs/issues/303/README.md) and its seven primary contracts |
 | Legacy reference | v0.1.6, retired from `main` by R9c; read at the recovery tag only | [R9c record](core/docs/issues/307/R9C-COMPLETION-20261010.md) |
 
+**The LayerFS UI is the dsh LayerFS plugin** (owner, 2026-10-19): the LayerFS tab in
+DeepSeek Harness, served by `dsh/packages`; see [dsh/README.md](dsh/README.md).
+Do not build or revive standalone HTML or TUI pages.
+
 Cluster names are workstreams. C1/C2/C5 in older component documents mean
 content/storage/history. Check [core/Cargo.toml](core/Cargo.toml) for active
 members: a directory or old test does not establish a built replacement.

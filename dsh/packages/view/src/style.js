@@ -1,6 +1,5 @@
 // The view's stylesheet, scoped under .lfs so it neither leaks into nor takes
-// from the page around it (dsh, or the design preview). Keyframes are named
-// lfs-*. The preview keeps only its own chrome (title bar, player).
+// from the dsh page around it. Keyframes are named lfs-*.
 export const CSS = `
 .lfs {
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -170,7 +169,7 @@ export const CSS = `
 .lfs .bench { flex: none; min-height: 64px; border-top: 1px dashed var(--sep-strong); display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 11px; color: var(--text-3); position: relative; }
 .lfs .bench b { font-weight: 600; letter-spacing: .04em; text-transform: uppercase; font-size: 10px; }
 /* branch view */
-/* SDK call details on a terminal line (tui.html) */
+/* SDK call details on a terminal line */
 .lfs .sdkbtn { margin-left: 8px; font: 9.5px var(--mono); padding: 0 4px; border-radius: 3px; border: 1px solid var(--term-border); background: transparent; color: var(--term-dim); cursor: pointer; opacity: 0; vertical-align: 1px; }
 .lfs .ln:hover .sdkbtn, .lfs .ln.open .sdkbtn, .lfs .sdkbtn:focus-visible { opacity: 1; }
 .lfs .sdk { display: none; margin: 3px 0 5px; padding: 6px 9px; border-left: 2px solid var(--t-cyan); background: var(--well); border-radius: 0 6px 6px 0; color: var(--term-text); font-size: 11.5px; white-space: normal; }
@@ -193,7 +192,7 @@ export const CSS = `
 .lfs .store .m { background: var(--orange); }
 .lfs .store .pc { color: var(--t-cyan); }
 .lfs .store .mc { color: var(--orange); }
-/* Files pane (tui.html), stacked for the right column */
+/* Files pane, stacked for the right column */
 .lfs .fsel { font: 12px var(--font); height: 24px; max-width: 200px; min-width: 70px; border: 1px solid var(--term-border); border-radius: 5px; background: var(--term); color: var(--term-text); padding: 0 4px; }
 .lfs .sync { font-size: 11px; line-height: 1; flex: none; }
 .lfs .sync.live { color: var(--t-green); }
@@ -281,7 +280,7 @@ export const CSS = `
 .lfs .bch.cont { opacity: .55; }
 .lfs .bch:hover { background: var(--well); }
 .lfs svg.graph .node { cursor: pointer; }
-/* Sandbox / process status bar (tui.html) */
+/* Sandbox / process status bar */
 .lfs .statusbar { height: 32px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--chrome); border-top: .5px solid var(--sep); overflow-x: auto; scrollbar-width: none; font-size: 11px; }
 .lfs .statusbar .lbl { color: var(--text-3); white-space: nowrap; }
 .lfs .statusbar .sp { flex: 1; min-width: 10px; }
@@ -322,7 +321,7 @@ export const CSS = `
 .lfs .sbchip:hover { background: var(--orange-bg); color: var(--t-orange); }
 .lfs .term.focus { animation: lfs-focuspane 1.2s ease-out; }
 @keyframes lfs-focuspane { 0%, 40% { box-shadow: 0 0 0 2.5px var(--accent), 0 6px 18px rgba(0,0,0,.18); } }
-/* Hover card on History nodes (tui.html) */
+/* Hover card on History nodes */
 .lfs .hcard { position: absolute; z-index: 65; width: 290px; background: var(--card); border-radius: 10px; box-shadow: 0 14px 44px rgba(0,0,0,.24), 0 0 0 .5px var(--sep-strong); padding: 8px; display: none; font-size: 12px; }
 .lfs .hcard.open { display: block; animation: lfs-grow .12s ease-out; }
 .lfs .hcard .h { display: flex; align-items: baseline; gap: 6px; margin: 0 4px 2px; }

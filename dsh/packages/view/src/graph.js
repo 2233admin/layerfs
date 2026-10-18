@@ -1,4 +1,4 @@
-// History in the tui.html shape, turned vertical: one column per lane (main
+// History as a lane graph, turned vertical: one column per lane (main
 // first), one row per node, oldest at the top. Gray edges join a lane; a fork
 // leaves its source sideways then runs down; publish and merge are dashed.
 // Mounted Workspaces show as a badge on the node they are based on.

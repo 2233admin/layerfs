@@ -9,7 +9,7 @@
 //   { a, script, calls } one agent's script: several calls in one step, each an
 //                        event whose `group` is the script's name
 //   { a: "dsh", ... }    dsh itself: spawn agents, a burst of calls, a pause, a view
-//   { demo, ev?, ... }   one frame of a tui.html demo story (demoFrames)
+//   { demo, ev?, ... }   one frame of a demo story (demoFrames)
 //
 // `env` gives the engine helpers the page or test has loaded:
 //   live                 true on the live server (no rewind; commands really run)
@@ -21,7 +21,7 @@ import { changedPaths, derive, rootsOf } from "../derive.js";
 import { callsOf, nodeOf, outLines, outcome } from "../terminals.js";
 import { cliOf } from "../cli.js";
 
-/** A view for a story, with the tui.html terminal engine for demo stories. */
+/** A view for a story, with a terminal engine (`Engine`) for demo stories. */
 export function storyView(engine, { lead = "main", demo = null, Engine = null } = {}) {
   const W = createView(engine, { lead });
   if (demo) {
@@ -85,8 +85,8 @@ export async function runCall(W, st, env) {
 }
 
 // ------------------------------------------------------------------ demo stories
-// A demo story (demo.js) plays through the same terminal engine as tui.html
-// (terminal.js Engine), so every outcome matches tui.html on either backend.
+// A demo story (sdk_sim/demo.js) plays through the simulation engine's
+// terminal (terminal.js Engine), so its outcomes are the engine's.
 // dsh adds which agent made each call. An agent step is one Bash tool call:
 // mount a Workspace in the Branch's shared Sandbox, run, commit, unmount.
 // Each phase is one frame, in demo.js's own schedule.
@@ -95,7 +95,7 @@ export async function runCall(W, st, env) {
 export function demoFrames(story, { lead, fixture, schedule }) {
   const escT = (t) => String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
   const out = [{ a: lead, call: "project.init", args: { name: "website", files: fixture },
-    cap: `<b>${escT(story.title)}</b> · the tui.html demo story, played by dsh. Every call is made by an agent, and the UI shows who.`, w: 1 }];
+    cap: `<b>${escT(story.title)}</b> · a LayerFS demo story, played by dsh. Every call is made by an agent, and the UI shows who.`, w: 1 }];
   story.steps.forEach((st, i) => {
     const cap = st.note ? (st.act ? `<b>${escT(st.act)}</b> · ` : "") + escT(st.note) : null;
     const w = st.beat || !story.roster ? 1 : 0.55;

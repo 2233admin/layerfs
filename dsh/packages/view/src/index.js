@@ -1,4 +1,4 @@
-// @dsh-layerfs/view: the LayerFS view as DOM, shared by the design preview
-// (sdk_sim/dsh_design.html) and the dsh client plugin.
+// @dsh-layerfs/view: the LayerFS view as DOM, drawn by the dsh client plugin's
+// LayerFS tab.
 export { createView } from "./view.js";
 export { CSS, injectStyle } from "./style.js";

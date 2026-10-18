@@ -8,7 +8,7 @@ export const ratio = (a, b) => (b > 0 ? `×${(a / b).toFixed(a / b >= 10 ? 0 : 1
 
 export const bar = (p, m) => `<span class="sbar"><i class="p" style="flex:${p} 0 0"></i><i class="m" style="flex:${m} 0 0"></i></span>`;
 
-// Diagnostic timing per call (issue #329 C), as tui.html shows it: live is the
+// Diagnostic timing per call (issue #329 C), as the tab shows it: live is the
 // SDK call, the server's refresh and the HTTP round trip; sim is the in-page
 // model and says nothing about the product. Neither is a measurement.
 export const fmtMs = (ms) => (ms < 1 ? ms.toFixed(2) : ms < 1000 ? ms.toFixed(0) : (ms / 1000).toFixed(2) + " s").replace(/(\d)$/, "$1 ms").replace(/ s ms$/, " s");
