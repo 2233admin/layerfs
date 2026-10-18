@@ -566,7 +566,7 @@ fn traced_calls_carry_sql_work_and_status_unmount_carry_opcodes() {
     let status = layerfs_api::internal::take_telemetry(&mut control);
     assert_eq!(status.len(), 1);
     let status = &status[0];
-    assert_eq!(width(status, &["fuse"]), 39 + 8);
+    assert_eq!(width(status, &["fuse"]), 39 + 10);
     for name in ["lookup", "create", "write", "release", "served"] {
         assert!(counter(status, &["fuse"], name) > 0, "{name}");
     }

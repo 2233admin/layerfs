@@ -60,9 +60,23 @@ class DecoderTests(unittest.TestCase):
         self.assertFalse(decoded[2]["complete"], "no footer means incomplete")
 
     def test_every_named_section_matches_its_source_width(self):
-        widths = {1: 15, 2: 17, 13: 55, 15: 31, 16: 42, 22: 20, 26: 45, 28: 28, 29: 42, 30: 34, 32: 11}
+        widths = {1: 15, 2: 17, 13: 55, 15: 31, 16: 42, 22: 20, 26: 47, 28: 28, 29: 42, 30: 34, 32: 11}
         for section, width in widths.items():
             self.assertEqual(len(decode_observations.SECTIONS[section][1]), width, section)
+
+    def test_kernel_opcodes_decodes_old_and_current_lengths(self):
+        # The 45-value layout predates lookup_missing/served_ns (#359); both
+        # stay decodable, with old records simply lacking the two new names.
+        old = list(range(45))
+        new = list(range(47))
+        lines = [*group(5), row(5, 26, 0, old), *group(6), row(6, 26, 0, new)]
+        decoded = {g["call"]: g["sections"]["kernel_opcodes"] for g in
+                   decode_observations.decode(lines, {})}
+        self.assertEqual(decoded[5]["store_units"], 44)
+        self.assertNotIn("lookup_missing", decoded[5])
+        self.assertNotIn("served_ns", decoded[5])
+        self.assertEqual(decoded[6]["lookup_missing"], 45)
+        self.assertEqual(decoded[6]["served_ns"], 46)
 
 
 if __name__ == "__main__":

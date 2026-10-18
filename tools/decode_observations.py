@@ -126,7 +126,7 @@ SECTIONS = {
                           "joined"], None),
     25: ("kernel_work", ["active", "retained", "requests", "completed", "terminal"], None),
     26: ("kernel_opcodes", OPCODES + ["served", "inline", "refused", "terminal", "forget_units",
-                                      "store_units"], None),
+                                      "store_units", "lookup_missing", "served_ns"], None),
     27: ("kernel_abort", ["disposition", "value"], None),
     28: ("workspace_resources", ["namespaces", "inode_rows", "directory_entry_rows",
                                  "payload_cells", "payload_bytes", "shrink_rows",

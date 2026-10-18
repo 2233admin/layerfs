@@ -171,7 +171,7 @@ array; it is never a successful zero-valued snapshot.
 | 23 | 0 | Original filesystem bindings_added, bindings_removed, directory_updates, base_records_read |
 | 24 | 0 | Native loop phase, revision, configured, created, entered, exited, joined; phase declaration order 0 Prepared through 4 Joined |
 | 25 | 0 | Native MountWork, all 13 source fields |
-| 26 | 0 | All 39 OpcodeWork opcode counts in Opcode declaration order, then handoffs, inline, refused, terminal, unadmitted, forget_units, store_units |
+| 26 | 0 | All 39 OpcodeWork opcode counts in Opcode declaration order, then served, inline, refused, terminal, forget_units, store_units, then lookup_missing and served_ns (appended for #359) |
 | 27 | 0 | Attempted abort disposition and value: (1,1) Written, (2,count) Short, (3,errno) Failed; no attempted abort is unavailable |
 | 28 | 0 | Workspace Resources (section 38); historical global Resources: 17 StoredCounts fields in declaration order, five AllocationState scalar fields, six AllocationWork fields, then database_pages, free_pages, debt_upper_bytes |
 | 29 | Reader index | That existing Store reader's 42 Storage Diagnostics fields, in the same order as section 16; unavailable after removal or while its reader lock is unavailable |
