@@ -18,6 +18,19 @@ use layerfs_content::{
 };
 use layerfs_overlay::{CapturedReader, IndexedOperationRecordScope, OperationOwner, OverlayError};
 use layerfs_telemetry::timer::{Active, Timing, TimingScope};
+use std::time::Instant;
+
+/// Adds one phase's wall time to its observation counter.
+fn elapsed<P: OverlayOperationRecords + ?Sized>(
+    shared: &Shared<'_, P>,
+    started: Instant,
+    counter: impl FnOnce(&mut CapturedNamespaceWork) -> &mut u64,
+) {
+    let ns = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+    let mut owner = shared.borrow_mut();
+    let counter = counter(&mut owner.work);
+    *counter = counter.saturating_add(ns);
+}
 
 /// One complete canonical filesystem root from one exact captured reader.
 /// Every read goes through that reader, this attempt's sealed records or the
@@ -188,7 +201,9 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Attempt<'_,
         };
         let initial = begin(shared, facts)?;
         // Normalize names: one header per changed parent that survives.
+        let started = Instant::now();
         let headers = names(self.provider, shared, facts)?;
+        elapsed(shared, started, |work| &mut work.normalize_ns);
         // Normalize inodes: typed values and dense fresh ranks, one file at a
         // time through the existing changed-file constructor.
         let workspace = Workspace::bind(self.route, base.clone());
@@ -202,7 +217,9 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Attempt<'_,
             capacities: self.capacities,
             objects: self.objects,
         };
+        let started = Instant::now();
         let totals = values(&builder, consumer, timing, headers)?;
+        elapsed(shared, started, |work| &mut work.values_ns);
         // Seal: the context now binds the reader identity and declared totals.
         let sealed = seal(shared, facts, totals, initial)?;
         // Update: Content's canonical algorithm over the sealed rows. No Store
@@ -216,8 +233,11 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Attempt<'_,
             rows: &rows,
         };
         let mut output = FilesystemObjects::new_with_accepted(self.objects, consumer, self.objects);
-        timing.child("update").run(|_| {
+        let started = Instant::now();
+        let result = timing.child("update").run(|_| {
             update_filesystem_streamed_backed(&mut output, &input, &mut Backing(shared), None)
-        })
+        });
+        elapsed(shared, started, |work| &mut work.update_ns);
+        result
     }
 }

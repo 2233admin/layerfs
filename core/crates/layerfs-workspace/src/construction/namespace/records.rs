@@ -1,7 +1,8 @@
 //! One first-original-failure owner, the sealed record kinds and their codecs.
 use crate::construction::outcome::CapturedNamespaceWork;
 use crate::{
-    CapturedFileCustody, IndexedConstructionRecords, OverlayOperationRecords, WorkspaceError,
+    CapturedFileCustody, IndexedConstructionRecords, OperationRecordWindow,
+    OverlayOperationRecords, WorkspaceError,
 };
 use layerfs_content::{
     filesystem::{FilesystemRootId, InodeScope},
@@ -126,16 +127,27 @@ impl<P: OverlayOperationRecords + ?Sized> State<'_, P> {
         }
         Ok(value)
     }
-    /// The values of at most PAGE_ROWS keys as one record job.
-    pub fn get_many(&mut self, keys: &[EditRecordKey]) -> ContentResult<Vec<Option<Vec<u8>>>> {
+    pub fn contains(&mut self, key: EditRecordKey) -> ContentResult<bool> {
         self.ready()?;
         add(&mut self.work.record_jobs, 1);
-        let result = self.records.get_many(keys);
-        let values = result.map_err(|error| self.content(error))?;
-        if let Some(actual) = values
+        let result = self.records.contains(key);
+        result.map_err(|error| self.content(error))
+    }
+    /// One key-ordered window of a kind's rows as one record job.
+    pub fn entries_after(
+        &mut self,
+        kind: u32,
+        after: Option<[u8; 32]>,
+    ) -> ContentResult<OperationRecordWindow> {
+        self.ready()?;
+        add(&mut self.work.record_jobs, 1);
+        add(&mut self.work.window_jobs, 1);
+        let result = self.records.entries_after(kind, after);
+        let window = result.map_err(|error| self.content(error))?;
+        if let Some(actual) = window
+            .0
             .iter()
-            .flatten()
-            .map(Vec::capacity)
+            .map(|(_, value)| value.capacity())
             .find(|capacity| *capacity > OPERATION_RECORD_BYTES)
         {
             return Err(self.content(ContentError::BoundedCapacityExceeded {
@@ -144,26 +156,7 @@ impl<P: OverlayOperationRecords + ?Sized> State<'_, P> {
                 actual: actual as u64,
             }));
         }
-        if values.len() != keys.len() {
-            return Err(self.content(ContentError::InvalidRecord("captured record answers")));
-        }
-        Ok(values)
-    }
-    pub fn contains(&mut self, key: EditRecordKey) -> ContentResult<bool> {
-        self.ready()?;
-        add(&mut self.work.record_jobs, 1);
-        let result = self.records.contains(key);
-        result.map_err(|error| self.content(error))
-    }
-    pub fn keys_after(
-        &mut self,
-        kind: u32,
-        after: Option<[u8; 32]>,
-    ) -> ContentResult<Vec<[u8; 32]>> {
-        self.ready()?;
-        add(&mut self.work.record_jobs, 1);
-        let result = self.records.keys_after(kind, after);
-        result.map_err(|error| self.content(error))
+        Ok(window)
     }
 }
 /// The serial is the last eight bytes, big-endian: key order is serial order.

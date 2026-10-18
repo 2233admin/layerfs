@@ -60,7 +60,7 @@ class DecoderTests(unittest.TestCase):
         self.assertFalse(decoded[2]["complete"], "no footer means incomplete")
 
     def test_every_named_section_matches_its_source_width(self):
-        widths = {1: 15, 2: 17, 13: 55, 15: 31, 16: 42, 22: 20, 26: 47, 28: 28, 29: 42, 30: 34, 32: 11}
+        widths = {1: 15, 2: 17, 13: 55, 15: 35, 16: 42, 22: 20, 26: 47, 28: 28, 29: 42, 30: 34, 32: 11}
         for section, width in widths.items():
             self.assertEqual(len(decode_observations.SECTIONS[section][1]), width, section)
 
@@ -77,6 +77,23 @@ class DecoderTests(unittest.TestCase):
         self.assertNotIn("served_ns", decoded[5])
         self.assertEqual(decoded[6]["lookup_missing"], 45)
         self.assertEqual(decoded[6]["served_ns"], 46)
+
+    def test_commit_namespace_decodes_old_and_current_lengths(self):
+        # The 31-value layout predates window_jobs and the phase times (#352
+        # record 033); both stay decodable, old records lacking the new names.
+        old = list(range(31))
+        new = list(range(35))
+        lines = [*group(7), row(7, 15, 0, old), *group(8), row(8, 15, 0, new)]
+        decoded = {g["call"]: g["sections"]["commit_namespace"] for g in
+                   decode_observations.decode(lines, {})}
+        self.assertEqual(decoded[7]["fresh_points"], 30)
+        for name in ["window_jobs", "normalize_ns", "values_ns", "update_ns"]:
+            self.assertNotIn(name, decoded[7])
+        self.assertNotIn("unnamed", decoded[7])
+        self.assertEqual(decoded[8]["fresh_points"], 30)
+        self.assertEqual(decoded[8]["window_jobs"], 31)
+        self.assertEqual(decoded[8]["update_ns"], 34)
+        self.assertNotIn("unnamed", decoded[8])
 
 
 if __name__ == "__main__":

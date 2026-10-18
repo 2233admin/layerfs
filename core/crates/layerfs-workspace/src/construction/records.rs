@@ -1,7 +1,7 @@
 //! Content-owned meanings over explicit local operation/file custody.
 use crate::{
-    OperationRecordApply, OperationRecordCopies, OperationRecordReply, OverlayOperationRecords,
-    WorkspaceError,
+    OperationRecordApply, OperationRecordCopies, OperationRecordReply, OperationRecordWindow,
+    OverlayOperationRecords, WorkspaceError,
 };
 use layerfs_content::{
     ContentError, ContentResult, EditRecordApply, EditRecordChange, EditRecordExpected,
@@ -275,6 +275,21 @@ impl<P: OverlayOperationRecords + ?Sized> IndexedEditBacking for IndexedEditReco
         self.observe(
             self.provider
                 .operation_record_keys_after(self.scope, kind, after),
+        )
+    }
+}
+impl<P: OverlayOperationRecords + ?Sized> IndexedEditRecords<'_, P> {
+    /// One key-ordered window of a kind's (key, value) rows as one job, and
+    /// whether the kind ends there; see `operation_record_entries_after`.
+    pub(crate) fn entries_after(
+        &mut self,
+        kind: u32,
+        after: Option<[u8; 32]>,
+    ) -> ContentResult<OperationRecordWindow> {
+        self.ready()?;
+        self.observe(
+            self.provider
+                .operation_record_entries_after(self.scope, kind, after),
         )
     }
 }

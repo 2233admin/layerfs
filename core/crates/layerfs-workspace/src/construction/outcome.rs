@@ -85,6 +85,14 @@ pub struct CapturedNamespaceWork {
     pub fresh_rows: u64,
     /// Fresh rank point lookups answered.
     pub fresh_points: u64,
+    /// Record windows read, by passes and by points; each is one of the
+    /// record jobs.
+    pub window_jobs: u64,
+    /// Wall time of name normalization, the values pass (changed files
+    /// included) and Content's update, in nanoseconds. Observations only.
+    pub normalize_ns: u64,
+    pub values_ns: u64,
+    pub update_ns: u64,
 }
 /// Exact retained reader, operation owner and first-original failure for the
 /// caller's fences. Exactly one of `file`, `failure` and `records.failure`

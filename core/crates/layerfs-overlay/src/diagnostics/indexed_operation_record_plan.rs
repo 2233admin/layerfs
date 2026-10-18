@@ -66,6 +66,18 @@ impl Overlay {
                 64,
             ),
             (
+                "entries",
+                sql::INDEXED_OPERATION_RECORD_ENTRIES,
+                &keys[..3],
+                32,
+            ),
+            (
+                "entries-after",
+                sql::INDEXED_OPERATION_RECORD_ENTRIES_AFTER,
+                keys.as_slice(),
+                64,
+            ),
+            (
                 "operation-cleanup",
                 sql::INDEXED_OPERATION_RECORD_RECLAIM_OPERATION,
                 operation_params.as_slice(),
