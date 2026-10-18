@@ -1,7 +1,9 @@
 # Handoff prompt — #352
 
-> **Status:** Current, 2026-10-18 (third lead). The second lead stopped after P2
-> closed at range 14, on the owner's instruction. [PROMPT.md](PROMPT.md) points
+> **Status:** Current, 2026-10-18. P2 closed at range 14. Owner direction (later
+> the same day): the current lead continues with the crew on the eleven P3-entry
+> items (RESULTS.md, "the current lead continues"); measured range 15 waits for the
+> owner's go. [PROMPT.md](PROMPT.md) points
 > here. Read "State" and "Next" first; the rest is how the run works.
 
 You own LayerFS issue [#352](https://github.com/Ephemeral-AI-Lab/layerfs/issues/352)
