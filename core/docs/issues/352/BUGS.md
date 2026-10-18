@@ -626,7 +626,7 @@
   on the old code with the `Dirty` reply above.
   [fixes/029-359-e10-kept-live-rows.md](fixes/029-359-e10-kept-live-rows.md).
 
-- **F-051 · a chmod is lost when the other side edits the same file
+- **F-052 · a chmod is lost when the other side edits the same file
   (product; owner, 2026-10-19).**
   - A merge kept the decided entry's metadata whole when both sides' metadata
     differed from the base. A content edit always moves the mtime, so a chmod
@@ -641,4 +641,4 @@
   changed differently on both sides are a `mode` conflict. Regression test:
   `merge_metadata_only` (6 tests); 5 fail on the old code with `mode=644` or
   no conflict. The 35-merge corpus is unchanged (140/140).
-  [fixes/035-f051-metadata-only-merge.md](fixes/035-f051-metadata-only-merge.md).
+  [fixes/035-f052-metadata-only-merge.md](fixes/035-f052-metadata-only-merge.md).

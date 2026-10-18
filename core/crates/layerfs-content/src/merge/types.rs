@@ -24,7 +24,7 @@ pub enum ConflictKind {
     /// A file still holds an unresolved marker block.
     Markers,
     /// Both changed a file's mode, to different modes; the decided entry's
-    /// mode is kept (#352 F-051).
+    /// mode is kept (#352 F-052).
     Mode,
 }
 

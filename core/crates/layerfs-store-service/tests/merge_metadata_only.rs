@@ -1,5 +1,5 @@
 //! A metadata-only change on one side of a merge, against a content edit of
-//! the same file on the other (#352 F-051). One side chmods file `f`; the
+//! the same file on the other (#352 F-052). One side chmods file `f`; the
 //! other rewrites its bytes. Both changes must survive, without a conflict:
 //! the merged `f` has the edited content and the changed mode. Both sides
 //! chmodding `f` to different modes stays a conflict.

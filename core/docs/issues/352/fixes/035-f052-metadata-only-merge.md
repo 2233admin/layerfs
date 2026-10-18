@@ -1,11 +1,11 @@
-# F-051 · a chmod is lost when the other side edits the same file
+# F-052 · a chmod is lost when the other side edits the same file
 
 | | |
 | --- | --- |
 | Trigger | Owner, 2026-10-19: a metadata-only change (chmod or touch) on one side and a content edit of the same file on the other must merge to the edited content with the changed mode, without a conflict |
 | Kind | code path (merge decision). No data written differently except the merged value's metadata; no Store format change |
 | Base | staging `d679c84ee` (`claude/dsh-352-integration-c98eb1`) |
-| Commits | `b9d775734` (failing test); `6c66519aa` (fix, test corrections, docs); this record's commit. Branch `claude/issue353-metadata-merge` |
+| Commits | `b9d775734` (failing test); `6c66519aa` (fix, test corrections, docs); `e55b1ebed` (this record); its renumbering commit. The pushed messages of `b9d775734`, `6c66519aa` and `e55b1ebed` say F-051: the number was already taken (a kernel_coherence flake), and the bug is F-052. Branch `claude/issue353-metadata-merge` |
 | Regression test | `layerfs-store-service/tests/merge_metadata_only.rs` (6 tests) |
 | Recovery | none: merges are recomputed per call; no stored result is wrong in place |
 

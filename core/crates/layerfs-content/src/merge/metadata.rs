@@ -1,5 +1,5 @@
 //! Metadata of a serial both sides changed, merged field by field (#352
-//! F-051). A chmod on one side and a content edit on the other both change
+//! F-052). A chmod on one side and a content edit on the other both change
 //! the value's metadata (the edit moves the mtime), so a merge of the whole
 //! metadata kept only the decided entry's and dropped the chmod. Mode and
 //! mtime now merge three-way each: a field one side changed takes that

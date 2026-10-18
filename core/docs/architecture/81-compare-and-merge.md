@@ -94,7 +94,7 @@ text) go through `construct_bytes` into the same consumer first.
    | one side deleted a file | the kept text inside a deletion marker block (`modify/delete`, `delete/modify`) |
    | anything else | ours if present, else theirs (`type`) |
 
-   Metadata merges by value, mode and mtime separately (#352 F-051): a field
+   Metadata merges by value, mode and mtime separately (#352 F-052): a field
    only one side changed takes that side's value, so a chmod survives an edit
    of the same file on the other side. A field both sides changed takes the
    decided entry's (theirs for a directory). Modes changed differently on
