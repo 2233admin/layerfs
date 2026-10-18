@@ -465,3 +465,40 @@
   Next diagnosis: a heap profile of the native addon (which allocator, which
   caches, whether it grows with calls or Stores). No owner assigned; the
   owner assigns.
+
+- **F-044 · a kernel reply computed before a merged install can land after
+  its invalidation (product, FUSE coherence; #359 D-9 sizing, 2026-10-18).**
+  - A merged install sends `inval_inode` / `inval_entry` for what changed
+    (store-service `commit_merge.rs`, `stale_after_install`).
+  - A LOOKUP, GETATTR or READDIR reply computed from the old view, but
+    delivered after that invalidation, is not fenced. The kernel caches the
+    stale answer.
+  - Entry and attribute replies carry a TTL, so their staleness is bounded by
+    it.
+  - A listing cached with `FOPEN_CACHE_DIR` (owner decision D-9) has no TTL.
+    The kernel's `iversion` check covers only changes made through the
+    mount, not installs. So after D-9 a stale listing could last until the
+    directory's next change, `inval_inode` or page reclaim.
+
+  Not observed in any sample or test; found by reading the order of reply
+  and invalidation. Needs a fence before D-9 is called exact: for example, a
+  per-mount install epoch checked before a listing reply is sent, with the
+  invalidation sent again when the epoch moved.
+  **Owner: #359** (D-9 lane).
+  [fixes/021-359-d9-sizing.md](fixes/021-359-d9-sizing.md).
+
+- **F-045 · hard-linked files are never entry-cached on the pinned image's
+  kernel (host behaviour, not LayerFS; #359 batch 4, 2026-10-18).**
+  - On `6.12.76-linuxkit` (Docker Desktop), a non-directory with
+    `nlink > 1` gets dentry time 0 on every LOOKUP reply, whatever entry TTL
+    is sent (7 s, 60 s and 300 s were tried).
+  - So every path resolution of a hard-linked file is a FUSE LOOKUP.
+  - Vanilla 6.12.76 `fs/fuse` has no such rule, and fuser 0.18 forwards the
+    TTL unchanged.
+  - Traced with a private ftrace instance and kprobes, removed afterwards
+    (`~/lfs-history/runs/issue359/batch4/trace*.sh`).
+
+  It matters for hard-link-heavy workloads (pnpm's store). Confirm or exclude
+  it on a vanilla kernel before attributing pnpm costs to LayerFS. No product
+  change.
+  [fixes/018-359-b4-readdirplus.md](fixes/018-359-b4-readdirplus.md).
