@@ -48,6 +48,7 @@ fn merge_work(bulk: usize) -> Work {
     fixture.apply("left", vec![write(DEEP, "one\ntwo\nthree\nfour\n")]);
     fixture.apply("right", vec![write("/other.txt", "other, changed\n")]);
     let before = fixture.work();
+    let counted = fixture.service.store.save_counters().merge;
     let merged = fixture.call(
         "branch.merge",
         vec![
@@ -58,6 +59,20 @@ fn merge_work(bulk: usize) -> Work {
     );
     let work = fixture.since(before);
     assert_eq!(merged.get_text("kind"), Some("Merged"), "{merged:?}");
+    // The merge counters (#352): one merge, named from recorded bindings,
+    // climbing the changed inodes and their ancestors only, whatever the
+    // tree's size.
+    let after = fixture.service.store.save_counters().merge;
+    assert_eq!(after.merges - counted.merges, 1);
+    assert_eq!(after.fallbacks - counted.fallbacks, 0);
+    let (inodes, climbed) = (
+        after.naming.inodes - counted.naming.inodes,
+        after.naming.climbed - counted.naming.climbed,
+    );
+    assert!(
+        inodes >= 1 && climbed >= inodes && climbed <= 16,
+        "{after:?}"
+    );
     println!("SDK_MERGE_PATHS bulk={bulk} work={work:?}");
     fixture.cleanup();
     work

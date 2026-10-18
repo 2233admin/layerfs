@@ -1,5 +1,6 @@
 //! Opened provider ownership and one reader per mounted Workspace.
 use super::{read_service::ReadSet, PortError, ReadServiceWork, ReaderFactory, StoreReader};
+use layerfs_content::ObjectId;
 use layerfs_history::{HistoryCatalog, WorkspaceId};
 use layerfs_storage::{encoding::delta::select::DeltaCounters, save::PoolCounters, WriteOutcome};
 use layerfs_storage::{
@@ -20,6 +21,15 @@ pub struct StoreWork {
     pub length_ids: u64,
     pub serial_reservations: u64,
 }
+/// Fixed per-call handles made and reused (#352 F-025 fix 4).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ReuseWork {
+    /// Workspace readers opened, and SDK private ones reused from the pool.
+    pub readers_opened: u64,
+    pub readers_reused: u64,
+    /// Producer Storage handles made (each reads the policy and hints).
+    pub producers: u64,
+}
 #[derive(Default)]
 pub(super) struct Counts {
     pub objects: AtomicU64,
@@ -27,6 +37,9 @@ pub(super) struct Counts {
     pub lengths: AtomicU64,
     pub length_ids: AtomicU64,
     pub serials: AtomicU64,
+    pub readers_opened: AtomicU64,
+    pub readers_reused: AtomicU64,
+    pub producers: AtomicU64,
 }
 /// Delta selection outcomes of every Save this daemon finished, payload and
 /// pooled metadata: stored depths and why candidates were refused.
@@ -34,6 +47,16 @@ pub(super) struct Counts {
 pub struct SaveCounters {
     pub delta: DeltaCounters,
     pub pool: PoolCounters,
+    pub merge: MergeCounters,
+}
+/// How every merge that reached path naming named its changed inodes (#352):
+/// from recorded bindings, or by the breadth-first walk (`fallbacks`), with
+/// the naming work summed over both sides.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct MergeCounters {
+    pub merges: u64,
+    pub fallbacks: u64,
+    pub naming: layerfs_content::compare::NamingWork,
 }
 /// One global Store binding, with mounted readers and a shared immutable cache.
 /// Opened providers must belong to the same validated authority. Application
@@ -53,6 +76,10 @@ pub struct Store {
     /// The write recognizer's fixed slots, shared by every Workspace.
     pub(super) recognizer: super::Recognizer,
     saves: Mutex<SaveCounters>,
+    /// One idle producer handle any Workspace may take (#352 F-025 fix 4).
+    pub(super) idle_producer: super::producer::Producer,
+    /// Reserved, unhanded serials per scope, `(next, end)` (#352 F-025 fix 4).
+    serial_pool: Mutex<std::collections::HashMap<ObjectId, (u64, u64)>>,
 }
 impl Store {
     /// Takes the control reader and a mount-time factory under explicit capacity.
@@ -85,6 +112,8 @@ impl Store {
             serial_low_water: AtomicU64::new(0),
             recognizer: super::Recognizer::new(),
             saves: Mutex::default(),
+            idle_producer: Default::default(),
+            serial_pool: Mutex::default(),
         })
     }
     /// Explicit configuration. Application assembly calls this once, before
@@ -96,6 +125,7 @@ impl Store {
     /// Independent mutable producer state over the same opened write provider.
     /// No shared Save or whole-Commit ownership is acquired here.
     pub fn producer(&self) -> StorageResult<Storage> {
+        self.counts.producers.fetch_add(1, Ordering::Relaxed);
         Storage::with_reservations(self.writer.clone(), self.reservations)
     }
     pub const fn policy(&self) -> StoragePolicy {
@@ -124,6 +154,37 @@ impl Store {
             saves.pool.accumulate(&saved.pool);
         }
     }
+    /// `count` serials of `scope` from the pool, when it holds that many.
+    pub(super) fn pooled_serials(&self, scope: ObjectId, count: u64) -> Option<(u64, u64)> {
+        let mut pool = self.serial_pool.lock().ok()?;
+        let (next, end) = pool.get_mut(&scope)?;
+        if *end - *next < count {
+            return None;
+        }
+        let start = *next;
+        *next += count;
+        Some((start, count))
+    }
+    /// Makes `[next, end)` the pool of `scope`; what it held before stays
+    /// consumed.
+    pub(super) fn pool_serials(&self, scope: ObjectId, next: u64, end: u64) {
+        if let Ok(mut pool) = self.serial_pool.lock() {
+            pool.insert(scope, (next, end));
+        }
+    }
+    /// Adds one merge's path naming to the totals; a merge that ended before
+    /// naming (one side unchanged) adds nothing.
+    pub fn note_merge(&self, merged: &layerfs_content::merge::MergeOutcome) {
+        let named = merged.naming;
+        if !merged.hinted && named.inodes == 0 {
+            return;
+        }
+        if let Ok(mut saves) = self.saves.lock() {
+            saves.merge.merges += 1;
+            saves.merge.fallbacks += u64::from(!merged.hinted);
+            saves.merge.naming.add(&named);
+        }
+    }
     /// The selection counts of every Save this daemon finished.
     pub fn save_counters(&self) -> SaveCounters {
         self.saves.lock().map(|saves| *saves).unwrap_or_default()
@@ -146,8 +207,15 @@ impl Store {
             serial_reservations: self.counts.serials.load(Ordering::Relaxed),
         }
     }
+    pub fn reuse_work(&self) -> ReuseWork {
+        ReuseWork {
+            readers_opened: self.counts.readers_opened.load(Ordering::Relaxed),
+            readers_reused: self.counts.readers_reused.load(Ordering::Relaxed),
+            producers: self.counts.producers.load(Ordering::Relaxed),
+        }
+    }
     pub fn mount_reader(&self, workspace: WorkspaceId) -> Result<(), Arc<PortError>> {
-        self.readers.mount(workspace)
+        self.readers.mount(workspace, false)
     }
     pub fn close_reader(&self, workspace: WorkspaceId) -> Result<(), Arc<PortError>> {
         self.readers.close(workspace)

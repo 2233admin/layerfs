@@ -7,6 +7,12 @@
 //! that did not complete drops its handle, and the next one starts from the
 //! Store as before. Inode values need no such memory: they are stored rows,
 //! and a Save reads only those of the leaves its change reaches.
+//!
+//! The Store keeps one more idle handle (#352 F-025 fix 4). A closing
+//! Workspace hands its idle handle there, and a Workspace without one takes
+//! it, so an SDK file call (a private Workspace per call) does not reload
+//! the policy row and content hints each time. One Save per handle at a
+//! time still holds: a taken handle is in no slot.
 use super::Store;
 use layerfs_storage::{Diagnostics, Storage, StorageResult};
 use std::sync::Mutex;
@@ -17,9 +23,10 @@ pub(super) struct Producer {
     idle: Mutex<Option<Storage>>,
 }
 impl Producer {
-    /// The kept handle with its counts so far, or a new one with none.
+    /// The kept handle with its counts so far: this Workspace's, else the
+    /// Store's idle one; or a new one with none.
     pub(super) fn take(&self, store: &Store) -> StorageResult<(Storage, Diagnostics)> {
-        let kept = self.idle.lock().ok().and_then(|mut idle| idle.take());
+        let kept = self.idle().or_else(|| store.idle_producer.idle());
         match kept {
             Some(storage) => {
                 let before = storage.diagnostics();
@@ -33,6 +40,18 @@ impl Producer {
     pub(super) fn keep(&self, storage: Storage) {
         if let Ok(mut idle) = self.idle.lock() {
             *idle = Some(storage);
+        }
+    }
+    fn idle(&self) -> Option<Storage> {
+        self.idle.lock().ok().and_then(|mut idle| idle.take())
+    }
+    /// Moves this Workspace's idle handle to `to` when `to` has none.
+    pub(super) fn hand_to(&self, to: &Self) {
+        let Some(storage) = self.idle() else { return };
+        if let Ok(mut idle) = to.idle.lock() {
+            if idle.is_none() {
+                *idle = Some(storage);
+            }
         }
     }
 }

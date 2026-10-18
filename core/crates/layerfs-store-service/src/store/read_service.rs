@@ -9,6 +9,12 @@ use std::{
 };
 
 pub type ReaderFactory = Arc<dyn Fn(usize) -> StorageResult<StoreReader> + Send + Sync>;
+/// Readers of closed SDK private Workspaces kept for the next one (#352
+/// F-025 fix 4): an SDK file call binds a private Workspace per call, and
+/// opening its reader (a read-only SQLite connection and Storage) was a fixed
+/// cost. A mounted Workspace's reader still opens at mount and closes at
+/// unmount.
+const IDLE_READERS: usize = 4;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReadAdmissionError {
     Capacity,
@@ -39,6 +45,12 @@ struct State {
     retired_requests: u64,
     retired_wait_ns: u64,
     opening_failures: BTreeMap<WorkspaceId, (usize, Arc<PortError>)>,
+    /// Readers that served a closed Workspace without failure, with the
+    /// identity each was opened under; reads take a fresh transaction each
+    /// call, so a kept reader carries no Workspace state.
+    idle: Vec<(usize, StoreReader)>,
+    /// Workspaces whose reader goes back to `idle` at close.
+    pooled: std::collections::BTreeSet<WorkspaceId>,
 }
 pub(super) struct ReadSet {
     state: Mutex<State>,
@@ -64,6 +76,8 @@ impl ReadSet {
                 retired_requests: 0,
                 retired_wait_ns: 0,
                 opening_failures: BTreeMap::new(),
+                idle: Vec::new(),
+                pooled: Default::default(),
             }),
             factory,
             counts,
@@ -71,7 +85,9 @@ impl ReadSet {
             policy,
         })
     }
-    pub fn mount(&self, workspace: WorkspaceId) -> Result<(), Arc<PortError>> {
+    /// Opens `workspace`'s reader; a `pooled` (SDK private) Workspace takes
+    /// an idle one first and gives it back at close.
+    pub fn mount(&self, workspace: WorkspaceId, pooled: bool) -> Result<(), Arc<PortError>> {
         let index = {
             let mut state = self
                 .state
@@ -87,6 +103,17 @@ impl ReadSet {
                     ReadAdmissionError::Capacity,
                 )));
             }
+            if pooled {
+                state.pooled.insert(workspace);
+                if let Some((index, reader)) = state.idle.pop() {
+                    self.counts.readers_reused.fetch_add(1, Ordering::Relaxed);
+                    let session = ReadSession::new(index, reader, self.counts.clone());
+                    state
+                        .sessions
+                        .insert(Some(workspace), Some(Arc::new(session)));
+                    return Ok(());
+                }
+            }
             let index = state.next;
             state.next = index.checked_add(1).ok_or_else(|| {
                 Arc::new(PortError::Storage(StorageError::Integrity(
@@ -96,6 +123,7 @@ impl ReadSet {
             state.sessions.insert(Some(workspace), None);
             index
         };
+        self.counts.readers_opened.fetch_add(1, Ordering::Relaxed);
         let result = (self.factory)(index).and_then(|reader| {
             if reader.storage.policy() != self.policy {
                 return Err(StorageError::Integrity("Workspace reader policy"));
@@ -170,14 +198,20 @@ impl ReadSet {
             .state
             .lock()
             .map_err(|_| Arc::new(PortError::Poisoned))?;
+        let pooled = state.pooled.remove(&workspace);
         if let Some(session) = state.sessions.get(&Some(workspace)).and_then(Clone::clone) {
-            session.close()?;
+            let reader = session.release()?;
             state.retired_requests = state
                 .retired_requests
                 .saturating_add(session.requests.load(Ordering::Relaxed));
             state.retired_wait_ns = state
                 .retired_wait_ns
                 .saturating_add(session.wait_ns.load(Ordering::Relaxed));
+            if let Some(reader) = reader.filter(|_| pooled) {
+                if !state.stopping && state.idle.len() < IDLE_READERS {
+                    state.idle.push((session.index, reader));
+                }
+            }
         }
         if let Some((_, cause)) = state.opening_failures.get(&workspace) {
             return Err(cause.clone());
@@ -262,6 +296,7 @@ impl ReadSet {
                 return;
             }
             state.stopping = true;
+            state.idle.clear();
         }
         let sessions = self.sessions();
         for session in &sessions {

@@ -12,6 +12,7 @@
 //! bounds, there is no answer and the caller names the inodes by the
 //! breadth-first walk; a stale or absent hint never changes a name.
 
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::rc::Rc;
 
@@ -19,7 +20,8 @@ use crate::compare::tree::TreeTable;
 use crate::compare::BindingHints;
 use crate::error::ContentResult;
 use crate::filesystem::path::PathName;
-use crate::object::AuthenticatedObjects;
+use crate::object::{AuthenticatedObjects, ObjectId};
+use layerfs_telemetry::timer::TimingScope;
 
 /// Components beyond which a climb gives up.
 const DEPTH: usize = 4096;
@@ -29,6 +31,50 @@ const PATHS: usize = 1024;
 /// One inode's paths, each as its components from the root.
 type Paths = Rc<Vec<Vec<PathName>>>;
 
+/// What naming from recorded bindings did, summed over its calls (#352).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct NamingWork {
+    /// Inodes asked for.
+    pub inodes: u64,
+    /// Distinct inodes climbed: those asked for and their ancestors.
+    pub climbed: u64,
+    /// Recorded-binding reads, one per inode climbed.
+    pub bindings: u64,
+    /// Object read demands the climbs made of the reader.
+    pub reads: u64,
+}
+
+impl NamingWork {
+    /// Adds `other` to these totals.
+    pub fn add(&mut self, other: &Self) {
+        self.inodes += other.inodes;
+        self.climbed += other.climbed;
+        self.bindings += other.bindings;
+        self.reads += other.reads;
+    }
+}
+
+/// Counts the object read demands a climb makes; the bytes are the reader's.
+struct Counted<'r> {
+    inner: &'r dyn AuthenticatedObjects,
+    reads: Cell<u64>,
+}
+
+impl AuthenticatedObjects for Counted<'_> {
+    fn read_canonical_batch(&self, ids: &[ObjectId]) -> ContentResult<Vec<Vec<u8>>> {
+        self.reads.set(self.reads.get() + 1);
+        self.inner.read_canonical_batch(ids)
+    }
+    fn read_canonical_batch_scoped(
+        &self,
+        ids: &[ObjectId],
+        scope: TimingScope<'_>,
+    ) -> ContentResult<Vec<Vec<u8>>> {
+        self.reads.set(self.reads.get() + 1);
+        self.inner.read_canonical_batch_scoped(ids, scope)
+    }
+}
+
 /// Climbs one tree's recorded bindings; each inode's paths are found once.
 struct Climb<'r> {
     reader: &'r dyn AuthenticatedObjects,
@@ -36,6 +82,7 @@ struct Climb<'r> {
     tree: &'r TreeTable,
     /// Paths per inode; `None` when an inode cannot be named completely.
     paths: HashMap<u64, Option<Paths>>,
+    bindings: u64,
 }
 
 impl Climb<'_> {
@@ -61,6 +108,7 @@ impl Climb<'_> {
             return Ok(None);
         };
         let mut checked = BTreeSet::new();
+        self.bindings += 1;
         for (parent, name) in self.hints.bindings_of(serial)? {
             if self.tree.lookup(self.reader, parent, &name)? == Some(serial) {
                 checked.insert((parent, name));
@@ -90,19 +138,40 @@ impl Climb<'_> {
 /// The path [`locate`](crate::compare::tree::locate) would give each wanted
 /// inode in `tree`, found from `hints` with work that follows the wanted
 /// inodes times their depth; `None` when one of them cannot be named
-/// completely from `hints` (the caller then uses `locate`).
+/// completely from `hints` (the caller then uses `locate`). `work` gains what
+/// this call did, whether or not it answers.
 pub fn name_from_hints(
     reader: &dyn AuthenticatedObjects,
     hints: &dyn BindingHints,
     tree: &TreeTable,
     wanted: &BTreeSet<u64>,
+    work: &mut NamingWork,
 ) -> ContentResult<Option<BTreeMap<u64, String>>> {
+    let counted = Counted {
+        inner: reader,
+        reads: Cell::new(0),
+    };
     let mut climb = Climb {
-        reader,
+        reader: &counted,
         hints,
         tree,
         paths: HashMap::new(),
+        bindings: 0,
     };
+    let named = name_all(&mut climb, wanted);
+    work.add(&NamingWork {
+        inodes: wanted.len() as u64,
+        climbed: climb.paths.len() as u64,
+        bindings: climb.bindings,
+        reads: counted.reads.get(),
+    });
+    named
+}
+
+fn name_all(
+    climb: &mut Climb<'_>,
+    wanted: &BTreeSet<u64>,
+) -> ContentResult<Option<BTreeMap<u64, String>>> {
     let mut named = BTreeMap::new();
     for serial in wanted {
         let Some(paths) = climb.paths(*serial, 0)? else {

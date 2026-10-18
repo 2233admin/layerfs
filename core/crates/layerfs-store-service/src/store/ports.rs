@@ -180,6 +180,27 @@ impl FileLengths for StorePorts {
 }
 impl InodeSerials for StorePorts {
     fn reserve(&self, count: u64) -> WorkspaceResult<(u64, u64)> {
+        self.reserve_block(count, count)
+    }
+}
+/// Serials one catalog reservation takes for the Store's pool (#352 F-025
+/// fix 4): an SDK file call the pool can serve opens no writer transaction.
+const POOL_BLOCK: u64 = 4096;
+impl StorePorts {
+    /// `count` serials of this scope for an SDK file call: from the Store's
+    /// pool when it holds them (memory only), else one catalog reservation of
+    /// `POOL_BLOCK`, whose rest becomes the pool. Mounted Workspaces keep
+    /// their own windows ([`InodeSerials::reserve`]). One attempt; serials
+    /// stay consumed whether used or not, as every reservation's do.
+    pub fn reserve_pooled(&self, count: u64) -> WorkspaceResult<(u64, u64)> {
+        if let Some(range) = self.store.pooled_serials(self.scope, count) {
+            return Ok(range);
+        }
+        self.reserve_block(count, count.max(POOL_BLOCK))
+    }
+    /// One catalog reservation of `block` serials; the first `count` are the
+    /// answer and any rest becomes the Store's pool for this scope.
+    fn reserve_block(&self, count: u64, block: u64) -> WorkspaceResult<(u64, u64)> {
         self.attempt(|| {
             self.store.counts.serials.fetch_add(1, Ordering::Relaxed);
             let range = self
@@ -187,18 +208,22 @@ impl InodeSerials for StorePorts {
                 .history
                 .reserve_inodes(&ReserveRequest {
                     scope: self.scope,
-                    count,
+                    count: block,
                 })
                 .map_err(|error| Arc::new(PortError::History(error)))?;
-            if range.scope != self.scope || range.count != count {
+            if range.scope != self.scope || range.count != block {
                 return Err(Arc::new(PortError::History(HistoryError::Integrity(
                     "inode reservation identity",
                 ))));
             }
-            range
+            let end = range
                 .end()
                 .map_err(|error| Arc::new(PortError::History(error)))?;
-            Ok((range.start, range.count))
+            if block > count {
+                self.store
+                    .pool_serials(self.scope, range.start + count, end);
+            }
+            Ok((range.start, count))
         })
         .map_err(|e| WorkspaceError::Service(Box::new(e)))
     }

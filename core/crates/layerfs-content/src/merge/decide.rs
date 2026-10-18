@@ -18,7 +18,7 @@ use super::text::{deletion_markers, merge3, Hunk};
 use super::{Conflict, ConflictKind, LwwDecision};
 use crate::compare::text::{as_text, MAXIMUM_TEXT_BYTES};
 use crate::compare::tree::{binding_changes, join, locate, subtree, EntryFacts, TreeTable};
-use crate::compare::{BindingHints, DifferenceWork};
+use crate::compare::{BindingHints, DifferenceWork, NamingWork};
 use crate::error::{ContentError, ContentResult};
 use crate::filesystem::attributes::{read_portable, AttributeReadWork};
 use crate::filesystem::directory::read::lookup;
@@ -134,35 +134,49 @@ pub(super) fn candidates(
     resolver: &Resolver<'_>,
     hints: Option<&dyn BindingHints>,
     work: &mut DifferenceWork,
+    naming: &mut NamingWork,
+    timing: &TimingScope<'_, Active>,
 ) -> ContentResult<(BTreeSet<String>, bool)> {
     let reader = resolver.reader;
     let [base, ours, _] = resolver.trees;
     let mut changed = Vec::new();
-    crate::compare::tree::inode_changes(reader, &base, &ours, work, |serial, b, o| {
-        if let (Some(b), Some(o)) = (b, o) {
-            changed.push((serial, *b, *o));
-        }
-        Ok(())
+    timing.child("merge.changes").run(|_| {
+        crate::compare::tree::inode_changes(reader, &base, &ours, work, |serial, b, o| {
+            if let (Some(b), Some(o)) = (b, o) {
+                changed.push((serial, *b, *o));
+            }
+            Ok(())
+        })
     })?;
     let wanted = changed
         .iter()
         .map(|(serial, _, _)| *serial)
         .collect::<BTreeSet<_>>();
+    // The trace shows which naming ran: `merge.named` (recorded bindings),
+    // and `merge.locate` only when they could not name every inode (#352).
     let hinted = match hints {
-        Some(hints) => match crate::compare::name_from_hints(reader, hints, &ours, &wanted)? {
-            Some(in_ours) => crate::compare::name_from_hints(reader, hints, &base, &wanted)?
-                .map(|in_base| (in_ours, in_base)),
-            None => None,
-        },
+        Some(hints) => timing.child("merge.named").run(|_| {
+            Ok::<_, ContentError>(
+                match crate::compare::name_from_hints(reader, hints, &ours, &wanted, naming)? {
+                    Some(in_ours) => {
+                        crate::compare::name_from_hints(reader, hints, &base, &wanted, naming)?
+                            .map(|in_base| (in_ours, in_base))
+                    }
+                    None => None,
+                },
+            )
+        })?,
         None => None,
     };
     let named = hinted.is_some();
     let (in_ours, in_base) = match hinted {
         Some(found) => found,
-        None => (
-            locate(reader, &ours, &wanted, MAXIMUM_MERGE_PATHS)?,
-            locate(reader, &base, &wanted, MAXIMUM_MERGE_PATHS)?,
-        ),
+        None => timing.child("merge.locate").run(|_| {
+            Ok::<_, ContentError>((
+                locate(reader, &ours, &wanted, MAXIMUM_MERGE_PATHS)?,
+                locate(reader, &base, &wanted, MAXIMUM_MERGE_PATHS)?,
+            ))
+        })?,
     };
     if in_ours.len() < wanted.len() || in_base.len() < wanted.len() {
         return Err(capacity("merge.locate", MAXIMUM_MERGE_PATHS));

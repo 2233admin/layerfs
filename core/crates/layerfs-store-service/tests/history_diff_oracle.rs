@@ -297,7 +297,8 @@ fn named_alike(
     let hints = CatalogHints::new(fixture.service.store.history());
     for tree in &trees {
         let walked = locate(reader, tree, &wanted, usize::MAX).unwrap();
-        let hinted = name_from_hints(reader, &hints, tree, &wanted).unwrap();
+        let hinted =
+            name_from_hints(reader, &hints, tree, &wanted, &mut Default::default()).unwrap();
         assert_eq!(
             hinted.as_ref(),
             Some(&walked),

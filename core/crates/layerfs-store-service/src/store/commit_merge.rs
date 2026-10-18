@@ -124,7 +124,10 @@ impl BoundWorkspace {
             merge_roots(save, &mut save.sink(), &input, &mut fresh, timing)
         });
         let merged = match (merged, refused) {
-            (Ok(merged), _) => merged,
+            (Ok(merged), _) => {
+                self.store.note_merge(&merged);
+                merged
+            }
             (Err(_), Some(error)) => return Err(CommitError::Workspace(error)),
             (Err(_), None) if hints.failure.borrow().is_some() => {
                 let error = hints.failure.take().expect("checked failure");

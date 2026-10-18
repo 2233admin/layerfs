@@ -109,6 +109,8 @@ pub struct MergeOutcome {
     pub work: DifferenceWork,
     /// True when recorded bindings named the changed inodes.
     pub hinted: bool,
+    /// What naming from recorded bindings did, on both sides.
+    pub naming: crate::compare::NamingWork,
 }
 
 impl MergeOutcome {

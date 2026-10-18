@@ -392,6 +392,7 @@ pub fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
         Some(failure) => history(failure),
         None => args::content(error),
     })?;
+    store.note_merge(&merged);
     let lww = layerfs_bridge::sdk_values::lww(&merged.lww);
     if !merged.clean() {
         // Nothing is created: the unfinished Save is dropped.

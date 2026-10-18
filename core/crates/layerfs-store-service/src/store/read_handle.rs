@@ -143,12 +143,16 @@ impl ReadSession {
         self.attempt(|handle, _| lookup(handle.history.as_ref()).map_err(PortError::History))
     }
     pub fn close(&self) -> Result<(), Arc<PortError>> {
+        self.release().map(drop)
+    }
+    /// Closes this session and hands back its reader, which served without
+    /// a failure; a failed or poisoned session keeps its cause and gives none.
+    pub fn release(&self) -> Result<Option<StoreReader>, Arc<PortError>> {
         let mut state = self.lock()?;
         if let Some(cause) = self.failure.get() {
             return Err(cause.clone());
         }
-        state.reader = None;
-        Ok(())
+        Ok(state.reader.take())
     }
     pub fn quarantined(&self) -> bool {
         self.failure.get().is_some() || self.state.is_poisoned()
