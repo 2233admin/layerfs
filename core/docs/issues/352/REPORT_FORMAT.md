@@ -282,7 +282,10 @@ overhead; the per-source rows keep tracked overhead visible; head cost separates
 the floor from history; the per-change figures expose waste without the drift.
 
 Range 011 in this shape (sealed snapshot): Store on disk 32.8 MiB on a 7.7 MiB
-latest version (tracked only) = **4.25× = content 1.10 + metadata 1.35 + index
-rows 1.07 + waste 0.69 + other 0.04**; stored per byte changed 1.78 (content
-0.78, metadata 1.00); stored per Commit 6.8 KiB.
+latest version (tracked only) = **4.26× = content 1.10 + metadata 1.35 + index
+rows 0.98 + waste 0.82 + other 0.01** (exact parts from the sealed file,
+STORAGE_STUDY.md §2; an earlier rough split here said index 1.07, waste 0.69);
+stored per byte changed 1.78 (content 0.78, metadata 1.00); stored per Commit
+6.8 KiB. Expected ranges per part and per Commit, and defect signatures:
+[STORAGE_STUDY.md](STORAGE_STUDY.md).
 
