@@ -1,10 +1,12 @@
 //! Name bindings a new saved tree adds, recorded as path hints for readers
 //! (the daemon's Commit and merge; host Init records its own tree's).
 use super::commit_types::CommitError;
-use layerfs_content::compare::{new_bindings, TreeTable};
+use layerfs_content::compare::{new_bindings, BindingHints, TreeTable};
+use layerfs_content::filesystem::path::PathName;
 use layerfs_content::filesystem::FilesystemRootId;
-use layerfs_content::{AuthenticatedObjects, ContentError};
-use layerfs_history::{BindingHint, HistoryCatalog};
+use layerfs_content::{AuthenticatedObjects, ContentError, ContentResult};
+use layerfs_history::{BindingHint, HistoryCatalog, HistoryError};
+use std::cell::RefCell;
 
 /// Rows one hint write transaction carries.
 const BATCH: usize = 4096;
@@ -52,4 +54,39 @@ pub fn record_new_bindings(
         recorded += rows.len() as u64;
     }
     Ok(recorded)
+}
+
+/// The History catalog's recorded bindings, as Content's hint port; a
+/// catalog failure is kept to answer with its own cause.
+pub struct CatalogHints<'a> {
+    catalog: &'a dyn HistoryCatalog,
+    /// The catalog failure that ended a lookup, if any.
+    pub failure: RefCell<Option<HistoryError>>,
+}
+
+impl<'a> CatalogHints<'a> {
+    /// Hints read from `catalog`.
+    pub fn new(catalog: &'a dyn HistoryCatalog) -> Self {
+        Self {
+            catalog,
+            failure: RefCell::new(None),
+        }
+    }
+}
+
+impl BindingHints for CatalogHints<'_> {
+    fn bindings_of(&self, child: u64) -> ContentResult<Vec<(u64, PathName)>> {
+        match self.catalog.bindings_of(child) {
+            Ok(rows) => Ok(rows
+                .into_iter()
+                .filter_map(|row| Some((row.parent, PathName::from_bytes(&row.name).ok()?)))
+                .collect()),
+            Err(error) => {
+                *self.failure.borrow_mut() = Some(error);
+                Err(ContentError::ProviderFailure {
+                    what: "binding hints",
+                })
+            }
+        }
+    }
 }

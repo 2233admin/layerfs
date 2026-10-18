@@ -6,6 +6,12 @@
 //! with `branch.diff_commits` and against an in-test walk of both whole trees
 //! (the walk the daemon used before). Each saved tree's every binding must be
 //! among the recorded hints, or the change walk could miss a path.
+//!
+//! #352 F-025 fix 1: a merge names its changed inodes from those hints
+//! (`name_from_hints`) instead of the breadth-first `locate`. For every compared
+//! pair, every inode changed on both sides gets the same name from the hints as
+//! from `locate`, in both trees, so a merge's candidate paths, and with them its
+//! picks, conflicts and merged root, are unchanged.
 #[path = "support/installed_store.rs"]
 #[allow(dead_code)]
 mod installed;
@@ -14,11 +20,14 @@ mod installed;
 mod support;
 
 use layerfs_bridge::control::SdkValue;
-use layerfs_content::compare::{list_directory, EntryFacts, TreeTable};
+use layerfs_content::compare::{
+    inode_changes, list_directory, locate, name_from_hints, DifferenceWork, EntryFacts, TreeTable,
+};
 use layerfs_content::filesystem::FilesystemRootId;
 use layerfs_content::object::inode_leaf::InodeKind;
 use layerfs_content::{AuthenticatedObjects, ObjectId};
 use layerfs_history::LayerStackId;
+use layerfs_store_service::store::CatalogHints;
 use std::collections::BTreeSet;
 use std::fs;
 use support::{items, operation, write, Fixture};
@@ -262,6 +271,42 @@ fn listed(fixture: &Fixture, from: &str, to: &str, page: i64) -> (Vec<String>, O
     }
 }
 
+/// Every inode changed on both sides of `from` -> `to` is named alike by the
+/// hints and by the breadth-first walk, in each tree; returns how many.
+fn named_alike(
+    fixture: &Fixture,
+    reader: &dyn AuthenticatedObjects,
+    from: ObjectId,
+    to: ObjectId,
+) -> usize {
+    let trees = [from, to].map(|root| TreeTable::open(reader, FilesystemRootId(root)).unwrap());
+    let mut wanted = BTreeSet::new();
+    inode_changes(
+        reader,
+        &trees[0],
+        &trees[1],
+        &mut DifferenceWork::default(),
+        |serial, b, a| {
+            if b.is_some() && a.is_some() {
+                wanted.insert(serial);
+            }
+            Ok(())
+        },
+    )
+    .unwrap();
+    let hints = CatalogHints::new(fixture.service.store.history());
+    for tree in &trees {
+        let walked = locate(reader, tree, &wanted, usize::MAX).unwrap();
+        let hinted = name_from_hints(reader, &hints, tree, &wanted).unwrap();
+        assert_eq!(
+            hinted.as_ref(),
+            Some(&walked),
+            "hints name {wanted:?} unlike the walk"
+        );
+    }
+    wanted.len()
+}
+
 /// Every binding of `root` must be a recorded hint.
 fn recorded(fixture: &Fixture, reader: &dyn AuthenticatedObjects, root: ObjectId) {
     let tree = TreeTable::open(reader, FilesystemRootId(root)).unwrap();
@@ -358,7 +403,7 @@ fn change_walk_equals_the_full_walk() {
             let reply = fixture.apply(&branch, ops);
             heads.push(reply.get_text("head").unwrap().to_owned());
         }
-        let mut compared = (0, 0);
+        let mut compared = (0, 0, 0);
         for i in 0..heads.len() {
             let j = if i % 3 == 0 {
                 rng.below(heads.len())
@@ -369,6 +414,7 @@ fn change_walk_equals_the_full_walk() {
             let (daemon, from, to) = listed(&fixture, &heads[i], &heads[j], page);
             let oracle = walked(&*reader, from, to);
             assert_eq!(daemon, oracle, "seed {seed}: diff {i} -> {j}");
+            compared.2 += named_alike(&fixture, &*reader, from, to);
             compared.0 += 1;
             compared.1 += daemon.len();
             if i % 10 == 0 {
@@ -376,8 +422,8 @@ fn change_walk_equals_the_full_walk() {
             }
         }
         println!(
-            "DIFF_ORACLE seed={seed} diffs={} entries={} profile=Disposable",
-            compared.0, compared.1
+            "DIFF_ORACLE seed={seed} diffs={} entries={} named_alike={} profile=Disposable",
+            compared.0, compared.1, compared.2
         );
         drop(reader);
         fixture.cleanup();

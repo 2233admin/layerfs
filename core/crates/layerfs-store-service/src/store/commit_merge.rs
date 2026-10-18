@@ -109,6 +109,7 @@ impl BoundWorkspace {
         };
         let policy = self.store.policy().construction();
         let capacities = policy.capacities();
+        let hints = super::CatalogHints::new(&*self.store.history);
         let input = MergeInput {
             base: FilesystemRootId(bound.effective_root),
             ours: candidate,
@@ -117,6 +118,7 @@ impl BoundWorkspace {
             rules_from: RulesFrom::Theirs,
             policy,
             capacities: &capacities,
+            hints: Some(&hints),
         };
         let merged = crate::telemetry::timed("merge", |timing| {
             merge_roots(save, &mut save.sink(), &input, &mut fresh, timing)
@@ -124,6 +126,10 @@ impl BoundWorkspace {
         let merged = match (merged, refused) {
             (Ok(merged), _) => merged,
             (Err(_), Some(error)) => return Err(CommitError::Workspace(error)),
+            (Err(_), None) if hints.failure.borrow().is_some() => {
+                let error = hints.failure.take().expect("checked failure");
+                return Err(CommitError::History(error));
+            }
             (Err(error), None) => return Err(content(error)),
         };
         let written = if merged.clean() {

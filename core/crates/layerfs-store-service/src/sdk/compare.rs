@@ -10,18 +10,14 @@ use super::args::{self, invalid, refuse, text, Answer};
 use super::files::path as checked;
 use super::reads::REPLY_BUDGET;
 use super::snapshot::{self, answer, existing, kind_name, Kind, Snap};
-use crate::store::{Store, StorePorts};
+use crate::store::{CatalogHints, Store, StorePorts};
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use layerfs_content::compare::{
-    line_diff, BindingHints, ChangeKind, ChangeWalk, DiffLine, EntryFacts, LineOp, Memo,
-    PathChange, Plan,
+    line_diff, ChangeKind, ChangeWalk, DiffLine, EntryFacts, LineOp, Memo, PathChange, Plan,
 };
 use layerfs_content::filesystem::path::PathName;
 use layerfs_content::object::inode_leaf::InodeKind;
-use layerfs_content::{ContentError, ContentResult};
 use layerfs_history::LayerStackRecord;
-use layerfs_history::{HistoryCatalog, HistoryError};
-use std::cell::RefCell;
 use std::sync::Arc;
 
 /// Budget one listed change costs besides its path and lines.
@@ -181,30 +177,6 @@ fn change(
     ])))
 }
 
-/// The History catalog's recorded bindings, as Content's hint port; a
-/// catalog failure is kept to answer with its own cause.
-struct CatalogHints<'a> {
-    catalog: &'a dyn HistoryCatalog,
-    failure: RefCell<Option<HistoryError>>,
-}
-
-impl BindingHints for CatalogHints<'_> {
-    fn bindings_of(&self, child: u64) -> ContentResult<Vec<(u64, PathName)>> {
-        match self.catalog.bindings_of(child) {
-            Ok(rows) => Ok(rows
-                .into_iter()
-                .filter_map(|row| Some((row.parent, PathName::from_bytes(&row.name).ok()?)))
-                .collect()),
-            Err(error) => {
-                *self.failure.borrow_mut() = Some(error);
-                Err(ContentError::ProviderFailure {
-                    what: "binding hints",
-                })
-            }
-        }
-    }
-}
-
 /// Where a page starts and what it lists: the caller's offset or its cursor
 /// (the last path an earlier page listed), and whether line hunks are wanted.
 struct Request {
@@ -264,10 +236,7 @@ fn changes(
         };
         return Ok((Vec::new(), done));
     }
-    let hints = CatalogHints {
-        catalog: store.history(),
-        failure: RefCell::new(None),
-    };
+    let hints = CatalogHints::new(store.history());
     // One memo for the page: lookups share the B-trees' upper pages.
     let memo = Memo::new(reader);
     let key = (left.root, right.root);
