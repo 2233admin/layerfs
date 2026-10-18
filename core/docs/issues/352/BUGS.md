@@ -454,3 +454,14 @@
   the lead places it. GitHub #357,
   [fixes/015-pre-f042-exec-base-reads.md](fixes/015-pre-f042-exec-base-reads.md).
   Builds on #356's cache change and #354's read-path work.
+
+- **F-043 · the replay runner's process holds 1.5–1.9 GB of native memory
+  (product, SDK in-process Store/addon; builder dev ranges, 2026-10-18).**
+  Peak RSS per fast dev range (dev352-p3p): 1,874 MB (r015), 1,712 MB (r016),
+  1,548 MB (r017), still resident at range end. JS heap 16–52 MB used and
+  Buffers 17–39 MB, so over 1.4 GB is native: the SDK's in-process Store
+  (F-020 direct route) and addon, not tool data. It caused the dev352-p3j OOM
+  kill (Docker VM 4.0 GB; kernel "Killed process … anon-rss 1,251,740 kB").
+  Next diagnosis: a heap profile of the native addon (which allocator, which
+  caches, whether it grows with calls or Stores). No owner assigned; the
+  owner assigns.
