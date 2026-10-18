@@ -107,16 +107,20 @@ pointed at this file and the records.
 **Builder:**
 1. P3 development checks (`040170cb3`, `a0a159a8d`): clean-reinstall metadata,
    `tsc -b` remount; one dev range with INSTALLS.
-2. F-031 revised (`.git` from P3), with its dev-range measurements (Store growth
+2. Sandbox pool from P3: 4 shared Sandboxes, agent aN on pool[(N−1) mod 4]
+   (SCRIPTS.md, RESULTS 2026-10-18). P2 played one Sandbox and daemon per
+   agent, contrary to SPEC §2. Prove it on the P3 dev range with concurrent
+   mounts in one Sandbox.
+3. F-031 revised (`.git` from P3), with its dev-range measurements (Store growth
    per git commit split into index, loose objects, packs; wall time added).
-3. Metrics the P2 close found missing: per-Commit lane hold and uncontended
+4. Metrics the P2 close found missing: per-Commit lane hold and uncontended
    `wait.writer` in range metrics (needed for DEFER D-1/D-2's triggers), and
    daemon RSS per daemon (max, median) with a one-time `smaps` breakdown,
    instead of the sum over all Sandboxes (RESULTS P2).
-4. Calibrate ranges 30–50 before P4.
+5. Calibrate ranges 30–50 before P4.
 
-**Entry criteria for measured P3 (range 15):** F-025 fix 1 proven; F-027 items
-1–3 merged; F-031 implemented and its dev range clean; P3 dev checks pass; then
+**Entry criteria for measured P3 (range 15):** F-025 fix 1 proven; F-029 merged
+(shared Sandboxes depend on it); F-027 items 1–3 merged; the 4-Sandbox pool; F-031 implemented and its dev range clean; P3 dev checks pass; then
 one P3 re-baseline (`run.mjs rebaseline --phase p3`) on the final binaries, with
 `.git` in place. Ranges 15–29 (SPEC §9).
 

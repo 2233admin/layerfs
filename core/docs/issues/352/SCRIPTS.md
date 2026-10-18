@@ -305,6 +305,14 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   agent has its own client (Store calls through the run's service Sandbox) so
   trace labels never mix; every call is recorded (`lib.mjs record`) and its
   trace label is `<step>#<seq>`, which joins the trace line to its record.
+- **Superseded from P3 (lead, 2026-10-18, after the owner asked why there are so
+  many daemons):** a small shared pool of 4 Sandboxes, each holding Workspaces
+  of agents from different lanes. Agent aN uses pool[(N−1) mod 4], and lanes'
+  agents are consecutive, so every Sandbox mixes Branches. Several agents mount,
+  exec and unmount concurrently in one Sandbox (F-009 fixed). This matches SPEC
+  §2 (4–8 Sandboxes, each holding many Workspaces). Ranges 5–14 keep their
+  recorded shape: 10–11 Sandboxes and daemons, one per agent. The earlier rule
+  follows.
 - **One Sandbox per agent** (at least 4), created once by the lead, kept
   across ranges until a seal. Two concurrent unmounts of different Workspaces
   in one Sandbox failed "Workspace absent" on daemon `511dceed` (dev run,

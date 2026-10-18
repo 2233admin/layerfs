@@ -44,7 +44,7 @@ bare clone of `https://github.com/deepseek-ai/deepseek-harness` at
 | Ranges | 202 (P0), each 30–100 dsh commits (target 60), ending at a mainline commit |
 | Lanes per range | 2–4 LayerFS Branches, each grouping side branches by repository area |
 | Agents | 5–10 plus a lead; always more agents than lanes, several per lane |
-| Sandboxes | 4–8, long-lived; each holds many Workspaces |
+| Sandboxes | 4–8, long-lived; each holds many Workspaces of agents from different lanes (P2 played one per agent, 10–11; corrected to a shared pool of 4 from P3, SCRIPTS.md) |
 | Workspaces per range | ~50–100, at least 70% one-shot (mount → exec → commit → unmount) |
 | fs : Sandbox file mutations | 9 : 1 |
 | LayerFS Commits | ~249k in total (P0), one per fs mutation, Sandbox Commit, merge and reconcile write |
