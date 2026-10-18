@@ -13,7 +13,7 @@ pub const LINES: usize = 2000;
 /// The window a NUL or invalid UTF-8 is found in: the scan stops at the same
 /// window boundary as the window-at-a-time scan it replaced (#352 F-035).
 const WINDOW: u64 = 16 * 1024;
-/// Bytes of a chunked file read at once: whole windows.
+/// Bytes of text handed on at once from a chunked file's read pass.
 const BLOCK: u64 = 16 * WINDOW;
 
 /// One logical LF-delimited line. A final LF belongs to this line, not a new one.
@@ -95,6 +95,10 @@ fn skip(bytes: &[u8], count: u64) -> Result<usize, u64> {
 /// A NUL or invalid UTF-8 ends the text at the start of the window it is
 /// found in, as the window-at-a-time scan did, and the scan then fails
 /// `Binary` unless `visit` stopped it first. A part may end inside a line.
+///
+/// A chunked file is read in one pass, so each chunk is decoded once and
+/// the mapping walked once; its text is handed on in parts of about
+/// [`BLOCK`] bytes as the pass delivers it, and stopping ends the pass.
 pub(super) fn texts(
     reader: &StorePorts,
     entry: &EntryFacts,
@@ -111,7 +115,7 @@ pub(super) fn texts(
             layerfs_bridge::control::SdkValue::Null,
         ));
     }
-    // The root is read and classified once; each block reads only its part.
+    // The root is read and classified once.
     let view = crate::telemetry::timed("sdk.lines", |timing| {
         layerfs_content::file::FileView::open(
             reader,
@@ -121,70 +125,110 @@ pub(super) fn texts(
     })
     .map_err(args::content)?;
     let size = view.logical_len();
-    // A whole-file payload is already in memory: one block, nothing copied.
+    // A whole-file payload is already in memory: one part, nothing copied.
     if let Some(payload) = view.whole_file_bytes().map_err(args::content)? {
-        let (text, bad) = checked(payload, 0, 0, size);
+        let (text, bad) = checked(payload, 0, size, true);
         return if !visit(text)? || !bad {
             Ok(())
         } else {
             Err(binary())
         };
     }
-    let (mut buffer, mut offset) = (Vec::new(), 0);
-    while offset < size {
-        let end = size.min(offset + BLOCK);
-        let carried = buffer.len();
-        let read = crate::telemetry::timed("sdk.lines", |timing| {
-            timing
-                .child("content.read")
-                .run(|scope| view.read_range(reader, offset..end, &mut buffer, scope))
-        });
-        read.map_err(args::content)?;
-        let (text, bad) = checked(&buffer, carried, offset, size);
-        let valid = text.len();
-        if !visit(text)? {
-            return Ok(());
-        }
-        if bad {
-            return Err(binary());
-        }
-        buffer.drain(..valid);
-        offset = end;
+    let mut feed = Feed {
+        pending: Vec::new(),
+        from: 0,
+        size,
+        visit: &mut visit,
+        end: None,
+    };
+    // The pass's time includes the scan of what it delivers.
+    let read = crate::telemetry::timed("sdk.lines", |timing| {
+        timing
+            .child("content.read")
+            .run(|scope| view.read_range(reader, 0..size, &mut feed, scope))
+    });
+    if let Some(end) = feed.end.take() {
+        return end;
     }
-    Ok(())
+    read.map_err(args::content)?;
+    feed.deliver(true);
+    feed.end.unwrap_or(Ok(()))
 }
 
-/// The valid text of `buffer` (`carried` bytes left over from before `base`,
-/// then the block at `base`) and whether a NUL or invalid UTF-8 ends it. The
-/// rest of a good block is an incomplete character, carried to the next.
+/// The sink of a file's single read pass: bytes not yet handed on, from file
+/// offset `from`, and how the scan ended when it ended early.
+struct Feed<'v> {
+    pending: Vec<u8>,
+    from: u64,
+    size: u64,
+    visit: &'v mut dyn FnMut(&str) -> Result<bool, SdkRefusal>,
+    end: Option<Result<(), SdkRefusal>>,
+}
+
+impl Feed<'_> {
+    /// Hands on the checked text; false, with `end` set, when the scan ends.
+    fn deliver(&mut self, last: bool) -> bool {
+        let (text, bad) = checked(&self.pending, self.from, self.size, last);
+        let length = text.len();
+        match (self.visit)(text) {
+            Err(refusal) => self.end = Some(Err(refusal)),
+            Ok(false) => self.end = Some(Ok(())),
+            Ok(true) if bad => self.end = Some(Err(binary())),
+            Ok(true) => {
+                self.pending.drain(..length);
+                self.from += length as u64;
+                return true;
+            }
+        }
+        false
+    }
+}
+
+impl std::io::Write for Feed<'_> {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.pending.extend_from_slice(bytes);
+        if self.pending.len() as u64 >= BLOCK && !self.deliver(false) {
+            // Ends the read pass; `end` says why.
+            return Err(std::io::Error::other("scan ended"));
+        }
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// The text of `bytes`, which start at file offset `from` on a character
+/// boundary, that may be handed on, and whether a NUL or invalid UTF-8 ends
+/// the scan after it. `last` when `bytes` reach the file's end.
 ///
 /// The window-at-a-time scan failed in the first window holding a NUL, or
 /// whose text so far was decisively invalid UTF-8, or, for a character left
-/// incomplete, the file's last window. The text ends where that window starts.
-fn checked(buffer: &[u8], carried: usize, base: u64, size: u64) -> (&str, bool) {
-    // A buffer position's window; carried bytes count with the block's first.
-    let window = |at: usize| (base + at.saturating_sub(carried) as u64) / WINDOW;
-    let start = |w: u64| (w * WINDOW - base) as usize + carried;
+/// incomplete, the file's last window; the text ends where that window
+/// starts. Otherwise text is handed on only through the last whole window,
+/// since a NUL later in a window fails it.
+fn checked(bytes: &[u8], from: u64, size: u64, last: bool) -> (&str, bool) {
+    let window = |at: usize| (from + at as u64) / WINDOW;
+    let start = |w: u64| (w * WINDOW).saturating_sub(from) as usize;
     // `contains` searches a whole slice at once; most text has no NUL.
-    let block = &buffer[carried..];
-    let mut bad = block
+    let mut bad = bytes
         .contains(&0)
-        .then(|| block.iter().position(|&byte| byte == 0))
+        .then(|| bytes.iter().position(|&byte| byte == 0))
         .flatten()
-        .map(|at| window(carried + at));
-    let (text, valid) = match std::str::from_utf8(buffer) {
-        Ok(text) => (Some(text), buffer.len()),
+        .map(window);
+    let (text, valid) = match std::str::from_utf8(bytes) {
+        Ok(text) => (Some(text), bytes.len()),
         Err(error) => {
             let at = error.valid_up_to();
             let found = match error.error_len() {
-                None if base + ((buffer.len() - carried) as u64) < size => None,
+                None if !last => None,
                 None => Some((size - 1) / WINDOW),
                 // Decided in the window holding the sequence's start, or else
                 // by its next byte, the first of the next window.
                 Some(_) => {
                     let w = window(at);
-                    let end = start(w + 1).min(buffer.len());
-                    match std::str::from_utf8(&buffer[at..end]) {
+                    let end = start(w + 1).min(bytes.len());
+                    match std::str::from_utf8(&bytes[at..end]) {
                         Err(error) if error.error_len().is_some() => Some(w),
                         _ => Some(w + 1),
                     }
@@ -196,15 +240,26 @@ fn checked(buffer: &[u8], carried: usize, base: u64, size: u64) -> (&str, bool) 
             (None, at)
         }
     };
-    if let (Some(text), None) = (text, bad) {
-        return (text, false);
+    let end = match bad {
+        Some(w) => start(w),
+        None if last => bytes.len(),
+        None => start(window(bytes.len())),
     }
-    let valid = bad.map_or(valid, |w| valid.min(start(w)));
+    .min(valid);
     // The text stops at a character boundary; what lies past it up to the
     // failing window holds no LF, so no reported line is lost.
-    let text = match std::str::from_utf8(&buffer[..valid]) {
-        Ok(text) => text,
-        Err(error) => std::str::from_utf8(&buffer[..error.valid_up_to()]).unwrap_or_default(),
+    let text = match text {
+        Some(text) => {
+            let mut end = end;
+            while !text.is_char_boundary(end) {
+                end -= 1;
+            }
+            &text[..end]
+        }
+        None => match std::str::from_utf8(&bytes[..end]) {
+            Ok(text) => text,
+            Err(error) => std::str::from_utf8(&bytes[..error.valid_up_to()]).unwrap_or_default(),
+        },
     };
     (text, bad.is_some())
 }

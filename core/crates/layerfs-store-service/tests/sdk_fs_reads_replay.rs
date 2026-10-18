@@ -402,36 +402,54 @@ fn dump() {
     }
     let Some(p) = probe() else { return };
     let mut text = String::new();
-    let paths = [
-        "/",
-        "/packages",
-        "/docs",
-        "/packages/view",
-        "/nope",
-        "/README.md",
-    ];
-    let patterns = [
-        NEVER,
-        "import",
-        "TODO",
-        "e",
-        "\n",
-        "}\n",
-        "a\nb",
-        "function (",
-        "é",
-        "😀",
-        "\u{0}",
-        "export default",
-        "  ",
-        "the",
-    ];
-    for path in paths {
-        for pattern in patterns {
+    // `LFS354_PATHS`, `LFS354_PATTERNS` (comma lists) and `LFS354_SIZES`
+    // narrow the battery so one command fits its limit on a large tree.
+    let list = |name: &str, default: &[&str]| -> Vec<String> {
+        std::env::var(name).map_or_else(
+            |_| default.iter().map(|s| s.to_string()).collect(),
+            |v| v.split(',').map(|s| s.replace("\\n", "\n")).collect(),
+        )
+    };
+    let paths = list(
+        "LFS354_PATHS",
+        &[
+            "/",
+            "/packages",
+            "/docs",
+            "/packages/view",
+            "/nope",
+            "/README.md",
+        ],
+    );
+    let patterns = list(
+        "LFS354_PATTERNS",
+        &[
+            NEVER,
+            "import",
+            "TODO",
+            "e",
+            "\n",
+            "}\n",
+            "a\nb",
+            "function (",
+            "é",
+            "😀",
+            "\u{0}",
+            "export default",
+            "  ",
+            "the",
+        ],
+    );
+    let sizes: Vec<i64> = list("LFS354_SIZES", &["50", "1000"])
+        .iter()
+        .map(|s| s.parse().unwrap())
+        .collect();
+    for path in paths.iter().map(String::as_str) {
+        for pattern in patterns.iter().map(String::as_str) {
             if !part("grep") {
                 break;
             }
-            for size in [50, 1000] {
+            for &size in &sizes {
                 let reply = p.call(
                     "fs.grep",
                     vec![
@@ -448,27 +466,33 @@ fn dump() {
                 );
             }
         }
-        for glob in [
-            "**",
-            "*",
-            "**/*.js",
-            "*.md",
-            "packages/**",
-            "packages/*/src/**/*.js",
-            "docs/*",
-            "/README.md",
-            "!docs/**",
-            "packages/view/**/index.*",
-            "**/test/**",
-            "?ackages/**",
-            "packages",
-            "packages/",
-            "x/**",
-        ] {
+        for glob in list(
+            "LFS354_GLOBS",
+            &[
+                "**",
+                "*",
+                "**/*.js",
+                "*.md",
+                "packages/**",
+                "packages/*/src/**/*.js",
+                "docs/*",
+                "/README.md",
+                "!docs/**",
+                "packages/view/**/index.*",
+                "**/test/**",
+                "?ackages/**",
+                "packages",
+                "packages/",
+                "x/**",
+            ],
+        )
+        .iter()
+        .map(String::as_str)
+        {
             if !part("glob") {
                 break;
             }
-            for size in [50, 1000] {
+            for &size in &sizes {
                 let reply = p.call(
                     "fs.glob",
                     vec![
@@ -481,7 +505,7 @@ fn dump() {
                 render(&mut text, &format!("glob {path} {glob:?} {size}"), &reply);
             }
         }
-        for size in [50, 1000].into_iter().filter(|_| part("list")) {
+        for &size in sizes.iter().filter(|_| part("list")) {
             let reply = p.call(
                 "fs.list",
                 vec![
@@ -498,7 +522,9 @@ fn dump() {
     let (_, reader, snap) = snapshot::open(&store, &p.args()).unwrap();
     let mut files = Vec::new();
     window::walk(&reader, &snap, "/", |path, entry| {
-        if entry.value.kind == InodeKind::RegularFile && files.len() < 4000 {
+        if entry.value.kind == InodeKind::RegularFile
+            && files.len() < std::env::var("LFS354_READS").map_or(4000, |n| n.parse().unwrap())
+        {
             files.push(path.to_owned());
         }
         Ok(true)
@@ -640,5 +666,241 @@ fn time() {
         t.elapsed(),
         p.statements() - before,
         reply.get("skipped")
+    );
+}
+
+/// The opened readers' Storage counters, summed.
+fn storage(p: &Probe) -> layerfs_storage::Diagnostics {
+    let mut sum = layerfs_storage::Diagnostics::default();
+    for index in 0..256 {
+        if let Some(d) = p.service.store.reader_storage_diagnostics(index) {
+            sum.locate += d.locate;
+            sum.read_packs += d.read_packs;
+            sum.read_pack_selections += d.read_pack_selections;
+            sum.whole_selected += d.whole_selected;
+            sum.range_selected += d.range_selected;
+            sum.range_acquired_bytes += d.range_acquired_bytes;
+            sum.payload_reads += d.payload_reads;
+            sum.payload_read_bytes += d.payload_read_bytes;
+            sum.pack_read_bytes += d.pack_read_bytes;
+            sum.locator_hits += d.locator_hits;
+            sum.locator_misses += d.locator_misses;
+            sum.pack_hits += d.pack_hits;
+            sum.pack_misses += d.pack_misses;
+            sum.prefetch_group_decodes += d.prefetch_group_decodes;
+            sum.value_groups += d.value_groups;
+        }
+    }
+    sum
+}
+
+/// Per file, the Store work of opening its root and of reading it whole,
+/// grouped by the pack acquisitions its open took (one per chain level and
+/// pack): statements, locator calls, pack bytes and time.
+#[test]
+fn chain() {
+    if std::env::var("LFS354_MODE").as_deref() != Ok("chain") {
+        return;
+    }
+    let Some(p) = probe() else { return };
+    let store = p.service.store.clone();
+    let (_, reader, snap) = snapshot::open(&store, &p.args()).unwrap();
+    let mut files = Vec::new();
+    window::walk(&reader, &snap, "/", |_, entry| {
+        if entry.value.kind == InodeKind::RegularFile {
+            files.push(entry);
+        }
+        Ok(true)
+    })
+    .unwrap();
+    // Row: files, statements, locates, pack selections, pack bytes, file bytes, ns.
+    let mut open = std::collections::BTreeMap::<u64, [u64; 7]>::new();
+    let mut whole = [0u64; 7];
+    let (mut whole_files, mut chunked) = (0u64, 0u64);
+    for entry in &files {
+        let (s0, d0, t0) = (p.statements(), storage(&p), Instant::now());
+        let view = Timing::disabled("probe", |scope| {
+            layerfs_content::file::FileView::open(
+                reader.as_ref(),
+                entry.value.content_root,
+                scope.child("open"),
+            )
+        })
+        .0
+        .unwrap();
+        let (s1, d1, t1) = (p.statements(), storage(&p), Instant::now());
+        let size = view.logical_len();
+        let mut sink = Vec::new();
+        if view.whole_file_bytes().unwrap().is_none() {
+            chunked += 1;
+            Timing::disabled("probe", |scope| {
+                view.read_range(reader.as_ref(), 0..size, &mut sink, scope)
+            })
+            .0
+            .unwrap();
+        } else {
+            whole_files += 1;
+        }
+        let (s2, d2, t2) = (p.statements(), storage(&p), Instant::now());
+        let row = open
+            .entry(d1.read_pack_selections - d0.read_pack_selections)
+            .or_default();
+        for (slot, value) in [
+            1,
+            s1 - s0,
+            d1.locate - d0.locate,
+            d1.read_pack_selections - d0.read_pack_selections,
+            (d1.pack_read_bytes + d1.payload_read_bytes + d1.range_acquired_bytes)
+                - (d0.pack_read_bytes + d0.payload_read_bytes + d0.range_acquired_bytes),
+            size,
+            (t1 - t0).as_nanos() as u64,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            row[slot] += value;
+        }
+        for (slot, value) in [
+            1,
+            s2 - s1,
+            d2.locate - d1.locate,
+            d2.read_pack_selections - d1.read_pack_selections,
+            (d2.pack_read_bytes + d2.payload_read_bytes + d2.range_acquired_bytes)
+                - (d1.pack_read_bytes + d1.payload_read_bytes + d1.range_acquired_bytes),
+            size,
+            (t2 - t1).as_nanos() as u64,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            whole[slot] += value;
+        }
+    }
+    println!(
+        "chain files={} (whole-file {whole_files}, chunked {chunked})",
+        files.len()
+    );
+    println!("open by pack acquisitions: acq files stmts/file locates/file packbytes/file filebytes/file us/file");
+    for (acquisitions, r) in &open {
+        let n = r[0].max(1);
+        println!(
+            "  {acquisitions:>3} {:>6} {:>6.1} {:>6.1} {:>9} {:>9} {:>8.1}",
+            r[0],
+            r[1] as f64 / n as f64,
+            r[2] as f64 / n as f64,
+            r[4] / n,
+            r[5] / n,
+            r[6] as f64 / n as f64 / 1000.0
+        );
+    }
+    println!(
+        "chunked reads after open: stmts={} locates={} selections={} packbytes={} ms={:.1}",
+        whole[1],
+        whole[2],
+        whole[3],
+        whole[4],
+        whole[6] as f64 / 1e6
+    );
+    let d = storage(&p);
+    println!(
+        "totals: locate={} selections={} whole={} range={} pack_hits={} pack_misses={} locator_hits={} misses={} prefetch_decodes={}",
+        d.locate,
+        d.read_pack_selections,
+        d.whole_selected,
+        d.range_selected,
+        d.pack_hits,
+        d.pack_misses,
+        d.locator_hits,
+        d.locator_misses,
+        d.prefetch_group_decodes
+    );
+}
+
+/// Every regular file's root read through a Storage handle opened on the
+/// copy, with a fresh reader per file (as each Store demand has now) or one
+/// reader for the whole walk (`LFS354_ARM=shared`): statements, pack bytes
+/// and time, to size a per-call reader before building one.
+#[test]
+fn reuse() {
+    if std::env::var("LFS354_MODE").as_deref() != Ok("reuse") {
+        return;
+    }
+    let Some(p) = probe() else { return };
+    let store = p.service.store.clone();
+    let (_, reader, snap) = snapshot::open(&store, &p.args()).unwrap();
+    let mut roots = Vec::new();
+    window::walk(&reader, &snap, "/", |_, entry| {
+        if entry.value.kind == InodeKind::RegularFile {
+            roots.push(entry.value.content_root);
+        }
+        Ok(true)
+    })
+    .unwrap();
+    let record = std::fs::read(std::env::var_os("LFS354_RECORD").unwrap()).unwrap();
+    let Reply::Sdk(value) = Answer::decode(&record).unwrap().reply else {
+        panic!("record");
+    };
+    let Some(SdkValue::Bytes(manifest)) = value.get("manifest") else {
+        panic!("manifest");
+    };
+    let manifest = StoreManifest::decode(manifest).unwrap();
+    let handles = layerfs_persistence::Handles::open_read_only(
+        PersistenceConfig::sqlite(std::env::var_os("LFS354_STORE").unwrap())
+            .with_sqlite_profile(SqlitePersistenceProfile::Disposable),
+        &manifest.binding,
+        manifest.cursor_key,
+    )
+    .unwrap();
+    let storage = layerfs_storage::Storage::new(handles.storage.clone()).unwrap();
+    let shared = std::env::var("LFS354_ARM").as_deref() == Ok("shared");
+    let one = storage.reader().unwrap();
+    let before = (
+        handles.diagnostics().unwrap().statements,
+        storage.diagnostics(),
+    );
+    let t = Instant::now();
+    let (mut bytes, mut chunked) = (0u64, 0u64);
+    for root in &roots {
+        let fresh;
+        let objects: &dyn layerfs_content::AuthenticatedObjects = if shared {
+            &one
+        } else {
+            fresh = storage.reader().unwrap();
+            &fresh
+        };
+        let view = Timing::disabled("probe", |scope| {
+            layerfs_content::file::FileView::open(objects, *root, scope.child("open"))
+        })
+        .0
+        .unwrap();
+        bytes += view.logical_len();
+        if view.whole_file_bytes().unwrap().is_none() {
+            chunked += 1;
+            let mut sink = Vec::new();
+            Timing::disabled("probe", |scope| {
+                view.read_range(objects, 0..view.logical_len(), &mut sink, scope)
+            })
+            .0
+            .unwrap();
+        }
+    }
+    let elapsed = t.elapsed();
+    let after = (
+        handles.diagnostics().unwrap().statements,
+        storage.diagnostics(),
+    );
+    println!(
+        "reuse arm={} files={} chunked={chunked} bytes={bytes} time={elapsed:?} statements={} \
+         selections={} locate={} pack_bytes={} pack_hits={}",
+        if shared { "shared" } else { "fresh" },
+        roots.len(),
+        after.0 - before.0,
+        after.1.read_pack_selections - before.1.read_pack_selections,
+        after.1.locate - before.1.locate,
+        (after.1.pack_read_bytes + after.1.payload_read_bytes + after.1.range_acquired_bytes)
+            - (before.1.pack_read_bytes
+                + before.1.payload_read_bytes
+                + before.1.range_acquired_bytes),
+        after.1.pack_hits - before.1.pack_hits,
     );
 }

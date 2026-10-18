@@ -189,6 +189,8 @@ fn put(mut bytes: Vec<u8>, at: usize, insert: &[u8]) -> Vec<u8> {
 
 fn files() -> Vec<(String, Vec<u8>)> {
     let mut files = Vec::new();
+    // Window and block edges, and the last byte of the window after the first
+    // block, which a part handed on early would have passed.
     let edges = [
         0,
         1,
@@ -201,6 +203,8 @@ fn files() -> Vec<(String, Vec<u8>)> {
         BLOCK - 1,
         BLOCK,
         BLOCK + 3,
+        BLOCK + WINDOW - 2,
+        BLOCK + WINDOW - 1,
         300_000,
     ];
     for at in edges {
@@ -224,6 +228,24 @@ fn files() -> Vec<(String, Vec<u8>)> {
         files.push((
             format!("match-{at:06}"),
             put(lines(310_000, 4099), at.saturating_sub(3), b"TOKEN"),
+        ));
+    }
+    // A part is handed on where the read pass's chunks reach a block; a NUL
+    // just past that point, in the same window, must still fail the window.
+    for at in (0..32).map(|k| BLOCK + 1000 + k * 1500) {
+        files.push((
+            format!("nul-sweep-{at:06}"),
+            put(lines(310_000, 61), at, b"\0"),
+        ));
+    }
+    for at in [
+        2 * BLOCK - 1,
+        2 * BLOCK + WINDOW - 1,
+        2 * BLOCK + 2 * WINDOW - 1,
+    ] {
+        files.push((
+            format!("nul-big-{at:06}"),
+            put(lines(700_000, 61), at, b"\0"),
         ));
     }
     files.push((
@@ -317,6 +339,10 @@ fn grep_and_read_give_the_window_scan_results() {
         .iter()
         .map(|(name, bytes)| (format!("/{name}"), bytes.clone()))
         .collect();
+    // `00043`, `00044` and `00086` match only lines 4300-4499 and 8600-8699:
+    // in 61-byte lines, the bytes around the first and second blocks' ends,
+    // past where a full page stops.
+    let late = ["TOKEN", "TOKEN\n", "😀", "00043", "00044", "00086"];
     for pattern in [
         "TOKEN",
         "TOKEN\n",
@@ -327,6 +353,9 @@ fn grep_and_read_give_the_window_scan_results() {
         "x",
         "€ TOKEN",
         "NEVER",
+        "00043",
+        "00044",
+        "00086",
     ] {
         for limit in [1000, 7] {
             assert_eq!(
@@ -335,10 +364,7 @@ fn grep_and_read_give_the_window_scan_results() {
                 "grep / {pattern:?} {limit}"
             );
         }
-        for file in rooted
-            .iter()
-            .filter(|_| ["TOKEN", "TOKEN\n", "😀"].contains(&pattern))
-        {
+        for file in rooted.iter().filter(|_| late.contains(&pattern)) {
             assert_eq!(
                 grep(&fixture, &file.0, pattern, 1000),
                 reference_grep(std::slice::from_ref(file), pattern, 1000),
@@ -353,6 +379,8 @@ fn grep_and_read_give_the_window_scan_results() {
             (2, Some(3)),
             (5, Some(9000)),
             (2001, None),
+            (4200, None),
+            (4290, Some(4400)),
             (7000, None),
         ] {
             let mut fields = vec![
