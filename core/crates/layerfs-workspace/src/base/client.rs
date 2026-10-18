@@ -1,7 +1,7 @@
 //! Authenticated canonical acquisition and exact immutable cache keys.
 use crate::cache::CanonicalCache;
 use layerfs_content::filesystem::attributes::{read_portable, AttributeReadWork, PortableMetadata};
-use layerfs_content::object::inode_leaf::InodeKind;
+use layerfs_content::object::inode_leaf::{InodeKind, InodeMetadata};
 use layerfs_content::{AuthenticatedObjects, ContentError, ContentResult, ObjectId};
 use std::sync::Arc;
 
@@ -146,13 +146,21 @@ impl CanonicalClient {
     /// same reads again and nothing else; a failed read remembers nothing.
     pub(crate) fn portable(
         &self,
-        root: ObjectId,
+        root: InodeMetadata,
         kind: InodeKind,
     ) -> ContentResult<PortableMetadata> {
+        let Some(root) = root.root() else {
+            return read_portable(self, root, kind, &mut AttributeReadWork::default());
+        };
         if let Some(remembered) = self.state()?.cache.portable(root, kind) {
             return Ok(remembered);
         }
-        let metadata = read_portable(self, root, kind, &mut AttributeReadWork::default())?;
+        let metadata = read_portable(
+            self,
+            InodeMetadata::Root(root),
+            kind,
+            &mut AttributeReadWork::default(),
+        )?;
         let mut state = self.state()?;
         let evictions = state.cache.remember_portable(root, kind, metadata);
         state.work.evictions = state.work.evictions.saturating_add(evictions);

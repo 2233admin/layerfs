@@ -151,7 +151,7 @@ fn entry(parent: Option<u64>, name: Vec<u8>, position: u64, kind: InodeKind) -> 
         key: EntryKey { parent, name },
         position: Some(position),
         kind,
-        metadata_root: ObjectId::for_bytes(&position.to_be_bytes()),
+        metadata: layerfs_content::filesystem::attributes::PortableMetadata { mode: 0o644, mtime_seconds: position as i64, mtime_nanoseconds: 0 },
         target_root: (kind == InodeKind::Symlink).then(|| ObjectId::for_bytes(b"target")),
         host_path: match kind {
             InodeKind::Symlink => None,

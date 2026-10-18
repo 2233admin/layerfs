@@ -106,15 +106,24 @@ pub fn lookup_many(
 
 /// Reads the typed portable fields of one inode.
 ///
-/// Both fields are optional in the grammar but required by the checked portable
-/// contract; a directory whose mode or mtime is missing, or whose stored value
-/// does not satisfy the typed grammar, fails explicitly.
+/// An inline metadata field returns its value with no object read. A root form
+/// walks the attribute tree: both fields are optional in the grammar but
+/// required by the checked portable contract; a directory whose mode or mtime
+/// is missing, or whose stored value does not satisfy the typed grammar, fails
+/// explicitly.
 pub fn read_portable(
     reader: &dyn AuthenticatedObjects,
-    root: ObjectId,
+    root: crate::object::inode_leaf::InodeMetadata,
     kind: InodeKind,
     work: &mut AttributeReadWork,
 ) -> ContentResult<PortableMetadata> {
+    let root = match root {
+        crate::object::inode_leaf::InodeMetadata::Root(root) => root,
+        crate::object::inode_leaf::InodeMetadata::Inline(metadata) => {
+            metadata.validate(kind)?;
+            return Ok(metadata);
+        }
+    };
     let keys = [
         AttributeKey::new("portable".to_owned(), b"mode".to_vec())?,
         AttributeKey::new("portable".to_owned(), b"mtime".to_vec())?,

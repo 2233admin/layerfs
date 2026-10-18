@@ -1,5 +1,7 @@
-//! A captured mode or time change patches the stored attribute tree: every
-//! other key keeps its stored value root. This file owns a small base of its
+//! A captured mode or time change of an inode whose attribute tree carries
+//! keys beyond the portable pair patches the stored tree: every other key
+//! keeps its stored value root. Inodes holding only the portable pair take
+//! the inline metadata form instead. This file owns a small base of its
 //! own whose inodes carry attributes outside the portable domain; the shared
 //! fixture and every other test's roots are untouched. The model walker
 //! compares each inode's complete attribute key set with its values.
@@ -16,7 +18,7 @@ use layerfs_content::filesystem::{
     build_filesystem, scope_for_seed, DirectoryUpdate, FilesystemInput, FilesystemObjects,
     FilesystemResources, FilesystemRootId, InodeUpdate,
 };
-use layerfs_content::object::inode_leaf::{InodeKind, InodeValue};
+use layerfs_content::object::inode_leaf::{InodeKind, InodeMetadata, InodeValue};
 use layerfs_content::ObjectId;
 use oracle::{assert_tree, attributes, value, walk, Model, BASE};
 use producer::Drive;
@@ -98,7 +100,7 @@ fn tagged() -> (Fixture, Model) {
             value: InodeValue {
                 kind,
                 content_root,
-                metadata_root,
+                metadata_root: InodeMetadata::Root(metadata_root),
                 namespace_ref_count: 0,
             },
         })
@@ -153,7 +155,10 @@ fn tagged() -> (Fixture, Model) {
 }
 /// The value root of one attribute of one inode of one root.
 fn value_root(b: &Bench, root: FilesystemRootId, serial: u64, key: (&str, &[u8])) -> ObjectId {
-    let metadata_root = value(&b.fixture.store, root, serial).metadata_root;
+    let metadata_root = value(&b.fixture.store, root, serial)
+        .metadata_root
+        .root()
+        .unwrap_or_else(|| panic!("serial {serial}: expected the root metadata form"));
     attributes(&b.fixture.store, metadata_root)
         .into_iter()
         .find(|entry| entry.key.domain() == key.0 && entry.key.key() == key.1)
@@ -195,7 +200,6 @@ fn a_metadata_patch_keeps_every_other_key_and_its_value_root() {
     d.chmod("tagged", 0o600);
     d.utimens("tagged", (7, 8));
     d.chmod("kept", 0o700);
-    d.utimens("plain", (9, 10));
     // A content change of the tagged file patches the same tree again.
     d.write("tagged", 4, b"TAGGED");
     // A new name under the tagged directory changes its time.
@@ -223,14 +227,15 @@ fn a_metadata_patch_keeps_every_other_key_and_its_value_root() {
                 "serial {serial}: {key:?} was not patched"
             );
         }
-        let keys = attributes(&b.fixture.store, new.metadata_root).len();
+        let keys = attributes(&b.fixture.store, new.metadata_root.root().unwrap()).len();
         assert_eq!(keys, 4, "serial {serial}: exactly the four stored keys");
     }
-    // Base inodes 2, 3 and 4 are patched and the new file is built. The root
-    // has no row: no name of it changed. (I first counted it: W-attempt1.)
+    // Base inodes 2 and 3 are patched; serial 4's utimens is mtime-only and
+    // not a change; the new file is built. The root has no row: no name of it
+    // changed. (I first counted it: W-attempt1.)
     assert_eq!(
         (built.work.metadata_patched, built.work.metadata_built),
-        (3, 1)
+        (2, 1)
     );
     built.install(&b);
 

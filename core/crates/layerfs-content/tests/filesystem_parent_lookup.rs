@@ -199,7 +199,7 @@ fn partial_parent_batches_preserve_values_new_directories_and_removals() {
                 .stat(&LogicalPath::new(path).unwrap())
                 .expect("retained parent");
             assert_eq!(
-                stat.metadata_root,
+                stat.metadata_root.root().unwrap(),
                 synthetic(&format!("metadata/{}", &path[1..]))
             );
         }
@@ -207,7 +207,7 @@ fn partial_parent_batches_preserve_values_new_directories_and_removals() {
             let stat = read
                 .stat(&LogicalPath::new(path).unwrap())
                 .expect("supplied parent");
-            assert_eq!(stat.metadata_root, synthetic("supplied-meta"));
+            assert_eq!(stat.metadata_root.root().unwrap(), synthetic("supplied-meta"));
             assert_eq!(stat.namespace_ref_count, 1);
         }
         assert!(matches!(

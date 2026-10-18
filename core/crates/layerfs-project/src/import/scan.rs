@@ -9,12 +9,12 @@
 use crate::backing::{placed_bytes, window_full, Backing, Bound, Pending, Stamp, WINDOW_ROWS};
 use crate::error::content;
 use crate::error::ProjectError as Failure;
-use crate::metadata::build_metadata;
+
 use crate::namespace::ImportProgress;
 use layerfs_content::filesystem::attributes::PortableMetadata;
 use layerfs_content::filesystem::symlink::{emit_symlink, SymlinkTarget};
 use layerfs_content::filesystem::FilesystemObjects;
-use layerfs_content::{inode_leaf::InodeKind, ObjectId, PathName};
+use layerfs_content::{inode_leaf::InodeKind, PathName};
 use layerfs_storage::port::acquisition::{EntryKey, NewEntry, Placed};
 use std::{
     ffi::{OsStr, OsString},
@@ -67,9 +67,6 @@ impl Child {
 /// Attribute and symlink-target construction into the prerequisite save.
 struct Roots<'o, 'p> {
     objects: &'o mut FilesystemObjects<'p>,
-    // Adjacent equal portable fields have the same canonical metadata root.
-    // One slot avoids an entry-count-sized cache on heterogeneous imports.
-    previous: Option<((u8, u32, i64, u32), ObjectId)>,
 }
 impl Roots<'_, '_> {
     /// The complete backing row of `child` under `directory`; refuses a
@@ -88,19 +85,12 @@ impl Roots<'_, '_> {
             child.stamp.mtime,
             nanos,
         );
-        let metadata_root = match self.previous {
-            Some((previous, root)) if previous == key => root,
-            _ => {
-                let value = PortableMetadata {
-                    mode: key.1,
-                    mtime_seconds: key.2,
-                    mtime_nanoseconds: nanos,
-                };
-                let root = build_metadata(self.objects, child.kind, value)?;
-                self.previous = Some((key, root));
-                root
-            }
+        let metadata = PortableMetadata {
+            mode: key.1,
+            mtime_seconds: key.2,
+            mtime_nanoseconds: nanos,
         };
+        metadata.validate(child.kind).map_err(content)?;
         let target_root = match child.target {
             Some(target) => {
                 let target = SymlinkTarget::new(target).map_err(content)?;
@@ -124,7 +114,7 @@ impl Roots<'_, '_> {
             },
             position,
             kind: child.kind,
-            metadata_root,
+            metadata,
             target_root,
             host_path,
             host,
@@ -166,10 +156,7 @@ pub(crate) fn scan(
     objects: &mut FilesystemObjects<'_>,
     progress: &mut ImportProgress,
 ) -> Result<Scanned, Failure> {
-    let mut roots = Roots {
-        objects,
-        previous: None,
-    };
+    let mut roots = Roots { objects };
     progress.counters.entry();
     let mut placement = Placement {
         next: 1,

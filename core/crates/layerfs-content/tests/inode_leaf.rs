@@ -6,10 +6,12 @@
 
 mod support;
 
+use layerfs_content::filesystem::attributes::PortableMetadata;
 use layerfs_content::inode_leaf::{
     decode_inode_value, decode_pooled_body, decode_pooled_value, encode_inode_value,
     encode_pooled_value, pooled_body, pooled_physical_length, InodeKind, InodeLeaf, InodeLeafRow,
-    InodeValue, LEAF_ROW_BYTES, MAXIMUM_LEAF_ROWS, POOLED_PREFIX_BYTES, POOLED_ROW_BYTES,
+    InodeMetadata, InodeValue, LEAF_ROW_BYTES, MAXIMUM_LEAF_ROWS, POOLED_PREFIX_BYTES,
+    POOLED_ROW_BYTES,
 };
 use layerfs_content::{ContentError, ObjectId};
 
@@ -18,7 +20,7 @@ fn value(kind: InodeKind, refs: u64, seed: u8) -> InodeValue {
         kind,
         namespace_ref_count: refs,
         content_root: ObjectId::for_bytes(&[seed; 4]),
-        metadata_root: ObjectId::for_bytes(&[seed.wrapping_add(1); 4]),
+        metadata_root: InodeMetadata::Root(ObjectId::for_bytes(&[seed.wrapping_add(1); 4])),
     }
 }
 
@@ -258,4 +260,115 @@ fn checked_pooling_leaf_reuses_decode_and_retains_all_ordinal_checks() {
         layerfs_content::inode_leaf::PoolingLeaf::decode(&canonical[..canonical.len() - 1])
             .is_err()
     );
+}
+
+fn inline(kind: InodeKind, mode: u32, seconds: i64, nanos: u32, seed: u8) -> InodeValue {
+    InodeValue {
+        kind,
+        namespace_ref_count: 1,
+        content_root: ObjectId::for_bytes(&[seed; 4]),
+        metadata_root: InodeMetadata::Inline(PortableMetadata {
+            mode,
+            mtime_seconds: seconds,
+            mtime_nanoseconds: nanos,
+        }),
+    }
+}
+
+#[test]
+fn the_inline_form_encodes_and_decodes_at_its_exact_offsets() {
+    let value = inline(InodeKind::RegularFile, 0o640, -1, 999_999_999, 0x5a);
+    let encoded = encode_inode_value(value);
+    assert_eq!(encoded.len(), 73);
+    assert_eq!(encoded[0], 1 | 0x80);
+    assert_eq!(&encoded[41..45], &0o640_u32.to_be_bytes());
+    assert_eq!(&encoded[45..53], &(-1_i64).to_be_bytes());
+    assert_eq!(&encoded[53..57], &999_999_999_u32.to_be_bytes());
+    assert!(encoded[57..].iter().all(|byte| *byte == 0));
+    assert_eq!(decode_inode_value(&encoded).expect("decodes"), value);
+}
+
+#[test]
+fn the_root_form_stays_byte_identical_to_the_old_layout() {
+    let value = value(InodeKind::Directory, 7, 0x31);
+    let encoded = encode_inode_value(value);
+    assert_eq!(encoded[0], 2);
+    assert_eq!(
+        &encoded[41..],
+        value.metadata_root.root().expect("root form").as_bytes()
+    );
+    let again = encode_inode_value(decode_inode_value(&encoded).expect("decodes"));
+    assert_eq!(again, encoded);
+}
+
+#[test]
+fn a_leaf_round_trips_with_both_metadata_forms() {
+    let leaf = InodeLeaf {
+        subtree_bytes: 2 * LEAF_ROW_BYTES as u64,
+        rows: vec![
+            InodeLeafRow {
+                serial: 4,
+                value: encode_inode_value(value(InodeKind::RegularFile, 1, 9)),
+            },
+            InodeLeafRow {
+                serial: 9,
+                value: encode_inode_value(inline(InodeKind::Symlink, 0o777, 60, 0, 2)),
+            },
+        ],
+    };
+    let canonical = leaf.encode().expect("encodes");
+    assert_eq!(InodeLeaf::decode(&canonical).expect("decodes"), leaf);
+}
+
+#[test]
+fn the_inline_form_rejects_bad_padding_bad_kind_and_bad_values() {
+    // Nonzero padding bytes 57..73.
+    let mut padding = encode_inode_value(inline(InodeKind::RegularFile, 0o600, 0, 0, 1));
+    padding[60] = 1;
+    assert!(matches!(
+        decode_inode_value(&padding),
+        Err(ContentError::InvalidRecord("inode inline padding"))
+    ));
+    // A foreign kind code under the tag bit.
+    let mut kind = encode_inode_value(inline(InodeKind::RegularFile, 0o600, 0, 0, 1));
+    kind[0] = 0x80;
+    assert!(matches!(
+        decode_inode_value(&kind),
+        Err(ContentError::InvalidRecord("inode kind"))
+    ));
+    kind[0] = 4 | 0x80;
+    assert!(decode_inode_value(&kind).is_err());
+    // A symlink mode other than 0o777 and nanoseconds beyond the field's bound.
+    assert!(decode_inode_value(&encode_inode_value(inline(
+        InodeKind::Symlink,
+        0o644,
+        0,
+        0,
+        1
+    )))
+    .is_err());
+    assert!(decode_inode_value(&encode_inode_value(inline(
+        InodeKind::RegularFile,
+        0o600,
+        0,
+        1_000_000_000,
+        1
+    )))
+    .is_err());
+    assert!(decode_inode_value(&encode_inode_value(inline(
+        InodeKind::RegularFile,
+        0o1000,
+        0,
+        0,
+        1
+    )))
+    .is_err());
+}
+
+#[test]
+fn a_pooled_value_wraps_the_inline_form() {
+    let raw = encode_inode_value(inline(InodeKind::Directory, 0o1777, 42, 7, 3));
+    let canonical = encode_pooled_value(&raw).expect("canonical value");
+    assert_eq!(canonical.len(), 94);
+    assert_eq!(decode_pooled_value(&canonical).expect("decodes"), raw);
 }

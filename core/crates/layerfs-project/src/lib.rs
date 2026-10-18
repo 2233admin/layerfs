@@ -12,8 +12,6 @@ pub(crate) use import::error;
 pub(crate) use import::files;
 pub(crate) use import::init;
 #[cfg(unix)]
-pub(crate) use import::metadata;
-#[cfg(unix)]
 pub(crate) use import::namespace;
 pub use import::observe::{InitCounters, InitCounts, InitStep};
 #[cfg(unix)]

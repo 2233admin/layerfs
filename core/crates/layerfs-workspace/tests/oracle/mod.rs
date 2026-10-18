@@ -12,7 +12,7 @@ use layerfs_content::{
         inode::codec::{decode_inode_page, InodePage},
         FilesystemRead, FilesystemRootId, PathName,
     },
-    object::inode_leaf::{InodeKind, InodeValue},
+    object::inode_leaf::{InodeKind, InodeMetadata, InodeValue},
     read_all, AuthenticatedObjects, ContentError, ObjectId,
 };
 use layerfs_telemetry::timer::Timing;
@@ -447,7 +447,12 @@ pub fn attributes(store: &Store, root: ObjectId) -> Vec<AttributeEntry> {
 }
 /// The complete key set of one inode: exactly one mode, exactly one mtime,
 /// and every other attribute with its value.
-fn extra(store: &Store, metadata_root: ObjectId, what: &str) -> Vec<Extra> {
+fn extra(store: &Store, metadata_root: InodeMetadata, what: &str) -> Vec<Extra> {
+    // An inline inode carries the portable pair in its value: there is no
+    // attribute tree to walk and no extra key to list.
+    let Some(metadata_root) = metadata_root.root() else {
+        return Vec::new();
+    };
     let entries = attributes(store, metadata_root);
     let (mut modes, mut mtimes, mut others) = (0, 0, Vec::new());
     for entry in entries {

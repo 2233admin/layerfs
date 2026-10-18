@@ -216,7 +216,7 @@ fn a_directory_value_keeps_its_supplied_root_without_a_header_and_is_rebuilt_wit
     let supplied = InodeValue {
         // Content never opens a directory it has no header for.
         content_root: synthetic("topology/supplied-directory-root"),
-        metadata_root: metadata,
+        metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(metadata),
         ..base.tree.stored(base.h)
     };
     let rows = Rowset::new().value(base.h, supplied);
@@ -226,7 +226,7 @@ fn a_directory_value_keeps_its_supplied_root_without_a_header_and_is_rebuilt_wit
     let value = inode(&store, result.root, base.h).expect("h");
     assert_eq!(
         (value.content_root, value.metadata_root),
-        (supplied.content_root, metadata),
+        (supplied.content_root, layerfs_content::object::inode_leaf::InodeMetadata::Root(metadata)),
         "without a header the supplied value is the whole statement"
     );
     assert_eq!(value.namespace_ref_count, 1);
@@ -244,7 +244,7 @@ fn a_directory_value_keeps_its_supplied_root_without_a_header_and_is_rebuilt_wit
         value.content_root, supplied.content_root,
         "with a header the rebuilt page replaces the supplied content root"
     );
-    assert_eq!(value.metadata_root, metadata);
+    assert_eq!(value.metadata_root.root().unwrap(), metadata);
     assert_eq!(
         listing(&store, result.root, base.h),
         vec![("g".to_owned(), fresh)]

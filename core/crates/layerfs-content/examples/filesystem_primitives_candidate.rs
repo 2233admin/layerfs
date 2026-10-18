@@ -74,7 +74,7 @@ fn record(serial: u64) -> InodeValue {
         kind: InodeKind::RegularFile,
         namespace_ref_count: 1,
         content_root: synthetic(&format!("component/content-{serial:05}")),
-        metadata_root: synthetic("component/meta"),
+        metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(synthetic("component/meta")),
     }
 }
 
@@ -131,7 +131,7 @@ fn build_base(files: usize) -> (Bag, DirectoryRoot, ObjectId, InodeScope) {
                 kind: InodeKind::Directory,
                 namespace_ref_count: 0,
                 content_root: directory.0,
-                metadata_root: synthetic("component/root-meta"),
+                metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(synthetic("component/root-meta")),
             }),
         ))];
         rows.extend((1..=files as u64).map(|serial| Ok((serial + 1, Some(record(serial))))));
@@ -205,7 +205,7 @@ fn main() {
                     kind: InodeKind::Directory,
                     namespace_ref_count: 0,
                     content_root: updated.0,
-                    metadata_root: synthetic("component/root-meta"),
+                    metadata_root: layerfs_content::object::inode_leaf::InodeMetadata::Root(synthetic("component/root-meta")),
                 }),
             )));
             rows.sort_by_key(|row| row.as_ref().map(|row| row.0).unwrap_or(0));
