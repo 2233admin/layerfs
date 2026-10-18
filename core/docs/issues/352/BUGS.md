@@ -181,3 +181,10 @@
   table line after the before/after header, so the attempt-vs-rerun table
   failed the eight-column rule. **Fixed** (builder, `f061aab65`): each Finding
   table is checked by its own shape (REPORT_FORMAT.md §5 Findings items 3–4).
+- **F-022 · a mount listed every Branch to find one (product, 009.a1,
+  2026-10-18).** `layerfs-api` `mount_branch` paged `project.list_branches` and
+  searched the items for the name, so a one-shot mount's VM steps grew with the
+  Branches (about 7 per range). **Fixed** (daemon `58a60046`, addon
+  `799e3ca6`, kind 1): `project.list_branches` takes `name` and answers from
+  the index;
+  [fixes/009-a1-mount-branch-lookup.md](fixes/009-a1-mount-branch-lookup.md).

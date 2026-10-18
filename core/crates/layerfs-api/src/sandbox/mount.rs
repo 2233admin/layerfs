@@ -76,6 +76,10 @@ impl WorkspaceApi<'_> {
                 self.control,
                 layerfs_bridge::control::SdkValue::map([
                     ("project", layerfs_bridge::control::SdkValue::text(project)),
+                    // By name: one index lookup, not a listing of every
+                    // Branch (#352 009.a1). A daemon without `name` lists
+                    // all, and the search below still finds it.
+                    ("name", layerfs_bridge::control::SdkValue::text(branch)),
                     ("pageSize", layerfs_bridge::control::SdkValue::Int(1000)),
                     ("pagePos", layerfs_bridge::control::SdkValue::Int(position)),
                 ]),
