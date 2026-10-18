@@ -308,7 +308,7 @@ fn entry_row(row: &Row<'_>) -> Result<Entry, BackendError> {
         position: number(position)?,
         kind: kind(row, 4)?,
         canonical: get::<Option<i64>>(row, 5)?.map(number).transpose()?,
-                metadata: super::metadata_parse(super::super::rows::blob(row, 6)?, kind(row, 4)?)?,
+        metadata: super::metadata_parse(super::super::rows::blob(row, 6)?, kind(row, 4)?)?,
         content_root: optional_root(row, 7)?,
     })
 }
