@@ -189,6 +189,27 @@ lister:
 - **This matters beyond merges:** any `node_modules` committed in one mount and used in another carries stale absolute paths.
 - **Not done:** a direct listing of the stale-root files. A recursive grep over `node_modules` hit the 120 s alarm and was stopped. The mounted Workspace was unmounted afterwards with discard; it held no changes.
 
+**What the `/.lww` merge's trace records** (owner request, 2026-10-18).
+These come from the existing per-call trace
+(`~/lfs-history/scale-experiments/s4l/trace-lww-merge.jsonl`, the
+`branch.merge` line at 07:17:54.125Z). There was no rerun. Anything not
+traced is said so here, not estimated.
+
+| Item | Traced value |
+| --- | --- |
+| SDK call total | 13,526 ms; client queue 4.8 ms |
+| Store-side `branch.merge` span | 10,427 ms |
+| `merge.paths` (path naming) | 1,767 ms, of which `merge.changes` 200 ms and `merge.named` 69 ms |
+| `merge.read` | 0.1 ms |
+| Decide, LWW, merged-root build (`merge.build` / `update_filesystem`), publish | **not traced as spans.** 8,660 ms of the 10,427 ms span sits under no traced child, and 3,099 ms of the SDK total sits outside the span |
+| Merge path counters (`delta.merge`) | merges 1, fallbacks 0, inodes 168, climbed 218, bindings 218, reads 1,318 |
+| SQL, writer connection | 442,041 statements; 131,712 transactions, of which 15 write; statement time 2,924 ms; transaction time 3,321 ms; commit time 189 ms; 7,082 blob opens reading 106,605,054 bytes; 8,191 full-scan steps; 1 sort |
+| SQL, readers | 21 statements |
+| A3 budget: topology placement, territory and rooted entries against 65,536; declared rows against 4,194,304 | **not traced**: no counter for any of them in the trace |
+| A2 budget: candidate paths decided against 262,144 | **not traced**. `delta.merge.inodes` (168) is a path-naming counter, not the decided-candidate count |
+| Total LWW picks | **not traced**. The SDK result lists 74 and sets `lwwTruncated: true`, and no counter carries the total. The ~253 above is an inference, not a measurement |
+| `ObjectLimitExceeded` | none: the merge returned `Merged` |
+
 **S4 with `/.lww` in short:**
 - The merge succeeds with 0 conflicts, and every listed pick takes the newer install, as the rule says.
 - The merged `node_modules` is a coherent single install (s4l-d's) at s4l-d's install root.
