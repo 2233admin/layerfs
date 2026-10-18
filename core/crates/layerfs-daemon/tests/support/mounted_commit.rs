@@ -180,21 +180,15 @@ impl Rig {
     }
     /// The newest page of the Branch's Commit ancestry, head first.
     pub fn history(&self) -> PageResult<CommitRecord> {
-        match self
-            .harness
-            .service
-            .execute_control(&Request::History(CommitHistoryRequest {
+        self.store
+            .history()
+            .commit_history(&CommitHistoryRequest {
                 branch: self.harness.branch,
                 start: None,
                 cursor: None,
                 limit: HISTORY,
-            }))
+            })
             .unwrap()
-            .reply
-        {
-            Reply::History(page) => page,
-            other => panic!("{other:?}"),
-        }
     }
     /// A plain kernel copy of the base tree, made by running the builder
     /// again, owned by the command identity. Never read by the daemon.
