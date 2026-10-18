@@ -342,3 +342,15 @@
   stable bind such as `/workspace` inside the Sandbox onto the fresh directory),
   or accept it and document it. Until then dev runs count stale roots as their
   own category, and measured P3 does not start with it open.
+  **Owner decision 2026-10-18: by design, no product change.** Each mount gets
+  a new directory; that is the correct model. Absolute paths a tool records
+  in the tree name the mount that ran it, as when a checkout is moved; a tool
+  that needs them current is re-run in the new mount. Consequences for the
+  replay: (1) stale roots are expected state, not a finding; (2) the oracle
+  for an install on top of a previous one replays the same sequence natively
+  and substitutes each recorded mount root by exact string (one listed entry
+  per root, counted per install, INSTALLS.md), and any other difference stays
+  a mismatch; (3) dev runs keep running one affected `.bin` entry, recording
+  whether it works, as a fact about the model (not a gate); (4) the merge
+  rule for `node_modules` state changed on two sides (watch-out S4) is still
+  open. F-034 no longer blocks measured P3.
