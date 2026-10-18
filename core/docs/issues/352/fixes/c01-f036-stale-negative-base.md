@@ -79,6 +79,45 @@ missing still fails `ObjectMissing`, now from a fresh answer. Cost: none when no
 base is marked absent, which is the normal case. Otherwise one locate statement
 for each base that was marked absent and is then reached through a stored chain.
 
+## Functions changed (ownership, liaison 2026-10-18)
+
+The liaison assigned these functions to this fix. The edits stay on the
+chain-walk and locate paths. Delta selection itself (candidate choice,
+scoring) is untouched. The RCA agent's #360 item 3 owns that.
+
+| File | Function | Change |
+| --- | --- | --- |
+| `store/source.rs` | `trait Source::base_location` (new, defaulted) | the new method |
+| `read/fetch.rs` | `impl Source for Fetch::base_location` (new) | drop `id` from `absent`, then `location` |
+| `save/source.rs` | `impl Source for WaveSource::base_location` (new) | packer first, then `Fetch::base_location` |
+| `encoding/delta/read.rs` | `Resolver::resolve_charged` | the chain-walk base lookup: `location` becomes `base_location` |
+| `encoding/pool/read.rs` | `PoolReader::reconstruct_leaf` | the pooled chain-walk base lookup: `location` becomes `base_location` |
+| `encoding/delta/select.rs` | `DepthCache::cost_of` | locating past the first chain element: `location` becomes `base_location` |
+| `read/prefetch.rs` | `chains` | the dependency-frontier lookup: `location` becomes `base_location` |
+
+`read/provider.rs` and `read/mod.rs` (#354 A1) are not changed.
+
+## Negative caching: invalidated where a concurrent writer can falsify it
+
+The per-wave `absent` set stays. Its entries are **invalidated** wherever the
+answer could be falsified by another Save:
+
+- **Bases named by a stored record.** Publication registers bases first, so
+  such a base is always stored. Any `absent` entry for it is stale, and
+  `base_location` drops the entry and locates the base again (one fresh
+  answer). This is the F-036 path.
+- **Admission's "is this object new?"** (`save/wave.rs`, once per wave).
+  When another writer publishes the object in between, the answer is stale.
+  The cost is only that the object is written again. First-wins registration
+  then reports it as lost, and the winner is read back through
+  `begin_demand`, which clears `absent`. Correctness does not depend on this
+  answer.
+- **Everything else.** `absent` is cleared at every `begin_demand` (each wave
+  and each read), so no negative answer outlives one demand.
+
+The Save is not retried. A base that is really missing fails `ObjectMissing`
+from a fresh answer.
+
 ## Tests
 
 | Test | Where | Without fix | With fix |
