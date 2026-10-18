@@ -75,13 +75,14 @@ You restart the lane from the records, not from memory.
 
 ## 4. Open for the owner (do not decide them yourself)
 
-- **Systemic per-operation cost.** The liaison's reading: #356, F-042, #354 and
-  F-043 share one cause. Each file operation becomes dozens to thousands of SQL
-  statements: about 1,250 per isolated `stat`, about 28 per object fetch, about
-  6 per chain step, about 11 per removed entry. Proposed: one issue with a cost
-  table per FUSE op and SDK call (statements, transactions, pages, bytes
-  decoded, daemon jobs) and per-op budgets, measured before more per-symptom
-  fixes. Not yet approved; ask the owner.
+- **Systemic per-operation cost: approved and running.** #356, F-042 and #354
+  share one cause: each file operation becomes dozens to thousands of SQL
+  statements (about 1,250 per isolated `stat`, about 28 per object fetch, about
+  6 per chain step, about 11 per removed entry). The owner approved a
+  measurement-only study, GitHub #359, run by its own session on branch
+  `issue359-cost-model`. It writes `COST_MODEL.md` with per-operation budgets
+  for the owner to approve. Plan further per-symptom fixes against those
+  budgets, and ask the owner how #359's results change the fixer order.
 - **Storage order (liaison's recommendation, not approved):** F-027 item 2
   (mode and mtime in the inode value) early, before the P3 re-baseline, since
   it also cuts objects per `stat`. Item 3 (inode branches as deltas) after
