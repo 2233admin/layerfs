@@ -275,25 +275,44 @@ Three of these are worth stating as the trap they avoid:
   a fixed budget), which is not a failure. Pooling the two would make a
   no-fallback architecture look like it had a fallback.
 
-### 15.4 The twelve 4,096s — a disambiguation
+### 15.4 The 4,096s — a disambiguation
 
-`4_096` appears twelve times in `core/crates/*/src`. **They are not one limit**, and
-three of them are not counts at all.
+> **Corrected 2026-10-18 (#352 limits audit, source `efcb6d880`).** The earlier
+> table listed twelve, including the retired `MAXIMUM_EDITS_PER_OPERATION` and
+> the retired resident `validate::walk_limit`. The list below is current; see
+> [the #352 limits audit](../issues/352/LIMITS_AUDIT.md) for each one's class.
+
+`4_096` appears twenty-six times as a constant in `core/crates/*/src`. **They are
+not one limit**, and eight of them are byte sizes, not counts.
 
 | # | Constant | File | Bounds | Kind |
 | ---: | --- | --- | --- | --- |
 | 1 | `MAXIMUM_READ_DEMANDS` | content `filesystem/objects.rs` | ids per C1 read wave | count — **read batch** |
 | 2 | `READ_OBJECT_LIMIT` | storage `policy.rs` | ids per C2 read wave | count — **read batch** |
-| 3 | resident topology containers (retired `validate::walk_limit`) | content `filesystem/validate/backed.rs` | entries per container on resident routes; none on the backed route | resource-derived count |
-| 4 | `MAXIMUM_EDITS_PER_OPERATION` | content `file/edit/input.rs` | edits per stream | count |
+| 3 | `DEMAND_IDS` | workspace `base/client.rs` | ids per base demand | count — window |
+| 4 | `MAXIMUM_LINEAGE_ROWS` | history `contract/records.rs` | rows one lineage walk examines; past it `Capacity` | count — **history cap (F-033)** |
 | 5 | `MAXIMUM_ATTRIBUTE_KEYS` | content `filesystem/limits.rs` | keys per listing | count |
-| 6 | `DEFAULT_MAXIMUM_PENDING` | content `references/reduce.rs` | reducer pending rows | count |
-| 7 | `DEPTH_CACHE_ENTRIES` | storage `delta/select.rs` | cached chain costs | count |
-| 8 | `TABLE_BUCKETS` | storage `pool/delta.rs` | hash buckets | count |
-| 9 | `SCAN_LIMIT` | content `references/backing.rs` | dir entries scanned | count |
-| 10 | `MAXIMUM_PATH_BYTES` | content `filesystem/limits.rs` | path length | **bytes** |
-| 11 | `MAXIMUM_SYMLINK_TARGET_BYTES` | content `filesystem/limits.rs` | symlink target | **bytes** |
-| 12 | `SINGLETON_FRAMING_SLACK` | storage `policy.rs` | pack framing headroom | **bytes** |
+| 6 | `DEFAULT_MAXIMUM_PENDING` | content `references/reduce.rs` | reducer pending rows before a spill | count — threshold |
+| 7 | `PREDECESSOR_DESCRIPTOR_LIMIT` | content `file/mapping/predecessor.rs` | extents one predecessor search reads | count — threshold |
+| 8 | `DEPTH` | content `compare/named.rs` | components one naming climb follows | count — threshold |
+| 9 | `ROWS`, `WALK` | daemon `control/dirty.rs` | rows and directories one dirty report reads | count — threshold (two constants) |
+| 10 | `WRITTEN_PATHS` | store-service `store/commit_merge.rs` | paths one merge report lists | count — threshold |
+| 11 | `BATCH` | project `import/hints.rs`, store-service `store/hints.rs` | hint rows per write transaction | count — window (two constants) |
+| 12 | `WRITE_WINDOW_ROWS` | storage `port/acquisition/contract.rs` | rows per acquisition write window | count — window |
+| 13 | `POOL_BLOCK` | store-service `store/ports.rs` | serials per SDK pool reservation | count — window |
+| 14 | `DEPTH_CACHE_ENTRIES` | storage `delta/select.rs` | cached chain costs | count — cache |
+| 15 | `TABLE_BUCKETS` | storage `pool/delta.rs` | hash buckets | count — format |
+| 16 | `SCAN_LIMIT` | content `references/backing.rs` | run files scanned for the next token | count |
+| 17 | `MAXIMUM_PATH_BYTES` | content `filesystem/limits.rs` | path length | **bytes** |
+| 18 | `MAXIMUM_SYMLINK_TARGET_BYTES` | content `filesystem/limits.rs` | symlink target | **bytes** |
+| 19 | `MAXIMUM_MESSAGE_BYTES` | history `contract/records.rs` | Commit message | **bytes** |
+| 20 | `TEXT_FIELD_LIMIT` | bridge `control_merge.rs` | one report text field | **bytes** |
+| 21 | `CELL_BYTES` | overlay `contract/types.rs` | overlay payload cell | **bytes** |
+| 22 | `BLOCK_BYTES` | fuse `request/inline.rs` | statfs block size | **bytes** |
+| 23 | `RECORD_BYTES` | daemon `application/diagnostics.rs` | one diagnostic record | **bytes** |
+| 24 | `SINGLETON_FRAMING_SLACK` | storage `policy.rs` | pack framing headroom | **bytes** |
+
+Rows 9 and 11 hold two constants each, so the 24 rows name 26 constants.
 
 **None of them is the write batch.** That is a different number, and it is smaller:
 
@@ -301,14 +320,14 @@ three of them are not counts at all.
    WRITE  (C2 save)                        READ  (C1 wave → C2)
    ────────────────                        ────────────────────
    BATCH_OBJECT_LIMIT            512       MAXIMUM_READ_DEMANDS   4,096
-   BATCH_CANONICAL_BYTES_LIMIT   512 KiB   READ_OBJECT_LIMIT      4,096
+   WAVE_CANONICAL_BYTES_LIMIT 4 MiB − 1   READ_OBJECT_LIMIT      4,096
    TRANSACTION_ROW_LIMIT       8,191
    TRANSACTION_CANONICAL_BYTES 4 MiB − 1
 ```
 
-Two of the twelve are the read wave, and they are **deliberately matched across the
+Two of them are the read wave, and they are **deliberately matched across the
 boundary** — `filesystem/objects.rs` states that "the storage side declares the
-same figure, and the pool that feeds both is bounded by it". The other ten are
+same figure, and the pool that feeds both is bounded by it". The others are
 unrelated limits that happen to share a round binary number.
 
 `MAXIMUM_PATH_BYTES = 4_096` means a 4,096-**byte** path, which has nothing to do
@@ -320,13 +339,13 @@ with batching; `filesystem_limits.rs` pins it that way
 | Bound | Value | Consequence for a receipt |
 | --- | ---: | --- |
 | `BATCH_OBJECT_LIMIT` | 512 | a wave drains every 512 objects, not at 4,096 |
-| `BATCH_CANONICAL_BYTES_LIMIT` | 512 KiB | usually binds first: 512 average objects ≈ 512 KiB only at ~1 KiB each |
+| `WAVE_CANONICAL_BYTES_LIMIT` | 4 MiB − 1 | the transaction's own byte capacity (it replaced a 512 KiB batch bound); `GROUP_CANONICAL_BYTES_LIMIT` 512 KiB bounds one group frame |
 | `TRANSACTION_ROW_LIMIT` | 8,191 | one transaction spans many waves |
 | `TRANSACTION_CANONICAL_BYTES_LIMIT` | 4 MiB − 1 | `2²²−1`, an encoding ceiling, not a round number |
 | resident topology containers | `floor(ordering_bytes / 1024)` each | container size on resident routes only; work examined is never a refusal since R4 |
 | `READ_WAVE_OBJECTS` | 32 | mapping read waves; ≤ 1 MiB payloads |
-| `EDIT_DEFERRED_LIMIT` | 8 MiB − 1 | binds by failing the operation, never by dropping state |
-| `DEPENDENCY_PACK_CACHE_BYTES` | 4 MiB | released wholesale; costs reads, never correctness |
+| `EDIT_DEFERRED_LIMIT` | 8 MiB − 1 | memory edit route only, which no product path uses (audit S5); binds by failing the operation, never by dropping state |
+| `DEPENDENCY_PACK_CACHE_BYTES` | 2 MiB | released wholesale; costs reads, never correctness |
 
 ### 15.6 Counters that are easy to misread
 

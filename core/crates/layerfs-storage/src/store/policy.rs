@@ -32,8 +32,6 @@ pub const GROUP_COUNT_LIMIT: usize = 256;
 pub const RECORD_COUNT_LIMIT: usize = 8_191;
 /// Largest canonical object accepted by the shared profile.
 pub const CANONICAL_LIMIT: usize = 16 * 1024 * 1024;
-/// Identifiers in one membership or locator page.
-pub const LOOKUP_PAGE_IDS: usize = 128;
 /// Objects held by one pending batch.
 pub const BATCH_OBJECT_LIMIT: usize = 512;
 /// Canonical bytes held by one pending batch, and therefore by one wave.
@@ -66,8 +64,6 @@ pub const TRANSACTION_PHYSICAL_BYTES_LIMIT: u64 = TRANSACTION_CANONICAL_BYTES_LI
 /// frame rather than a transaction. The two were the same constant, which is why
 /// widening the wave's budget would otherwise have widened a frame's.
 pub const GROUP_CANONICAL_BYTES_LIMIT: u64 = 512 * 1024;
-/// Rows removed by one bounded cleanup page.
-pub const CLEANUP_PAGE_ROWS: usize = 128;
 /// Objects one authenticated read wave may demand.
 ///
 /// One wave is one grouped SQL lookup plus one shared decode workspace, so the
@@ -87,9 +83,6 @@ pub const WHOLE_FILE_CANONICAL_OVERHEAD: usize = 23;
 pub const SINGLETON_FRAMING_SLACK: usize = 4_096;
 /// Largest assembled singleton pack: one maximum canonical record plus framing.
 pub const SINGLETON_PACK_LIMIT: usize = CANONICAL_LIMIT + SINGLETON_FRAMING_SLACK;
-
-/// Rows in one pooled metadata leaf.
-pub const POOLED_LEAF_ROWS_LIMIT: usize = 100;
 
 /// Chain-work budgets. These are separate from the cutoff and the depths: a
 /// deeper chain is still bounded by the bytes it may decode and encode.
