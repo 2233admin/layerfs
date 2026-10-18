@@ -75,28 +75,98 @@ export function closureSteps({ changed, packages, tsconfigs, milestone, installe
 }
 
 /**
- * Plays the steps in the range's Workspace, each exec followed by its own
- * Commit. A non-zero install or build exit, or a test that does not give its
- * native pass, is a stop finding (Mismatch); nothing is retried.
+ * Plays the steps on `branch`, each in its own one-shot Workspace: mount,
+ * exec, the step's listing (install: the node_modules lister; build: the
+ * build outputs), its own Commit, unmount (INSTALLS §3.3). An install first
+ * checks that the Sandbox has the pnpm store mount (the read-only volume
+ * `sandbox.create` takes, sandboxVolumes). A non-zero install or build exit,
+ * or a test that does not give its native pass, is a stop finding
+ * (Mismatch); nothing is retried.
  */
-export async function playClosure(run, k, steps, { sb, ws, expectCall, Mismatch }) {
+export async function playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, store = STORE_MOUNT }) {
   const out = [];
   for (const s of steps) {
     const label = `r${pad(k)}.${s.kind}`;
     run.label(label);
-    const t0 = Date.now();
-    const r = await expectCall(run, `${label} exec`, () => run.lf.sandbox.exec(sb, ws, s.command));
-    const row = { kind: s.kind, exitCode: r.exitCode, ms: Date.now() - t0 };
-    if (s.kind === "test") {
-      const root = String((await run.lf.sandbox.exec(sb, ws, "pwd")).stdout).trim();
-      row.results = compareResults(s.files, parseVitestJson(String(r.stdout), root));
+    const ws = await expectCall(run, `${label} mount`, () => run.lf.sandbox.mount(sb, branch));
+    try {
+      if (/install/.test(s.kind)) {
+        const has = await run.lf.sandbox.exec(sb, ws, `test -d ${store}/v11 && test -f ${store}/.cache/lockfile-verified.jsonl`);
+        if (has.exitCode !== 0) throw new Mismatch(`${label}: the Sandbox has no pnpm store at ${store} (sandbox.create's read-only volume mount, INSTALLS §3.1)`);
+      }
+      const t0 = Date.now();
+      const r = await expectCall(run, `${label} exec`, () => run.lf.sandbox.exec(sb, ws, s.command));
+      const row = { kind: s.kind, exitCode: r.exitCode, ms: Date.now() - t0, ...(s.packages ? { packages: s.packages } : {}) };
+      out.push(row);
+      if (s.kind !== "test" && r.exitCode !== 0) throw new Mismatch(`${label} exited ${r.exitCode}: ${String(r.stderr || r.stdout || "").slice(-300)}`);
+      if (/install/.test(s.kind)) {
+        row.output = normalizeOutput(`${r.stdout ?? ""}${r.stderr ?? ""}`);
+        row.groups = String((await run.lf.sandbox.exec(sb, ws, listerCommand())).stdout).split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l));
+      }
+      if (s.kind === "build") row.bytes = buildBytes((await run.lf.sandbox.exec(sb, ws, buildListCommand(s.packages))).stdout, s.packages);
+      if (s.kind === "test") {
+        const root = String((await run.lf.sandbox.exec(sb, ws, "pwd")).stdout).trim();
+        row.results = compareResults(s.files, parseVitestJson(String(r.stdout), root));
+      }
+      row.commit = (await expectCall(run, `${label} commit`, () => run.lf.sandbox.commit(sb, ws, label), "Committed|UpToDate"))?.kind;
+      if (row.results?.differ.length) throw new Mismatch(`${label}: ${row.results.differ.length} file(s) differ from native`);
+    } finally {
+      await run.lf.sandbox.unmount(sb, ws, true);
     }
-    row.commit = (await expectCall(run, `${label} commit`, () => run.lf.sandbox.commit(sb, ws, label), "Committed|UpToDate"))?.kind;
-    out.push(row);
-    if (s.kind !== "test" && r.exitCode !== 0) throw new Mismatch(`${label} exited ${r.exitCode}: ${String(r.stderr ?? r.stdout ?? "").slice(-300)}`);
-    if (row.results?.differ.length) throw new Mismatch(`${label}: ${row.results.differ.length} file(s) differ from native`);
   }
   return out;
+}
+
+/** Paths the closure writes that git does not track: node_modules, build output (`dist/`, `*.tsbuildinfo`). The proof leaves them out when extra. */
+export const CLOSURE_OUTPUT = /(^|\/)node_modules(\/|$)|(^|\/)dist\/|\.tsbuildinfo$/;
+
+/**
+ * One range's closure on `branch` before its publish (P3, INSTALLS §3): the
+ * steps from git's changes since the previous checkpoint, the checkpoint's
+ * packages and tsconfigs, the milestone flag and the calibrated tests, played
+ * by playClosure. The installed tree must equal the native oracle of the same
+ * lockfile and pnpm's output must equal native apart from timing; either
+ * difference is a stop finding. Returns the rows, the oracle comparison and
+ * the reinstall input (changed packages and their raw bytes); the caller adds
+ * the stored bytes from the install Commit's traced sizes.
+ */
+export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir }) {
+  const git = (args) => execFileSync("git", ["--git-dir", run.repo, ...args], { encoding: "utf8", maxBuffer: 1 << 28 });
+  const tree = lsTree(run.repo, plan.checkpoint).files;
+  const lock = tree.get("pnpm-lock.yaml")?.blob;
+  if (!lock) return { skipped: "no pnpm-lock.yaml (not a pnpm project at this checkpoint)" };
+  const dirsWith = (name) => new Set([...tree.keys()].filter((p) => p.endsWith(`/${name}`)).map((p) => p.slice(0, -name.length - 1)));
+  const calFile = join(run.planDir, `tests-${pad(k)}.json`);
+  if (!existsSync(calFile)) throw new Mismatch(`range ${k} has no calibration (${calFile})`);
+  const cal = JSON.parse(readFileSync(calFile, "utf8"));
+  const changed = git(["diff", "--name-only", run.state.prevCommit, plan.checkpoint]).split("\n").filter(Boolean);
+  const steps = closureSteps({ changed, packages: dirsWith("package.json"), tsconfigs: dirsWith("tsconfig.json"), milestone: !!plan.milestone, installed: !!run.state.installed, run: cal.run });
+  const install = steps.find((s) => /install/.test(s.kind));
+  const oracleFile = join(oracleDir, "node_modules", `${lock}.json`);
+  if (install && !existsSync(oracleFile)) throw new Mismatch(`range ${k}: no node_modules oracle for lockfile ${lock.slice(0, 12)}; run closure.mjs oracle --range ${k} first`);
+  const rows = await playClosure(run, k, steps, { sb, branch, expectCall, Mismatch });
+  const out = { steps: steps.map((s) => s.kind), rows: rows.map(({ groups, ...r }) => r) };
+  const done = rows.find((r) => /install/.test(r.kind));
+  if (done) {
+    const oracle = JSON.parse(readFileSync(oracleFile, "utf8"));
+    out.oracle = compareInstalled(oracle, done.groups);
+    if (!out.oracle.ok) throw new Mismatch(`r${pad(k)} install differs from native: ${JSON.stringify({ missing: out.oracle.missing.slice(0, 5), extra: out.oracle.extra.slice(0, 5), differ: out.oracle.differ.slice(0, 5) })}`);
+    if (done.output !== oracle.output) throw new Mismatch(`r${pad(k)} install output differs from native: ${firstDifference(oracle.output, done.output)}`);
+    let prevLock = "";
+    try { prevLock = git(["show", `${run.state.prevCommit}:pnpm-lock.yaml`]); } catch { prevLock = ""; }
+    const ch = changedPackages(prevLock, git(["show", `${plan.checkpoint}:pnpm-lock.yaml`]));
+    out.reinstall = { changedPackages: ch.count, rawChangedBytes: rawChangedBytes(ch, oracle.groups), changed: ch };
+    out.prevGroups = run.state.nmGroupsFile ? JSON.parse(readFileSync(run.state.nmGroupsFile, "utf8")) : [];
+    out.groups = done.groups;
+  }
+  return out;
+}
+
+/** The first line where two outputs differ, for a stop finding. */
+export function firstDifference(a, b) {
+  const x = String(a).split("\n"), y = String(b).split("\n");
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if (x[i] !== y[i]) return `line ${i + 1}: native ${JSON.stringify(x[i] ?? null)}, LayerFS ${JSON.stringify(y[i] ?? null)}`;
+  return "none";
 }
 
 /**
@@ -197,32 +267,31 @@ export const STUDY_BINARIES = [/^@anthropic-ai\/claude-agent-sdk-linux-arm64@/, 
  * The seven measurements STORAGE_STUDY.md §8 asks of P3's development run,
  * from what one range records. Storage is attributed by the step's own Commit
  * (an install Commit writes node_modules, a build Commit build output, the
- * agents' Commits tracked files). Bytes by role (content vs metadata) need the
- * product's per-domain pack write counters; until the trace has them each
- * such value is null with `needs`.
- * @param {{ fsWrites: object[], install?: { storage, delta, prevGroups, groups, changed }, build?: { storage, bytes }, binaries?: object }} r
+ * agents' Commits tracked files), from each Commit's traced `sizes`: newStored
+ * (every new pack body) and newMetadata (metadata-domain packs), so content =
+ * newStored − newMetadata (layerfs-storage Save outcome; no new counter).
+ * @param {{ fsWrites: object[], install?: { sizes, delta, prevGroups, groups, changed, paths }, build?: { sizes, bytes }, binaries?: object }} r
  */
-export const ROLE_COUNTER = "per-Commit stored pack body bytes by domain (payload, metadata) in the daemon storage counters";
 export function studyMeasurements({ fsWrites = [], install = null, build = null, binaries = null }) {
   const p50 = (xs) => { const v = xs.filter((x) => x != null).sort((a, b) => a - b); return v.length ? v[Math.floor((v.length - 1) / 2)] : null; };
-  const role = (st) => (st?.payload_pack_write_bytes == null ? { content: null, metadata: null, needs: ROLE_COUNTER } : { content: st.payload_pack_write_bytes, metadata: st.metadata_pack_write_bytes });
+  const role = (z) => (z?.newStored == null ? { content: null, metadata: null } : { content: z.newStored - (z.newMetadata ?? 0), metadata: z.newMetadata ?? 0 });
   const out = {
-    fsWriteCommit: { n: fsWrites.length, storedP50: p50(fsWrites.map((c) => c.storage?.pack_write_bytes)), ...role(fsWrites.length ? { payload_pack_write_bytes: p50(fsWrites.map((c) => c.storage?.payload_pack_write_bytes)), metadata_pack_write_bytes: p50(fsWrites.map((c) => c.storage?.metadata_pack_write_bytes)) } : null) },
+    fsWriteCommit: { n: fsWrites.length, storedP50: p50(fsWrites.map((c) => c.sizes?.newStored)), contentP50: p50(fsWrites.map((c) => role(c.sizes).content)), metadataP50: p50(fsWrites.map((c) => role(c.sizes).metadata)) },
   };
   if (install) {
     const was = new Map((install.prevGroups ?? []).map((g) => [g.g, g.digest]));
     const added = install.groups.filter((g) => !was.has(g.g)), rewritten = install.groups.filter((g) => was.has(g.g) && was.get(g.g) !== g.digest);
-    const newPaths = added.reduce((n, g) => n + g.n, 0), r = role(install.storage);
+    const newPaths = added.reduce((n, g) => n + g.n, 0), r = role(install.sizes);
     const ownGroup = (g) => install.changed?.packages.some((k) => { const at = k.lastIndexOf("@"); return g.g.includes(`/.pnpm/${k.slice(0, at).replaceAll("/", "+")}@${k.slice(at + 1)}`); });
-    out.install = { stored: install.storage?.pack_write_bytes ?? null, ...r, newPaths, newPackageFolders: added.length,
+    out.install = { stored: install.sizes?.newStored ?? null, ...r, newPaths, newPackageFolders: added.length,
       // per-path facts: read from the sealed snapshot (inspect.mjs), not from one Commit's counters
       lockYamlDeduped: install.paths?.lockYamlDeduped ?? null, modulesYamlDelta: install.paths?.modulesYamlDelta ?? null };
-    out.metadataPerPath = { perNewPath: r.metadata == null || !newPaths ? null : +(r.metadata / newPaths).toFixed(1), ...(r.needs ? { needs: r.needs } : {}) };
+    out.metadataPerPath = { perNewPath: r.metadata == null || !newPaths ? null : +(r.metadata / newPaths).toFixed(1) };
     out.reuse = install.delta ?? null;
     out.relink = { rewrittenFolders: rewritten.length, unchangedPackageFolders: rewritten.filter((g) => !ownGroup(g)).length };
   }
   if (binaries) out.binaries = binaries;
-  if (build) out.build = { stored: build.storage?.pack_write_bytes ?? null, perPackage: build.bytes, ...role(build.storage) };
+  if (build) out.build = { stored: build.sizes?.newStored ?? null, perPackage: build.bytes, ...role(build.sizes) };
   return out;
 }
 

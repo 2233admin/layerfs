@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlink
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fetchScript } from "../fetch-store.mjs";
-import { buildBytes, buildListCommand, changedPackages, closureSteps, ROLE_COUNTER, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, playClosure } from "../closure.mjs";
+import { buildBytes, buildListCommand, changedPackages, CLOSURE_OUTPUT, closureSteps, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, playClosure } from "../closure.mjs";
 import { aggregate, buildBaseline, reinstallGate, evaluate, probeSeries, thinClass } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
@@ -25,7 +25,7 @@ import { checkRunner, loadBudget, wallProjection } from "../run.mjs";
 import { runnerArgs, runOf } from "../runner.mjs";
 import { demux, parseRun } from "../runner/docker-shim.mjs";
 import {
-  attributeFuse, callOf, diskGuard, markContention, diskModel, changedDirs, outcomeOf, checkpointDiff, consolidationSteps, withDirs, decoyBytes, nextPhase, p2Plan, route, sandboxCommands, STEP_KINDS, Tree,
+  attributeFuse, callOf, comparePaths, diskGuard, markContention, diskModel, changedDirs, outcomeOf, checkpointDiff, consolidationSteps, withDirs, decoyBytes, nextPhase, p2Plan, route, sandboxCommands, STEP_KINDS, Tree,
 } from "../steps.mjs";
 import {
   buildOverview, callTable, categoryOf, withoutProbeSetupCommits, categoryRows, CATEGORIES, checkOverview, derivedOverview, renderOverview, renderStats, stageSplit, tenths, timeLine,
@@ -83,7 +83,9 @@ test("consolidationSteps: the race publishes one lane while merging the other, t
 test("nextPhase: one phase forward only, to a phase with a player", () => {
   assert.equal(nextPhase("p1", "p2"), null);
   assert.match(nextPhase("p2", "p1"), /one phase forward/);
-  assert.match(nextPhase("p1", "p3"), /no player/);
+  assert.match(nextPhase("p1", "p3"), /one phase forward/);
+  assert.equal(nextPhase("p2", "p3"), null, "P3 has its player (the closure)");
+  assert.match(nextPhase("p3", "p4"), /no player/);
 });
 
 test("route with concurrent agents: a removal stops at a shared folder; a write re-makes a shared new folder; all through a Sandbox", () => {
@@ -678,13 +680,19 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
   const changed = compareInstalled({ groups }, [{ ...groups[0], digest: "0" }]);
   assert.deepEqual([changed.differ, changed.missing], [["node_modules/.pnpm"], ["node_modules/.pnpm/x@1", "node_modules/x"]]);
   rmSync(t, { recursive: true, force: true });
-  // playing: one exec and one Commit per step; a failing build stops
+  // playing: each step in its own one-shot Workspace (mount, exec, listing, Commit, unmount); a failing build stops
   const calls = [];
-  const fake = { label: () => {}, tally: { calls: 0 }, lf: { sandbox: {
-    exec: async (sb, ws, c) => { calls.push(c.startsWith("./node_modules/.bin/tsc") ? "build" : c === "pwd" ? "pwd" : "exec"); return { exitCode: c.startsWith("./node_modules/.bin/tsc") ? 2 : 0, stdout: "" }; },
-    commit: async () => { calls.push("commit"); return { kind: "Committed" }; } } } };
-  await assert.rejects(playClosure(fake, 15, steps.slice(0, 2), { sb: 1, ws: 1, expectCall: (r, l, w) => w(), Mismatch: class extends Error {} }), /r015\.build exited 2/);
-  assert.deepEqual(calls, ["exec", "commit", "build", "commit"]);
+  const kind = (c) => (c.startsWith("test -d /pnpm-store") ? "store?" : c.startsWith("./node_modules/.bin/tsc") ? "build" : c.startsWith("node -e") ? "list" : c.includes("pnpm install") ? "install" : c);
+  const fake = (store) => ({ label: () => {}, tally: { calls: 0 }, lf: { sandbox: {
+    mount: async () => { calls.push("mount"); return "/workspaces/1"; }, unmount: async () => { calls.push("unmount"); },
+    exec: async (sb, ws, c) => { calls.push(kind(c)); return { exitCode: kind(c) === "build" ? 2 : kind(c) === "store?" && !store ? 1 : 0, stdout: "" }; },
+    commit: async () => { calls.push("commit"); return { kind: "Committed" }; } } } });
+  const deps = { sb: 1, branch: "r015-main-3", expectCall: (r, l, w) => w(), Mismatch: class extends Error {} };
+  await assert.rejects(playClosure(fake(true), 15, steps.slice(0, 2), deps), /r015\.build exited 2/);
+  assert.deepEqual(calls, ["mount", "store?", "install", "list", "commit", "unmount", "mount", "build", "unmount"]);
+  calls.length = 0;
+  await assert.rejects(playClosure(fake(false), 15, steps.slice(0, 1), deps), /no pnpm store at \/pnpm-store/);
+  assert.deepEqual(calls, ["mount", "store?", "unmount"], "no install without the store mount");
 });
 
 test("reinstall gate (lead decision): changed lockfile packages and links, stored ÷ raw changed; none changed is judged absolutely", () => {
@@ -744,17 +752,17 @@ test("disk projection: the study model's estimate beside the guard's floor", () 
   assert.equal(floor.projected, 10 * 256 * 2 ** 20, "the guard keeps its 256 MiB floor");
 });
 
-test("study §8 measurements: storage by the step's Commit; role bytes need the product's domain counters", () => {
+test("study §8 measurements: storage by the step's Commit, content and metadata from its traced sizes", () => {
   const prevGroups = [{ g: "node_modules/.pnpm/a@1", n: 3, digest: "x" }, { g: "node_modules/.pnpm/b@1", n: 2, digest: "y" }];
   const groups = [{ g: "node_modules/.pnpm/a@1", n: 3, digest: "x" }, { g: "node_modules/.pnpm/b@1", n: 2, digest: "z" }, { g: "node_modules/.pnpm/c@2", n: 4, digest: "w" }];
   const m = studyMeasurements({
-    fsWrites: [{ storage: { pack_write_bytes: 5000 } }, { storage: { pack_write_bytes: 7000 } }, { storage: { pack_write_bytes: 9000 } }],
-    install: { storage: { pack_write_bytes: 1000 }, delta: { share: 0.4 }, prevGroups, groups, changed: { packages: ["c@2"], links: [] } },
-    build: { storage: { pack_write_bytes: 300, payload_pack_write_bytes: 200, metadata_pack_write_bytes: 100 }, bytes: buildBytes("10 packages/a/dist/x.js\n5 packages/a/tsconfig.tsbuildinfo\n7 packages/b/dist/y.js\n", ["packages/a", "packages/b"]) },
+    fsWrites: [{ sizes: { newStored: 5000, newMetadata: 3000 } }, { sizes: { newStored: 7000, newMetadata: 4000 } }, { sizes: { newStored: 9000, newMetadata: 5000 } }],
+    install: { sizes: { newStored: 1000, newMetadata: 400 }, delta: { share: 0.4 }, prevGroups, groups, changed: { packages: ["c@2"], links: [] } },
+    build: { sizes: { newStored: 300, newMetadata: 100 }, bytes: buildBytes("10 packages/a/dist/x.js\n5 packages/a/tsconfig.tsbuildinfo\n7 packages/b/dist/y.js\n", ["packages/a", "packages/b"]) },
   });
-  assert.deepEqual(m.fsWriteCommit, { n: 3, storedP50: 7000, content: null, metadata: null, needs: ROLE_COUNTER });
-  assert.deepEqual([m.install.newPaths, m.install.newPackageFolders, m.install.metadata, m.relink], [4, 1, null, { rewrittenFolders: 1, unchangedPackageFolders: 1 }]);
-  assert.equal(m.metadataPerPath.needs, ROLE_COUNTER);
+  assert.deepEqual(m.fsWriteCommit, { n: 3, storedP50: 7000, contentP50: 3000, metadataP50: 4000 });
+  assert.deepEqual([m.install.newPaths, m.install.newPackageFolders, m.install.content, m.install.metadata, m.relink], [4, 1, 600, 400, { rewrittenFolders: 1, unchangedPackageFolders: 1 }]);
+  assert.equal(m.metadataPerPath.perNewPath, 100);
   assert.deepEqual(m.build, { stored: 300, perPackage: { "packages/a": 15, "packages/b": 7 }, content: 200, metadata: 100 });
   assert.match(buildListCommand(["packages/a"]), /^find 'packages\/a' -path '\*\/node_modules' -prune -o/);
 });
@@ -789,6 +797,16 @@ test("uncontended vs contended (SPEC §5): overlap with a Commit or merge classe
   assert.equal(cw(() => 5000).result, "pass");
   const narrow = [0, 1, 2].map((i) => ({ ...mk(i, (j) => 5000 * (j + 1)), inputs: { tree: { files: 1000 + 30 * i } } }));
   assert.match(evaluate(narrow.at(-1), narrow.slice(0, -1)).checks.find((c) => c.name === "Contended work").value, /too narrow/, "a fit over a few percent of growth is not judged");
+});
+
+test("P3 proof: untracked closure output is no extra; a tracked file under it is still compared", () => {
+  const items = [{ path: "/src/a.ts", kind: "Modified" }, { path: "/node_modules/.pnpm/x@1/node_modules/x/i.js", kind: "Added" }, { path: "/packages/a/dist/i.js", kind: "Added" },
+    { path: "/packages/a/tsconfig.tsbuildinfo", kind: "Added" }, { path: "/packages/b/dist/keep.js", kind: "Modified" }];
+  const git = [{ path: "src/a.ts" }, { path: "packages/b/dist/keep.js" }];
+  assert.equal(comparePaths(items, git, [".lfs-probe/"]).extra.length, 3, "P2: every untracked path is an extra");
+  const p3 = comparePaths(items, git, [".lfs-probe/"], CLOSURE_OUTPUT);
+  assert.deepEqual([p3.ok, p3.extra, p3.missing], [true, [], []]);
+  assert.equal(comparePaths(items, [...git, { path: "packages/c/dist/gone.js" }], [".lfs-probe/"], CLOSURE_OUTPUT).missing[0], "packages/c/dist/gone.js", "git's tracked output is still required");
 });
 
 // the runner stays last: a test registered after it never runs

@@ -18,12 +18,15 @@ export const PROBE_DIR = ".lfs-probe";
  * What each phase runs (SPEC §9). P1: one lane, one agent, fs only. P2: the
  * plan's lanes as Branches, its agents as concurrent tasks ordered by the
  * plan's barriers, its one-shot Workspaces, planned conflicts and
- * consolidation; no installs or unit tests (P3). Later phases refuse until
- * their player exists.
+ * consolidation; no installs or unit tests. P3: P2 with the closure
+ * (closure.mjs rangeClosure) on main before the publish. Later phases refuse
+ * until their player exists.
  */
 export const PHASES = {
   p1: { lanes: 1, agents: 1, fsOnly: true, conflicts: false, tests: false, snapshot: "every", probes: true, order: 1 },
   p2: { lanes: "plan", agents: "plan", fsOnly: false, conflicts: true, tests: false, snapshot: "due", probes: true, order: 2 },
+  // P3 (INSTALLS.md): P2 plus the closure on main before its publish: a real pnpm install, tsc -b, the unit tests
+  p3: { lanes: "plan", agents: "plan", fsOnly: false, conflicts: true, tests: true, closure: true, snapshot: "due", probes: true, order: 3 },
 };
 
 /** A run may move only to the phase after its own (run.mjs phase). */
@@ -305,11 +308,12 @@ export function parseTreePage(stdout) {
  * between the previous checkpoint and this one against the paths git
  * changed. Folders are left out (git has none), and so are ignored prefixes.
  */
-export function comparePaths(items, gitChanges, ignore) {
+export function comparePaths(items, gitChanges, ignore, outputs = null) {
   const skip = (p) => ignore.some((i) => p.startsWith(i));
-  const files = items.filter((i) => i.type !== "dir").map((i) => ({ ...i, path: i.path.replace(/^\//, "") })).filter((i) => !skip(i.path));
-  const lfs = new Set(files.map((i) => i.path));
   const git = new Set(gitChanges.filter((c) => !c.gitlink).map((c) => c.path).filter((p) => !skip(p)));
+  // P3: what the closure writes and git does not track (closure.mjs CLOSURE_OUTPUT) is no extra
+  const files = items.filter((i) => i.type !== "dir").map((i) => ({ ...i, path: i.path.replace(/^\//, "") })).filter((i) => !skip(i.path) && !(outputs?.test(i.path) && !git.has(i.path)));
+  const lfs = new Set(files.map((i) => i.path));
   const missing = [...git].filter((p) => !lfs.has(p)).sort();
   // A file whose bytes are unchanged but whose metadata changed (a timestamp,
   // after a step changed it and a later one put it back) is no change to git;

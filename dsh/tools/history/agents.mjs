@@ -226,9 +226,9 @@ export async function startRange(run, k, plan, measured) {
  * Branch (a new Branch per merge, `r<k>-main-<n>`), the planned race (the
  * first raced lane publishes while the lead merges the second; the
  * published lane is then merged again), the reconcile on the result and its
- * publish. Returns the publish's answer.
+ * publish (P3: the closure first, `beforePublish`). Returns the publish's answer.
  */
-export async function consolidateLanes(run, k, plan, ctx) {
+export async function consolidateLanes(run, k, plan, ctx, { beforePublish = null } = {}) {
   let cur = ctx.lead, n = 0;
   const changes = (lane) => laneChanges(ctx.base, ctx.trees.get(lane)).size;
   const merge = async (who, lane, want = "Merged") => {
@@ -266,6 +266,8 @@ export async function consolidateLanes(run, k, plan, ctx) {
       if (ctx.race?.again) { await merge(run, ctx.race.again); ctx.leadSteps.push({ op: "merge again", category: "branch" }); ctx.race.again = null; }
       if (ctx.race && ctx.race.doneAt == null) ctx.race.doneAt = performance.now();
       ctx.mainTree ??= mergedTree(ctx.base, [...ctx.trees.values()]);
+      // P3: the closure's install, build and tests, each with its own Commit on the Branch published next
+      if (beforePublish) ctx.closure = await beforePublish(cur);
       run.label(`r${pad(k)}.publish`);
       const v = await expectCall(run, `r${pad(k)} publish`, () => run.lf.branch.publish(cur), "Added");
       ctx.leadSteps.push({ op: "publish", category: "branch" });

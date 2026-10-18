@@ -20,6 +20,7 @@ import { BlobCache, diffTrees, lsTree } from "./git.mjs";
 import { compareTree, IGNORE } from "./oracle.mjs";
 import { compareResults, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
 import { INSTALL } from "./calibrate-tests.mjs";
+import { CLOSURE_OUTPUT, sandboxVolumes } from "./closure.mjs";
 import {
   abs, attributeFuse, callOf, changedDirs, compareIds, comparePaths, idBatches, pad, parseTreePage, PHASES, phaseOps, PROBE_DIR, quote,
   deltaWork, markContention, route, sandboxCommands, sandboxExpect, sqlCounters, traceLines, Tree, TREE_IDS, TREE_PAGE,
@@ -27,6 +28,7 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const REPO = resolve(here, "../../..");
+export const PNPM_STORE = "layerfs-issue352-pnpm-store";
 export const HISTORY = process.env.LFS_HISTORY ?? join(process.env.HOME, "lfs-history");
 export class Mismatch extends Error {}
 
@@ -222,7 +224,9 @@ export async function expectCall(run, label, work, want) {
 export async function setup(run) {
   if (run.sandbox) return run.sandbox;
   const id = `s${run.state.next}`;
-  run.sandbox = await run.lf.sandbox.create(id, run.manifest.project, run.manifest.env.LAYERFS_IMAGE);
+  // P3 (INSTALLS §3.1): the pnpm store volume, read-only, outside every Workspace
+  const extra = PHASES[run.manifest.phase]?.closure ? [sandboxVolumes(run.manifest.env.LAYERFS_PNPM_STORE ?? PNPM_STORE)] : [];
+  run.sandbox = await run.lf.sandbox.create(id, run.manifest.project, run.manifest.env.LAYERFS_IMAGE, ...extra);
   run.note({ kind: "container", name: `${run.manifest.env.LAYERFS_CONTAINER_PREFIX}${id}`, id: run.container(id), sandbox: id });
   const service = `_service.${run.manifest.project}`;
   if (run.lf.sandboxes.has(service) && !run.state.serviceNoted) {
@@ -386,11 +390,12 @@ export async function verify(run, k, { prevHead, head, layer, prevCommit, full }
     if (!page.nextCursor || page.nextCursor === cursor) throw new Error(`diff_commits answered hasMore without a new nextCursor (${cursor ?? "first page"})`);
     cursor = page.nextCursor;
   }
-  const paths = comparePaths(items, changes, IGNORE);
+  const outputs = PHASES[run.manifest.phase]?.closure ? CLOSURE_OUTPUT : null;
+  const paths = comparePaths(items, changes, IGNORE, outputs);
   const expected = lsTree(run.repo, plan.checkpoint).files;
   const present = [...changes.filter((c) => !c.gitlink && c.mode !== "000000").map((c) => c.path), ...paths.metadataOnly];
   const ids = compareIds(present, present.length ? await readIds(run, layer, present, `r${pad(k)}-ids`) : new Map(), expected);
-  const tree = full ? compareTree(expected, await readIds(run, layer, null, `r${pad(k)}-tree`)) : null;
+  const tree = full ? compareTree(expected, await readIds(run, layer, null, `r${pad(k)}-tree`), IGNORE, outputs) : null;
   return { ok: paths.ok && ids.ok && (!tree || tree.ok), paths, ids, tree, changedDirs: changedDirs(items.map((i) => i.path)) };
 }
 

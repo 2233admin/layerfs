@@ -55,13 +55,14 @@ import { due, manifestPath, rebuild } from "./snapshot.mjs";
 import { aggregate } from "./gates.mjs";
 import { PLAN_VERSION } from "./plan.mjs";
 import {
-  binaries, closure, consolidate, HISTORY, Mismatch, probeFixture, probes, readTrace, REPO, Run,
-  sandboxHealth, sha256, step, teardown, verify, versionStats, writeJson,
+  binaries, closure, consolidate, expectCall, HISTORY, Mismatch, probeFixture, probes, readTrace, REPO, Run,
+  sandboxHealth, setup, sha256, step, teardown, verify, versionStats, writeJson,
 } from "./lib.mjs";
-import { addDelta, checkpointDiff, deltaSummary, diskGuard, diskModel, EXIT, nextPhase, pad, PHASES, phaseOps, Tree } from "./steps.mjs";
+import { addDelta, checkpointDiff, deltaSummary, deltaWork, diskGuard, diskModel, EXIT, nextPhase, pad, PHASES, phaseOps, Tree } from "./steps.mjs";
 import { consolidateLanes, playAgents, pool, startRange } from "./agents.mjs";
 import { buildOverview, callTable } from "./stats.mjs";
 import { area } from "./plan-range.mjs";
+import { rangeClosure, studyMeasurements } from "./closure.mjs";
 
 const here = new URL(".", import.meta.url).pathname;
 const IMAGE = "sha256:d3773b4eac6a7a644887b17e36956cd1553786d47103f0170a3bb2b0ff6988de";
@@ -342,9 +343,15 @@ async function playRange(run, k, mode) {
       await playAgents(run, k, ctx);
       lap("playMs", since);
       since = performance.now();
-      published = await consolidateLanes(run, k, plan, ctx);
+      const beforePublish = phase.closure ? async (cur) => rangeClosure(run, k, plan, cur, { sb: await setup(run), expectCall, Mismatch, oracleDir: run.manifest.oracle }) : null;
+      published = await consolidateLanes(run, k, plan, ctx, { beforePublish });
       branch = ctx.final;
       ctx.tree = ctx.mainTree;
+      if (ctx.closure?.groups) {
+        const file = join(run.dir, "closure", `groups-${pad(k)}.json`);
+        writeJson(file, ctx.closure.groups);
+        run.state.installed = true; run.state.nmGroupsFile = file;
+      }
       lap("consolidateMs", since);
     } else {
       run.label(`r${pad(k)}.fork`);
@@ -371,7 +378,7 @@ async function playRange(run, k, mode) {
     lap("verifyMs", since);
     wall.verify = snapshotDue ? "diff_commits + full compareTree" : "diff_commits";
     if (!proof.ok) failure = `the checkpoint differs from git: ${JSON.stringify({ paths: proof.paths, ids: proof.ids, tree: proof.tree && { missing: proof.tree.missing.slice(0, 5), extra: proof.tree.extra.slice(0, 5), content: proof.tree.content.slice(0, 5), mode: proof.tree.mode.slice(0, 5) } }).slice(0, 1500)}`;
-    if (!failure && phase.tests && measured) { since = performance.now(); tests = await closure(run, k, "tests", { layer: published.publishedLayer.id }); lap("testsMs", since); }
+    if (!failure && phase.tests && !phase.closure && measured) { since = performance.now(); tests = await closure(run, k, "tests", { layer: published.publishedLayer.id }); lap("testsMs", since); }
     if (!failure && phase.probes && measured) { since = performance.now(); probeOut = await probes(run, k, { branch, tree: ctx.tree }); lap("probesMs", since); }
     // the latest version as LayerFS shows it (REPORT_FORMAT.md §4), every range
     if (!failure && measured) { since = performance.now(); versionOut = await versionStats(run, k, published.publishedLayer.id); lap("versionMs", since); }
@@ -411,6 +418,19 @@ async function playRange(run, k, mode) {
     deltaTotal: deltaSummary(deltaTotal, caps(run.manifest.policy)),
     reinstall: null,
   };
+  if (ctx?.closure && !ctx.closure.skipped) {
+    // P3: storage by the step's own Commit (traced sizes), the reinstall gate, STORAGE_STUDY §8
+    const commitOf = (kind) => t.all.find((l) => l.method === "sandbox.commit" && l.step === `r${pad(k)}.${kind}`);
+    const inst = ctx.closure.rows.find((r) => /install/.test(r.kind)), build = ctx.closure.rows.find((r) => r.kind === "build");
+    const instSizes = inst ? commitOf(inst.kind)?.sizes ?? null : null;
+    if (ctx.closure.reinstall && m.storage) m.storage.reinstall = { changedPackages: ctx.closure.reinstall.changedPackages, rawChangedBytes: ctx.closure.reinstall.rawChangedBytes, storedNewBytes: instSizes?.newStored ?? null };
+    m.closure = { steps: ctx.closure.steps, rows: ctx.closure.rows, oracle: ctx.closure.oracle ?? null };
+    m.study = studyMeasurements({
+      fsWrites: t.all.filter((l) => l.method === "fs.write" && l.sizes).map((l) => ({ sizes: l.sizes })),
+      install: inst ? { sizes: instSizes, delta: deltaSummary(deltaWork(t.all.filter((l) => l.step === `r${pad(k)}.${inst.kind}`)), caps(run.manifest.policy)), prevGroups: ctx.closure.prevGroups, groups: ctx.closure.groups, changed: ctx.closure.reinstall?.changed } : null,
+      build: build ? { sizes: commitOf("build")?.sizes ?? null, bytes: build.bytes } : null,
+    });
+  }
   m.ops = aggregate(t.calls);
   m.opsTrace = aggregate(t.callsTrace);
   // the call records beside the trace, so a later re-derivation keeps the size classes (SPEC §5)
@@ -466,7 +486,7 @@ async function playRange(run, k, mode) {
     conflicts: { planned: p2 ? plan.conflicts.length : 0, hit: p2 ? m.overview.conflicts.reduce((n, c) => n + c.hit, 0) : 0, unplanned: 0,
       byKind: Object.fromEntries(m.overview.conflicts.map((c) => [c.kind, { hit: c.hit, planned: c.planned }])) },
     ignored: { ok: true },
-    tests: tests ?? { equal: 0, run: 0 },
+    tests: tests ?? (ctx?.closure?.rows?.find((r) => r.kind === "test")?.results ?? { equal: 0, run: 0 }),
   };
   lap("metricsMs", since);
   m.budget = { diskProjected: guard.projected, diskBudget: free.dockerFree + (run.state.storeBytes ?? 0),

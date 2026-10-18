@@ -43,8 +43,8 @@ export function expectedTree(repo, commit) {
  * bytes LayerFS returned) with the checkpoint's. Mode is compared as git sees
  * it: regular, executable or symlink.
  */
-export function compareTree(expected, actual, ignore = IGNORE) {
-  const skip = (p) => ignore.some((i) => p.startsWith(i));
+export function compareTree(expected, actual, ignore = IGNORE, outputs = null) {
+  const skip = (p) => ignore.some((i) => p.startsWith(i)) || !!outputs?.test(p);
   const out = { missing: [], extra: [], content: [], mode: [] };
   for (const [p, e] of expected) {
     const a = actual.get(p);
