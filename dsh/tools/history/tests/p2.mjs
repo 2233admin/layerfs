@@ -590,11 +590,13 @@ test("F-021 follow-up: open issues are judged as of the latest attempt's start",
 });
 
 test("runner container: docker run arguments with the run's Store volume, the host refused, the shim's run parsing and stream split", () => {
-  const a = runnerArgs({ imageId: "sha256:abc", hostSocket: "/Users/u/.docker/run/docker.sock", args: ["play", "--run", "x"], sdk: "/w/f020/sdk/js", home: "/Users/u", repo: "/r", history: "/Users/u/lfs-history" });
+  const a = runnerArgs({ imageId: "sha256:abc", hostSocket: "/Users/u/.docker/run/docker.sock", args: ["play", "--run", "x"], sdk: "/w/f020/sdk/js", gitCommon: "/m/.git", home: "/Users/u", repo: "/r", history: "/Users/u/lfs-history" });
   const s = a.join(" ");
-  for (const want of ["--name layerfs-issue352-runner --init --network host", "-v /r:/r", "-v /Users/u/lfs-history:/Users/u/lfs-history", "-v layerfs-issue352-x:/layerfs-store", "-v /w/f020/sdk/js:/w/f020/sdk/js:ro",
+  for (const want of ["--name layerfs-issue352-runner --init -v", "LAYERFS_DAEMON_HOST=host.docker.internal", "--mount type=bind,src=/m/.git,dst=/m/.git,readonly", "-v /r:/r", "-v /Users/u/lfs-history:/Users/u/lfs-history", "-v layerfs-issue352-x:/layerfs-store", "-v /w/f020/sdk/js:/w/f020/sdk/js:ro",
     "-v /var/run/docker.sock:/Users/u/.docker/run/docker.sock", "LAYERFS_STORE_PATH=/layerfs-store/global/store.sqlite", "LAYERFS_RUNNER_IMAGE=sha256:abc", "PATH=/r/dsh/tools/history/runner:"]) assert.ok(s.includes(want), want);
   assert.ok(!s.includes("ROUTE"), "one route: nothing to choose");
+  assert.ok(!s.includes("--network"), "the default bridge; host networking is excluded");
+  assert.ok(!runnerArgs({ imageId: "i", args: ["play", "--run", "x"], gitCommon: "/r/.git", repo: "/r", history: "/h" }).join(" ").includes("--mount"), "a plain checkout's .git is already mounted");
   assert.ok(!runnerArgs({ imageId: "i", args: ["play", "--run", "x"], sdk: "/r/sdk/js", repo: "/r", history: "/h" }).join(" ").includes(":ro -v /var"), "an SDK inside the checkout is already mounted");
   assert.equal(runOf(["phase", "--run", "y", "--phase", "p2"]), "y");
   assert.equal(runOf(["play"]), null);

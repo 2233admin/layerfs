@@ -11,10 +11,11 @@
 // JavaScript folder given with --sdk when it lies outside the checkout
 // (read-only), and the Docker socket (at /var/run/docker.sock and at the host
 // context's path, which run manifests name). `docker` inside is
-// runner/docker-shim.mjs over the Engine API. It shares the Docker VM's
-// network: a Sandbox's daemon port is published on 127.0.0.1 there, which the
-// SDK connects to (on the default bridge that address is the runner itself,
-// and Sandbox create failed ConnectionRefused). The runner's image id is passed
+// runner/docker-shim.mjs over the Engine API. It stays on Docker's default
+// bridge (host networking is excluded): a Sandbox's daemon port is published
+// on the host's 127.0.0.1, which the SDK dials at LAYERFS_DAEMON_HOST =
+// host.docker.internal (F-020 `daemonHost`). A worktree checkout's git
+// directory (its common dir) is mounted read-only beside it, so git works. The runner's image id is passed
 // in (LAYERFS_RUNNER_IMAGE) and recorded in every metrics file beside the
 // daemon, addon and Sandbox image ids. A run played here needs a Linux addon
 // (`--addon` on new/fork); the binary guard refuses any other.
@@ -26,6 +27,8 @@ import { options, rebaselineId, STORE_PATH } from "./run.mjs";
 
 export const RUNNER = "layerfs-issue352-runner";
 export const RUNNER_IMAGE = "layerfs-352-runtime:node24";
+/** Where the runner reaches a Sandbox's published daemon port from Docker's default bridge (F-020 `daemonHost`). */
+export const DAEMON_HOST = "host.docker.internal";
 
 /** The run a run.mjs command acts on, whose Store volume the runner mounts (null: none). */
 export function runOf(args) {
@@ -34,14 +37,16 @@ export function runOf(args) {
 }
 
 /** The `docker run` arguments of the runner (pure, for the tests). */
-export function runnerArgs({ imageId, hostSocket, args, run = runOf(args), sdk = null, home = process.env.HOME, repo = REPO, history = HISTORY }) {
+export function runnerArgs({ imageId, hostSocket, args, run = runOf(args), sdk = null, gitCommon = null, home = process.env.HOME, repo = REPO, history = HISTORY }) {
   const socketMounts = ["/var/run/docker.sock", ...(hostSocket && hostSocket !== "/var/run/docker.sock" ? [hostSocket] : [])].flatMap((p) => ["-v", `/var/run/docker.sock:${p}`]);
   const store = run ? ["-v", `layerfs-issue352-${run}:/layerfs-store`] : [];
   const sdkMount = sdk && !sdk.startsWith(`${repo}/`) ? ["-v", `${sdk}:${sdk}:ro`] : [];
-  return ["run", "--rm", "--name", RUNNER, "--init", "--network", "host",
-    "-v", `${repo}:${repo}`, "-v", `${history}:${history}`, ...store, ...sdkMount, ...socketMounts,
+  // a worktree checkout's .git is a file naming the main repository's git directory: mount that too, read-only
+  const gitMount = gitCommon && !gitCommon.startsWith(`${repo}/`) ? ["--mount", `type=bind,src=${gitCommon},dst=${gitCommon},readonly`] : [];
+  return ["run", "--rm", "--name", RUNNER, "--init",
+    "-v", `${repo}:${repo}`, "-v", `${history}:${history}`, ...store, ...sdkMount, ...gitMount, ...socketMounts,
     "-e", `HOME=${home}`, "-e", `LFS_HISTORY=${history}`, "-e", `PATH=${join(repo, "dsh/tools/history/runner")}:/usr/local/bin:/usr/bin:/bin`,
-    "-e", `LAYERFS_STORE_PATH=${STORE_PATH}`, "-e", `LAYERFS_RUNNER_IMAGE=${imageId}`, "-e", `LAYERFS_RUNNER=${RUNNER}`,
+    "-e", `LAYERFS_STORE_PATH=${STORE_PATH}`, "-e", `LAYERFS_DAEMON_HOST=${DAEMON_HOST}`, "-e", `LAYERFS_RUNNER_IMAGE=${imageId}`, "-e", `LAYERFS_RUNNER=${RUNNER}`,
     "-e", "GIT_CONFIG_COUNT=1", "-e", "GIT_CONFIG_KEY_0=safe.directory", "-e", "GIT_CONFIG_VALUE_0=*",
     "-w", repo, "--entrypoint", "node", imageId, join(repo, "dsh/tools/history/run.mjs"), ...args];
 }
@@ -56,7 +61,8 @@ function main(argv) {
   const sdk = o.sdk ? resolve(o.sdk) : recorded;
   const imageId = execFileSync("docker", ["image", "inspect", "--format", "{{.Id}}", RUNNER_IMAGE], { encoding: "utf8" }).trim();
   const hostSocket = execFileSync("docker", ["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"], { encoding: "utf8" }).trim().replace(/^unix:\/\//, "");
-  return spawnSync("docker", runnerArgs({ imageId, hostSocket, args, sdk }), { stdio: "inherit" }).status ?? 1;
+  const gitCommon = resolve(REPO, execFileSync("git", ["-C", REPO, "rev-parse", "--git-common-dir"], { encoding: "utf8" }).trim());
+  return spawnSync("docker", runnerArgs({ imageId, hostSocket, args, sdk, gitCommon }), { stdio: "inherit" }).status ?? 1;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) process.exit(main(process.argv.slice(2)));
