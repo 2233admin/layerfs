@@ -99,20 +99,3 @@ fn missing_logical_child_is_still_refused() {
         matches!(save.finish(),Err(StorageError::MissingDependency {object,reference}) if object==parent.id() && reference==child.id())
     );
 }
-#[test]
-fn exact_reuse_still_acquires_and_compares_canonical_bytes() {
-    let t = support::Temp::new("exact-reuse-acquisition");
-    let h = create(&t.join("db"));
-    let storage = Storage::new(h.storage.clone()).unwrap();
-    let o = chunk(741);
-    let save = storage.begin_save().unwrap();
-    save.accept(o.clone()).unwrap();
-    save.finish().unwrap();
-    let before = storage.diagnostics();
-    let save = storage.begin_save().unwrap();
-    save.accept(o).unwrap();
-    let result = save.finish().unwrap();
-    let after = storage.diagnostics();
-    assert_eq!((result.inserted, result.reused), (0, 1));
-    assert!(after.read_packs + after.payload_reads > before.read_packs + before.payload_reads);
-}

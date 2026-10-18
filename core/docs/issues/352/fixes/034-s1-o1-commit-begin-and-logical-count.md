@@ -229,6 +229,135 @@ The ceiling was `begin` at about 0.3 ms. The result is 0.11 ms.
 as pnpm-first, still loads the ring at its first insert, now at the S1-a
 cost.
 
+## A-1 · exact reuse trusts the content address (owner decision, 2026-10-19)
+
+**Integrity policy change, in one line:** on exact reuse (the same id under
+the same role and canonical length), a Save no longer reads the stored copy
+back, so a corrupt stored object surfaces at its first read, not at Save.
+
+**Why.** After O1-a, Save::accept was 2.76–2.86 s of pnpm-first's Commit. 89%
+of that was re-checking objects the Store already holds. Of 63,392 accepted
+objects, 55,966 were reused, and 50,183 of them were read back in full
+(396 MB, 1,543 ms) to be compared byte for byte (s689). The full split and
+the A-1 option table (a/b/c) are in the shared liaison note
+`r034-save-accept-rca.md`. The owner chose (b).
+
+**Old.** `save/wave.rs State::wave`, on a found locator, required:
+- equal role;
+- equal canonical length;
+- `self.resolve(id)? == object.canonical()`, a full reconstruction plus a
+  byte compare.
+
+Any mismatch failed the Save with `Collision`.
+
+**New.** Only the `save/*` function `State::wave` changes. It still requires
+equal role and canonical length, and a mismatch is still `Collision` at
+Save. `||` short-circuits, so today's code never read back on a mismatch
+either. A match is accepted without `resolve`. `State::resolve` stays: the
+Save's own provider still uses it (`save/provider.rs read_inner`).
+
+**Every read path still authenticates (audit at `5da5401aa`).** Every route
+that returns stored object bytes ends in a hash check against the id. A
+corrupt object therefore fails at read with a typed `StorageError::Integrity`.
+- `Reader::read_objects` / `read_with` / `read_kept` go through
+  `read/objects.rs ReadState::read`, then
+  `encoding/delta/read.rs Resolver::resolve_at` and `resolve_charged`. The
+  checks there are:
+  - each object of an ordinary or payload chain is decoded and checked with
+    `ObjectId::for_bytes(&decoded) != location.object_id`, giving
+    `Integrity("dependency identity")`;
+  - a pooled `InodeLeaf` is rebuilt and checked, giving
+    `Integrity("pooled leaf identity")`, and `encoding/pool/read.rs` checks
+    again, giving `Integrity("pooled canonical identity")`;
+  - an `InodeBranch` gives `encoding/pool/branch.rs`
+    `Integrity("branch canonical identity")`;
+  - the record grammars check base identities (`encoding/delta/record.rs`:
+    compact, chunk and framed base identity);
+  - a whole-pack read checks the pack digest
+    (`port/read_pack.rs PersistedPack::authenticate`).
+- Save-side reads:
+  - `save/provider.rs Save::read_objects` / `read_inner` return this Save's
+    own pending bytes or `State::resolve`, which is the same `Resolver`;
+  - delta-base acquisition goes through `Resolver::resolve_dependency`.
+
+  A later Save that uses a corrupt object as a delta base fails with the
+  same error.
+- Store-service and Workspace reads (`store/ports.rs`, `sdk/cached.rs`,
+  workspace `base/client.rs CanonicalClient`) read through the storage
+  `Reader`.
+- Not byte reads:
+  - `Reader::file_lengths` returns catalogue lengths for whole-file objects
+    and decodes only FileState objects (authenticated). It never returns
+    stored payload bytes.
+  - The workspace base cache is seeded with the bytes construction just
+    built (`base/cache.rs admit_constructed`), not with stored bytes. A
+    daemon that seeded a reused object serves correct bytes from its cache,
+    and the damaged stored copy is seen on the first cache miss.
+
+No read path skips authentication.
+
+**Proof.** `layerfs-storage/tests/exact_reuse_trust.rs` (4 tests,
+in-memory Store):
+- an exact reuse on a fresh handle reads no pack (no `read_*` port call);
+- the same holds for a pooled `InodeLeaf` (no pack acquired), and the leaf
+  still reads back whole;
+- a stored locator whose role (or canonical length) was changed is refused
+  with `Collision(id)`;
+- a stored record with one payload byte flipped, and its pack digest
+  re-sealed so only object authentication can see it, is accepted by a
+  reusing Save (inserted 0, reused 1, no pack read). Its next read fails
+  with `Integrity("dependency identity")`.
+
+On the old `wave()`, the no-read and corruption tests fail and the mismatch
+test passes.
+
+**Tests deleted** (they asserted the retired read-back on reuse):
+- `layerfs-storage/tests/pooled_demand_work.rs`
+  `save_exact_reuse_consumes_the_group_already_acquired_by_discovery`: a
+  reused pooled leaf acquired its pack exactly once. Now it acquires none,
+  which `an_exact_reuse_of_a_pooled_leaf_acquires_no_pack` asserts.
+- `layerfs-persistence/tests/sqlite_reference_acquisition.rs`
+  `exact_reuse_still_acquires_and_compares_canonical_bytes`: the retired
+  policy itself.
+
+**Result, pnpm-first** (s677 O1-a → s693 A-1, daemon `7f51b68b`, addon
+`af7042ef`):
+
+| Measure | s677 | s693 | Change |
+| --- | ---: | ---: | ---: |
+| Writer blob reads | 18,798 / 211 MB | 1,287 / 5.0 MB | −17,511 / −206 MB |
+| Pack read selections | 6,266 | 429 | −5,837 |
+| Payload reads | 4,365 / 146 MB | 1 / 12 KB | −4,364 / −146 MB |
+| Writer statements | 66,173 | 59,592 | −6,581 |
+| Locate statements | 9,759 | 9,079 | −680 |
+| Commit (daemon) | 11.68 s | 12.31 s | **not attributable**: s693 ran at load 36.3 against 10.1, and its writer statement time was 2.30 s against 0.84 s for fewer statements |
+
+Host load 36.3 at s693's start. By rule it is not rerun, so the timing
+gain is shown by counts only: the 50,183 read-backs (1,543 ms in the
+counters-only build, s689) are gone.
+
+**Checks:** the storage and persistence test binaries (60) pass, each under
+a 100 s alarm. The seven Linux daemon targets pass on `abc3eb772` (35
+tests, own container each, 115 s timeout, load 13.9–15.3). The first test
+build was killed by the linker running out of memory (signal 9, `-j 6`, at
+load 36); it was rebuilt at `-j 2`. That was a build failure, not a test
+result.
+
+## A-2 · membership locate split (s691, diagnostic only)
+
+- Membership locate is 869 ms. Of that, SQL `tx.query` (the IN-list SELECT
+  on `object_location` joining `pack`) is 758 ms (87%).
+  `LocatorCache::make_room` is 45 ms, the row loop 21 ms, the hit scan
+  15 ms and the decode 10 ms.
+- That is about 13.7 µs per id over 55k missing ids in 154 statements.
+- The likely cause is the pinned 2 MiB SQLite page cache with no mmap.
+  This is inferred: no page-miss counter was taken.
+- A-2a (the eviction search) is skipped; see below. A-2b (a larger page
+  cache) is a profile change and the owner's call. It has one diagnostic
+  sample of its own, outside this record's fixes.
+- **A-2b (64 MiB SQLite cache): diagnostic negative on s695 vs s691;
+  rejected, no profile change.**
+
 ## Not done (approved skips), with ceilings
 
 - **O1-b · bindings.** 47,526 single-row `INSERT OR IGNORE INTO binding_hint`
@@ -241,9 +370,14 @@ cost.
 - **O1-c · Save-internal.** About 2,950 locates, 9,441 single-row pack
   descriptor lookups (39 ms) and the inode-value reads (2,298 statements,
   97 ms). Ceiling **under −0.1 s**.
+- **A-2a · locator-cache eviction search.** `read/locator_cache.rs
+  LocatorCache::make_room` / `evict_one` scan the protected demand
+  linearly per probe; a binary search would save at most 45 ms (s691).
+  Skipped by the liaison.
 - Not material on these cases: `save/wave.rs wave()` re-reads every
   exact-reuse hit with `resolve(id)` to compare bytes. That would matter
-  only on a Commit full of already-stored files.
+  only on a Commit full of already-stored files. **Wrong** (corrected after s689): pnpm-first *is* such a Commit, with
+  55,966 reuses. The count was misread from `whole_due_reuse`. See A-1.
 - After bindings, about 2.1 s of the pnpm Commit (RCA, under load) runs no
   Store SQL. That is install and overlay work, outside this lane's scope.
 
