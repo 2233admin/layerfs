@@ -188,3 +188,14 @@
   `799e3ca6`, kind 1): `project.list_branches` takes `name` and answers from
   the index;
   [fixes/009-a1-mount-branch-lookup.md](fixes/009-a1-mount-branch-lookup.md).
+- **F-025 · Commits queue behind in-lane merges whose path search walks the
+  tree (product, owner direction 2026-10-18, from 007.a2's `fs.write` ≤512 KiB
+  watch).** 20–30% of fs.* Commits merge at publish inside the lane, and
+  `merge.paths` names changed inodes with two breadth-first walks from the
+  root (`merge/decide.rs:147-148`), so its cost grows with the tree's
+  directories (p50 28.6 → 56.1 ms from r9a2 to r11 on `58a60046`). Merged
+  writes run 240 ms p50 at r11, and unmerged writes queued behind them reach
+  271 ms p95. Owner: the fixer, now; fix 1 (top-down path naming) first,
+  then lane narrowing, reads off the writer queue, and fixed per-call costs.
+  Kind 1. The thin-baseline gate question goes to F-024 and does not close
+  this. [fixes/007-a2-f025-merge-in-lane.md](fixes/007-a2-f025-merge-in-lane.md).
