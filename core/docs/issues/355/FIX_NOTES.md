@@ -299,6 +299,45 @@ Pre-(d) refuses the 135k case at the cap. The 135k merge's root is
   the 2 s admission window but larger than at 35k.
 - Linux proofs are not run.
 
+## #360 mixed metadata forms and the merge's serial reuse (analysis, no change)
+
+#360 (`8aed51d60`, `c4d9893e7`, not on this branch) lets an inode value's
+metadata be an inline mode and mtime or a metadata root. `same_value` stays a
+byte comparison, and `inode_changes` and `root_changes` move to the decoded
+`same_inode`. On this branch `metadata_root` is always an `ObjectId`, so
+equal metadata has one form. Strict and decoded equality agree here, and
+nothing is changed.
+
+After integration, the merge build's three strict checks can see two forms
+of equal metadata:
+
+1. `onto_ours`' `held`: same serial, different form. `Keep` becomes `Take` of
+   theirs' entry. `assign` keeps the serial if it has one binding in ours.
+   Otherwise it gives a fresh serial, which splits a hard-link group whose
+   value is unchanged.
+2. `assign`'s `given.find`: two paths of one source serial that pick the same
+   metadata from different sides get two serials, which also splits a
+   hard-link group.
+3. `assign`'s `Some(held) if same_value`: a value equal to the `into` side's
+   but in the other form loses the "theirs already holds it" reuse. It falls
+   back to the one-binding rule or a fresh serial.
+
+None of these breaks "one serial carries one value": a fresh serial is always
+safe. The results are a different root identity and spurious delete/add
+pairs in diffs. Candidates also change after integration: a form-only change
+in ours is no longer a candidate, because `inode_changes` uses `same_inode`.
+
+Before any edit, prove equivalence on the integrated tree:
+- an old-form base;
+- one side rewrites a hard-linked file inline with equal mode and mtime;
+- the other side changes something unrelated;
+- assert the merged root keeps both links on one serial, and that its decoded
+  view equals a strict-form merge's view.
+
+The likely change is a decoded comparison (`same_inode`) in the three sites,
+with the written value taken from the pick. It needs a reader in `assign`.
+It belongs to whoever integrates #353/#355 with #360.
+
 ## Measurements so far (one sample each, Disposable, macOS host, not quiet-window receipts)
 
 Lane holds are timed by the test's catalog wrapper from `publish_lane`
