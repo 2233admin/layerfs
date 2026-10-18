@@ -40,3 +40,11 @@
   captured namespace `update` phase on one Branch (378 and 331 ms for
   two-change applies), not merges. It needs its own diagnosis; the baseline
   class is thin (F-024).
+- **F-027 · storage batch (STORAGE_STUDY §6 items 1–3, owner-approved,
+  2026-10-18).** Sized pack directories (−14.8%), mode and mtime in the inode
+  value (−16.5%), inode-branch deltas (−9.5% at r011, the main P3 item):
+  32.8 → ~19.2 MiB simulated at r011, ~1.95 GiB instead of 3.37 GiB forecast
+  at r201. Kind 1, readers accept both forms. Owner: the fixer, after F-020 and
+  F-025's fixes, before P3; items in order 1 → 2 → 3, each proved and
+  measured. Spec: [STORAGE_BATCH_SPEC.md](STORAGE_BATCH_SPEC.md); record:
+  [fixes/011-study-f027-storage-batch.md](fixes/011-study-f027-storage-batch.md).

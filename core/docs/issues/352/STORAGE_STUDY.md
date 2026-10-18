@@ -244,6 +244,8 @@ land before P3, after F-020 and F-025's fixes; each keeps its own commit,
 compatibility test and old-vs-new table, and item 3 keeps the lead's speed
 condition (RESULTS.md).
 
+Implementation spec: [STORAGE_BATCH_SPEC.md](STORAGE_BATCH_SPEC.md) (fix F-027).
+
 ## 7. Defect signatures
 
 "If a measure leaves its normal range, suspect the cause, check the first
