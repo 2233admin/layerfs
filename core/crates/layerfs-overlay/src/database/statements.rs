@@ -165,6 +165,14 @@ pub(crate) const INDEXED_OPERATION_RECORD_ALL_KEYS: &str = "SELECT key FROM comm
 pub(crate) const INDEXED_OPERATION_RECORD_KEYS_AFTER: &str = "SELECT key FROM commit_record
     WHERE operation=?1 AND file_scope=?2 AND kind=?3 AND key>?4
     ORDER BY key LIMIT 64";
+/// Keys with their values in key order: one window of a sealed sequence.
+pub(crate) const INDEXED_OPERATION_RECORD_ENTRIES: &str = "SELECT key,value FROM commit_record
+    WHERE operation=?1 AND file_scope=?2 AND kind=?3
+    ORDER BY key LIMIT 64";
+pub(crate) const INDEXED_OPERATION_RECORD_ENTRIES_AFTER: &str =
+    "SELECT key,value FROM commit_record
+    WHERE operation=?1 AND file_scope=?2 AND kind=?3 AND key>?4
+    ORDER BY key LIMIT 64";
 /// Every record of one operation up to one key, in one statement.
 pub(crate) const INDEXED_OPERATION_RECORD_DELETE_OPERATION: &str = "DELETE FROM commit_record
     WHERE operation=?1 AND (file_scope,kind,key)<=(?2,?3,?4)";

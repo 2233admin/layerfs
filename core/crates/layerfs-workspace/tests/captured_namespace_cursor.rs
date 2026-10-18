@@ -261,6 +261,7 @@ fn counters(work: &CapturedNamespaceWork) -> Vec<(&'static str, u64)> {
         ("fresh_opens", work.fresh_opens),
         ("fresh_rows", work.fresh_rows),
         ("fresh_points", work.fresh_points),
+        ("window_jobs", work.window_jobs),
     ]
 }
 struct Counted {
@@ -427,9 +428,19 @@ fn work_follows_the_change_and_not_the_installed_base() {
     // Built against patched metadata follows the stored form: the fixture
     // stores a metadata root, the large base's own install wrote inline
     // values (#360 F-027 item 2). Their sum is the change's work.
+    // Wall times are observations, not counted work.
     let metadata = |mut work: layerfs_workspace::CapturedNamespaceWork| {
         work.metadata_built += work.metadata_patched;
         work.metadata_patched = 0;
+        (work.normalize_ns, work.values_ns, work.update_ns) = (0, 0, 0);
+        (work.inode_page_ns, work.file_ns, work.file_bind_ns) = (0, 0, 0);
+        (
+            work.file_source_ns,
+            work.values_emit_ns,
+            work.values_record_ns,
+        ) = (0, 0, 0);
+        (work.update_record_ns, work.update_capture_ns) = (0, 0);
+        (work.update_emit_ns, work.backing_ns) = (0, 0);
         work
     };
     assert_eq!(

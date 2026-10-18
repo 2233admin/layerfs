@@ -4,8 +4,8 @@ use layerfs_overlay::{
     IndexedOperationRecordChange, IndexedOperationRecordKey, IndexedOperationRecordScope, Overlay,
 };
 use layerfs_workspace::{
-    OperationRecordApply, OperationRecordReply, OverlayOperationRecords, WorkspaceError,
-    WorkspaceResult,
+    OperationRecordApply, OperationRecordReply, OperationRecordWindow, OverlayOperationRecords,
+    WorkspaceError, WorkspaceResult,
 };
 
 impl OwnerClient {
@@ -102,6 +102,18 @@ impl OverlayOperationRecords for OwnerClient {
     ) -> WorkspaceResult<OperationRecordReply<Vec<[u8; 32]>>> {
         self.record((scope, kind, after), |db, (scope, kind, after)| {
             db.indexed_operation_record_keys_after(scope, kind, after)
+                .map_err(Into::into)
+        })
+        .map(OperationRecordReply::owned)
+    }
+    fn operation_record_entries_after(
+        &self,
+        scope: IndexedOperationRecordScope,
+        kind: u32,
+        after: Option<[u8; 32]>,
+    ) -> WorkspaceResult<OperationRecordReply<OperationRecordWindow>> {
+        self.record((scope, kind, after), |db, (scope, kind, after)| {
+            db.indexed_operation_record_entries_after(scope, kind, after)
                 .map_err(Into::into)
         })
         .map(OperationRecordReply::owned)

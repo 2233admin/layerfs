@@ -21,9 +21,9 @@ use layerfs_overlay::{
 use layerfs_telemetry::timer::Timing;
 use layerfs_workspace::{
     CapturedNamespace, CapturedNamespaceAttempt, CapturedNamespaceCustody, CapturedNamespaceWork,
-    Operation, OperationRecordApply, OperationRecordReply, Outcome, OverlayCapturedNamespace,
-    OverlayCapturedRuns, OverlayOperationRecords, Position, Time, ViewStat, WorkspaceError,
-    WorkspaceResult,
+    Operation, OperationRecordApply, OperationRecordReply, OperationRecordWindow, Outcome,
+    OverlayCapturedNamespace, OverlayCapturedRuns, OverlayOperationRecords, Position, Time,
+    ViewStat, WorkspaceError, WorkspaceResult,
 };
 use std::{
     cell::{Cell, RefCell},
@@ -1033,6 +1033,33 @@ impl OverlayOperationRecords for Recording<'_> {
         }
         Ok(reply)
     }
+    fn operation_record_entries_after(
+        &self,
+        scope: IndexedOperationRecordScope,
+        kind: u32,
+        after: Option<[u8; 32]>,
+    ) -> WorkspaceResult<OperationRecordReply<OperationRecordWindow>> {
+        self.enter(if own(scope) {
+            Call::NamespaceKeys
+        } else {
+            Call::FileRead
+        })?;
+        let reply = OverlayOperationRecords::operation_record_entries_after(
+            self.overlay,
+            scope,
+            kind,
+            after,
+        )?;
+        self.page(reply.value.0.len());
+        if own(scope) {
+            self.log.borrow_mut().key_windows.push(KeyWindow {
+                kind,
+                after,
+                keys: reply.value.0.iter().map(|(key, _)| *key).collect(),
+            });
+        }
+        Ok(reply)
+    }
 }
 
 /// Changes rows, not calls: name rows a Workspace never writes are added to
@@ -1209,6 +1236,15 @@ impl OverlayOperationRecords for Perturbed<'_> {
         after: Option<[u8; 32]>,
     ) -> WorkspaceResult<OperationRecordReply<Vec<[u8; 32]>>> {
         self.inner.operation_record_keys_after(scope, kind, after)
+    }
+    fn operation_record_entries_after(
+        &self,
+        scope: IndexedOperationRecordScope,
+        kind: u32,
+        after: Option<[u8; 32]>,
+    ) -> WorkspaceResult<OperationRecordReply<OperationRecordWindow>> {
+        self.inner
+            .operation_record_entries_after(scope, kind, after)
     }
 }
 

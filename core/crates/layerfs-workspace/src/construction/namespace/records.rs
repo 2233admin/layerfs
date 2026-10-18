@@ -1,7 +1,8 @@
 //! One first-original-failure owner, the sealed record kinds and their codecs.
-use crate::construction::outcome::CapturedNamespaceWork;
+use crate::construction::outcome::{nanos, CapturedNamespaceWork};
 use crate::{
-    CapturedFileCustody, IndexedConstructionRecords, OverlayOperationRecords, WorkspaceError,
+    CapturedFileCustody, IndexedConstructionRecords, OperationRecordWindow,
+    OverlayOperationRecords, WorkspaceError,
 };
 use layerfs_content::{
     filesystem::{FilesystemRootId, InodeScope},
@@ -9,7 +10,7 @@ use layerfs_content::{
     EditRecordKey, IndexedEditBacking, ObjectId,
 };
 use layerfs_overlay::{CapturedReader, OperationOwner, OPERATION_RECORD_BYTES};
-use std::{cell::RefCell, ops::Deref};
+use std::{cell::RefCell, ops::Deref, time::Instant};
 
 // Producer kinds 0x434E_0000..=0x434E_000F share the operation's file scope 0
 // with Content's filesystem kinds; each changed file has its own file scope.
@@ -43,6 +44,8 @@ pub(crate) struct State<'a, P: OverlayOperationRecords + ?Sized> {
     pub failure: Option<WorkspaceError>,
     pub file: Option<Box<CapturedFileCustody>>,
     pub work: CapturedNamespaceWork,
+    /// Running time of this adapter's record jobs; the driver splits it by phase.
+    pub record_ns: u64,
 }
 pub(crate) struct Shared<'a, P: OverlayOperationRecords + ?Sized>(RefCell<State<'a, P>>);
 impl<'a, P: OverlayOperationRecords + ?Sized> Shared<'a, P> {
@@ -102,7 +105,10 @@ impl<P: OverlayOperationRecords + ?Sized> State<'_, P> {
     pub fn apply(&mut self, changes: Vec<EditRecordChange>) -> ContentResult<()> {
         self.ready()?;
         add(&mut self.work.record_jobs, 1);
-        match self.records.apply(changes) {
+        let started = Instant::now();
+        let applied = self.records.apply(changes);
+        add(&mut self.record_ns, nanos(started));
+        match applied {
             Ok(EditRecordApply::Applied) => Ok(()),
             Ok(EditRecordApply::NotApplied { .. }) => Err(ContentError::ProviderFailure {
                 what: "captured namespace deciding record refusal",
@@ -113,7 +119,9 @@ impl<P: OverlayOperationRecords + ?Sized> State<'_, P> {
     pub fn get(&mut self, key: EditRecordKey) -> ContentResult<Option<Vec<u8>>> {
         self.ready()?;
         add(&mut self.work.record_jobs, 1);
+        let started = Instant::now();
         let result = self.records.get(key);
+        add(&mut self.record_ns, nanos(started));
         let value = result.map_err(|error| self.content(error))?;
         if let Some(value) = &value {
             if value.capacity() > OPERATION_RECORD_BYTES {
@@ -126,16 +134,45 @@ impl<P: OverlayOperationRecords + ?Sized> State<'_, P> {
         }
         Ok(value)
     }
-    /// The values of at most PAGE_ROWS keys as one record job.
-    pub fn get_many(&mut self, keys: &[EditRecordKey]) -> ContentResult<Vec<Option<Vec<u8>>>> {
+    pub fn contains(&mut self, key: EditRecordKey) -> ContentResult<bool> {
         self.ready()?;
         add(&mut self.work.record_jobs, 1);
-        let result = self.records.get_many(keys);
-        let values = result.map_err(|error| self.content(error))?;
-        if let Some(actual) = values
+        let started = Instant::now();
+        let result = self.records.contains(key);
+        add(&mut self.record_ns, nanos(started));
+        result.map_err(|error| self.content(error))
+    }
+    /// One call of Content's own state over `keys` keys, counted and timed.
+    fn backing<T>(
+        &mut self,
+        keys: usize,
+        call: impl FnOnce(&mut IndexedConstructionRecords<'_, P>) -> ContentResult<T>,
+    ) -> ContentResult<T> {
+        self.ready()?;
+        add(&mut self.work.backing_calls, 1);
+        add(&mut self.work.backing_keys, keys as u64);
+        let started = Instant::now();
+        let result = call(&mut self.records);
+        add(&mut self.work.backing_ns, nanos(started));
+        result.map_err(|error| self.content(error))
+    }
+    /// One key-ordered window of a kind's rows as one record job.
+    pub fn entries_after(
+        &mut self,
+        kind: u32,
+        after: Option<[u8; 32]>,
+    ) -> ContentResult<OperationRecordWindow> {
+        self.ready()?;
+        add(&mut self.work.record_jobs, 1);
+        add(&mut self.work.window_jobs, 1);
+        let started = Instant::now();
+        let result = self.records.entries_after(kind, after);
+        add(&mut self.record_ns, nanos(started));
+        let window = result.map_err(|error| self.content(error))?;
+        if let Some(actual) = window
+            .0
             .iter()
-            .flatten()
-            .map(Vec::capacity)
+            .map(|(_, value)| value.capacity())
             .find(|capacity| *capacity > OPERATION_RECORD_BYTES)
         {
             return Err(self.content(ContentError::BoundedCapacityExceeded {
@@ -144,26 +181,7 @@ impl<P: OverlayOperationRecords + ?Sized> State<'_, P> {
                 actual: actual as u64,
             }));
         }
-        if values.len() != keys.len() {
-            return Err(self.content(ContentError::InvalidRecord("captured record answers")));
-        }
-        Ok(values)
-    }
-    pub fn contains(&mut self, key: EditRecordKey) -> ContentResult<bool> {
-        self.ready()?;
-        add(&mut self.work.record_jobs, 1);
-        let result = self.records.contains(key);
-        result.map_err(|error| self.content(error))
-    }
-    pub fn keys_after(
-        &mut self,
-        kind: u32,
-        after: Option<[u8; 32]>,
-    ) -> ContentResult<Vec<[u8; 32]>> {
-        self.ready()?;
-        add(&mut self.work.record_jobs, 1);
-        let result = self.records.keys_after(kind, after);
-        result.map_err(|error| self.content(error))
+        Ok(window)
     }
 }
 /// The serial is the last eight bytes, big-endian: key order is serial order.
@@ -234,16 +252,13 @@ pub(crate) fn verify<P: OverlayOperationRecords + ?Sized>(
 pub(crate) struct Backing<'s, 'a, P: OverlayOperationRecords + ?Sized>(pub &'s Shared<'a, P>);
 impl<P: OverlayOperationRecords + ?Sized> IndexedEditBacking for Backing<'_, '_, P> {
     fn contains(&mut self, key: EditRecordKey) -> ContentResult<bool> {
-        let mut owner = self.0.borrow_mut();
-        owner.ready()?;
-        let result = owner.records.contains(key);
-        result.map_err(|error| owner.content(error))
+        self.0
+            .borrow_mut()
+            .backing(1, |records| records.contains(key))
     }
     fn get(&mut self, key: EditRecordKey) -> ContentResult<Option<Vec<u8>>> {
         let mut owner = self.0.borrow_mut();
-        owner.ready()?;
-        let result = owner.records.get(key);
-        let value = result.map_err(|error| owner.content(error))?;
+        let value = owner.backing(1, |records| records.get(key))?;
         if let Some(value) = &value {
             if value.capacity() > OPERATION_RECORD_BYTES {
                 return Err(owner.content(ContentError::BoundedCapacityExceeded {
@@ -257,9 +272,7 @@ impl<P: OverlayOperationRecords + ?Sized> IndexedEditBacking for Backing<'_, '_,
     }
     fn get_many(&mut self, keys: &[EditRecordKey]) -> ContentResult<Vec<Option<Vec<u8>>>> {
         let mut owner = self.0.borrow_mut();
-        owner.ready()?;
-        let result = owner.records.get_many(keys);
-        let values = result.map_err(|error| owner.content(error))?;
+        let values = owner.backing(keys.len(), |records| records.get_many(keys))?;
         if let Some(actual) = values
             .iter()
             .flatten()
@@ -275,25 +288,23 @@ impl<P: OverlayOperationRecords + ?Sized> IndexedEditBacking for Backing<'_, '_,
         Ok(values)
     }
     fn apply(&mut self, changes: Vec<EditRecordChange>) -> ContentResult<EditRecordApply> {
-        let mut owner = self.0.borrow_mut();
-        owner.ready()?;
-        let result = owner.records.apply(changes);
-        result.map_err(|error| owner.content(error))
+        let keys = changes.len();
+        self.0
+            .borrow_mut()
+            .backing(keys, |records| records.apply(changes))
     }
     fn first_keys(
         &mut self,
         kind: u32,
         excluded: Option<[u8; 32]>,
     ) -> ContentResult<Vec<[u8; 32]>> {
-        let mut owner = self.0.borrow_mut();
-        owner.ready()?;
-        let result = owner.records.first_keys(kind, excluded);
-        result.map_err(|error| owner.content(error))
+        self.0
+            .borrow_mut()
+            .backing(1, |records| records.first_keys(kind, excluded))
     }
     fn keys_after(&mut self, kind: u32, after: Option<[u8; 32]>) -> ContentResult<Vec<[u8; 32]>> {
-        let mut owner = self.0.borrow_mut();
-        owner.ready()?;
-        let result = owner.records.keys_after(kind, after);
-        result.map_err(|error| owner.content(error))
+        self.0
+            .borrow_mut()
+            .backing(1, |records| records.keys_after(kind, after))
     }
 }

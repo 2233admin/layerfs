@@ -336,9 +336,12 @@ fn a_stored_file_replaced_by_rename_while_open_leaves_only_the_new_inode() {
         "a stored inode"
     );
     assert_eq!(built.work.tombstones_skipped, 1);
-    // Exactly the replacement was constructed, under its own scope.
+    // Exactly the replacement was constructed: it has its sealed value. A
+    // new file takes the direct route, so its scope holds no record job
+    // (record 033 F2).
     assert_eq!(built.work.files_constructed, 1);
-    assert!(recording.log.borrow().scoped(newer) > 0);
+    assert!(record(&b, &built.taken, VALUE, newer).is_some());
+    assert_eq!(recording.log.borrow().scoped(newer), 0);
     never_constructed(&b, &built, &recording, victim, "replaced while open");
     drop(recording);
     built.install(&b);

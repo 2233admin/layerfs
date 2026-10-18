@@ -5,12 +5,16 @@ use super::{
     scan::{Scan, Supply},
     state::Shared,
 };
+use crate::construction::outcome::nanos;
 use crate::{BaseContent, BaseView, OverlayCapturedRuns, OverlayOperationRecords};
 use layerfs_content::{
     ContentError, ContentResult, Edit, EditRecordApply, EditRecordChange, EditRecordKey,
     EditSequence, FileRun, FileRuns, IndexedEditBacking, IndexedEditSource,
 };
-use std::cell::{Cell, RefCell};
+use std::{
+    cell::{Cell, RefCell},
+    time::Instant,
+};
 
 pub(super) struct Input<'s, 'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> {
     pub provider: &'a P,
@@ -114,6 +118,7 @@ impl<'s, 'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> Input<'s
                 .checked_add(1)
                 .ok_or(ContentError::LengthOverflow)?;
         }
+        let started = Instant::now();
         let result = self
             .scan
             .borrow_mut()
@@ -126,6 +131,10 @@ impl<'s, 'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> Input<'s
                     length,
                 } => self.committed(root, offset, length, output),
             });
+        {
+            let mut owner = self.shared.borrow_mut();
+            owner.work.source_ns = owner.work.source_ns.saturating_add(nanos(started));
+        }
         let run = result.map_err(|error| self.shared.borrow_mut().content(error))?;
         let length = match run {
             FileRun::Data(count) => count as u64,
@@ -182,6 +191,9 @@ impl<P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> IndexedEditSourc
 pub(super) struct Complete<'s, 'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> {
     pub input: Input<'s, 'a, P>,
     pub position: u64,
+    /// Whether the runs follow a sealed context record, checked again before
+    /// the stream ends. A base-less file on the direct route has none.
+    pub sealed: bool,
 }
 impl<P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> FileRuns for Complete<'_, '_, P> {
     fn read_run(&mut self, output: &mut [u8]) -> ContentResult<FileRun> {
@@ -189,7 +201,9 @@ impl<P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> FileRuns for Com
         // checked again before the stream may end, so no file completes over
         // a context that changed underneath it.
         if self.position == self.input.facts.final_size {
-            context::verify(self.input.shared, self.input.context)?;
+            if self.sealed {
+                context::verify(self.input.shared, self.input.context)?;
+            }
             return Ok(FileRun::End);
         }
         let run = self.input.run(

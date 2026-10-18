@@ -185,7 +185,12 @@ impl Run {
         let result = attempt.result.as_ref().unwrap();
         let reads: u64 = self.case.objects.calls.lock().unwrap().values().sum();
         assert_eq!(self.edits(scope), edits, "{label}: sealed edits");
-        let work = attempt.custody.work;
+        // Wall times are observations, not counted work.
+        let work = CapturedFileWork {
+            bind_ns: 0,
+            source_ns: 0,
+            ..attempt.custody.work
+        };
         assert_eq!(work.normalized_edits, edits.len() as u64, "{label}");
         let original = attempt.custody.file.as_ref().unwrap().root();
         assert_eq!(result.logical_len, self.expected.len() as u64, "{label}");

@@ -1,6 +1,6 @@
 //! The sealed streamed row source: record windows, captured names and points.
 use super::records::{add, key, read_number, serial, verify, Shared, Totals, FRESH, HEADER, VALUE};
-use crate::construction::outcome::CapturedNamespaceWork;
+use crate::construction::outcome::{nanos, CapturedNamespaceWork};
 use crate::{OverlayCapturedNamespace, OverlayOperationRecords};
 use layerfs_content::{
     filesystem::{
@@ -11,37 +11,67 @@ use layerfs_content::{
     ContentError, ContentResult,
 };
 use layerfs_overlay::{CapturedReader, DirectoryEntry, PAGE_ROWS};
-use std::cell::RefCell;
+use std::{cell::RefCell, time::Instant};
 
-/// Slots of one window of point answers. Serials are allocated in order, so
-/// a change of up to this many neighbouring serials has a slot for each and
-/// reads each sealed record once; a larger change shares slots and reads a
-/// displaced answer again. The window is this size at any change size.
-const POINT_SLOTS: usize = 1024;
-/// One fixed window of sealed point answers, one slot per serial residue.
-/// A sealed record never changes, so a retained answer cannot go stale; a
-/// refused or undecodable read is never retained.
-struct Memo<T: Copy>(RefCell<Vec<Option<(u64, T)>>>);
-impl<T: Copy> Memo<T> {
+/// Windows of sealed answers each Cursor holds per record kind. A window is
+/// at most PAGE_ROWS rows of one key-ordered range and answers every serial
+/// in that range, absence included, so a sweep in serial order reads each
+/// sealed record once and a point near a recent one reads nothing. Held only
+/// by this Cursor, whatever the size of the change.
+const WINDOWS: usize = 16;
+/// One key-ordered range of sealed answers: every serial in `from..=to`
+/// that has a record is in `rows`; any other serial in the range has none.
+#[derive(Clone)]
+struct Window<T> {
+    from: u64,
+    to: u64,
+    rows: Vec<(u64, T)>,
+}
+impl<T: Copy> Window<T> {
+    fn answer(&self, serial: u64) -> Option<Option<T>> {
+        (self.from..=self.to).contains(&serial).then(|| {
+            self.rows
+                .binary_search_by_key(&serial, |(known, _)| *known)
+                .ok()
+                .map(|index| self.rows[index].1)
+        })
+    }
+}
+/// A fixed ring of windows. A sealed record never changes, so a retained
+/// answer cannot go stale; a refused or undecodable window is never retained.
+struct Windows<T>(RefCell<(Vec<Window<T>>, usize)>);
+impl<T: Copy> Windows<T> {
     fn new() -> Self {
-        Self(RefCell::new(vec![None; POINT_SLOTS]))
+        Self(RefCell::new((Vec::with_capacity(WINDOWS), 0)))
     }
-    fn slot(serial: u64) -> usize {
-        (serial % POINT_SLOTS as u64) as usize
+    fn answer(&self, serial: u64) -> Option<Option<T>> {
+        self.0
+            .borrow()
+            .0
+            .iter()
+            .find_map(|window| window.answer(serial))
     }
-    fn get(&self, serial: u64) -> Option<T> {
-        self.0.borrow()[Self::slot(serial)]
-            .filter(|(known, _)| *known == serial)
-            .map(|(_, answer)| answer)
+    fn keep(&self, window: Window<T>) {
+        let (windows, next) = &mut *self.0.borrow_mut();
+        if windows.len() < WINDOWS {
+            windows.push(window);
+        } else {
+            windows[*next] = window;
+            *next = (*next + 1) % WINDOWS;
+        }
     }
-    fn set(&self, serial: u64, answer: T) {
-        self.0.borrow_mut()[Self::slot(serial)] = Some((serial, answer));
-    }
+}
+fn header_rows(raw: &[u8]) -> ContentResult<u64> {
+    read_number(raw, "captured namespace header")
+}
+fn fresh_rank(raw: &[u8]) -> ContentResult<usize> {
+    read_number(raw, "captured namespace fresh rank")
+        .and_then(|rank| usize::try_from(rank).map_err(|_| ContentError::LengthOverflow))
 }
 /// Every pass and point answers the same sealed rows: headers, values and
 /// fresh ranks from this attempt's records, names from the retained reader.
-/// One window of at most PAGE_ROWS is resident per open pass, and one of
-/// POINT_SLOTS per kind of point answer, whatever the size of the change.
+/// One window of at most PAGE_ROWS rows is read per job, and at most WINDOWS
+/// of them per kind are held, whatever the size of the change.
 pub(crate) struct Cursor<'s, 'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> {
     provider: &'a P,
     shared: &'s Shared<'a, P>,
@@ -50,10 +80,10 @@ pub(crate) struct Cursor<'s, 'a, P: OverlayCapturedNamespace + OverlayOperationR
     headers: usize,
     values: usize,
     fresh: usize,
-    /// Recent header, value and fresh-rank answers, absence included.
-    header: Memo<Option<u64>>,
-    value: Memo<Option<InodeValue>>,
-    rank: Memo<Option<usize>>,
+    /// Recent header, value and fresh-rank ranges, absence included.
+    header: Windows<u64>,
+    value: Windows<InodeValue>,
+    rank: Windows<usize>,
 }
 impl<'s, 'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Cursor<'s, 'a, P> {
     pub fn new(
@@ -73,103 +103,103 @@ impl<'s, 'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Cur
             headers: rows(totals.headers)?,
             values: rows(totals.values)?,
             fresh: rows(totals.fresh)?,
-            header: Memo::new(),
-            value: Memo::new(),
-            rank: Memo::new(),
+            header: Windows::new(),
+            value: Windows::new(),
+            rank: Windows::new(),
         })
     }
     fn count(&self, counter: impl FnOnce(&mut CapturedNamespaceWork) -> &mut u64) {
         add(counter(&mut self.shared.borrow_mut().work), 1);
     }
+    /// Charges one captured name read's time to the update.
+    fn charge(&self, started: Instant) {
+        add(
+            &mut self.shared.borrow_mut().work.update_capture_ns,
+            nanos(started),
+        );
+    }
     fn fail(&self, original: ContentError) -> ContentError {
         self.shared.borrow_mut().content(original)
     }
-    fn record(&self, kind: u32, serial: u64) -> ContentResult<Option<Vec<u8>>> {
-        self.shared.borrow_mut().get(key(kind, serial))
-    }
-    fn header(&self, parent: u64) -> ContentResult<Option<u64>> {
-        if let Some(rows) = self.header.get(parent) {
-            self.shared.borrow().ready()?;
-            return Ok(rows);
-        }
-        let rows = match self.record(HEADER, parent)? {
-            Some(raw) => Some(
-                read_number(&raw, "captured namespace header").map_err(|error| self.fail(error))?,
-            ),
-            None => None,
-        };
-        self.header.set(parent, rows);
-        Ok(rows)
-    }
-    fn value(&self, serial: u64) -> ContentResult<Option<InodeValue>> {
-        if let Some(value) = self.value.get(serial) {
-            self.shared.borrow().ready()?;
-            return Ok(value);
-        }
-        let value = match self.record(VALUE, serial)? {
-            Some(raw) => Some(decode_inode_value(&raw).map_err(|error| self.fail(error))?),
-            None => None,
-        };
-        self.value.set(serial, value);
-        Ok(value)
-    }
-    fn rank(&self, serial: u64) -> ContentResult<Option<usize>> {
-        if let Some(rank) = self.rank.get(serial) {
-            self.shared.borrow().ready()?;
-            return Ok(rank);
-        }
-        let rank = self.decode_rank(self.record(FRESH, serial)?)?;
-        self.rank.set(serial, rank);
-        Ok(rank)
-    }
-    fn decode_rank(&self, raw: Option<Vec<u8>>) -> ContentResult<Option<usize>> {
-        raw.map(|raw| {
-            read_number(&raw, "captured namespace fresh rank")
-                .and_then(|rank| usize::try_from(rank).map_err(|_| ContentError::LengthOverflow))
-                .map_err(|error| self.fail(error))
-        })
-        .transpose()
-    }
-    /// The fresh ranks of at most PAGE_ROWS serials: the answers not already
-    /// held are read as one record job.
-    fn ranks(&self, serials: &[u64]) -> ContentResult<Vec<Option<usize>>> {
-        self.shared.borrow().ready()?;
-        if serials.len() > PAGE_ROWS {
+    /// The window of `kind` after `after` (None: from the first serial), as
+    /// one job: the rows must be ordered past `after` and decodable, and a
+    /// window that does not end the kind must hold a row.
+    fn load<T: Copy>(
+        &self,
+        kind: u32,
+        after: Option<u64>,
+        decode: fn(&[u8]) -> ContentResult<T>,
+    ) -> ContentResult<(Window<T>, bool)> {
+        let (entries, ended) = self
+            .shared
+            .borrow_mut()
+            .entries_after(kind, after.map(|serial| key(kind, serial).key))?;
+        if entries.len() > PAGE_ROWS || (entries.is_empty() && !ended) {
             return Err(self.fail(ContentError::InvalidRecord(
-                "captured namespace point window",
+                "captured namespace record window",
             )));
         }
-        let mut ranks = serials
-            .iter()
-            .map(|serial| self.rank.get(*serial))
-            .collect::<Vec<_>>();
-        let unknown = serials
-            .iter()
-            .zip(&ranks)
-            .filter(|(_, rank)| rank.is_none())
-            .map(|(serial, _)| key(FRESH, *serial))
-            .collect::<Vec<_>>();
-        if !unknown.is_empty() {
-            let mut read = self.shared.borrow_mut().get_many(&unknown)?.into_iter();
-            for (serial, rank) in serials.iter().zip(&mut ranks) {
-                if rank.is_none() {
-                    let raw = read.next().ok_or(ContentError::UnexpectedEof)?;
-                    let answer = self.decode_rank(raw)?;
-                    self.rank.set(*serial, answer);
-                    *rank = Some(answer);
-                }
+        let from = match after {
+            Some(after) => after.checked_add(1).ok_or(ContentError::LengthOverflow)?,
+            None => 0,
+        };
+        let mut rows = Vec::with_capacity(entries.len());
+        let mut previous = after;
+        for (raw, value) in entries {
+            let serial = serial(&raw).map_err(|error| self.fail(error))?;
+            if previous.is_some_and(|previous| previous >= serial) {
+                return Err(self.fail(ContentError::InvalidRecord(
+                    "captured namespace window order",
+                )));
             }
+            rows.push((serial, decode(&value).map_err(|error| self.fail(error))?));
+            previous = Some(serial);
         }
-        Ok(ranks.into_iter().map(Option::flatten).collect())
+        let to = match (ended, previous) {
+            (true, _) | (false, None) => u64::MAX,
+            (false, Some(last)) => last,
+        };
+        Ok((Window { from, to, rows }, ended))
+    }
+    /// One sealed answer: from a held window, else from the window that
+    /// starts at `serial`, which is then held.
+    fn point<T: Copy>(
+        &self,
+        windows: &Windows<T>,
+        kind: u32,
+        serial: u64,
+        decode: fn(&[u8]) -> ContentResult<T>,
+    ) -> ContentResult<Option<T>> {
+        if let Some(answer) = windows.answer(serial) {
+            self.shared.borrow().ready()?;
+            return Ok(answer);
+        }
+        let (window, _) = self.load(kind, serial.checked_sub(1), decode)?;
+        let answer = window.answer(serial).ok_or(ContentError::InvalidRecord(
+            "captured namespace window range",
+        ))?;
+        windows.keep(window);
+        Ok(answer)
+    }
+    fn header(&self, parent: u64) -> ContentResult<Option<u64>> {
+        self.point(&self.header, HEADER, parent, header_rows)
+    }
+    fn value(&self, serial: u64) -> ContentResult<Option<InodeValue>> {
+        self.point(&self.value, VALUE, serial, decode_inode_value)
+    }
+    fn rank(&self, serial: u64) -> ContentResult<Option<usize>> {
+        self.point(&self.rank, FRESH, serial, fresh_rank)
     }
     /// One original parent-local page of the retained reader.
     fn names(&self, parent: u64, after: Option<Vec<u8>>) -> ContentResult<Vec<DirectoryEntry>> {
         self.shared.borrow().ready()?;
         self.count(|work| &mut work.change_pages);
+        let started = Instant::now();
         let page = self
             .provider
-            .captured_directory_entries(self.reader, parent, after)
-            .map_err(|original| self.shared.borrow_mut().original(original))?;
+            .captured_directory_entries(self.reader, parent, after);
+        self.charge(started);
+        let page = page.map_err(|original| self.shared.borrow_mut().original(original))?;
         if page.len() > PAGE_ROWS {
             return Err(self.fail(ContentError::InvalidRecord("captured namespace page shape")));
         }
@@ -178,67 +208,60 @@ impl<'s, 'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Cur
         Ok(page)
     }
 }
-/// One ordered pass over one record kind's serials, a key window at a time.
-struct Keys {
+/// One ordered pass over one record kind, a window at a time. Each window
+/// it reads is also held for the points that follow its rows.
+struct Pass<T> {
     kind: u32,
-    window: std::vec::IntoIter<[u8; 32]>,
-    after: Option<[u8; 32]>,
+    decode: fn(&[u8]) -> ContentResult<T>,
+    rows: std::vec::IntoIter<(u64, T)>,
+    after: Option<u64>,
     ended: bool,
 }
-impl Keys {
-    fn new(kind: u32) -> Self {
+impl<T: Copy> Pass<T> {
+    fn new(kind: u32, decode: fn(&[u8]) -> ContentResult<T>) -> Self {
         Self {
             kind,
-            window: Vec::new().into_iter(),
+            decode,
+            rows: Vec::new().into_iter(),
             after: None,
             ended: false,
         }
     }
-    fn next<P: OverlayOperationRecords + ?Sized>(
+    fn next<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized>(
         &mut self,
-        shared: &Shared<'_, P>,
-    ) -> ContentResult<Option<u64>> {
-        if self.window.len() == 0 && !self.ended {
-            let keys = shared.borrow_mut().keys_after(self.kind, self.after)?;
-            if keys.len() > PAGE_ROWS {
-                return Err(shared
-                    .borrow_mut()
-                    .content(ContentError::InvalidRecord("captured namespace key window")));
+        cursor: &Cursor<'_, '_, P>,
+        windows: &Windows<T>,
+    ) -> ContentResult<Option<(u64, T)>> {
+        loop {
+            if let Some(row) = self.rows.next() {
+                return Ok(Some(row));
             }
-            // A short window ends a sealed sequence: no empty window job
-            // follows. A full one may be the last, so one more is asked for.
-            self.ended = keys.len() < PAGE_ROWS;
-            if let Some(last) = keys.last() {
-                self.after = Some(*last);
+            if self.ended {
+                return Ok(None);
             }
-            self.window = keys.into_iter();
-        }
-        match self.window.next() {
-            Some(raw) => serial(&raw)
-                .map(Some)
-                .map_err(|error| shared.borrow_mut().content(error)),
-            None => Ok(None),
+            // A window that ends the kind is the last: no empty window job
+            // follows it.
+            let (window, ended) = cursor.load(self.kind, self.after, self.decode)?;
+            self.ended = ended;
+            self.after = window.rows.last().map(|(serial, _)| *serial).or(self.after);
+            self.rows = window.rows.clone().into_iter();
+            windows.keep(window);
         }
     }
 }
 struct Headers<'c, 's, 'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> {
     cursor: &'c Cursor<'s, 'a, P>,
-    keys: Keys,
+    pass: Pass<u64>,
 }
 impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> DirectoryHeaderSource
     for Headers<'_, '_, '_, P>
 {
     fn next_row(&mut self) -> ContentResult<Option<DirectoryHeader>> {
-        let Some(parent) = self.keys.next(self.cursor.shared)? else {
+        // The pass's window is held, so the points that follow this row
+        // answer from the same sealed rows.
+        let Some((parent, change_rows)) = self.pass.next(self.cursor, &self.cursor.header)? else {
             return Ok(None);
         };
-        // The same point the lookups use, so a pass cannot answer differently;
-        // its answer stays for the checks that follow this row.
-        let change_rows = self.cursor.header(parent)?.ok_or_else(|| {
-            self.cursor.fail(ContentError::InvalidRecord(
-                "missing captured namespace header",
-            ))
-        })?;
         self.cursor.count(|work| &mut work.header_rows);
         Ok(Some(DirectoryHeader {
             parent,
@@ -284,37 +307,40 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> DirectoryCh
 }
 struct Values<'c, 's, 'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> {
     cursor: &'c Cursor<'s, 'a, P>,
-    keys: Keys,
+    pass: Pass<InodeValue>,
 }
 impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> InodeRowSource
     for Values<'_, '_, '_, P>
 {
     fn next_row(&mut self) -> ContentResult<Option<InodeUpdate>> {
-        let Some(serial) = self.keys.next(self.cursor.shared)? else {
+        let Some((serial, value)) = self.pass.next(self.cursor, &self.cursor.value)? else {
             return Ok(None);
         };
-        let value = self.cursor.value(serial)?.ok_or_else(|| {
-            self.cursor.fail(ContentError::InvalidRecord(
-                "missing captured namespace value",
-            ))
-        })?;
         self.cursor.count(|work| &mut work.value_rows);
         Ok(Some(InodeUpdate { serial, value }))
     }
 }
 struct Fresh<'c, 's, 'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> {
     cursor: &'c Cursor<'s, 'a, P>,
-    keys: Keys,
+    pass: Pass<usize>,
+    /// The dense rank the next fresh serial must carry.
+    next: usize,
 }
 impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> SerialRowSource
     for Fresh<'_, '_, '_, P>
 {
     fn next_row(&mut self) -> ContentResult<Option<u64>> {
-        let serial = self.keys.next(self.cursor.shared)?;
-        if serial.is_some() {
-            self.cursor.count(|work| &mut work.fresh_rows);
+        let Some((serial, rank)) = self.pass.next(self.cursor, &self.cursor.rank)? else {
+            return Ok(None);
+        };
+        if rank != self.next {
+            return Err(self
+                .cursor
+                .fail(ContentError::InvalidRecord("captured namespace fresh rank")));
         }
-        Ok(serial)
+        self.next += 1;
+        self.cursor.count(|work| &mut work.fresh_rows);
+        Ok(Some(serial))
     }
 }
 impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> StreamedRowSource
@@ -334,7 +360,7 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> StreamedRow
         self.count(|work| &mut work.header_opens);
         Ok(Box::new(Headers {
             cursor: self,
-            keys: Keys::new(HEADER),
+            pass: Pass::new(HEADER, header_rows),
         }))
     }
     fn directory_header(&self, parent: u64) -> ContentResult<Option<DirectoryHeader>> {
@@ -370,10 +396,12 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> StreamedRow
         if self.header(parent)?.is_none() {
             return Ok(DirectoryChangeLookup::Unchanged);
         }
+        let started = Instant::now();
         let row = self
             .provider
-            .captured_directory_entry(self.reader, parent, name.as_bytes())
-            .map_err(|original| self.shared.borrow_mut().original(original))?;
+            .captured_directory_entry(self.reader, parent, name.as_bytes());
+        self.charge(started);
+        let row = row.map_err(|original| self.shared.borrow_mut().original(original))?;
         match row {
             None => Ok(DirectoryChangeLookup::Unchanged),
             Some(row) if row.parent != parent || row.name != name.as_bytes() => {
@@ -389,7 +417,7 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> StreamedRow
         self.count(|work| &mut work.value_opens);
         Ok(Box::new(Values {
             cursor: self,
-            keys: Keys::new(VALUE),
+            pass: Pass::new(VALUE, decode_inode_value),
         }))
     }
     fn new_inodes(&self) -> ContentResult<Box<dyn SerialRowSource + '_>> {
@@ -397,7 +425,8 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> StreamedRow
         self.count(|work| &mut work.fresh_opens);
         Ok(Box::new(Fresh {
             cursor: self,
-            keys: Keys::new(FRESH),
+            pass: Pass::new(FRESH, fresh_rank),
+            next: 0,
         }))
     }
     fn value_for(&self, serial: u64) -> ContentResult<Option<InodeValue>> {
@@ -413,10 +442,14 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> StreamedRow
             &mut self.shared.borrow_mut().work.fresh_points,
             serials.len() as u64,
         );
-        Ok(self
-            .ranks(serials)?
-            .into_iter()
-            .map(|rank| rank.is_some())
-            .collect())
+        if serials.len() > PAGE_ROWS {
+            return Err(self.fail(ContentError::InvalidRecord(
+                "captured namespace point window",
+            )));
+        }
+        serials
+            .iter()
+            .map(|serial| Ok(self.rank(*serial)?.is_some()))
+            .collect()
     }
 }

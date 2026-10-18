@@ -12,7 +12,10 @@ mod oracle;
 mod producer;
 use harness::Bench;
 use layerfs_content::filesystem::attributes::{read_portable, AttributeReadWork};
-use layerfs_overlay::Inode;
+use layerfs_content::{object::inode_leaf::decode_inode_value, ConstructionPolicy, ContentError};
+use layerfs_overlay::{IndexedOperationRecordScope, Inode};
+use layerfs_telemetry::timer::Timing;
+use layerfs_workspace::CapturedFileEdits;
 use oracle::{absent, value};
 use producer::{
     build_over, drain, evidence, record, Built, Call, Drive, Log, Recording, FRESH, HEADER, VALUE,
@@ -233,15 +236,43 @@ fn a_fresh_file_is_constructed_from_its_captured_runs() {
         assert_eq!(record(&b, &built.taken, FRESH, serial), number(rank as u64));
         assert!(record(&b, &built.taken, VALUE, serial).is_some());
     }
-    // Every file's own records live under its serial as file scope.
+    // A fresh file has no base: it is built from its captured runs with no
+    // file-scoped record job (record 033 F2).
     let log = recording.log.borrow();
     for serial in fresh {
-        assert!(
-            log.applies.iter().any(|job| job.file_scope == serial),
-            "serial {serial} has no file-scoped record job"
-        );
+        assert_eq!(log.scoped(serial), 0, "serial {serial} wrote file records");
     }
     drop(log);
+    // The committed tree takes each sealed value's content root. The record
+    // route over the same capture builds the same root for every one of
+    // these files, so the tree's objects are the same with or without F2.
+    for serial in fresh {
+        let sealed = record(&b, &built.taken, VALUE, serial).unwrap();
+        let value = decode_inode_value(&sealed).unwrap();
+        let scope = IndexedOperationRecordScope {
+            owner: built.taken.operation,
+            file_scope: 10_000 + serial,
+        };
+        let prepared =
+            CapturedFileEdits::prepare(&b.workspace, &b.overlay, built.taken.reader, serial, scope)
+                .unwrap();
+        let policy = ConstructionPolicy::frozen_default();
+        let attempt = Timing::disabled("record-route", |timing| {
+            Ok::<_, ContentError>(prepared.construct(
+                policy,
+                &policy.capacities(),
+                &mut b.fixture.store.clone(),
+                timing.child("construct"),
+            ))
+        })
+        .0
+        .unwrap();
+        assert_eq!(
+            attempt.result.as_ref().unwrap().root,
+            value.content_root,
+            "serial {serial}: the record route builds another root"
+        );
+    }
     built.release(&b);
 }
 

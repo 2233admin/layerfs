@@ -2,6 +2,12 @@
 use crate::{CapturedFileCustody, ConstructionBackingCustody, WorkspaceError};
 use layerfs_content::{ContentResult, FilesystemResult};
 use layerfs_overlay::{CapturedReader, OperationOwner};
+use std::time::Instant;
+
+/// Nanoseconds since `started`, saturating: an observation, never a limit.
+pub(crate) fn nanos(started: Instant) -> u64 {
+    u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX)
+}
 
 /// Actual adapter visits only; not whole-operation I/O, copies or residency.
 /// Rows and pages come from successful returned units: failed original work
@@ -85,6 +91,35 @@ pub struct CapturedNamespaceWork {
     pub fresh_rows: u64,
     /// Fresh rank point lookups answered.
     pub fresh_points: u64,
+    /// Record windows read, by passes and by points; each is one of the
+    /// record jobs.
+    pub window_jobs: u64,
+    /// Wall time of name normalization, the values pass (changed files
+    /// included) and Content's update, in nanoseconds. Observations only.
+    pub normalize_ns: u64,
+    pub values_ns: u64,
+    pub update_ns: u64,
+    /// The values pass split, in nanoseconds: captured inode pages with their
+    /// grouped base demands; whole changed-file constructions; their binding
+    /// (captured inode and base file lookups) and run reads (payload and
+    /// committed bytes); objects handed to the consumer; and the pass's own
+    /// record jobs. Observations only.
+    pub inode_page_ns: u64,
+    pub file_ns: u64,
+    pub file_bind_ns: u64,
+    pub file_source_ns: u64,
+    pub values_emit_ns: u64,
+    pub values_record_ns: u64,
+    /// The update split, in nanoseconds: the cursor's record jobs, its captured
+    /// name reads, and objects handed to the consumer. Observations only.
+    pub update_record_ns: u64,
+    pub update_capture_ns: u64,
+    pub update_emit_ns: u64,
+    /// Content's own state in the same scope: calls, keys read or changed
+    /// (one statement each in the overlay) and their time in nanoseconds.
+    pub backing_calls: u64,
+    pub backing_keys: u64,
+    pub backing_ns: u64,
 }
 /// Exact retained reader, operation owner and first-original failure for the
 /// caller's fences. Exactly one of `file`, `failure` and `records.failure`

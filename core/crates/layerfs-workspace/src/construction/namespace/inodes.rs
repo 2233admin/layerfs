@@ -1,5 +1,6 @@
 //! One captured inode row to one typed value: file root, symlink target, metadata.
 use super::records::{add, key, read_number, Facts, Shared, HEADER};
+use crate::construction::outcome::nanos;
 use crate::{
     BaseView, CapturedFileEdits, OverlayCapturedNamespace, OverlayOperationRecords, Workspace,
 };
@@ -18,6 +19,7 @@ use layerfs_content::{
 };
 use layerfs_overlay::{IndexedOperationRecordScope, Inode, InodeKind};
 use layerfs_telemetry::timer::{Active, TimingScope};
+use std::time::Instant;
 
 /// Exact inputs of every value this attempt builds. Canonical bytes come only
 /// from Content's constructors; this adapter selects their inputs.
@@ -68,7 +70,7 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
             }
         };
         let content_root = match (inode.kind, stored) {
-            (InodeKind::File, _) => self.file(inode.serial, consumer, timing)?,
+            (InodeKind::File, _) => self.file(inode.serial, stored.is_none(), consumer, timing)?,
             (InodeKind::Symlink, None) => self.symlink(inode.serial, consumer)?,
             // Content builds a fresh directory's page from its header and
             // replaces this root; the zero identity names no object.
@@ -153,31 +155,56 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
         Ok((portable.mode == live.mode).then_some(portable))
     }
     /// The existing changed-file constructor under its own file scope. It
-    /// takes the new-file route itself and returns the base root when the
-    /// content is unchanged. A failure keeps the file's whole custody.
+    /// returns the base root when the content is unchanged. A fresh file has
+    /// no base, so it takes the direct route with no edit records. A failure
+    /// keeps the file's whole custody.
     fn file(
         &self,
         serial: u64,
+        fresh: bool,
         consumer: &mut dyn FinalizedConsumer,
         timing: &TimingScope<'_, Active>,
     ) -> ContentResult<ObjectId> {
         self.shared.borrow().ready()?;
+        let started = Instant::now();
         let scope = IndexedOperationRecordScope {
             owner: self.facts.operation,
             file_scope: serial,
         };
-        let prepared = match CapturedFileEdits::prepare(
-            self.workspace,
-            self.provider,
-            self.facts.reader,
-            serial,
-            scope,
-        ) {
-            Ok(prepared) => prepared,
-            Err(custody) => return Err(self.shared.borrow_mut().file(custody)),
+        let attempt = if fresh {
+            CapturedFileEdits::construct_new(
+                self.workspace,
+                self.provider,
+                self.facts.reader,
+                serial,
+                scope,
+                self.policy,
+                self.capacities,
+                consumer,
+                timing.child("file"),
+            )
+        } else {
+            let prepared = match CapturedFileEdits::prepare(
+                self.workspace,
+                self.provider,
+                self.facts.reader,
+                serial,
+                scope,
+            ) {
+                Ok(prepared) => prepared,
+                Err(custody) => return Err(self.shared.borrow_mut().file(custody)),
+            };
+            prepared.construct(self.policy, self.capacities, consumer, timing.child("file"))
         };
-        let attempt =
-            prepared.construct(self.policy, self.capacities, consumer, timing.child("file"));
+        {
+            let mut owner = self.shared.borrow_mut();
+            add(&mut owner.work.file_ns, nanos(started));
+            add(&mut owner.work.file_bind_ns, attempt.custody.work.bind_ns);
+            add(
+                &mut owner.work.file_source_ns,
+                attempt.custody.work.source_ns,
+            );
+        }
         match attempt.result {
             Ok(file) => {
                 let mut owner = self.shared.borrow_mut();
