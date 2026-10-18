@@ -76,6 +76,22 @@ symlinks, modes, exit status, test results). The first concurrent-exec run found
 F-008 and F-009, so installs through FUSE are expected to find more; find them
 before P3, not during it.
 
+As built (2026-10-18, owner checks): a run labelled `dev` adds two checks to
+the closure (`closure.mjs`, `checks`).
+- **`reinstall-check`:** a clean reinstall of the unchanged lockfile, right
+  after the install. It is compared with the oracle, and its Commit's metadata
+  and stored bytes are recorded (`closure.reinstallCheck`; about 12.5 MiB
+  today, near zero after F-027 item 2).
+- **`rebuild`:** `tsc -b --verbose` of the built packages in a fresh
+  Workspace, after the build's Commit and unmount. It must find nothing to
+  build. Otherwise a native rerun in the image decides; a difference is a stop
+  finding against design 8 (`closure.rebuild`).
+
+The bytes come from the trace, so the dev run plays with `--mode measured`
+under `--label dev`. Its outputs stay in the run's folder, not in the reports.
+A fast play keeps the steps and states but no bytes. Editor-style saves are
+measure-only.
+
 ## 6. Ruled out
 
 | Route | Why not |

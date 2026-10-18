@@ -395,7 +395,9 @@ async function playRange(run, k, mode) {
   m.depth = { before: depthBefore, after: run.state.depth.commits + ctx.work.commits };
   if (!measured) {
     const stages = { kind: "tooling", totalMs: Math.round(performance.now() - t0), ...wall };
-    writeJson(join(run.dir, "fast", `range-${pad(k)}.json`), { range: k, mode, head, failure, calls: run.tally.calls, wall: stages });
+    // a closure's steps and development checks are kept in fast mode too; their stored bytes need the trace (measured mode)
+    const cl = ctx?.closure && !ctx.closure.skipped ? { steps: ctx.closure.steps, rows: ctx.closure.rows, oracleOk: ctx.closure.oracle?.ok ?? null, rebuild: ctx.closure.rebuild ?? null, reinstallCheck: ctx.closure.reinstallCheck ?? null } : null;
+    writeJson(join(run.dir, "fast", `range-${pad(k)}.json`), { range: k, mode, head, failure, calls: run.tally.calls, wall: stages, ...(cl ? { closure: cl } : {}) });
     console.log(`range ${k}: ${failure ? `STOP ${failure}` : "ok"} (${run.tally.calls} calls; tooling ${JSON.stringify(stages)})`);
     if (failure) { run.state.dirty = k; run.save(); return EXIT.stop; }
     advance(run, k, plan, head, layer, ctx, performance.now() - t0);
