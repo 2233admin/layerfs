@@ -253,9 +253,17 @@ cost.
   commit (65 for S1-a, 59 for S1-b), each under a 100 s alarm. The new
   tests take under 0.2 s. Clippy `-D warnings` and rustfmt are clean on the
   changed crates.
+- **Linux daemon targets** (liaison's pre-push condition): `store_commit`
+  (10), `mounted_commit` (9), `mounted_install` (4), `concurrent_commits`
+  (3), `mounted_commit_failures` (4), `r5_5_install_survival` (4) and
+  `r5_10_producer_profile` (1). They ran once each in their own container
+  (pinned image `378b799ef433`, `/dev/fuse`, `SYS_ADMIN`), under a 115 s
+  timeout, on the source tree of `1380bd542` (the same product code as
+  `4469e20a7`), at host load 11.5–13. All 35 tests pass; there was no F-046
+  or F-049 recurrence.
 - **Not run:**
   - workspace-wide builds and checks;
-  - Linux mount tests;
+  - the other Linux mount targets;
   - the r011 storage gate;
   - any Durable profile (`NOT_RUN — disabled by owner until explicit
     reauthorization`);
