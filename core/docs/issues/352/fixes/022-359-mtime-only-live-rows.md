@@ -6,6 +6,7 @@
 | Kind | code path only (overlay, Workspace construction, owner port). No format change, no schema change |
 | Commit | on local branch `issue359-impl` (not pushed); this record lands with it |
 | Status | implemented; verified by the tests below. No performance sample: the change runs only for mtime-only rows at Capture |
+| Superseded in part | 2026-10-19, record 029 (E10): the carried row is no longer counted dirty. It is kept in a journaled `kept_live` set until a writer counts it (BUGS.md F-048) |
 
 ## Problem
 

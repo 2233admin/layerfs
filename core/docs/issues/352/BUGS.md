@@ -541,6 +541,12 @@
     walk). The child keeps the copy until its `exec`, which under load can
     land after this test's unmount. Whether the same race explains the
     two earlier occurrences is not known.
+  - **Fourth occurrence** (2026-10-19, scratch build `75bfde677`, record
+    029): `mounted_commit`
+    `r5_9_stores_through_shared_mappings_are_committed_once_written_back`,
+    with the same `Busy` / `unmount:kernel` text. Not rerun as a pass. The
+    liaison (2026-10-19) finds the fork race plausible and leaves the
+    finding with its owner, still unassigned.
 
   **Status: OPEN. Owner: unassigned.** Next step: confirm or rule out the
   fork race. One way is to run each affected target with
@@ -564,3 +570,22 @@
   Needs a stage that misses `KeptReads` (a test change). **Owner:
   unassigned** (A1 owner #354 or the lead).
   [fixes/026-359-head-full-sample.md](fixes/026-359-head-full-sample.md).
+
+- **F-048 · an Unmount without `discard` is refused after an mtime-only
+  Commit (product; #359 E10, 2026-10-19).**
+  - `keep_live_row` (§4.8 option A, record 022, `4db0ceb9e`) counted the
+    row it carries into the active generation as one dirty inode.
+  - So after a Commit whose only change to a file was its mtime,
+    `control/dirty.rs` reported the Workspace dirty. `Unmount { discard:
+    false }` answered `Dirty { paths: ["/src/main.rs"], inodes: 1 }`
+    although nothing uncommitted remained. §4.8's live time ends at
+    unmount.
+  - The same count kept c04's UpToDate shortcut from ever applying after
+    such a Commit.
+
+  **Status: FIXED** in `9bee52d27` (`issue359-impl`, not pushed): a
+  journaled `kept_live` set replaces the count, and every writer of a kept
+  serial counts it. Regression test: `mounted_commit`
+  `an_unmount_without_discard_succeeds_after_an_mtime_only_commit`. It fails
+  on the old code with the `Dirty` reply above.
+  [fixes/029-359-e10-kept-live-rows.md](fixes/029-359-e10-kept-live-rows.md).
