@@ -114,13 +114,20 @@ remains a separate MEMORY/OFF/EXCLUSIVE database file.
   during live activity and idle periods. Terminal unmount drains requests,
   closes the Workspace's overlay connection and deletes its file. Neither
   deletes global history.
-- Target (owner direction 2026-10-07): every daemon opens the global Store
-  directly from a volume the daemons share and reads, saves and publishes
-  in-process. The host runs Project Init, installs one sealed Store file into
-  that volume and is control-only afterwards (mount, Exec, Commit, status,
-  unmount). Do not revive `layerfs-server` or build a host/server adapter in
-  the data path; the host-mediated SDK runtime is retired, not extended. See
-  the [integration contract](core/docs/issues/303/06-cluster-one-integration.md).
+- Target (owner direction 2026-10-07, Store calls revised 2026-10-18): every
+  daemon opens the global Store directly from a volume the daemons share and
+  reads, saves and publishes in-process. Project Init creates and seals one
+  Store file, installed into that volume. **SDK Store calls (fs, branch,
+  project, operator) run in the SDK's own process, which opens the same Store
+  directly; this is the only route.** It is Linux only: every opener shares
+  one Linux kernel and a local filesystem holding the Store (ext4, xfs,
+  btrfs). Anywhere else Store calls fail `Unsupported`, with no fallback; the
+  daemon does not serve Store calls. Workspace calls (mount, Exec, Commit,
+  status, unmount) go to the daemon. Do not revive `layerfs-server` or build a
+  host/server adapter in the data path; the host-mediated SDK runtime is
+  retired, not extended. See the
+  [integration contract](core/docs/issues/303/06-cluster-one-integration.md)
+  and [direct Store access](core/docs/issues/352/DIRECT_STORE.md).
   Immutable objects support reuse/distribution; authority, reference closure,
   mutable history, durability and safe GC still require exact contracts.
   Filesystem history is not a process, memory, socket or stdout/stderr

@@ -174,6 +174,8 @@
   on the current route until the switch). Kind 1. Spec:
   [DIRECT_STORE_IMPL.md](DIRECT_STORE_IMPL.md); record:
   [fixes/007-a1-f020-direct-store-access.md](fixes/007-a1-f020-direct-store-access.md).
+  One route, Linux only (owner): the daemon stops serving Store calls and the
+  old-route tests are deleted, not converted.
 - **F-021 · F4 judged the with-vs-without table by the before/after shape
   (tooling, builder, 2026-10-18, range 007 attempt 2).** The check read every
   table line after the before/after header, so the attempt-vs-rerun table

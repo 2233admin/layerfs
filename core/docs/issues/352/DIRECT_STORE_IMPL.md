@@ -7,6 +7,9 @@
 > **F-020** (BUGS.md) with the fix record
 > [fixes/007-a1-f020-direct-store-access.md](fixes/007-a1-f020-direct-store-access.md).
 > Owner: the fixer builds, the builder moves the runner, the lead accepts.
+> **Owner direction 2026-10-18 (second):** one route only, the direct one, Linux
+> only. The daemon no longer serves Store calls, and tests of the old route are
+> deleted, not converted (§3 steps 1 and 5).
 > Binding under the non-stop rule: no question to the owner; where this file is
 > silent, choose the option that keeps one attempt per operation, no fallback,
 > and the least new code, and record the choice in the fix record.
@@ -41,25 +44,26 @@ p50. Step 0 says which end; the old-vs-new table (§7) is the answer.
 
 ```
 Node process (runner container, Linux)
-  SDK JS ─▶ addon dispatch ─┬─ route "direct": layerfs-store-service, in-process
+  SDK JS ─▶ addon dispatch ─┬─ Store calls: layerfs-store-service, in-process
                             │     └─ global Store file on the shared volume
-                            └─ route "daemon": control connection ─▶ daemon
-  sandbox.* (mount, exec, Commit, status, unmount) ─▶ always the daemon
+                            └─ sandbox.* (mount, exec, Commit, status, unmount)
+                                  └─ control connection ─▶ daemon
 ```
 
 - **One implementation of every Store call.** The daemon's SDK functions move
-  into a new library crate, `layerfs-store-service`. The daemon and the addon
-  both call the same `dispatch(method, args, bodies)`; nothing is rewritten for
-  the addon. Equivalence holds by construction and is still proved (§6).
+  into a new library crate, `layerfs-store-service`, called by the addon
+  through `dispatch(method, args, bodies)`; nothing is rewritten. The daemon
+  keeps using the crate's `store/` and `overlay/` for Workspace Commits only.
+  Equivalence with the old binaries is proved (§3 step 5).
 - **Same argument and reply values.** Direct calls pass the same `SdkCall`
   values (`layerfs_bridge::control`) the wire carries, without the socket,
   framing or a second process. A typed API is a later cleanup, not this fix.
-- **Routes are explicit.** A client is created with `route: "direct"` or
-  `route: "daemon"`. Direct is the default where the kernel guard passes. A
-  failed guard is the error `Unsupported` with its reason; it never switches to
-  the daemon route. The daemon route stays for hosts that cannot open the Store
-  directly (macOS with Docker Desktop, the dsh web app). The owner may later
-  remove it; this fix does not.
+- **One route, Linux only.** Store calls always run in-process. Where the
+  kernel guard fails (macOS, a non-local filesystem) they fail `Unsupported`
+  with the reason; there is no daemon route to fall back to or to choose. The
+  SDK process (the replay runner, the dsh web app) runs in a Linux container
+  on the Store's volume. `project.init` keeps its current host Init: it creates
+  and seals a new Store before any daemon or other opener exists.
 
 ## 3. Steps
 
@@ -87,7 +91,7 @@ Move, unchanged in behaviour, into `core/crates/layerfs-store-service/`:
 
 | From `layerfs-daemon/src/` | Why it moves |
 | --- | --- |
-| `store/` | Store ports, Commit, merge, publish, readers: used by both routes and by Workspace Commits |
+| `store/` | Store ports, Commit, merge, publish, readers: used by Store calls in the addon and by the daemon's Workspace Commits |
 | `sdk/` | every Store call's implementation and its dispatch table |
 | `operator/files.rs`, `inspect.rs`, `store.rs` | operator Store calls |
 | `overlay/` | the owner of the private overlay that `fs.write`, `fs.edit`, `fs.apply` and recursive calls construct through (`sdk/files.rs`, `mutation.rs`, `recursive.rs`); FUSE-free today |
@@ -104,9 +108,18 @@ Rules:
   comes only from the new `StoreService` seam.
 - Files keep the 999-line ceiling; the new `lib.rs` stays a declaration file
   under 200 lines.
-- The daemon's behaviour and wire are unchanged: the existing SDK and daemon
-  tests pass unmodified (each test command ≤120 s), and the daemon binary is
-  re-identified (its id changes; that is expected).
+- **The daemon stops serving Store calls.** Its control channel keeps only
+  Workspace calls (mount, exec, Commit, status, unmount) and the operator
+  Workspace calls; the SDK dispatch over the wire and the operator Store calls
+  are removed from it. A Store call arriving on the wire is refused as an
+  unknown method. The daemon binary is re-identified.
+- **Old-route tests are deleted, not fixed.** Every test that drives a Store
+  call through the daemon's control channel (daemon crate tests of the SDK
+  dispatch, addon tests of the pooled Store path, `sdk/js/test` cases that
+  only exist for the daemon route, such as `concurrent_reads_real.mjs`) is
+  removed in the same commit. List each deleted file in the fix record. Tests
+  of surviving behaviour (Workspace calls, Store internals now in the new
+  crate) move with their code and keep passing (each test command ≤120 s).
 
 ### Step 2 · Kernel guard (`kernel_guard.rs` in the new crate)
 
@@ -125,7 +138,7 @@ Then it opens the Store with the **Disposable** profile selected explicitly
 busy handler, retry or fsync is added; the direct opener behaves as one more
 daemon would.
 
-### Step 3 · Addon route (`sdk/js/native/src/direct.rs`)
+### Step 3 · In-process Store calls in the addon (`sdk/js/native/src/direct.rs`)
 
 - One `StoreService` per Store path per process, opened on first use and
   shared by every client of that process; closed when the last client closes.
@@ -137,29 +150,27 @@ daemon would.
   Reads use the read-only session (F-018); writes take the Store's writer
   admission once.
 - One attempt: a refused or failed call returns its exact error; nothing is
-  resent on either route.
-- **Trace:** the same line shape, plus `route: "direct" | "daemon"`; on the
-  direct route the phase timers are the work, and `queue` records the libuv
-  wait and the writer-admission wait.
-- `dispatch.rs` picks the route per client; `pool.rs` and the control
-  connection serve only the daemon route and `sandbox.*`.
-- JS (`sdk/js/src/client.js`): `createClient({ route, storePath })`, documented
-  in `sdk/js/README.md`; the default is `"direct"`, and an explicit
-  `route: "daemon"` keeps today's behaviour.
+  resent.
+- **Trace:** the same line shape; the phase timers are the work, and `queue`
+  records the libuv wait and the writer-admission wait.
+- `dispatch.rs` sends Store calls to `direct.rs` and `sandbox.*` to the
+  control connection; `pool.rs` serves `sandbox.*` only, and the Store-call
+  code paths through it are deleted.
+- JS (`sdk/js/src/client.js`): `createClient({ storePath })`, documented in
+  `sdk/js/README.md` with the Linux-only requirement. No route option.
 
 ### Step 4 · Runner container (builder)
 
 As DIRECT_STORE.md §3.1: `layerfs-issue352-runner`, from the
 `layerfs-352-runtime` image (Node 24), mounting the Store volume, `~/lfs-history`
 and the checkout, with the Docker socket for creating Sandboxes. The image id,
-the addon id and the daemon id are recorded in every metrics file. The runner
-refuses to start a measured range when the route it records is not the one
-the plan line names.
+the addon id and the daemon id are recorded in every metrics file. Measured
+ranges run only from this container.
 
 ### Step 5 · Proofs (fixer; each command ≤120 s, under 10 s where possible)
 
-1. **Locking test** (`sdk/js/test/verify/direct_locking_real.mjs`): the direct
-   route and two daemons in separate containers on the shared volume write to
+1. **Locking test** (`sdk/js/test/verify/direct_locking_real.mjs`): the
+   in-process SDK and two daemons in separate containers on the shared volume write to
    one Store concurrently, barrier-ordered: Commits to the same Branch and to
    different Branches, a merge, and reads during publication. Every publish is
    applied once or refused with its exact outcome; `PRAGMA integrity_check`
@@ -167,22 +178,26 @@ the plan line names.
 2. **Refusal test:** opening from macOS and from a non-local filesystem
    (a FUSE or bind-mounted path in the container) fails `Unsupported` before
    any write; the Store file's bytes are unchanged.
-3. **Equivalence** (`direct_equivalence_real.mjs`): every Store method the
-   SDK exposes, run on a fork of the newest `p2-main` snapshot through both
-   routes, gives equal replies (errors included) and equal Store contents
-   (objects, roots, Branch heads) after the same sequence.
+3. **Equivalence with the old binaries** (`direct_equivalence_real.mjs`):
+   every Store method the SDK exposes, run on two forks of the newest
+   `p2-main` snapshot, one through the kept old binaries (daemon `c25119ac`,
+   addon `5baa0f5d`) and one in-process with the new addon, gives equal
+   replies (errors included) and equal Store contents (objects, roots, Branch
+   heads) after the same sequence. The old binaries are evidence only; they
+   are not a product route.
 4. **Compatibility (REBUILD.md kind 1):** the direct route opens the newest
    `p2-main` snapshot written by daemon `c25119ac` and passes the whole-tree
    proof checkpoint with `compat.mjs`.
-5. **Existing suites** of the daemon and SDK on the relocated crate.
+5. **Surviving suites** of the daemon, the new crate and the SDK, after the
+   old-route tests are deleted.
 
 ### Step 6 · Old vs new, then switch
 
 On the same snapshot fork, same cache state, one sample per case, each series
 labeled with its binaries: the probes and the trace p50/p95 for fs.read,
 fs.stat, fs.list, fs.grep, fs.write, fs.apply, branch.fork, branch.merge,
-branch.publish, plus SQL statements per call, old route (daemon `c25119ac`,
-addon `5baa0f5d`) vs direct route (new ids). The table goes in the fix record.
+branch.publish, plus SQL statements per call, old binaries (daemon
+`c25119ac`, addon `5baa0f5d`) vs the in-process SDK (new ids). The table goes in the fix record.
 
 Then, at a range boundary: re-measure the P2 baseline on the direct route
 (ranges 0–4 on a fork of the range-4 snapshot, a new series beside the old,
@@ -194,15 +209,16 @@ direct route. Earlier ranges are not replayed; their reports keep their labels.
 | Check | Required |
 | --- | --- |
 | Locking, refusal, equivalence, compatibility | all pass |
-| Existing daemon and SDK suites | pass, unmodified apart from the moved paths |
-| Read p50 (fs.read, stat, list) | lower than the daemon route on the same snapshot |
-| Write p50 (fs.write, apply, rm) | not higher than the daemon route |
-| SQL statements per call | equal on both routes (same code) |
-| Store bytes after the equivalence sequence | equal on both routes |
-| Workspace calls | unchanged route; their p50 within noise of the old baseline |
+| Surviving daemon, crate and SDK suites | pass; old-route tests deleted and listed |
+| Read p50 (fs.read, stat, list) | lower than the old binaries on the same snapshot |
+| Write p50 (fs.write, apply, rm) | not higher than the old binaries |
+| SQL statements per call | equal to the old binaries (same code) |
+| Store bytes after the equivalence sequence | equal to the old binaries |
+| Workspace calls | still through the daemon; p50 within noise of the old baseline |
 
-A miss is a finding under the playbook, not a reason to change the route or
-the gate. If reads do not improve, the cause goes in the fix record (step 0's
+A miss is a finding under the playbook, not a reason to bring back a daemon
+route or change the gate. If reads do not improve, the cause goes in the fix
+record (step 0's
 attribution says where to look).
 
 ## 5. Expected layout
@@ -217,7 +233,7 @@ layerfs-store-service/src/          [7874]  new crate (relocation, from layerfs-
   lib.rs                               —   new (declarations, StoreService)
   kernel_guard.rs                      —   new (step 2)
   store/                            [2326]  (moved)
-  sdk/                              [3020]  (moved; dispatch takes &StoreService)
+  sdk/                              [3020]  (moved; dispatch takes &StoreService; wire-only code deleted)
   operator/                          [493]  (moved: files, inspect, store)
     files.rs                         175
     inspect.rs                       237
@@ -238,8 +254,8 @@ layerfs-daemon/src/                         (only touched parts shown)
 ```
 sdk/js/native/src/                  [1896]
   direct.rs                            —   new (step 3)
-  dispatch.rs                         93   (route per client)
-  pool.rs                            135   (daemon route only)
+  dispatch.rs                         93   (Store calls to direct.rs)
+  pool.rs                            135   (sandbox.* only)
   discovery.rs                       495
   sandbox.rs                         442
   exec.rs                            253
@@ -247,13 +263,13 @@ sdk/js/native/src/                  [1896]
   convert.rs                          87
   job.rs                              80
   registry.rs                         76
-  trace.rs                            69   (route field)
+  trace.rs                            69
   lib.rs                              21
 ```
 
 ```
 sdk/js/src/                                 (only touched files shown)
-  client.js                           64   (route and storePath options)
+  client.js                           64   (storePath option)
 ```
 
 The fix record replaces this with the as-built listing at its final commit.
@@ -263,6 +279,5 @@ The fix record replaces this with the as-built listing at its final commit.
 The Store format (kind 1, no rebuild), Disposable/WAL/OFF, page size 4 KiB,
 one attempt per operation, the daemon's own direct open of the Store, FUSE and
 Workspaces in the daemon, per-Workspace overlay files. No `layerfs-server`, no
-host/server adapter: the addon is an opener, not a proxy. Root AGENTS.md's
-"host is control-only" paragraph is the owner's to edit; DIRECT_STORE.md is the
-record until then.
+host/server adapter: the addon is an opener, not a proxy. Root AGENTS.md
+records the one-route rule (2026-10-18).

@@ -3,12 +3,14 @@
 > **Status:** Current, owner decision 2026-10-18. For Store calls (fs, branch,
 > project, operator), the SDK opens the global Store **in-process**, without a
 > Sandbox daemon in the path. This supersedes, for those calls, the 2026-10-07
-> direction that the host is control-only (root AGENTS.md, "Active persistence
-> profile" and the LayerFS mental model's target paragraph). Updating AGENTS.md
-> itself is left to the owner; until then this note is the record. Workspace
+> direction that the host is control-only. Root AGENTS.md records it (the
+> LayerFS mental model's target paragraph, revised 2026-10-18). Workspace
 > calls (mount, exec, Workspace commit, status, unmount) stay with the daemon.
 > Implementation: [DIRECT_STORE_IMPL.md](DIRECT_STORE_IMPL.md), tracked as fix
 > F-020.
+> **One route, Linux only (owner, 2026-10-18):** Store calls run in-process
+> only; the daemon stops serving them, and an unsupported setup fails
+> `Unsupported`. There is no daemon route to choose or fall back to.
 
 ## 1. Architecture
 
@@ -46,8 +48,8 @@ within one kernel.
 
 The check is made when the Store is opened, from facts the process can verify
 (platform, filesystem type of the Store's directory, the same device as the
-daemons' volume). An unsupported setup fails with its reason; it never falls back
-to the daemon route silently.
+daemons' volume). An unsupported setup fails with its reason; there is no daemon route
+for Store calls to fall back to.
 
 ## 3. What changes for the replay
 
