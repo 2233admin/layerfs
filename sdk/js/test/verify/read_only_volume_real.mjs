@@ -4,19 +4,21 @@
 //   node sdk/js/test/verify/read_only_volume_real.mjs outer <daemon> <addon> <image>
 //
 // `outer` (on the Docker host) makes a fresh Store volume and a store volume
-// holding one marker file, then runs `inner` twice in the runtime image, each in
-// its own container sharing one LAYERFS_HOME:
+// holding one marker file, then runs `inner` in the runtime image: two phases in
+// one container, the second as a child process sharing its LAYERFS_HOME:
 //   create  - creates the Sandbox with the store at /pnpm-store, forks, mounts
 //             and checks inside the Workspace: the marker is readable; a write
-//             into the store fails EROFS; a hard link store -> Workspace and
-//             Workspace -> store each fail EXDEV; then Commits the Workspace.
+//             into the store fails EROFS; a hard link store -> Workspace fails
+//             EXDEV and Workspace -> store EROFS (the kernel refuses the
+//             read-only destination first); then Commits the Workspace.
 //   reopen  - a new process reopens the Sandbox from its record (the inspection
 //             must expect the same read-only mount), checks again, unmounts and
 //             closes it.
 // It then checks the store volume is unchanged and removes the containers its
 // runs named, both volumes and the home. One attempt per step; nothing retried.
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,7 +41,9 @@ function expectProbe(out) {
   assert.match(out, /READ store marker 352/, out);
   assert.match(out, /WRITE EROFS/, out);
   assert.match(out, /LINK_IN EXDEV/, out);
-  assert.match(out, /LINK_OUT EXDEV/, out);
+  // into the store, linkat(2) refuses the read-only destination mount first
+  // (mnt_want_write before the same-mount check): EROFS, still no link made
+  assert.match(out, /LINK_OUT EROFS/, out);
 }
 
 async function inner([phase, volume]) {
@@ -73,6 +77,10 @@ async function inner([phase, volume]) {
       }
       rmSync(source, { recursive: true, force: true });
       console.log("CREATE ok");
+      // a new process (its own addon state) reopens the Sandbox from its record
+      const child = spawnSync(process.execPath, [fileURLToPath(import.meta.url), "inner", "reopen", volume], { encoding: "utf8", timeout: 40_000 });
+      console.log((child.stdout + child.stderr).trim());
+      assert.equal(child.status, 0, "the reopen process passes");
     } else {
       const path = readFileSync(saved, "utf8");
       const ran = await layerfs.sandbox.exec("box", path, PROBE.replace('t("SYMLINK"', '0 && t("SYMLINK"'));
@@ -95,13 +103,14 @@ function outer([daemon, addon, image]) {
   const store = `layerfs-issue352-${stamp}-pnpm`;
   const home = join(REPO, "core/target/f020", `${stamp}-home`);
   mkdirSync(home, { recursive: true });
+  chmodSync(home, 0o700); // LAYERFS_HOME must be private
   const results = [];
   let after = "";
   try {
     for (const v of [volume, store]) assert.equal(docker(["volume", "create", v]).status, 0);
     const seed = docker(["run", "--rm", "-v", `${store}:/s`, "--entrypoint", "sh", image, "-c", "echo 'store marker 352' > /s/marker && chmod -R a+rX /s"]);
     assert.equal(seed.status, 0, seed.stderr);
-    for (const phase of ["create", "reopen"]) {
+    for (const phase of ["create"]) {
       const r = inRuntime({ script: fileURLToPath(import.meta.url), args: [phase, store], daemon, addon, image, volume, prefix: `${stamp}-`, env: { LAYERFS_HOME: home }, timeout: 55_000 });
       results.push({ phase, ...r });
       if (r.status !== 0) break;
@@ -114,7 +123,8 @@ function outer([daemon, addon, image]) {
     rmSync(home, { recursive: true, force: true });
   }
   for (const r of results) console.log(`== ${r.phase} exit ${r.status}\n${r.out.split("\n").slice(-12).join("\n")}`);
-  assert.deepEqual(results.map((r) => r.status), [0, 0], "both phases pass");
+  assert.deepEqual(results.map((r) => r.status), [0], "create and its reopen process pass");
+  assert.match(results[0].out, /REOPEN ok/);
   assert.equal(after, "marker", "nothing was written into the store volume");
   console.log("read-only volume: ok");
 }
