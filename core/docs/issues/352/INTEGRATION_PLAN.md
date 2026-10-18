@@ -52,8 +52,9 @@ the resolved tree. The counter is `tools/production_loc.py --root` on
      `read/provider.rs` (`Reader::new`, `ReadCache::new`, and `read_kept`'s
      per-demand workspace), write `Decoder::new()?`. Deref coercion passes it
      where `&mut DecompressionWorkspace` is taken.
-- **`read/provider.rs` is #354's held file.** The three-line change needs the
-  liaison's OK at integration.
+- **`read/provider.rs` is #354's held file.** The liaison approved the
+  three-line change on 2026-10-19, to be applied at integration as the merge
+  step that resolves this conflict.
 - Without it, reads do not reuse decode regions; Saves still do, through
   `save/state.rs`, which auto-merges. The probe figure of 286 / 238 MB
   assumes reads reuse too.
