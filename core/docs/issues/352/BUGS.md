@@ -404,6 +404,14 @@
   (2026-10-18):** the fixer takes F-036 right after F-032; until then it only
   reads source, logs and REPRO-F036.md, with no product change; frozen-volume
   access goes through the lead. Measured P3 waits for it.
+  **Fixed (correctness lane, 2026-10-18, branch
+  `claude/issue352-correctness-644bbc`, unmerged):** cause proved. A Save's
+  per-wave "absent" cache answered a delta base that the other writer
+  published after the negative was taken, while that writer's PREFIX chain was
+  walked: `ObjectMissing(base)`. e8775b32 is a base of 11 of daemon a's chains;
+  daemon b's 1,610 sealed packs are the other block. Base lookups now re-ask.
+  A deterministic test fails without the fix. Record:
+  [fixes/c01-f036-stale-negative-base.md](fixes/c01-f036-stale-negative-base.md).
 - **Limits audit findings (owner decision 2026-10-18).** From the limits audit
   (branch `dsh-352-limits-audit`, `core/docs/issues/352/LIMITS_AUDIT.md` §1,
   `17148cacd`). The F-033 rule applies to each: no `Capacity` or `Busy` on a
@@ -465,6 +473,34 @@
   Next diagnosis: a heap profile of the native addon (which allocator, which
   caches, whether it grows with calls or Stores). No owner assigned; the
   owner assigns.
+  **Split recorded (correctness lane, 2026-10-18, before the fix):** in-process
+  probe of the runner's call mix on a range-14 Store copy, base addon
+  `413ae60d`: RSS 1,246 MB = anonymous 1,198 MB + file-backed 48 MB (binaries;
+  the Store has `mmap_size=0`, so no SQLite file or WAL mapping); JS heap 6 MB.
+  It plateaus per process (1,222 MB at range 0, 1,437 MB at p3p), so it does
+  not grow per range. **Cause:** each Save allocates a zero-filled 16 MiB zstd
+  encode arena, which glibc keeps in the arena of each pool thread (dynamic mmap
+  threshold). **Fixed** (branch `claude/issue352-correctness-644bbc`, unmerged):
+  arenas are reused: 281 MB, flat over 3,600 writes. Diagnostics, not the
+  fix: `MALLOC_ARENA_MAX=1` cuts per-write growth from 21 MB to 0.4 MB, and a
+  fixed `MALLOC_MMAP_THRESHOLD_` cuts it to 2 MB.
+
+  **Reworked to the liaison ruling** (`926543b10`): plain encode regions,
+  bounded to one per CPU, no new `unsafe`, decode reuse held. Real fast dev
+  ranges (c43, base → fix, runner peak):
+  - r15: 1,444 → 445 MB and 1,287 → 274 MB;
+  - r16: 1,398 → 462 MB;
+  - file-backed 44–49 MB throughout.
+
+  **Decode regions as well** (liaison approval): reused regions are zeroed
+  on hand-out, because zstd's static decoder init does not clear its own
+  struct. Range-14 probe: 286 / 238 MB, against encode-only 363 / 315 MB.
+
+  **Follow-up:** release the idle regions when the Store closes. Wire it after
+  integration, once `store/handle.rs` is free.
+
+  Record:
+  [fixes/c03-f043-runner-memory.md](fixes/c03-f043-runner-memory.md).
 
 - **F-044 · a kernel reply computed before a merged install can land after
   its invalidation (product, FUSE coherence; #359 D-9 sizing, 2026-10-18).**

@@ -1,20 +1,20 @@
 //! C1's authenticated provider over a two-port Storage handle.
 
-use super::objects::ReadState;
-use crate::{encoding::codec::DecompressionWorkspace, error::StorageResult, storage::Storage};
+use super::objects::{Decoder, ReadState};
+use crate::{error::StorageResult, storage::Storage};
 use layerfs_content::{AuthenticatedObjects, ContentResult, ObjectId};
 use std::cell::RefCell;
 
 /// One operation's decode arena and bounded group/pooled-value caches.
 pub struct Reader<'a> {
     storage: &'a Storage,
-    state: RefCell<(DecompressionWorkspace, ReadState)>,
+    state: RefCell<(Decoder, ReadState)>,
 }
 impl<'a> Reader<'a> {
     pub(crate) fn new(storage: &'a Storage) -> StorageResult<Self> {
         Ok(Self {
             storage,
-            state: RefCell::new((DecompressionWorkspace::new()?, ReadState::new())),
+            state: RefCell::new((Decoder::new()?, ReadState::new())),
         })
     }
     /// Actual pooled reconstruction work across this operation’s read demands.
@@ -46,11 +46,11 @@ impl<'a> Reader<'a> {
 /// demand. Pack ids come from a counter that never goes back and published
 /// packs never change, so a kept body stays valid; every object read through
 /// it is authenticated as before. The bounds are the [`Reader`]'s.
-pub struct ReadCache(DecompressionWorkspace, KeptReads);
+pub struct ReadCache(Decoder, KeptReads);
 impl ReadCache {
     /// Empty caches and a fresh decode arena.
     pub fn new() -> StorageResult<Self> {
-        Ok(Self(DecompressionWorkspace::new()?, KeptReads::new()))
+        Ok(Self(Decoder::new()?, KeptReads::new()))
     }
 }
 /// [`ReadCache`]'s pack, group and pooled-value caches without its decode
@@ -91,7 +91,7 @@ impl Storage {
     }
     /// [`Reader::read_objects`] through kept caches and a fresh arena.
     pub fn read_kept(&self, kept: &mut KeptReads, ids: &[ObjectId]) -> StorageResult<Vec<Vec<u8>>> {
-        let mut workspace = DecompressionWorkspace::new()?;
+        let mut workspace = Decoder::new()?;
         kept.0
             .read(&mut workspace, &self.source, &self.capacities(), ids)
     }

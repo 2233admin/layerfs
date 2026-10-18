@@ -54,9 +54,10 @@ You restart the lane from the records, not from memory.
     `issue354-fs-read-calls`, session "#354 fs read calls". Autocommit reads
     allowed only for immutable objects; snapshot-choosing reads stay in one
     read transaction.
-  - Windows and file-overlap checks for #353 and #354 currently go through the
-    owner's liaison session. When you start timing, agree one window schedule
-    with the liaison; do not measure over another session's timed sample.
+  - File-overlap checks for #353 and #354 go through the owner's liaison
+    session. There are no go windows (root AGENTS.md §4, 2026-10-18): each
+    timed sample records host load and other worktrees' activity as declared
+    interference, and never interrupts another owner's work.
 
 ## 3. Owner decisions in force (2026-10-18)
 

@@ -25,6 +25,12 @@ impl Source for WaveSource<'_> {
             None => self.fetch.location(id, ceiling),
         }
     }
+    fn base_location(&self, id: ObjectId, ceiling: i64) -> StorageResult<Option<ObjectLocation>> {
+        match self.packer.location(id) {
+            Some(row) => Ok(Some(row)),
+            None => self.fetch.base_location(id, ceiling),
+        }
+    }
     fn pack_bytes(&self, id: i64) -> StorageResult<Vec<u8>> {
         match self
             .packer

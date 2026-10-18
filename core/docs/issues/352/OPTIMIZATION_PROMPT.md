@@ -73,7 +73,7 @@ code.
 - **Other sessions on the host:**
   - #353/#355 on `claude/issue353-lineage-cap-ec7c49` own the merge module, `commit_merge.rs`, `commit.rs`, `sdk/branch.rs` and `storage/merge_records.rs`.
   - #354 on `issue354-fs-read-calls` owns the Store read path and the SDK read calls.
-- **Windows:** builds and correctness tests need no window. Every timed sample needs a quiet window from the owner's liaison session: say what it is and how long it takes, and report when you're done.
+- **No go windows** (root AGENTS.md §4, 2026-10-18). Build and test in your worktree's own registered resources (`docs/general/parallel-worktrees.md`). For each timed sample, record the host load and any other worktree's activity as declared interference (AGENTS §3.5), and never interrupt another owner's work. Run `python3 tools/cleanup.py check` at start, every 30 minutes and at handoff; below 100 GB free, follow its cleanup procedure.
 
 ## 5. Rules
 

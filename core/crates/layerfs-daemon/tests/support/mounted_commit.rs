@@ -178,17 +178,34 @@ impl Rig {
         assert_eq!(closed.reply, Reply::Unmounted(token));
         flat
     }
-    /// The newest page of the Branch's Commit ancestry, head first.
+    /// The newest `HISTORY` records of the Branch's Commit ancestry, head
+    /// first. A page is byte-bounded (16 KiB over a 4,510-byte widest
+    /// record: 3 records), so this follows continuations like any caller.
     pub fn history(&self) -> PageResult<CommitRecord> {
-        self.store
-            .history()
-            .commit_history(&CommitHistoryRequest {
-                branch: self.harness.branch,
-                start: None,
-                cursor: None,
-                limit: HISTORY,
-            })
-            .unwrap()
+        let mut records = Vec::new();
+        let mut cursor = None;
+        loop {
+            let page = self
+                .store
+                .history()
+                .commit_history(&CommitHistoryRequest {
+                    branch: self.harness.branch,
+                    start: None,
+                    cursor,
+                    limit: HISTORY,
+                })
+                .unwrap();
+            records.extend(page.records);
+            match page.continuation {
+                Some(next) if records.len() < usize::from(HISTORY) => cursor = Some(next),
+                continuation => {
+                    return PageResult {
+                        records,
+                        continuation,
+                    }
+                }
+            }
+        }
     }
     /// The newest `count` Commit ids, head first, read across pages. A page
     /// is byte-bounded: since #327 a CommitRecord encodes at up to 4,510

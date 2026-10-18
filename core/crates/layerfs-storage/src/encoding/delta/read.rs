@@ -256,7 +256,7 @@ impl<'a> Resolver<'a> {
             }
             let location = self
                 .connection
-                .location(base, self.ceiling)?
+                .base_location(base, self.ceiling)?
                 .ok_or(StorageError::ObjectMissing(base))?;
             if location.role != current.role {
                 return Err(StorageError::Integrity("dependency role"));

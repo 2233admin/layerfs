@@ -193,6 +193,12 @@ impl Source for Fetch {
         self.locate(&[id])?;
         Ok(self.locators.borrow().get(&id).map(|row| row.location))
     }
+    fn base_location(&self, id: ObjectId, ceiling: i64) -> StorageResult<Option<ObjectLocation>> {
+        // A negative mark may be older than the record naming this base: the
+        // other writer published both after it was taken (F-036).
+        self.absent.borrow_mut().remove(&id);
+        self.location(id, ceiling)
+    }
     fn pack_bytes(&self, id: i64) -> StorageResult<Vec<u8>> {
         let info = self.descriptors.borrow().get(&id).copied();
         if let Some(info) = info {
