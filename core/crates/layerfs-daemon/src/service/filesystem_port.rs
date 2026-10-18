@@ -359,7 +359,7 @@ impl RequestServices for FilesystemPort {
         self.fenced(true)?;
         match self.0.ports().take_serial(self.0.workspace()) {
             Ok((serial, None)) => Ok(Some(serial)),
-            // A contended early refill reserved nothing and is not asked
+            // A refused early refill reserved nothing and is not asked
             // again: this create keeps the serial it took.
             Ok((serial, Some(early))) if writer_contended(&early) => Ok(Some(serial)),
             // Any other early failure is this create's original error; its
@@ -384,7 +384,9 @@ impl RequestServices for FilesystemPort {
         }))
     }
 }
-/// The allocator's immediate admission refusal: nothing was reserved.
+/// An exact SQLite `Busy` at the refill's one BEGIN: nothing was reserved.
+/// Admission itself queues the refill with no time limit (#352 F-040); only
+/// a writer outside the cooperative lock can still refuse it this way.
 fn writer_contended(error: &WorkspaceError) -> bool {
     let WorkspaceError::Service(error) = error else {
         return false;

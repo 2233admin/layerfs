@@ -443,6 +443,19 @@
     `Busy`; a mount's inode serial refill turns it into `EAGAIN`
     (`layerfs-daemon/src/service/filesystem_port.rs:388-398`). A time limit
     on correct, queued work.
+    **Status: FIXED** (branch `f040-writer-admission`, off
+    `dsh-history-replay` `0609aaeaa`). Admission is an untimed FIFO: a
+    queued writer blocks on the queue's condition variable, and on Linux in
+    one blocking `flock` after its turn, with no sleep-poll and no retry.
+    `WINDOW` and the `WAITERS` = 1,024 count (audit A11) are removed: each
+    queued entry is a blocked thread. The named exits without the writer
+    are `Closed` (new `Handles::close`), `Cancelled` (a signal interrupts
+    the kernel wait), `Integrity` (the thread already holds its own turn)
+    and `Unknown` (poisoned queue). The serial refill now queues; its
+    `EAGAIN` remains only for an exact SQLite `Busy` from a writer outside
+    the cooperative lock. Tests written first (`c1502c9b3`) failed `Busy`
+    on macOS and Linux.
+    [fixes/038-f040-untimed-writer-admission.md](fixes/038-f040-untimed-writer-admission.md).
   - **F-041 · merge report says `truncated: false` when it was truncated
     (correctness).** `WRITTEN_PATHS` = 4,096
     (`layerfs-store-service/src/store/commit_merge.rs:20, :141`) truncates

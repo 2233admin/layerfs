@@ -39,8 +39,10 @@
 The queue and the directory lock replace failure, not add serialization: the
 repository forbids automatic retries and busy handlers (one attempt per
 operation, exact failure), so a writer waits its turn before its single SQL
-attempt rather than failing with `Busy`. A wait past the admission deadline is
-an exact refusal, never a retry.
+attempt rather than failing with `Busy`. The wait has no time limit (#352
+F-040): queued correct work waits its turn. Its only exits without the writer
+are typed: the Store closing (`Closed`), a signal interrupting the
+cross-process wait (`Cancelled`) and a poisoned queue (`Unknown`).
 
 ## 3. Consequences for design and review
 

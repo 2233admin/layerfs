@@ -1,13 +1,13 @@
 //! Linux local-volume cooperative ownership before one SQLite write attempt.
 use crate::backend::records::BackendError;
-use std::{path::Path, time::Instant};
+use std::path::Path;
 #[cfg(target_os = "linux")]
 use {
     nix::{
         errno::Errno,
         fcntl::{Flock, FlockArg},
     },
-    std::{fs::File, time::Duration},
+    std::fs::File,
 };
 
 pub(crate) struct Writer {
@@ -16,7 +16,7 @@ pub(crate) struct Writer {
 }
 
 impl Writer {
-    pub(crate) fn acquire(path: &Path, deadline: Instant) -> Result<Self, BackendError> {
+    pub(crate) fn acquire(path: &Path) -> Result<Self, BackendError> {
         #[cfg(target_os = "linux")]
         {
             // Never open another FD to SQLite's main/WAL/SHM files here:
@@ -29,7 +29,7 @@ impl Writer {
                 .parent()
                 .filter(|parent| !parent.as_os_str().is_empty())
                 .unwrap_or_else(|| Path::new("."));
-            let mut file = File::open(directory).map_err(|_| BackendError::Integrity)?;
+            let file = File::open(directory).map_err(|_| BackendError::Integrity)?;
             if !file
                 .metadata()
                 .map_err(|_| BackendError::Integrity)?
@@ -37,36 +37,26 @@ impl Writer {
             {
                 return Err(BackendError::Integrity);
             }
-            loop {
-                if Instant::now() >= deadline {
-                    return Err(BackendError::Busy);
-                }
-                match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
-                    Ok(lock) => return Ok(Self { lock }),
-                    Err((owned, Errno::EAGAIN)) => {
-                        file = owned;
-                        let remaining = deadline.saturating_duration_since(Instant::now());
-                        if remaining.is_zero() {
-                            return Err(BackendError::Busy);
-                        }
-                        // Readiness only: no BEGIN/body has been attempted.
-                        std::thread::sleep(remaining.min(Duration::from_millis(1)));
-                    }
-                    Err((_, Errno::EINTR)) => return Err(BackendError::Busy),
-                    Err(_) => return Err(BackendError::Integrity),
-                }
+            // One blocking kernel wait, taken after the Session's FIFO turn,
+            // so at most one thread per Session waits here. Its exits: the lock
+            // (a holder process that exits releases it); `Cancelled` when a
+            // signal interrupts the wait. No BEGIN/body has been attempted.
+            match Flock::lock(file, FlockArg::LockExclusive) {
+                Ok(lock) => Ok(Self { lock }),
+                Err((_, Errno::EINTR)) => Err(BackendError::Cancelled),
+                Err(_) => Err(BackendError::Integrity),
             }
         }
         #[cfg(target_os = "macos")]
         {
             // Darwin's flock conflicts with SQLite's open-file locks. Host Init
             // is sole-owner; cross-session contention retains exact SQLite Busy.
-            let _ = (path, deadline);
+            let _ = path;
             Ok(Self {})
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
-            let _ = (path, deadline);
+            let _ = path;
             Err(BackendError::Integrity)
         }
     }

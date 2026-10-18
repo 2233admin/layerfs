@@ -28,6 +28,13 @@ impl Handles {
             .reclaim_space(pages)
             .map_err(Into::into)
     }
+    /// Closes this session's admission: every call queued for, or later
+    /// asking for, the connection fails `Closed` (Storage: `Refused`
+    /// "Closed"; history: `OwnershipUnavailable`) without attempting SQL.
+    /// The call holding the connection, and its lane, run to completion.
+    pub fn close(&self) {
+        self.storage.session.admission.close();
+    }
     /// Read-back settings from the actual shared connection.
     pub fn profile(&self) -> &ConnectionProfile {
         &self.storage.session.profile

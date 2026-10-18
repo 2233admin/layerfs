@@ -141,10 +141,7 @@ impl Session {
         decode: impl FnMut(&rusqlite::Row<'_>) -> Result<Option<T>, E>,
     ) -> Result<Vec<T>, E> {
         let start = Instant::now();
-        let _turn = self
-            .admission
-            .enter(start + super::admission::WINDOW, self.wait_kind())
-            .map_err(E::from)?;
+        let _turn = self.admission.enter(self.wait_kind()).map_err(E::from)?;
         let mut state = self
             .state
             .lock()
@@ -201,10 +198,7 @@ impl Session {
         &self,
         body: impl FnOnce(&Transaction<'_>) -> Result<T, E>,
     ) -> Result<T, E> {
-        let _turn = self
-            .admission
-            .enter(Instant::now() + super::admission::WINDOW, self.wait_kind())
-            .map_err(E::from)?;
+        let _turn = self.admission.enter(self.wait_kind()).map_err(E::from)?;
         let mut state = self
             .state
             .lock()
@@ -244,11 +238,7 @@ impl Session {
             return Err(BackendError::ReadOnly.into());
         }
         let start = Instant::now();
-        let deadline = start + super::admission::WINDOW;
-        let turn = self
-            .admission
-            .enter(deadline, self.wait_kind())
-            .map_err(E::from)?;
+        let turn = self.admission.enter(self.wait_kind()).map_err(E::from)?;
         let mut s = self
             .state
             .lock()
@@ -259,9 +249,8 @@ impl Session {
         // A held publication lane already owns the writer for its nested work.
         if writable && !turn.nested {
             // State owns this before BEGIN, including across a poisoned unwind.
-            s.writer_hold = Some(
-                super::writer_admission::Writer::acquire(&self.path, deadline).map_err(E::from)?,
-            );
+            s.writer_hold =
+                Some(super::writer_admission::Writer::acquire(&self.path).map_err(E::from)?);
         }
         let tx = Transaction {
             connection: &s.connection,

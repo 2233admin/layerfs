@@ -1,22 +1,34 @@
-//! Bounded FIFO connection ownership before a single SQL attempt.
+//! FIFO connection ownership before a single SQL attempt (#352 F-040).
+//!
+//! A queued caller waits for its turn with no time limit: waiting is
+//! readiness, never a retry, and correct queued work is not refused for
+//! waiting. Each queued entry is one blocked thread, so the queue is bounded
+//! by the threads the process can run, not by a count. A waiter leaves
+//! without its turn only by a named exit:
+//! - `Closed`: the Store was closed (`Admission::close`) before its turn;
+//! - `Unknown`: the queue's mutex was poisoned by a panicking holder;
+//! - `Integrity`: the caller's own thread already holds the turn outside a
+//!   lane, so waiting would deadlock on itself.
+//!
+//! A holder that unwinds still releases its turn (`Turn`'s drop), so a gone
+//! owner hands the turn on rather than stranding the queue.
 use crate::backend::records::BackendError;
 use layerfs_telemetry::timer::waits::{self, Wait};
 use std::{
     collections::VecDeque,
     sync::{Condvar, Mutex},
     thread::ThreadId,
-    time::{Duration, Instant},
+    time::Instant,
 };
-
-/// Operational admission budget, shared with Linux writer admission.
-pub(crate) const WINDOW: Duration = Duration::from_secs(2);
-// At most 8 KiB of queued ticket identifiers, independent of file/Save size.
-const WAITERS: usize = 1024;
 
 #[derive(Default)]
 struct Queue {
     next: u64,
-    active: bool,
+    /// The thread whose turn is in progress.
+    active: Option<ThreadId>,
+    /// Set once by `close`; queued and later entries then fail `Closed`.
+    closed: bool,
+    /// Waiting tickets in arrival order; the front is admitted next.
     pending: VecDeque<u64>,
     /// The thread holding the publication lane: its own nested SQL work runs
     /// inside the turn it already owns instead of queueing behind itself.
@@ -44,56 +56,62 @@ pub(crate) struct Turn<'a> {
 }
 
 impl Admission {
-    /// Waits for this connection's turn, bounded by `deadline`. Time spent
+    /// Waits, first come first served, for this connection's turn. Time spent
     /// queued is added to the calling thread's wait total for `kind`.
-    pub(crate) fn enter(&self, deadline: Instant, kind: Wait) -> Result<Turn<'_>, BackendError> {
+    pub(crate) fn enter(&self, kind: Wait) -> Result<Turn<'_>, BackendError> {
         let mut queue = self.queue.lock().map_err(|_| BackendError::Unknown)?;
-        if queue.holder == Some(std::thread::current().id()) {
+        let thread = std::thread::current().id();
+        // The job in progress finishes, even after `close`.
+        if queue.holder == Some(thread) {
             return Ok(Turn {
                 admission: self,
                 nested: true,
             });
         }
-        if Instant::now() >= deadline {
-            return Err(BackendError::Busy);
+        if queue.closed {
+            return Err(BackendError::Closed);
         }
-        if !queue.active && queue.pending.is_empty() {
-            queue.active = true;
+        if queue.active == Some(thread) {
+            return Err(BackendError::Integrity);
+        }
+        if queue.active.is_none() && queue.pending.is_empty() {
+            queue.active = Some(thread);
             return Ok(Turn {
                 admission: self,
                 nested: false,
             });
         }
-        if queue.pending.len() == WAITERS {
-            return Err(BackendError::Capacity);
-        }
+        // Unique while fewer than 2^64 tickets wait at once.
         let ticket = queue.next;
-        queue.next = queue.next.checked_add(1).ok_or(BackendError::Capacity)?;
+        queue.next = queue.next.wrapping_add(1);
         queue.pending.push_back(ticket);
-        let queued = Instant::now();
-        let _waited = Waited(queued, kind);
+        let _waited = Waited(Instant::now(), kind);
         loop {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                if let Some(index) = queue.pending.iter().position(|value| *value == ticket) {
-                    queue.pending.remove(index);
-                }
-                self.changed.notify_all();
-                return Err(BackendError::Busy);
+            if queue.closed {
+                queue.pending.retain(|value| *value != ticket);
+                return Err(BackendError::Closed);
             }
-            if !queue.active && queue.pending.front() == Some(&ticket) {
+            if queue.active.is_none() && queue.pending.front() == Some(&ticket) {
                 queue.pending.pop_front();
-                queue.active = true;
+                queue.active = Some(thread);
                 return Ok(Turn {
                     admission: self,
                     nested: false,
                 });
             }
-            (queue, _) = self
+            queue = self
                 .changed
-                .wait_timeout(queue, remaining)
+                .wait(queue)
                 .map_err(|_| BackendError::Unknown)?;
         }
+    }
+
+    /// Refuses every queued and later entry with `Closed` and wakes the queue.
+    /// The turn in progress, and its lane's nested work, run to completion.
+    pub(crate) fn close(&self) {
+        let mut queue = self.queue.lock().unwrap_or_else(|error| error.into_inner());
+        queue.closed = true;
+        self.changed.notify_all();
     }
 }
 
@@ -118,7 +136,7 @@ impl Admission {
     pub(crate) fn release_hold(&self) {
         let mut queue = self.queue.lock().unwrap_or_else(|error| error.into_inner());
         queue.holder = None;
-        queue.active = false;
+        queue.active = None;
         self.changed.notify_all();
     }
 }
@@ -135,7 +153,7 @@ impl Drop for Turn<'_> {
             .queue
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        queue.active = false;
+        queue.active = None;
         self.admission.changed.notify_all();
     }
 }

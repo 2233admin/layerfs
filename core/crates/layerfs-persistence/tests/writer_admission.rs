@@ -398,3 +398,211 @@ fn a_cross_process_waiter_outlives_the_old_window_and_succeeds() {
     );
     drop(original);
 }
+
+fn refused(result: &Result<impl std::fmt::Debug, PersistenceError>, status: &str) -> bool {
+    matches!(result, Err(PersistenceError::Refused { status: s }) if s == status)
+}
+
+#[test]
+fn queued_writers_are_admitted_first_come_first_served() {
+    let temp = support::Temp::new("writer-admission-fifo");
+    let handles = create(&temp.join("store.sqlite"));
+    let (holder, release) = hold_turn(&handles);
+    let mut writers = Vec::new();
+    for _ in 0..5 {
+        let provider = handles.storage.clone();
+        writers.push(std::thread::spawn(move || provider.reserve(reserve())));
+        // Each writer is queued before the next one arrives.
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    release.send(()).unwrap();
+    assert!(holder.join().unwrap().is_ok());
+    let packs = writers
+        .into_iter()
+        .map(|writer| writer.join().unwrap().unwrap().first_pack_id)
+        .collect::<Vec<_>>();
+    assert!(
+        packs.windows(2).all(|pair| pair[0] < pair[1]),
+        "admission order differs from arrival order: {packs:?}"
+    );
+}
+
+#[test]
+fn closing_the_store_fails_every_queued_writer_typed_and_lets_the_holder_finish() {
+    use layerfs_history::{HistoryCatalog, HistoryError};
+    let temp = support::Temp::new("writer-admission-close");
+    let handles = create(&temp.join("store.sqlite"));
+    let (holder, release) = hold_turn(&handles);
+    let (result_tx, result_rx) = mpsc::channel();
+    let writers = (0..3)
+        .map(|_| {
+            let provider = handles.storage.clone();
+            let result = result_tx.clone();
+            std::thread::spawn(move || result.send(provider.reserve(reserve())).unwrap())
+        })
+        .collect::<Vec<_>>();
+    std::thread::sleep(Duration::from_millis(200));
+    handles.close();
+    // Every queued writer wakes and fails while the holder still holds.
+    for _ in 0..3 {
+        let outcome = result_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(refused(&outcome, "Closed"), "{outcome:?}");
+    }
+    for writer in writers {
+        writer.join().unwrap();
+    }
+    release.send(()).unwrap();
+    assert!(holder.join().unwrap().is_ok());
+    let later = handles.storage.reserve(reserve());
+    assert!(refused(&later, "Closed"), "{later:?}");
+    assert!(matches!(
+        handles.history.publish_lane(),
+        Err(HistoryError::OwnershipUnavailable)
+    ));
+}
+
+#[test]
+fn writers_queue_behind_a_held_publication_lane_without_deadlock() {
+    use layerfs_history::HistoryCatalog;
+    let temp = support::Temp::new("writer-admission-lane");
+    let handles = create(&temp.join("store.sqlite"));
+    let (result_tx, result_rx) = mpsc::channel();
+    std::thread::scope(|scope| {
+        let (held_tx, held_rx) = mpsc::channel();
+        let (handles, result) = (&handles, result_tx.clone());
+        scope.spawn(move || {
+            let lane = handles.history.publish_lane().unwrap();
+            held_tx.send(()).unwrap();
+            // The holder's own write runs inside its held turn.
+            result.send(handles.storage.reserve(reserve())).unwrap();
+            std::thread::sleep(LONG_HOLD);
+            drop(lane);
+        });
+        held_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        for _ in 0..3 {
+            let result = result_tx.clone();
+            scope.spawn(move || result.send(handles.storage.reserve(reserve())).unwrap());
+        }
+        let result = result_tx.clone();
+        scope.spawn(move || {
+            let lane = handles.history.publish_lane().unwrap();
+            result.send(handles.storage.reserve(reserve())).unwrap();
+            drop(lane);
+        });
+        for _ in 0..5 {
+            let outcome = result_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+            assert!(outcome.is_ok(), "{outcome:?}");
+        }
+    });
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn a_holder_process_that_exits_hands_the_lock_to_the_waiter() {
+    let temp = support::Temp::new("wx");
+    let path = temp.join("store.sqlite");
+    let original = create(&path);
+    let handles = open(&path);
+    let held = Held::start(&path, &temp.join("s"));
+    let (result_tx, result_rx) = mpsc::channel();
+    let provider = handles.storage.clone();
+    let writer = std::thread::spawn(move || result_tx.send(provider.reserve(reserve())).unwrap());
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(result_rx.try_recv().is_err(), "the writer ignored the lock");
+    // Killing the owner releases its kernel lock; nothing is left behind.
+    drop(held);
+    let outcome = result_rx.recv_timeout(Duration::from_secs(3)).unwrap();
+    writer.join().unwrap();
+    assert!(outcome.is_ok(), "{outcome:?}");
+    drop(original);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn a_signalled_kernel_waiter_is_cancelled_and_leaves_the_queue_cleanly() {
+    use nix::sys::{
+        pthread,
+        signal::{self, SaFlags, SigAction, SigHandler, SigSet, Signal},
+    };
+    extern "C" fn interrupt(_: i32) {}
+    // No SA_RESTART: the signal interrupts the blocking flock with EINTR.
+    let action = SigAction::new(
+        SigHandler::Handler(interrupt),
+        SaFlags::empty(),
+        SigSet::empty(),
+    );
+    unsafe { signal::sigaction(Signal::SIGUSR1, &action) }.unwrap();
+    let temp = support::Temp::new("wc");
+    let path = temp.join("store.sqlite");
+    let original = create(&path);
+    let handles = open(&path);
+    let held = Held::start(&path, &temp.join("s"));
+    let (thread_tx, thread_rx) = mpsc::channel();
+    let provider = handles.storage.clone();
+    let first = std::thread::spawn(move || {
+        thread_tx.send(pthread::pthread_self()).unwrap();
+        provider.reserve(reserve())
+    });
+    let waiting = thread_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    std::thread::sleep(Duration::from_millis(300));
+    let provider = handles.storage.clone();
+    let second = std::thread::spawn(move || provider.reserve(reserve()));
+    std::thread::sleep(Duration::from_millis(300));
+    pthread::pthread_kill(waiting, Signal::SIGUSR1).unwrap();
+    let first = first.join().unwrap();
+    assert!(refused(&first, "Cancelled"), "{first:?}");
+    // The next waiter took the turn and waits in the kernel in its place.
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(!second.is_finished(), "the second writer ignored the lock");
+    held.release();
+    let second = second.join().unwrap();
+    assert!(second.is_ok(), "{second:?}");
+    drop(original);
+}
+
+/// A read plan that asks for a write while its own read holds the turn.
+struct ReentrantPlan {
+    provider: std::sync::Arc<layerfs_persistence::StorageProvider>,
+    outcome: Option<Result<Reserved, PersistenceError>>,
+}
+impl PackReadPlan for ReentrantPlan {
+    fn select(&mut self, _: PackInfo, _: &[u8]) -> Result<PackReadChoice, PersistenceError> {
+        self.outcome = Some(self.provider.reserve(reserve()));
+        Ok(PackReadChoice::Whole)
+    }
+}
+
+#[test]
+fn a_thread_reentering_its_own_turn_is_refused_instead_of_deadlocking() {
+    let temp = support::Temp::new("writer-admission-reentry");
+    let handles = create(&temp.join("store.sqlite"));
+    let storage = Storage::new(handles.storage.clone()).unwrap();
+    let object = FinalizedObject::new(
+        ObjectRole::FileState,
+        layerfs_content::object::codec::encode_bytes_object(&vec![49; 32000]).unwrap(),
+    )
+    .unwrap();
+    let save = storage.begin_save().unwrap();
+    save.accept(object.clone()).unwrap();
+    save.finish().unwrap();
+    let mut locations = Vec::new();
+    handles
+        .storage
+        .locate(&[object.id()], &mut locations)
+        .unwrap();
+    let mut plan = ReentrantPlan {
+        provider: handles.storage.clone(),
+        outcome: None,
+    };
+    handles
+        .storage
+        .read_pack_selection(locations[0].pack.pack_id, &mut plan)
+        .unwrap();
+    assert!(
+        matches!(plan.outcome, Some(Err(PersistenceError::Malformed))),
+        "{:?}",
+        plan.outcome
+    );
+    // The turn was released: the next call is admitted at once.
+    assert!(handles.storage.reserve(reserve()).is_ok());
+}
