@@ -11,7 +11,9 @@
 //! intent, which refuses later creates until a person resolves it. Nothing
 //! is retried on the caller's behalf.
 use crate::job::{failed, refused, Outcome};
-use crate::registry::{lock, random, sandbox, text, Mount, SandboxState, SANDBOXES};
+use crate::registry::{
+    lock, random, sandbox, sandbox_refreshed, text, Mount, SandboxState, SANDBOXES,
+};
 use layerfs_api::internal::{split, workspace};
 use layerfs_api::sandbox::values;
 use layerfs_api::{
@@ -377,7 +379,7 @@ fn abandon(directory: &Path, id: &str, mut failure: Box<SandboxFailure>) -> SdkR
 /// `sandbox.close(sandbox)`: refused while Workspaces are mounted or an
 /// operation still holds the Sandbox; then stop and delete the container.
 pub(crate) fn close(args: &SdkValue) -> Outcome {
-    let state = sandbox(args)?;
+    let state = sandbox_refreshed(args)?;
     let mounts = lock(&state.mounts)?.keys().cloned().collect::<Vec<_>>();
     if !mounts.is_empty() {
         return Err(SdkRefusal {
@@ -498,7 +500,7 @@ pub(crate) fn commit(args: &SdkValue) -> Outcome {
 /// `sandbox.unmount(sandbox, path, { discard? })`: `Busy` while a background
 /// process this binding started still runs there, then the daemon's answer.
 pub(crate) fn unmount(args: &SdkValue) -> Outcome {
-    let state = sandbox(args)?;
+    let state = sandbox_refreshed(args)?;
     let _guard = crate::discovery::guard(&state.directory)?;
     let path = text(args, "path")?;
     let token = state.token(path)?;

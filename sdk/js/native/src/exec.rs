@@ -7,7 +7,7 @@
 //! Engine offers no per-exec cancel, so `cancel` signals the process group
 //! from a second command and waits (bounded) until it is gone.
 use crate::job::{failed, refused, Outcome};
-use crate::registry::{lock, sandbox, text, Process, SandboxState};
+use crate::registry::{lock, sandbox, sandbox_refreshed, text, Process, SandboxState};
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use std::io::Write;
 use std::time::Duration;
@@ -75,10 +75,7 @@ pub(crate) fn exec(args: &SdkValue) -> Outcome {
     let state = sandbox(args)?;
     let path = text(args, "path")?;
     let command = text(args, "command")?;
-    let directory = lock(&state.mounts)?
-        .get(path)
-        .map(|mount| mount.workspace.ready.directory.clone())
-        .ok_or_else(|| refused("NotMounted", format!("{}:{path} is not mounted", state.id)))?;
+    let directory = state.directory(path)?;
     if !args.get_bool("background") {
         let (code, stdout, stderr) = run(
             &state,
@@ -194,7 +191,7 @@ pub(crate) fn running_in(state: &SandboxState, path: &str) -> Result<Vec<String>
 
 /// `sandbox.list_processes(sandbox)`: the processes this binding started.
 pub(crate) fn processes(args: &SdkValue) -> Outcome {
-    let state = sandbox(args)?;
+    let state = sandbox_refreshed(args)?;
     let listed = lock(&state.processes)?
         .iter()
         .map(|(id, process)| {
@@ -236,7 +233,7 @@ pub(crate) fn processes(args: &SdkValue) -> Outcome {
 /// `process.cancel(sandbox, process)`: TERM to the process group, then a
 /// bounded wait until it is gone.
 pub(crate) fn cancel(args: &SdkValue) -> Outcome {
-    let state = sandbox(args)?;
+    let state = sandbox_refreshed(args)?;
     let id = text(args, "process")?;
     let _guard = crate::discovery::guard(&state.directory)?;
     let (pid, start, stopped) = lock(&state.processes)?

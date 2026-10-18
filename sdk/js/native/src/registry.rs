@@ -69,7 +69,11 @@ pub(crate) fn text<'a>(args: &'a SdkValue, name: &str) -> Result<&'a str, SdkRef
         .ok_or_else(|| refused("InvalidInput", format!("missing text argument `{name}`")))
 }
 
-/// The Sandbox an operation names.
+/// The Sandbox an operation names, with this process's mount and process
+/// tables as they stand: no daemon call (#352 F-029). A call that names a
+/// mount checks just that mount (`SandboxState::token`, `directory`); one
+/// that needs every mount or process another process may have changed takes
+/// [`sandbox_refreshed`].
 pub(crate) fn sandbox(args: &SdkValue) -> Result<Arc<SandboxState>, SdkRefusal> {
     let id = text(args, "sandbox")?;
     let existing = lock(&SANDBOXES)?.get(id).cloned();
@@ -85,6 +89,13 @@ pub(crate) fn sandbox(args: &SdkValue) -> Result<Arc<SandboxState>, SdkRefusal> 
     if state.directory != crate::discovery::sandbox_dir(args, id)? {
         return Err(refused("Unauthorized", "Sandbox/home mismatch"));
     }
+    Ok(state)
+}
+
+/// The Sandbox an operation names, its tables read again from the shared
+/// records and the daemon (one status call per mount).
+pub(crate) fn sandbox_refreshed(args: &SdkValue) -> Result<Arc<SandboxState>, SdkRefusal> {
+    let state = sandbox(args)?;
     crate::discovery::refresh(&state)?;
     Ok(state)
 }
@@ -92,9 +103,34 @@ pub(crate) fn sandbox(args: &SdkValue) -> Result<Arc<SandboxState>, SdkRefusal> 
 impl SandboxState {
     /// The token of the Workspace mounted at `path`.
     pub(crate) fn token(&self, path: &str) -> Result<WorkspaceToken, SdkRefusal> {
+        self.mounted(path, |mount| mount.workspace.bound.token)
+    }
+
+    /// The kernel directory of the Workspace mounted at `path`.
+    pub(crate) fn directory(&self, path: &str) -> Result<String, SdkRefusal> {
+        self.mounted(path, |mount| mount.workspace.ready.directory.clone())
+    }
+
+    /// `pick` from the mount at `path`. A mount this process knows is used
+    /// while its shared record exists; an unknown path reads the shared
+    /// records once, for a mount another process made.
+    fn mounted<T>(&self, path: &str, pick: impl Fn(&Mount) -> T) -> Result<T, SdkRefusal> {
+        let known = lock(&self.mounts)?
+            .get(path)
+            .map(|mount| (mount.workspace.bound.token, pick(mount)));
+        match known {
+            Some((token, value)) if crate::discovery::mount_file(self, token).exists() => {
+                return Ok(value)
+            }
+            // Unmounted by another process: its owner removed the record.
+            Some(_) => {
+                lock(&self.mounts)?.remove(path);
+            }
+            None => crate::discovery::refresh(self)?,
+        }
         lock(&self.mounts)?
             .get(path)
-            .map(|mount| mount.workspace.bound.token)
+            .map(pick)
             .ok_or_else(|| refused("NotMounted", format!("{}:{path} is not mounted", self.id)))
     }
 }
