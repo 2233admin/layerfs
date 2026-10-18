@@ -406,6 +406,10 @@ test("version figures (lead 2026-10-18): the incremental manifest from diff_comm
   // the version execs are counted as tooling inside the total
   const ex = execFacts([{ method: "sandbox.exec", step: "r015.version#9", args: { command: "node -e x" }, ok: true }, { method: "sandbox.exec", step: "r015.s0001#1", args: { command: "ls" }, ok: true }]);
   assert.deepEqual([ex.total, ex.version], [2, 1]);
+  const inst = execFacts([{ method: "sandbox.exec", step: "r015.install#2501", args: { command: "test -d /pnpm-store/v11 && test -f x" }, ok: true },
+    { method: "sandbox.exec", step: "r015.install#2502", args: { command: "mkdir -p /tmp/pnpm-cache /tmp/pnpm-store && for d in /pnpm-s…" }, ok: true },
+    { method: "sandbox.exec", step: "r015.install#2503", args: { command: "pwd" }, ok: true }]);
+  assert.equal(inst.installs, 1, "a shortened install command is counted by its step");
   rmSync(dir, { recursive: true, force: true });
 });
 

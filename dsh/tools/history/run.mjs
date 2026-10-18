@@ -159,7 +159,8 @@ export function execFacts(lines) {
   const js = (c) => /^\s*(node|npm|pnpm|npx|yarn|vitest|corepack)\b/.test(String(c ?? ""));
   return { total: ex.length, js: ex.filter((l) => js(l.args?.command)).length, shell: ex.filter((l) => !js(l.args?.command)).length,
     nonZero: ex.filter((l) => l.ok && l.exitCode != null && l.exitCode !== 0).length, refused: ex.filter((l) => !l.ok).length,
-    installs: ex.filter((l) => /pnpm (install|i)\b/.test(String(l.args?.command ?? ""))).length, tests: ex.filter((l) => /vitest/.test(String(l.args?.command ?? ""))).length,
+    // the trace shortens long commands, so the closure's installs are known by their step too (dev352-p3h: 0 counted)
+    installs: ex.filter((l) => /pnpm (install|i)\b/.test(String(l.args?.command ?? "")) || /^r\d+\.(install|incremental-install|clean-install|reinstall-check)#/.test(String(l.step ?? "")) && /pnpm-store/.test(String(l.args?.command ?? "")) && !/^test -d /.test(String(l.args?.command ?? ""))).length, tests: ex.filter((l) => /vitest/.test(String(l.args?.command ?? ""))).length,
     // the version figures' own execs (version.mjs): tooling, inside the total
     version: ex.filter((l) => /^r\d+\.version(#|$)/.test(String(l.step ?? ""))).length };
 }
