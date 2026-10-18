@@ -128,6 +128,8 @@ to be uncommon; the replay's back-to-back play makes them frequent. Hence:
 | 2 · narrower lane | **deferred** | mainly a contention optimization; revisit only if the uncontended series or the lane hold per Commit needs it after fix 1 |
 | 3 · reads off the writer queue | **deferred** | same; F-018 already moved the important reads off |
 
+Fixes 2 and 3 are listed with their reopen triggers in [DEFER.md](../DEFER.md) (D-1, D-2).
+
 **Closing F-025:** fix 1's proof and old-vs-new table on the uncontended and
 contended series (SPEC §5 note of the same date): `merge.paths` flat against
 tree size, merged-Commit lane hold back to a few milliseconds, uncontended

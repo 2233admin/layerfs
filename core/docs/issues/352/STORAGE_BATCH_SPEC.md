@@ -270,4 +270,5 @@ removes a proof. A storage gain bought with a ~50% speed loss is rejected
 
 Shared zstd dictionary (STORAGE_STUDY §6 item 4), compression level changes,
 merging a Save's packs, chunk compaction (F-005), shorter `object_location`
-keys, commit row compaction: each below 10% or not approved.
+keys, commit row compaction: each below 10% or not approved. Listed with
+their reopen triggers in [DEFER.md](DEFER.md) (D-3, D-4).
