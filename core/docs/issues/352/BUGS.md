@@ -239,6 +239,10 @@
   reuse. Exec launch itself, a fresh Docker exec per call (three Engine
   exchanges with `Connection: close`, then dockerd → containerd → runc), is
   the Sandbox's cost. A long-lived launcher is the owner's call.
+  Owner read (2026-10-18): the growth is a reasonable range for 16 mounts.
+  Untraced it is +5 ms (46.3 → 51.6, about 0.35 ms per mount), so this is
+  low-priority cleanup at the end of the fixer's queue, not a performance
+  problem.
 - **F-030 · `daemon[].fuse.served` on traced exec lines is cumulative
   (tooling, liaison, 2026-10-18).** It rose 35 → 248 across calls, including
   `true` calls that make no requests. Readers must take differences per
