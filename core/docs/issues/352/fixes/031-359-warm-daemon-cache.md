@@ -234,14 +234,172 @@ One run each, under a 115 s alarm (host) or `timeout 100` (Linux), built
   - architecture 61, COST_MODEL and this record.
   `issue359-impl` has three later commits (`9bee52d27`, `1e90114fa`, `7dc323574`) not on this branch. They touch none of these files, so a two-dot diff also shows them, reversed.
 
+## Serial operations on one daemon (owner request 2026-10-19)
+
+**Question:** is the 64 MiB cache shared across different operations? The
+owner asked: "test against those operations ... and see if the cache is cross
+shared between operations (we can have one workspace execute on one
+operation serially)".
+
+**Design:**
+- Binary `w64-6ae65f16` (64 MiB; product source equal to the final branch
+  except a comment), LayerFS part only.
+- One daemon and one Store clone per arm. Each case runs in its own fresh
+  Workspace on that daemon: mount, run its non-steady steps once, read the
+  daemon's RSS, unmount discarded. No case Commits; `serial case` refuses
+  Commit cases, so the base never moves.
+- Every case is its own command (`cost.mjs serial open|case|close`, commit
+  `35d2e3373`) and the Sandbox stays up between them.
+- Counts per step are the daemon's records at a status before and after the
+  step, as in the other arms. The reference for each case is its own
+  cold-daemon a64 sample (one daemon per case): s471, s475, s479, s483, s487,
+  s491, s495, s609 (rm-rf-nm) and s613 (node-require). The last two were run
+  for this request.
+- One sample per arm.
+
+**Order of events and failures:**
+- *Arm S (seq 633): FAILED.* Its order was rm-rf-nm, find, git, tsc-b,
+  node-require, cp-rm-nm, folder-10000-ls, vitest, first-stat,
+  first-stat-deep. Case 6 (cp-rm-nm) hit the 115 s alarm: cp alone took
+  117.5 s. Its runner kept running, and cases 7–10 ran while its 28 s
+  rm-created step was still going, so their daemon-wide counters and walls
+  are contaminated. Close was refused (`MountsActive`), and the Sandbox and
+  volume were removed by hand. Cases 1–5 are clean but are not reported as an
+  arm. The per-case script now stops the sequence on any overrun.
+- *cp-rm-nm's cold reference (s611): FAILED.* It ran over budget: cp 107 s
+  and rm-created 36 s at host load 46–52. It was decoded afterwards for its
+  counts only.
+- *S2 and R leave cp-rm-nm out.* It cannot fit a 2-minute command on this
+  host now. This is a changed case set because of the budget, not a rerun
+  because of load. The liaison had been asked to choose and had not answered
+  when the owner said "just go"; this was the recommended option.
+- Host load (one minute) was 19–42 throughout S2 and R. The integration
+  session's builds and another lane's samples were running. Walls are
+  diagnostic; counts are the evidence.
+
+
+#### Arm S2: order rm-rf-nm → find → git → tsc-b → node-require → folder-10000-ls → vitest → first-stat → first-stat-deep  (warm-s635-serial-S2, COMPLETE)
+
+| # | Case / step | ms | stmts | reader req | CC hits | CC misses | evictions | RSS MB | cold ms | cold stmts | cold misses | misses vs cold |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | rm-rf-nm / rm-committed | 37,446.2 | 203,368 | 198,063 | 1,784,987 | 194,526 | 80,923 | 84.3 | 35,871.5 | 203,368 | 194,526 | 100% |
+| 2 | find / cold | 3,630.4 | 17,793 | 16,067 | 419,802 | 16,082 | 22,801 | 94.4 | 3,814.0 | 38,993 | 36,194 | 44% |
+| 3 | git / status-cold | 653.9 | 9,574 | 6,539 | 71,578 | 6,112 | 10,217 | 109.4 | 649.7 | 13,075 | 8,623 | 71% |
+| 3 | git / add | 178.2 | 59 | 25 | 18,436 | 26 | 91 | 109.4 | 170.1 | 59 | 26 | 100% |
+| 3 | git / commit | 85.0 | 391 | 371 | 5,150 | 337 | 637 | 109.4 | 64.1 | 391 | 337 | 100% |
+| 4 | tsc-b / cold | 645.9 | 959 | 563 | 15,052 | 755 | 30,954 | 116.7 | 564.7 | 4,452 | 3,160 | 24% |
+| 5 | node-require / cold | 79.3 | 141 | 62 | 2,887 | 55 | 344 | 116.7 | 212.6 | 1,169 | 869 | 6% |
+| 6 | folder-10000-ls / cold | 2,944.3 | 40,402 | 40,091 | 301,696 | 40,252 | 54,265 | 116.7 | 2,507.8 | 40,458 | 40,262 | 100% |
+| 7 | vitest / cold | 4,743.1 | 3,449 | 1,482 | 115,993 | 2,480 | 84,090 | 149.5 | 3,288.9 | 9,760 | 7,060 | 35% |
+| 8 | first-stat / cold | 5.3 | 0 | 0 | 15 | 0 | 0 | 149.5 | 3.2 | 63 | 15 | 0% |
+| 9 | first-stat-deep / cold | 4.7 | 38 | 26 | 161 | 25 | 11 | 149.5 | 9.1 | 150 | 76 | 33% |
+
+Cache after the last case: evictions 284,443 in total, 64.0 MiB charged, 56,970 objects, authenticated 69.6 MB over the sequence.
+
+#### Arm R: order first-stat-deep → first-stat → vitest → folder-10000-ls → node-require → tsc-b → git → find → rm-rf-nm  (warm-s644-serial-R, COMPLETE)
+
+| # | Case / step | ms | stmts | reader req | CC hits | CC misses | evictions | RSS MB | cold ms | cold stmts | cold misses | misses vs cold |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | first-stat-deep / cold | 36.6 | 150 | 50 | 270 | 76 | 0 | 19.1 | 9.1 | 150 | 76 | 100% |
+| 2 | first-stat / cold | 3.7 | 8 | 5 | 49 | 4 | 0 | 18.9 | 3.2 | 63 | 15 | 27% |
+| 3 | vitest / cold | 5,122.7 | 9,655 | 6,110 | 134,448 | 7,005 | 0 | 75.3 | 3,288.9 | 9,760 | 7,060 | 99% |
+| 4 | folder-10000-ls / cold | 5,802.4 | 40,404 | 40,092 | 301,724 | 40,252 | 0 | 93.3 | 2,507.8 | 40,458 | 40,262 | 100% |
+| 5 | node-require / cold | 158.1 | 835 | 672 | 5,048 | 665 | 0 | 95.7 | 212.6 | 1,169 | 869 | 77% |
+| 6 | tsc-b / cold | 613.6 | 2,142 | 1,664 | 19,937 | 1,705 | 0 | 102.7 | 564.7 | 4,452 | 3,160 | 54% |
+| 7 | git / status-cold | 842.7 | 7,627 | 5,252 | 66,234 | 4,907 | 0 | 105.6 | 649.7 | 13,075 | 8,623 | 57% |
+| 7 | git / add | 277.0 | 59 | 25 | 18,436 | 26 | 0 | 105.6 | 170.1 | 59 | 26 | 100% |
+| 7 | git / commit | 94.3 | 391 | 371 | 5,151 | 337 | 0 | 106.5 | 64.1 | 391 | 337 | 100% |
+| 8 | find / cold | 4,091.7 | 33,778 | 31,765 | 491,643 | 32,201 | 2,338 | 117.4 | 3,814.0 | 38,993 | 36,194 | 89% |
+| 9 | rm-rf-nm / rm-committed | 24,991.6 | 178,919 | 175,169 | 1,702,451 | 171,116 | 158,538 | 127.2 | 35,871.5 | 203,368 | 194,526 | 88% |
+
+Cache after the last case: evictions 160,876 in total, 64.0 MiB charged, 134,834 objects, authenticated 69.1 MB over the sequence.
+
+Cold references (a64-fresh, own daemon each): find s483, first-stat s471, first-stat-deep s475, folder-10000-ls s479, git s487, node-require s613, rm-rf-nm s609, tsc-b s495, vitest s491
+
+
+Column "misses vs cold" is the case's CanonicalCache misses in the sequence
+over its misses on its own fresh daemon. Under 100% means earlier operations
+left entries it used.
+
+**Reading:**
+- **The cache is shared across operations, and the order decides how much.**
+  - With the broad walks first (S2), later cases miss far less than cold:
+    - find 44%;
+    - tsc -b 24%;
+    - node require 6%;
+    - vitest 35%;
+    - first stat 0%;
+    - git status 71%.
+    Their Store statements fall the same way (find 38,993 → 17,793,
+    tsc -b 4,452 → 959, node require 1,169 → 141, vitest 9,760 → 3,449).
+  - With the light cases first (R), little is shared: vitest 99%,
+    `ls -l` 100%, node require 77%, tsc -b 54%, git status 57%, find 89%,
+    rm -rf 88%.
+- **Likely suppliers (inference from working-set overlap, not traced per
+  object):**
+  - S2:
+    - find and git status draw on rm-rf-nm's walk of every directory and
+      inode under `node_modules`;
+    - tsc -b and node require draw on the package metadata that rm-rf-nm,
+      find and git status walked before them;
+    - vitest draws on all of those;
+    - first stat (root) was still resident.
+  - R:
+    - first stat draws on first-stat-deep's root path;
+    - node require, tsc -b and git status draw on vitest's `node_modules`
+      metadata;
+    - find and rm-rf-nm, last, draw on what the earlier cases left.
+  - `ls -l` of 10,000 entries reads the `folders` branch's own `.cost`
+    directory, which no other case touches: 100% in both orders, as expected.
+- **Where it runs out:**
+  - rm-rf-nm alone overruns 64 MiB: it evicts 80,923 entries inside its own
+    case in S2, and 158,538 in R. In S2 it still left the shared directory
+    and inode objects that find, git and the package-metadata readers reused.
+  - The cache is full (64.0 MiB charged) at the end of both arms: S2 evicted
+    284,443 entries in total and R 160,876.
+  - Each arm authenticated about 70 MB of objects over its sequence. The
+    owner's estimate of about 100 MB of combined working set is in line with
+    a cache that stays full and keeps evicting.
+  - vitest evicts 84,090 entries in S2, where it comes after the walks, and
+    none in R, where it is third.
+- **Daemon RSS** climbs across the sequence: S2 84 → 150 MB, R 19 → 127 MB.
+  That is above the 64 MiB cache: per-case allocations are not all returned
+  to the OS. It is a point sample after each step.
+- **cp-rm-nm at 64 MiB, unresolved.**
+  - cp took 107–118 s at 64 MiB (s611, S case 6) against 40–49 s at 8 MiB
+    (s347, s405).
+  - The Store counts are about the same: statements 223k vs 226k, requests
+    236k vs 238k.
+  - Evictions are higher (248k–394k vs 323k), and kernel-served time is
+    about 3× higher.
+  - rm-created, which does no Store or cache work, is equally about 3× slower
+    (25 s vs 8.3 s). That points to host load (46–52, and 11–23 with the
+    integration build), not to the cache size, but no clean comparison was
+    run. It is noted here, not attributed.
+
+**Harness lines touched on this branch** (`dsh/tools/history/cost.mjs` at
+`35d2e3373`, new-file line numbers; the RCA session also edits this file):
+
+- header comments 7 and 26–33;
+- `runInner` mounts 152–153;
+- `hostCase` 170, 172, 174, 181 and 185;
+- `inner` 301;
+- the RSS helpers 315–318;
+- `playCase` 344–351, 353, 357 and 361;
+- `summarize` 384, 386, 395, 399 and 404;
+- `table` 425 and 438;
+- the serial commands (new functions `hostSerial`, `innerSerial`,
+  `summarizeSerial`) 449–553;
+- `main` dispatch 563–564.
+
 ## Not run, and gaps
 
 - The other daemon test targets, the fuse, overlay and workspace suites (untouched crates), and the SDK check set.
 - pnpm, grep-r, du-s and the other cost cases outside the requested set.
 - Durable: `NOT_RUN — disabled by owner until explicit reauthorization`.
-- No sample of several different cases in sequence on one daemon (the union working set). The "find + vitest + tsc ≈ 64 MiB" figure is the sum of the per-case occupancies, not a measurement.
+- The union working set was sampled later in the serial arms S2 and R (see "Serial operations"). cp-rm-nm is left out of them: it cannot fit a 2-minute command on this host, and its 64 MiB slowdown is unattributed.
+- Shared-tier counters were never published in daemon telemetry (the tier is dropped).
 - RSS is a point sample after the step, not a peak.
-- Shared-tier counters are not published in daemon telemetry.
 - Wall times across arms were taken at different host loads (see Conditions).
 
 ## Production LOC
@@ -257,7 +415,9 @@ Scope and method for every line: `tools/production_loc.py --root` on `git archiv
 | `a82efb484` a+b | 98664 → 98664 (delta 0) | |
 | `668088a39`, `dee0eb089` docs | 98664 → 98664 (delta 0) | |
 | `5038c3b57` remove (b) | 98664 → 98479 (delta −185) | core 89982 → 89797; deleted tests `shared_pack_tier`, `shared_pack_reads` |
-| decision docs commit | 98479 → 98479 (delta 0) | |
+| `419f771bf` decision docs | 98479 → 98479 (delta 0) | |
+| `35d2e3373` serial harness | 98479 → 98479 (delta 0) | `dsh/tools` is not in a production scope |
+| serial results docs commit | 98479 → 98479 (delta 0) | |
 
 Net over the base `46e17bdf3`: 98479 → 98479 (delta 0). The kept product
 change is the `cache_bytes` value and its comment.
