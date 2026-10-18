@@ -675,6 +675,11 @@ fn busy_while_a_commit_is_held(name: &'static str, label: &str, point: Option<Po
         host(&mount)
     });
     let readme = fs::read(mount.join("README.md")).unwrap();
+    // An unchanged mount is answered before capture (#352 c04). Rewriting a
+    // file with its own bytes gives the caller constructor a capture to hold.
+    if point.is_none() {
+        fs::write(mount.join("README.md"), &readme).unwrap();
+    }
     fx.quiet(token);
     let bound = fx.harness.status(token);
     assert_eq!(bound.activity, Activity::Idle);

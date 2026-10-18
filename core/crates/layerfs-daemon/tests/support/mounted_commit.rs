@@ -139,7 +139,15 @@ impl Rig {
         let done = self
             .commit(token)
             .unwrap_or_else(|failure| panic!("{what}: {failure:?}"));
-        receipt(&done, what);
+        // An unchanged Workspace is answered before capture (#352 c04): no
+        // constructor ran and nothing was saved. A capture keeps its receipt.
+        let commit = done.commit.as_ref().expect("Commit receipt");
+        if commit.capture.is_some() {
+            receipt(&done, what);
+        } else {
+            assert!(commit.namespace.is_none(), "{what}: {commit:?}");
+            assert_eq!(commit.saved, Default::default(), "{what}");
+        }
         match &done.reply {
             Reply::Committed(CommitOutcome::UpToDate { head, root }) => (*head, *root),
             other => panic!("{what}: {other:?}"),

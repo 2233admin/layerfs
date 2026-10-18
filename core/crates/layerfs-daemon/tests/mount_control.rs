@@ -489,8 +489,10 @@ fn product_control_commit_captures_the_frontier_releases_its_owners_and_is_then_
         "{:?}",
         again.reply
     );
-    let unchanged = again.commit.as_ref().unwrap().namespace.as_ref().unwrap();
-    assert!(!unchanged.retained() && unchanged.released.len() == 2);
+    // Answered before capture (#352 c04): no constructor, owner or Save.
+    let unchanged = again.commit.as_ref().unwrap();
+    assert!(unchanged.namespace.is_none() && unchanged.capture.is_none());
+    assert_eq!(unchanged.saved, Default::default());
     drop(again);
     // A new Workspace binds the published root. Only the root identity is
     // compared here; the committed bytes are read back in product_commit.

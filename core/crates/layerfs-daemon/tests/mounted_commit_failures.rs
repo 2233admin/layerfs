@@ -751,7 +751,8 @@ impl Case {
             }
         };
         let commit = done.commit.as_ref().expect("Commit receipt");
-        let _request = u64::try_from(commit.capture.generation.number()).unwrap();
+        let _request =
+            u64::try_from(commit.capture.expect("captured").generation.number()).unwrap();
         let owners = commit.namespace.as_ref().map(Owners::of);
         drop(done);
         expect!(

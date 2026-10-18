@@ -331,6 +331,9 @@ fn known_publication_survives_an_unattempted_local_install() {
 fn a_held_producer_does_not_hold_workspace_metadata_or_read_capacity() {
     let (f, store, owner) = setup("commit-admission");
     let workspace = bind(&store, &owner, &f, 1);
+    // A changed Workspace, so the Commit runs its producer (an unchanged one
+    // answers UpToDate before capture).
+    write(&workspace, &bytes(b'A'));
     let (ready, entered) = mpsc::channel();
     let (release, proceed) = mpsc::channel();
     let active = workspace.clone();
@@ -353,13 +356,97 @@ fn a_held_producer_does_not_hold_workspace_metadata_or_read_capacity() {
             .error,
         CommitError::InFlight
     ));
-    assert_eq!(read(&workspace), support::bytes(0));
+    assert_eq!(read(&workspace), bytes(b'A'));
     release.send(()).unwrap();
     let done = worker.join().unwrap().unwrap();
     assert!(matches!(done.history, Some(CommitOutcome::UpToDate { .. })));
     drop(done);
     close(&owner, &workspace);
     drop((workspace, store));
+    owner.stop().unwrap();
+    f.cleanup();
+}
+
+#[test]
+fn an_unchanged_workspace_answers_uptodate_without_capture_or_save() {
+    let (f, store, owner) = setup("commit-unchanged");
+    let workspace = bind(&store, &owner, &f, 1);
+    let original = workspace.snapshot().unwrap();
+    let done = workspace.commit(|_, _, _| unreachable!()).unwrap();
+    assert!(
+        matches!(done.history, Some(CommitOutcome::UpToDate { head, root })
+            if head == original.branch.head_commit && root == original.effective_root),
+        "{:?}",
+        done.history
+    );
+    assert!(done.capture.is_none() && done.merge.is_none());
+    assert_eq!(done.saved, Default::default());
+    assert_eq!(workspace.snapshot().unwrap(), original);
+    // The Workspace still captures and publishes its next change.
+    write(&workspace, &bytes(b'U'));
+    let next = workspace
+        .commit(|save, _, snapshot| {
+            construct(save, snapshot, &bytes(b'U'), store.policy().construction())
+        })
+        .unwrap();
+    assert!(matches!(
+        next.history,
+        Some(CommitOutcome::Committed { .. })
+    ));
+    assert!(next.capture.is_some());
+    drop((done, next));
+    close(&owner, &workspace);
+    drop((workspace, store));
+    owner.stop().unwrap();
+    f.cleanup();
+}
+
+#[test]
+fn captured_rows_or_a_moved_head_never_take_the_uptodate_shortcut() {
+    let (f, store, owner) = setup("commit-unchanged-refused");
+    let workspace = bind(&store, &owner, &f, 1);
+    // Rows in the active generation: the producer runs over a capture.
+    write(&workspace, &bytes(b'R'));
+    let called = Cell::new(false);
+    let done = workspace
+        .commit(|save, _, snapshot| {
+            called.set(true);
+            construct(save, snapshot, &bytes(b'R'), store.policy().construction())
+        })
+        .unwrap();
+    assert!(called.get() && done.capture.is_some());
+    assert!(matches!(
+        done.history,
+        Some(CommitOutcome::Committed { .. })
+    ));
+    drop(done);
+    // Unchanged, but another Workspace moved the head: the shortcut is not
+    // taken; the Commit captures and follows the head.
+    let other = bind(&store, &owner, &f, 2);
+    write(&other, &bytes(b'S'));
+    let moved = other
+        .commit(|save, _, snapshot| {
+            construct(save, snapshot, &bytes(b'S'), store.policy().construction())
+        })
+        .unwrap();
+    assert!(matches!(
+        moved.history,
+        Some(CommitOutcome::Committed { .. })
+    ));
+    called.set(false);
+    let followed = workspace
+        .commit(|_, _, snapshot| {
+            called.set(true);
+            Ok(FilesystemRootId(snapshot.effective_root))
+        })
+        .unwrap();
+    assert!(called.get() && followed.capture.is_some());
+    assert_eq!(read(&workspace), bytes(b'S'));
+    drop((moved, followed));
+    for view in [&workspace, &other] {
+        close(&owner, view);
+    }
+    drop((workspace, other, store));
     owner.stop().unwrap();
     f.cleanup();
 }
