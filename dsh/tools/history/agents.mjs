@@ -30,6 +30,7 @@ import {
 } from "./lib.mjs";
 import { sandboxVolumes } from "./closure.mjs";
 import { generateLww, gitignores } from "./lww.mjs";
+import { gitContext, laneGit, leadGit, seedGit } from "./gitplay.mjs";
 import { createHash } from "node:crypto";
 import { abs, consolidationSteps, decoyBytes, p2Plan, pad, PHASES, quote, route, sandboxExpect, STEP_KINDS, Tree } from "./steps.mjs";
 
@@ -87,6 +88,9 @@ async function decoys(a, files, tree) {
     bytes: decoyBytes(await a.blobs().get(f.base), f.marker), previous: tree.get(f.path), expect: "Committed" })));
 }
 
+/** A Sandbox step's paths for its lane git exec: written (unchanged ones included; git add is a no-op for them) and removed. */
+const tracked = (files) => ({ add: files.filter((f) => f.op !== "rm").map((f) => f.path), remove: files.filter((f) => f.op === "rm").map((f) => f.path) });
+
 /** Plays one P2 step as agent view `a` (SCRIPTS.md §5). */
 async function playStep(a, k, s, ctx) {
   const lane = s.lane, tree = ctx.trees.get(lane), opts = { ...ctx.p2.options(lane), untracked: !!ctx.untracked }, label = s.id, work = ctx.work;
@@ -105,6 +109,7 @@ async function playStep(a, k, s, ctx) {
         countMutation(work, "fs", { ...d, size: d.bytes.length });
         ctx.events.push({ kind: "decoy", step: s.id, at: now() });
       }
+      await laneGit(a, k, s, ctx, { add: [...real.filter((f) => f.op === "write"), ...fake].map((f) => f.path), remove: real.filter((f) => f.op === "rm").map((f) => f.path) });
       if (ctx.measured) await reads(a, lane, s, tree);
       return;
     }
@@ -116,6 +121,7 @@ async function playStep(a, k, s, ctx) {
       work.sandbox += sandbox.length;
       for (const f of sandbox) countMutation(work, "sandbox", f);
       if (want === "Committed") work.commits++;
+      if (want === "Committed") await laneGit(a, k, s, ctx, tracked(sandbox));
       return;
     }
     case "hold-mount": case "stale-mount": {
@@ -161,6 +167,7 @@ async function playStep(a, k, s, ctx) {
       work.sandbox += sandbox.length;
       for (const f of sandbox) countMutation(work, "sandbox", f);
       work.commits++;
+      await laneGit(a, k, s, ctx, tracked(sandbox));
       ctx.events.push({ kind: "stale-clean-merge", step: s.id, at: now() });
       return;
     }
@@ -250,7 +257,12 @@ export async function startRange(run, k, plan, measured) {
       ctx.work.commits++;
     }
   }
-  for (const l of plan.lanes) await expectCall(run, `r${pad(k)} fork ${l.name}`, () => run.lf.branch.fork(l.name, "main"), "Forked");
+  // F-031 option (c): the seed on the first git range's lead Branch; its lanes then fork from the lead, so they have .git
+  ctx.git = ctx.untracked ? gitContext(run, plan) : null;
+  ctx.checkpoint = plan.checkpoint;
+  if (ctx.git && !run.state.gitSeeded) await seedGit(run, k, ctx);
+  const from = ctx.git?.seed ? ctx.lead : "main";
+  for (const l of plan.lanes) await expectCall(run, `r${pad(k)} fork ${l.name}`, () => run.lf.branch.fork(l.name, from), "Forked");
   ctx.leadSteps.push({ op: "fork", category: "branch" });
   return ctx;
 }
@@ -302,6 +314,8 @@ export async function consolidateLanes(run, k, plan, ctx, { beforePublish = null
       if (ctx.race?.again) { await merge(run, ctx.race.again); ctx.leadSteps.push({ op: "merge again", category: "branch" }); ctx.race.again = null; }
       if (ctx.race && ctx.race.doneAt == null) ctx.race.doneAt = performance.now();
       ctx.mainTree ??= mergedTree(ctx.base, [...ctx.trees.values()]);
+      // F-031 option (c): the lead writes every dsh commit of the range, before the closure
+      if (ctx.git) await leadGit(run, k, plan, ctx, cur);
       // P3: the closure's install, build and tests, each with its own Commit on the Branch published next
       if (beforePublish) ctx.closure = await beforePublish(cur);
       run.label(`r${pad(k)}.publish`);

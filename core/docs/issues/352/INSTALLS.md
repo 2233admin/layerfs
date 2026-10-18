@@ -127,8 +127,15 @@ Proof:
     | pnpm's install output | the age on the line `✓ Lockfile passes supply-chain policies (verified <age> ago)` | `<t>` | the time since the store's lockfile verification, which varies with when the install runs (dev352-p3g r015: 5h natively, 6h in LayerFS) |
     | pnpm's install output | the duration on the `Done in <duration> using pnpm` line | `<t>` | the install's wall time (since the oracle was built) |
     | pnpm's install output | `Progress: ` lines | dropped | progress redraws vary with timing (since the oracle was built) |
+    | `node_modules/.vite/vitest/*/results.json` | the order of the `results` entries | sorted by spec path | completion order of parallel vitest workers (dev352-p3o r016; lead interim yes 2026-10-18, reported to the owner) |
+    | `node_modules/.vite/vitest/*/results.json` | each entry's `duration` value | `<t>` | wall time of the previous run (same) |
 
     | `node_modules/.modules.yaml`, `node_modules/.pnpm-workspace-state-v1.json` and pnpm bin shims, as above | every occurrence of one recorded mount root of an earlier step in the node_modules chain, each root listed by exact string | `<root>` | a new directory per mount is the product's model (owner, F-034, 2026-10-18), so files pnpm wrote in an earlier mount keep that mount's root, as expected state (dev352-p3h r016: `/workspaces/23` in shims after a remount) |
+
+    In `results.json`, `version`, the top-level keys, the set of spec paths,
+    each entry's keys and every `failed` flag stay exact. A file that does not
+    parse as `{results: [[path, {…}], …]}` is compared raw and counted as
+    unparsed (lister v5).
 
     The root substitutions match only at a path boundary: the next character
     is not a letter, digit, `_`, `.` or `-`, so `/workspaces/2` never matches

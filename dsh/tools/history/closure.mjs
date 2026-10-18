@@ -134,6 +134,8 @@ export async function playClosure(run, k, steps, { sb, branch, expectCall, Misma
       if (/install/.test(s.kind)) {
         row.output = normalizeOutput(`${r.stdout ?? ""}${r.stderr ?? ""}`);
         Object.assign(row, parseLister((await run.lf.sandbox.exec(sb, ws, listerCommand([], { roots }))).stdout));
+        // dev: the vitest cache as installed, for the .vite finding (lead 2026-10-18; never compared)
+        if (binCheck) row.dump = parseDump((await run.lf.sandbox.exec(sb, ws, dumpCommand(DEV_DUMP))).stdout);
         // F-034 (owner 2026-10-18): a fact, not a gate: does a bin whose shim holds an earlier mount's root run in this mount?
         if (binCheck && s.kind === "incremental-install") {
           const b = await run.lf.sandbox.exec(sb, ws, BIN_CHECK);
@@ -229,7 +231,7 @@ export function oracleFiles(oracleDir, { lock, steps, chain = [], checkpoint }) 
   };
 }
 
-export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir, checks = false, lwwPicked = false }) {
+export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir, checks = false, lwwPicked = false, dumpTo = null }) {
   const git = (args) => execFileSync("git", ["--git-dir", run.repo, ...args], { encoding: "utf8", maxBuffer: 1 << 28 });
   // the development checks run after the publish, on a fork (devcheck.mjs; SCRIPTS.md, 120 s rule)
   const planned = planClosure({ repo: run.repo, planDir: run.planDir, k, plan, prevCommit: run.state.prevCommit, installed: run.state.installed, checks: false, lwwPicked });
@@ -244,7 +246,7 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
   // the recorded mount roots of this chain's earlier steps: listed substitutions (INSTALLS §4, F-034)
   const roots = [...new Set([...chain.map((e) => e.root), ...(run.state.closureRoots ?? [])].filter(Boolean))];
   const rows = await playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, roots, binCheck: checks });
-  const out = { steps: steps.map((s) => s.kind), rows: rows.map(({ groups, ...r }) => r), oracleKind: files.kind,
+  const out = { steps: steps.map((s) => s.kind), rows: rows.map(({ groups, dump, ...r }) => r), oracleKind: files.kind,
     executed: steps.map((s, i) => ({ kind: s.kind, command: s.command, root: rows[i]?.root ?? null })) };
   const done = rows.find((r) => /install/.test(r.kind));
   if (done) {
@@ -255,6 +257,8 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
     const nativeOutput = normalizeOutput(oracle.output), native = rootless(nativeOutput, oracle.root), ours = rootless(done.output, done.root);
     out.normalized = { root: done.root, nativeRoot: oracle.root, files: done.normalized, nativeFiles: oracle.normalized, outputRoot: done.output.split(done.root).length - 1, nativeOutputRoot: oracle.output.split(oracle.root).length - 1, outputVerifiedAge: verifiedAges(done.output), nativeOutputVerifiedAge: verifiedAges(nativeOutput) };
     out.oracle = compareInstalled(oracle, done.groups);
+    // dev: the dumped groups as installed (playClosure, before any later step), for the finding (never compared)
+    if (dumpTo && done.dump) writeFileSync(dumpTo, JSON.stringify({ range: k, groups: DEV_DUMP, differ: out.oracle.differ, files: done.dump }, null, 1));
     if (!out.oracle.ok) throw new Mismatch(`r${pad(k)} install differs from native: ${JSON.stringify({ missing: out.oracle.missing.slice(0, 5), extra: out.oracle.extra.slice(0, 5), differ: out.oracle.differ.slice(0, 5) })}`);
     if (ours !== native) throw new Mismatch(`r${pad(k)} install output differs from native: ${firstDifference(native, ours)}`);
     let prevLock = "";
@@ -320,10 +324,21 @@ export function firstDifference(a, b) {
  * size stays in \`bytes\`. Native installs at ORACLE_ROOT, a path no package
  * content contains, so the replacement cannot touch unrelated bytes.
  */
-export const LISTER_VERSION = 4;
+export const LISTER_VERSION = 5;
 export const ORACLE_ROOT = "/lfs352-native-root";
-export const LISTER = `const fs=require("fs"),c=require("crypto");const full=new Set(process.argv.slice(1));const groups=new Map(),bytes=new Map();const groupOf=(p)=>{const s=p.split("/");const i=s.indexOf("node_modules");let j=i+1;if(s[j]===".pnpm"||(s[j]||"").startsWith("@"))j++;return s.slice(0,Math.min(j+1,s.length)).join("/")};const add=(p,line,n)=>{const g=groupOf(p);bytes.set(g,(bytes.get(g)||0)+n);let e=groups.get(g);if(!e)groups.set(g,e=[]);e.push(line)};const root=process.cwd(),state={"node_modules/.modules.yaml":/("prunedAt": )"[^"\\n]*"/,"node_modules/.pnpm-workspace-state-v1.json":/("lastValidatedTimestamp": )\\d+/},shim=/(^|\\/)node_modules\\/\\.bin\\/[^/]+$/;const stale=JSON.parse(process.env.LFS352_ROOTS||"[]").filter((x)=>x&&x!==root);const sub=(s,r)=>{let o="",i=0,n=0;for(;;){const j=s.indexOf(r,i);if(j<0)break;if(/[A-Za-z0-9_.-]/.test(s[j+r.length]||"")){o+=s.slice(i,j+r.length);i=j+r.length;continue}o+=s.slice(i,j)+"<root>";i=j+r.length;n++}return[o+s.slice(i),n]};const norm={shims:{files:0,root:0}};const blob=(p,n)=>{let b=fs.readFileSync(p);const t=state[p];if(t||(shim.test(p)&&b.subarray(0,10).toString()==="#!/bin/sh\\n")){let[s,r0]=sub(b.toString("utf8"),root);const st={};for(const x of stale){const[s2,c]=sub(s,x);if(c){st[x]=c;s=s2}}if(Object.keys(st).length){norm.earlierRoots=norm.earlierRoots||{};norm.earlierRoots[p]=st}if(t){if(!t.test(s))throw new Error(p+": no "+t);s=s.replace(t,"$1<t>");norm[p]={root:r0,time:1}}else{norm.shims.files++;norm.shims.root+=r0}b=Buffer.from(s)}const h=c.createHash("sha1");h.update("blob "+b.length+"\\0");h.update(b);return h.digest("hex")};const walk=(d,nm)=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=d==="."?e.name:d+"/"+e.name;if(p===".git"||p===".lfs-probe")continue;const inNm=nm||e.name==="node_modules";const s=fs.lstatSync(p);const m=(s.mode&0o7777).toString(8);if(s.isSymbolicLink()){if(inNm)add(p,"l "+m+" "+fs.readlinkSync(p)+" "+p,s.size)}else if(s.isDirectory()){if(inNm&&e.name!=="node_modules")add(p,"d "+m+" - "+p,0);walk(p,inNm)}else if(inNm)add(p,"f "+m+" "+blob(p,s.size)+" "+p,s.size)}};walk(".",false);for(const g of [...groups.keys()].sort()){const ls=groups.get(g).sort();if(full.size){if(full.has(g))for(const l of ls)process.stdout.write(l+"\\n");continue}process.stdout.write(JSON.stringify({g,n:ls.length,bytes:bytes.get(g)||0,digest:c.createHash("sha256").update(ls.join("\\n")).digest("hex")})+"\\n")}if(!full.size)process.stdout.write("#normalized "+JSON.stringify(norm)+"\\n")`;
+export const LISTER = `const fs=require("fs"),c=require("crypto");const full=new Set(process.argv.slice(1));const groups=new Map(),bytes=new Map();const groupOf=(p)=>{const s=p.split("/");const i=s.indexOf("node_modules");let j=i+1;if(s[j]===".pnpm"||(s[j]||"").startsWith("@"))j++;return s.slice(0,Math.min(j+1,s.length)).join("/")};const add=(p,line,n)=>{const g=groupOf(p);bytes.set(g,(bytes.get(g)||0)+n);let e=groups.get(g);if(!e)groups.set(g,e=[]);e.push(line)};const root=process.cwd(),state={"node_modules/.modules.yaml":/("prunedAt": )"[^"\\n]*"/,"node_modules/.pnpm-workspace-state-v1.json":/("lastValidatedTimestamp": )\\d+/},shim=/(^|\\/)node_modules\\/\\.bin\\/[^/]+$/;const stale=JSON.parse(process.env.LFS352_ROOTS||"[]").filter((x)=>x&&x!==root);const sub=(s,r)=>{let o="",i=0,n=0;for(;;){const j=s.indexOf(r,i);if(j<0)break;if(/[A-Za-z0-9_.-]/.test(s[j+r.length]||"")){o+=s.slice(i,j+r.length);i=j+r.length;continue}o+=s.slice(i,j)+"<root>";i=j+r.length;n++}return[o+s.slice(i),n]};const norm={shims:{files:0,root:0}};const blob=(p,n)=>{let b=fs.readFileSync(p);if(p.startsWith("node_modules/.vite/vitest/")&&p.endsWith("/results.json")&&p.split("/").length===5){let j;try{j=JSON.parse(b.toString("utf8"))}catch{j=null}const v=norm.vitest=norm.vitest||{files:0,entries:0,reordered:0,durations:0,unparsed:0};if(j&&Array.isArray(j.results)&&j.results.every((r)=>Array.isArray(r)&&r.length===2&&typeof r[0]==="string"&&r[1]&&typeof r[1]==="object")){const keys=j.results.map((r)=>r[0]);const sorted=[...j.results].sort((x,y)=>(x[0]<y[0]?-1:x[0]>y[0]?1:0));v.files++;v.entries+=sorted.length;if(sorted.some((r,i)=>r[0]!==keys[i]))v.reordered++;for(const r of sorted)if("duration" in r[1]){r[1].duration="<t>";v.durations++}j.results=sorted;b=Buffer.from(JSON.stringify(j))}else v.unparsed++}const t=state[p];if(t||(shim.test(p)&&b.subarray(0,10).toString()==="#!/bin/sh\\n")){let[s,r0]=sub(b.toString("utf8"),root);const st={};for(const x of stale){const[s2,c]=sub(s,x);if(c){st[x]=c;s=s2}}if(Object.keys(st).length){norm.earlierRoots=norm.earlierRoots||{};norm.earlierRoots[p]=st}if(t){if(!t.test(s))throw new Error(p+": no "+t);s=s.replace(t,"$1<t>");norm[p]={root:r0,time:1}}else{norm.shims.files++;norm.shims.root+=r0}b=Buffer.from(s)}const h=c.createHash("sha1");h.update("blob "+b.length+"\\0");h.update(b);return h.digest("hex")};const walk=(d,nm)=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=d==="."?e.name:d+"/"+e.name;if(p===".git"||p===".lfs-probe")continue;const inNm=nm||e.name==="node_modules";const s=fs.lstatSync(p);const m=(s.mode&0o7777).toString(8);if(s.isSymbolicLink()){if(inNm)add(p,"l "+m+" "+fs.readlinkSync(p)+" "+p,s.size)}else if(s.isDirectory()){if(inNm&&e.name!=="node_modules")add(p,"d "+m+" - "+p,0);walk(p,inNm)}else if(inNm)add(p,"f "+m+" "+blob(p,s.size)+" "+p,s.size)}};walk(".",false);for(const g of [...groups.keys()].sort()){const ls=groups.get(g).sort();if(full.size){if(full.has(g))for(const l of ls)process.stdout.write(l+"\\n");continue}process.stdout.write(JSON.stringify({g,n:ls.length,bytes:bytes.get(g)||0,digest:c.createHash("sha256").update(ls.join("\\n")).digest("hex")})+"\\n")}if(!full.size)process.stdout.write("#normalized "+JSON.stringify(norm)+"\\n")`;
 /** Lister stdout: its groups, and what version 2 normalized (`#normalized`: per state file root and time substitutions; shims: files and root substitutions). */
+/**
+ * Development dump (lead, 2026-10-18, .vite): every file under the given
+ * node_modules groups with its bytes, `@@dump <base64 path> <base64 bytes>`,
+ * so a differing group can be read file by file on both sides. Never part of a
+ * comparison.
+ */
+export const DUMP = `const fs=require("fs");const walk=(p)=>{let s;try{s=fs.lstatSync(p)}catch{return}if(s.isDirectory()){for(const e of fs.readdirSync(p).sort())walk(p+"/"+e);return}const b=s.isSymbolicLink()?Buffer.from("-> "+fs.readlinkSync(p)):fs.readFileSync(p);process.stdout.write("@@dump "+Buffer.from(p).toString("base64")+" "+b.toString("base64")+"\\n")};for(const g of process.argv.slice(1))walk(g)`;
+export const DEV_DUMP = ["node_modules/.vite"];
+export const dumpCommand = (groups) => `node -e ${quote(DUMP)} ${groups.map(quote).join(" ")}`;
+export const parseDump = (stdout) => Object.fromEntries(String(stdout).split("\n").filter((l) => l.startsWith("@@dump ")).map((l) => { const [, p, b] = l.split(" "); return [Buffer.from(p, "base64").toString(), Buffer.from(b ?? "", "base64").toString("utf8")]; }));
+
 export const parseLister = (stdout) => {
   const lines = String(stdout).split("\n"), norm = lines.find((l) => l.startsWith("#normalized "));
   return { groups: lines.filter((l) => l.startsWith("{")).map((l) => JSON.parse(l)), normalized: norm ? JSON.parse(norm.slice(12)) : null };
@@ -509,7 +524,7 @@ export function nativeInstall({ repo, commit, image, volume, name = "layerfs-iss
  * final install's exit, output and lister groups are the oracle; each step's
  * exit is kept.
  */
-export function nativeSequence({ repo, chain, final, image, volume, name = "layerfs-issue352-oracle" }) {
+export function nativeSequence({ repo, chain, final, image, volume, name = "layerfs-issue352-oracle", dump = [] }) {
   const steps = [...chain, { ...final, kind: "final" }];
   const stage = mkdtempSync(join(tmpdir(), "lfs352-seq-"));
   try {
@@ -526,7 +541,7 @@ export function nativeSequence({ repo, chain, final, image, volume, name = "laye
         }
         prev = st.checkpoint;
       }
-      script.push(i < steps.length - 1 ? `t=$(date +%s%N); (${st.command}) > /tmp/s${i} 2>&1; e=$?; echo "@@step ${i} ${st.kind} $e $(( ($(date +%s%N) - t) / 1000000 ))"` : `(${st.command}) > /tmp/o 2>&1; echo "@@exit $?"; sed 's/^/@@out /' /tmp/o; ${listerCommand()}`);
+      script.push(i < steps.length - 1 ? `t=$(date +%s%N); (${st.command}) > /tmp/s${i} 2>&1; e=$?; echo "@@step ${i} ${st.kind} $e $(( ($(date +%s%N) - t) / 1000000 ))"` : `(${st.command}) > /tmp/o 2>&1; echo "@@exit $?"; sed 's/^/@@out /' /tmp/o; ${listerCommand()}${dump.length ? `; ${dumpCommand(dump)}` : ""}`);
     });
     const input = execFileSync("tar", ["-c", "-C", stage, "."], { maxBuffer: 1 << 30 });
     if (process.env.LFS352_SEQ_DEBUG) writeFileSync(process.env.LFS352_SEQ_DEBUG, script.join(";\n"));
@@ -539,6 +554,7 @@ export function nativeSequence({ repo, chain, final, image, volume, name = "laye
       exit: Number(/^@@exit (\d+)/.exec(lines.find((l) => l.startsWith("@@exit")) ?? "")?.[1] ?? NaN),
       output: normalizeOutput(lines.filter((l) => l.startsWith("@@out ")).map((l) => l.slice(6)).join("\n")),
       ...parseLister(r.stdout),
+      ...(dump.length ? { dump: parseDump(r.stdout) } : {}),
       ms: Date.now() - t0,
     };
   } finally {
@@ -595,6 +611,15 @@ function main() {
       const forced = planClosure({ repo, planDir, k, plan, prevCommit: state.prevCommit, installed: state.installed, checks: false, lwwPicked: true });
       Object.assign(files, oracleFiles(join(process.env.HOME, "lfs-history", "oracle"), { lock: forced.lock, steps: forced.steps, chain: state.closureChain, checkpoint: plan.checkpoint }), { clean: files.clean });
       planned.steps = forced.steps;
+    }
+    // dev: the sequence replayed again with the named groups dumped, beside the cached oracle (never replacing it)
+    if (files.kind === "sequence" && opt("--dump")) {
+      const install = planned.steps.find((s) => s.kind === "incremental-install");
+      const n = nativeSequence({ repo, chain: state.closureChain, final: { checkpoint: plan.checkpoint, command: install.command }, image: opt("--image"), volume: opt("--volume"), dump: opt("--dump").split(",") });
+      const file = files.install.replace(/\.json$/, `.dump-${pad(k)}.json`);
+      writeFileSync(file, JSON.stringify({ range: k, root: ORACLE_ROOT, groups: n.groups.filter((g) => opt("--dump").split(",").includes(g.g)), dump: n.dump, ms: n.ms }, null, 1));
+      console.log(JSON.stringify({ file, files: Object.keys(n.dump ?? {}).length, ms: n.ms }));
+      return;
     }
     if (files.kind === "sequence" && !fresh(files.install)) {
       const install = planned.steps.find((s) => s.kind === "incremental-install");

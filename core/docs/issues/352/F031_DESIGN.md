@@ -54,26 +54,55 @@ The lane writes only these under `.git/`:
 - its own `lanes/<lane>/index`;
 - its own `refs/heads/lanes/<lane>`.
 
-The player checks every path a lane Commit changed under `.git/`. Anything
-else there is a stop finding.
+As built, the check is per range: verify's `diff_commits` list of the
+range's net change may touch under `.git/` only `HEAD`, `config`, `index`,
+`info/exclude`, `refs/heads/main` and `objects/pack/pack-*.{pack,idx,rev}`
+(`GIT_ALLOWED`). Anything else is a stray and fails the range.
 
 **The lead writes main exactly as dsh.** After the lane merges and the
 reconcile, before the closure, the lead runs one or more execs, each at or
 under 120 s, in a one-shot Workspace on the merged Branch. Every dsh commit
-of the range is written in topological order with a lead-private index
-(`.git/lanes/lead/index`):
-1. `git read-tree <first parent>`;
-2. `git update-index --add --cacheinfo <mode>,<blob>,<path>` for each path
-   that differs from the first parent (from `git diff-tree` on `dsh.git`),
-   and `--force-remove` for deletions. The blobs are in `.git` from the
-   lanes' `git add`.
+of the range is written in topological order with a lead-private index:
+1. `git read-tree <first parent>`, skipped when the previous commit written
+   is that parent;
+2. `git update-index --index-info` with each path that differs from the
+   first parent (from `git diff-tree` on `dsh.git`), deletions as mode 0.
 3. Real `git write-tree`, which must print dsh's tree id;
 4. `git commit-tree` with the original author, committer, dates, message,
    parents and encoding, which must print dsh's commit id.
 
-That includes dsh's merge commits and the checkpoint. A blob no lane wrote,
-such as merge-resolution content that never reached a Workspace, stops the
-exec: that is a finding.
+The job (commits, index lines, raw messages) travels as one gzip file written
+by `fs.apply` under `/.lfs-git-job/`, which the lead's last exec removes. A
+node writer (`LEAD_WRITER`) runs the git commands, each exec until done or
+80 s, so every exec stays under 120 s.
+
+Two recorded departures (lead, 2026-10-18):
+- **The lead's index lives in the Sandbox's `/tmp`, not over FUSE.** Each
+  dsh commit would otherwise write the 1.6 MB index twice through FUSE. The
+  liaison's condition holds it: at range end the real `.git/index` is written
+  in the Workspace (`read-tree HEAD`, `update-index --refresh`, over FUSE),
+  `git status --porcelain` there must be clean, and again in a fresh
+  one-shot Workspace on the checkpoint (below).
+- **Blobs no step wrote.** A frozen-plan step can cover several dsh commits,
+  so an intermediate version never reaches a Workspace: 403 blobs (12.6 MB
+  raw) in range 15, 829 (22.5 MB) in 16, 505 in 17, 286 in 19, none in the
+  checkpoint tree. The lead ships them as one native pack and real
+  `git unpack-objects` writes them before the writer runs. They are counted
+  as `missing` (blobs, raw bytes, pack bytes) and reported apart.
+3. Real `git write-tree`, which must print dsh's tree id;
+4. `git commit-tree` with the original author, committer, dates, message,
+   parents and encoding, which must print dsh's commit id.
+
+That includes dsh's merge commits and the checkpoint.
+
+**The FUSE stat check (owner; liaison condition).** After the lead's
+Commit, a fresh one-shot Workspace on the checkpoint runs `git status
+--porcelain`, timed, with `GIT_TRACE2_PERF`. It must list nothing, and git's
+`refresh/sum_scan` must be 0: git read back no tracked file because every
+index entry's inode, ctime and mtime still match after the remount.
+`sum_lstat` and whether `.git/index` changed are recorded. The Workspace is
+discarded. Daemon FUSE counters are traced only in measured mode; trace2's
+count is the per-range proof.
 
 **Earlier plans, kept as history.** The revision committed each dsh commit
 in its lane. The frozen plan spreads half the commits over 2–4 lanes, so

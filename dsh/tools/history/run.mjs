@@ -19,6 +19,7 @@
 //   node dsh/tools/history/run.mjs cleanup --run <id>
 //   node dsh/tools/history/run.mjs phase --run <id> --phase p2
 //   node dsh/tools/history/run.mjs devcheck --run <dev run> --range k   (devcheck.mjs: dev checks after the publish)
+//   node dsh/tools/history/run.mjs git --run <dev run> --on   (F-031 option (c) from the next range; dev runs only until the dev proof is accepted)
 // `phase` moves a run to the next phase (P1 → P2 …) at the range it stands
 // at, keeping its pinned binaries and its Store; the move is recorded in the
 // run's manifest (`phases`) and ledger. A dirty run cannot move.
@@ -61,6 +62,7 @@ import {
 } from "./lib.mjs";
 import { addDelta, checkpointDiff, deltaSummary, deltaWork, diskGuard, diskModel, EXIT, nextPhase, oneshotSplit, pad, poolSharing, PHASES, phaseOps, Tree } from "./steps.mjs";
 import { consolidateLanes, playAgents, pool, startRange } from "./agents.mjs";
+import { gitFacts } from "./gitplay.mjs";
 import { buildOverview, callTable } from "./stats.mjs";
 import { area } from "./plan-range.mjs";
 import { nextChain, rangeClosure, studyMeasurements } from "./closure.mjs";
@@ -309,6 +311,17 @@ function snapshot(run, k, facts) {
   return { size: m.size, newBlocks: m.newBlocks, newBytes: m.newBytes, copyMs: m.copyMs, sealMs: facts.sealMs, walBytes: facts.walBytes, manifest: file };
 }
 
+/**
+ * The runner process's memory (lead, 2026-10-18, after the p3j OOM): peak
+ * resident set since the process started (one play command), and the current
+ * split: JS heap, external and ArrayBuffer memory (Buffers), the rest native
+ * (the SDK's in-process Store among it).
+ */
+export function runnerMemory() {
+  const u = process.memoryUsage(), mb = (n) => +(n / 2 ** 20).toFixed(1);
+  return { peakRssMb: mb(process.resourceUsage().maxRSS * 1024), rssMb: mb(u.rss), heapUsedMb: mb(u.heapUsed), heapTotalMb: mb(u.heapTotal), externalMb: mb(u.external), arrayBuffersMb: mb(u.arrayBuffers) };
+}
+
 /** Plays range k. Returns the exit code the range ends with (0 to go on). */
 async function playRange(run, k, mode) {
   const phase = PHASES[run.manifest.phase], measured = mode === "measured";
@@ -353,7 +366,7 @@ async function playRange(run, k, mode) {
       await playAgents(run, k, ctx);
       lap("playMs", since);
       since = performance.now();
-      const beforePublish = phase.closure ? async (cur) => rangeClosure(run, k, plan, cur, { sb: await setup(run), expectCall, Mismatch, oracleDir: run.manifest.oracle, checks: run.manifest.label === "dev", lwwPicked: !!ctx.lww?.picks.some((p) => p.picks > 0) }) : null;
+      const beforePublish = phase.closure ? async (cur) => rangeClosure(run, k, plan, cur, { sb: await setup(run), expectCall, Mismatch, oracleDir: run.manifest.oracle, checks: run.manifest.label === "dev", lwwPicked: !!ctx.lww?.picks.some((p) => p.picks > 0), dumpTo: run.manifest.label === "dev" ? (mkdirSync(join(run.dir, "closure"), { recursive: true }), join(run.dir, "closure", `dump-${pad(k)}.json`)) : null }) : null;
       published = await consolidateLanes(run, k, plan, ctx, { beforePublish });
       branch = ctx.final;
       ctx.tree = ctx.mainTree;
@@ -391,7 +404,7 @@ async function playRange(run, k, mode) {
     proof = await verify(run, k, { prevHead: run.state.head, head: published.source.commit, layer: published.publishedLayer.id, prevCommit: run.state.prevCommit, full: snapshotDue });
     lap("verifyMs", since);
     wall.verify = snapshotDue ? "diff_commits + full compareTree" : "diff_commits";
-    if (!proof.ok) failure = `the checkpoint differs from git: ${JSON.stringify({ paths: proof.paths, ids: proof.ids, tree: proof.tree && { missing: proof.tree.missing.slice(0, 5), extra: proof.tree.extra.slice(0, 5), content: proof.tree.content.slice(0, 5), mode: proof.tree.mode.slice(0, 5) } }).slice(0, 1500)}`;
+    if (!proof.ok) failure = `the checkpoint differs from git: ${JSON.stringify({ paths: proof.paths, ids: proof.ids, gitStray: proof.gitStray?.slice(0, 5), tree: proof.tree && { missing: proof.tree.missing.slice(0, 5), extra: proof.tree.extra.slice(0, 5), content: proof.tree.content.slice(0, 5), mode: proof.tree.mode.slice(0, 5) } }).slice(0, 1500)}`;
     if (!failure && phase.tests && !phase.closure && measured) { since = performance.now(); tests = await closure(run, k, "tests", { layer: published.publishedLayer.id }); lap("testsMs", since); }
     if (!failure && phase.probes && measured) { since = performance.now(); probeOut = await probes(run, k, { branch, tree: ctx.tree }); lap("probesMs", since); }
     // the latest version as LayerFS shows it (REPORT_FORMAT.md §4), every range
@@ -410,7 +423,7 @@ async function playRange(run, k, mode) {
     const stages = { kind: "tooling", totalMs: Math.round(performance.now() - t0), ...wall };
     // a closure's steps and development checks are kept in fast mode too; their stored bytes need the trace (measured mode)
     const cl = ctx?.closure && !ctx.closure.skipped ? { steps: ctx.closure.steps, rows: ctx.closure.rows, oracleOk: ctx.closure.oracle?.ok ?? null, rebuild: ctx.closure.rebuild ?? null, reinstallCheck: ctx.closure.reinstallCheck ?? null } : null;
-    writeJson(join(run.dir, "fast", `range-${pad(k)}.json`), { range: k, mode, head, failure, calls: run.tally.calls, wall: stages, ...(cl ? { closure: cl } : {}) });
+    writeJson(join(run.dir, "fast", `range-${pad(k)}.json`), { range: k, mode, head, failure, calls: run.tally.calls, wall: stages, runnerMemory: runnerMemory(), ...(cl ? { closure: cl } : {}), ...(ctx?.git ? { git: gitFacts(ctx) } : {}) });
     console.log(`range ${k}: ${failure ? `STOP ${failure}` : "ok"} (${run.tally.calls} calls; tooling ${JSON.stringify(stages)})`);
     if (failure) { run.state.dirty = k; run.save(); return EXIT.stop; }
     advance(run, k, plan, head, layer, ctx, performance.now() - t0);
@@ -435,6 +448,7 @@ async function playRange(run, k, mode) {
     reinstall: null,
   };
   // owner S4: the generated /.lww and the picks its rules made, per merge
+  if (ctx?.git) m.git = gitFacts(ctx);
   if (ctx?.lww) m.lww = { ...ctx.lww, total: ctx.lww.picks.reduce((n, p) => n + p.picks, 0) };
   if (ctx?.closure && !ctx.closure.skipped) {
     // P3: storage by the step's own Commit (traced sizes), the reinstall gate, STORAGE_STUDY §8
@@ -478,6 +492,7 @@ async function playRange(run, k, mode) {
     }
   }
   m.hostLoad = { ...m.hostLoad, end: loadNow() };
+  m.runnerMemory = runnerMemory();
   // the Sandbox pool's sharing (P3: 4 shared Sandboxes): Workspaces and mount/unmount calls at once, per Sandbox
   m.pool = { size: run.pool?.length ?? null, sharing: poolSharing(t.all) };
   const open = snap?.sandboxes?.reduce((n, s) => n + (s.workspaces?.length ?? 0), 0) ?? null;
@@ -630,6 +645,20 @@ function cmdPhase(o) {
   return EXIT.done;
 }
 
+/** Turns F-031 option (c) on for a dev run in a closure phase, from the range it stands at (gitplay.mjs). */
+function cmdGit(o) {
+  const dir = join(HISTORY, "runs", o.run), run = new Run(dir);
+  if (!o.on) return usage();
+  if (run.manifest.label !== "dev") { console.error(`run ${o.run}: git is for dev runs until its dev proof is accepted (F031_DESIGN §5a)`); return EXIT.usage; }
+  if (!PHASES[run.manifest.phase]?.closure) { console.error(`run ${o.run}: git starts in a closure phase (P3)`); return EXIT.usage; }
+  if (run.state?.dirty != null) { console.error(`run ${o.run} stopped in range ${run.state.dirty}; recover by fork first`); return EXIT.guard; }
+  run.manifest.git = { on: true, atRange: run.state.next, at: new Date().toISOString() };
+  writeJson(join(dir, "run.json"), run.manifest);
+  run.note({ kind: "git", name: "F-031 option (c) on", atRange: run.state.next });
+  console.log(JSON.stringify({ run: o.run, git: run.manifest.git }));
+  return EXIT.done;
+}
+
 /** The pilot lines a phase-matched re-baseline forks from, newest format first (their range-1 snapshot). */
 export const REBASELINE_SOURCES = ["p1-rebase-d", "p1-pilot-b"];
 
@@ -752,7 +781,7 @@ async function main() {
   if (!o.run && cmd !== "rebaseline") process.exit(usage());
   const outside = checkRunner(cmd, process.env);
   if (outside) { console.error(outside); process.exit(EXIT.guard); }
-  const code = cmd === "new" ? (await cmdNew(o), EXIT.done) : cmd === "play" ? await cmdPlay(o) : cmd === "phase" ? cmdPhase(o) : cmd === "fork" ? (await cmdFork(o), EXIT.done) : cmd === "cleanup" ? await cmdCleanup(o) : cmd === "devcheck" ? await cmdDevcheck(o) : cmd === "rebaseline" ? await cmdRebaseline(o) : usage();
+  const code = cmd === "new" ? (await cmdNew(o), EXIT.done) : cmd === "play" ? await cmdPlay(o) : cmd === "phase" ? cmdPhase(o) : cmd === "fork" ? (await cmdFork(o), EXIT.done) : cmd === "cleanup" ? await cmdCleanup(o) : cmd === "devcheck" ? await cmdDevcheck(o) : cmd === "git" ? cmdGit(o) : cmd === "rebaseline" ? await cmdRebaseline(o) : usage();
   process.exit(code);
 }
 

@@ -19,6 +19,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BlobCache, diffTrees, lsTree } from "./git.mjs";
 import { compareTree, IGNORE } from "./oracle.mjs";
+import { GIT_ALLOWED } from "./gitlanes.mjs";
 import { compareResults, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
 import { INSTALL } from "./calibrate-tests.mjs";
 import { CLOSURE_OUTPUT, sandboxVolumes } from "./closure.mjs";
@@ -422,7 +423,9 @@ export async function verify(run, k, { prevHead, head, layer, prevCommit, full }
   const present = [...changes.filter((c) => !c.gitlink && c.mode !== "000000").map((c) => c.path), ...paths.metadataOnly];
   const ids = compareIds(present, present.length ? await readIds(run, layer, present, `r${pad(k)}-ids`) : new Map(), expected);
   const tree = full ? compareTree(expected, await readIds(run, layer, null, `r${pad(k)}-tree`), IGNORE, outputs) : null;
-  return { ok: paths.ok && ids.ok && (!tree || tree.ok), paths, ids, tree, changedDirs: changedDirs(items.map((i) => i.path)), items };
+  // F-031: the range's net change under .git/ (skipped by the tree check) may only touch the files the design names
+  const gitStray = items.filter((i) => i.type !== "dir").map((i) => i.path.replace(/^\//, "")).filter((p) => p.startsWith(".git/") && !GIT_ALLOWED.test(p));
+  return { ok: paths.ok && ids.ok && (!tree || tree.ok) && !gitStray.length, paths, ids, tree, gitStray, changedDirs: changedDirs(items.map((i) => i.path)), items };
 }
 
 /**

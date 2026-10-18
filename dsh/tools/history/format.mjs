@@ -36,7 +36,7 @@ export const HEADLINE_CELLS = ["Latest version", "Store on disk", "Space amplifi
 export function installedText(cl) {
   const o = cl.oracle, n = cl.normalized, f = n?.files ?? {};
   const st = (p) => (f[p] ? `\`${p.slice(13)}\` root ×${f[p].root}, time ×${f[p].time}` : `\`${p.slice(13)}\` absent`);
-  const norm = n ? `normalized: ${st("node_modules/.modules.yaml")} · ${st("node_modules/.pnpm-workspace-state-v1.json")} · root ×${f.shims?.root ?? 0} in ${f.shims?.files ?? 0} bin shims · output root ×${n.outputRoot}${n.outputVerifiedAge != null ? `, verification age ×${n.outputVerifiedAge}` : ""}` : "normalized: not recorded";
+  const norm = n ? `normalized: ${st("node_modules/.modules.yaml")} · ${st("node_modules/.pnpm-workspace-state-v1.json")} · root ×${f.shims?.root ?? 0} in ${f.shims?.files ?? 0} bin shims · output root ×${n.outputRoot}${n.outputVerifiedAge != null ? `, verification age ×${n.outputVerifiedAge}` : ""}${f.vitest ? ` · vitest results: order sorted in ${f.vitest.reordered} of ${f.vitest.files} files, duration ×${f.vitest.durations}${f.vitest.unparsed ? `, ${f.vitest.unparsed} unparsed` : ""}` : ""}` : "normalized: not recorded";
   const er = cl.earlierRoots, earlier = er ? ` · earlier mount roots ×${er.install.occurrences} in ${er.install.files} files (${er.roots.length} roots${er.reinstall ? `; reinstall ×${er.reinstall.occurrences}` : ""})${er.binCheck ? ` · \`${er.binCheck.command}\` in the new mount: exit ${er.binCheck.exitCode}` : ""}` : "";
   return `${cl.oracleKind === "sequence" ? "against the native replay of its chain · " : ""}${o.ok ? `**${o.groups} package groups equal to native**` : `**differs**: ${o.missing.length} missing, ${o.extra.length} extra, ${o.differ.length} differ`} · ${norm}${earlier}`;
 }

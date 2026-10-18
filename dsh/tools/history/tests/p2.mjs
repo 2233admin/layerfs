@@ -1024,23 +1024,71 @@ test("DEFER D-6 (#355): merge errors from the trace; untraced values named, neve
   assert.equal(d6Text(null), "D-6 triggers: not recorded for this attempt");
 });
 
-test("F-031 split (lead 2026-10-18): who commits each dsh commit; the commit's metadata; the scripts check ids", async () => {
-  const { classifyCommits, parseCommit, laneCommitScript, leadCommitScript, hashScript } = await import("../gitlanes.mjs");
-  const commits = [{ id: "a", parents: ["base"] }, { id: "b", parents: ["a"] }, { id: "c", parents: ["base"] }, { id: "d", parents: ["c"] }, { id: "m", parents: ["b", "d"] }, { id: "e", parents: ["base"] }];
-  const lanesOf = new Map([["a", new Set(["L1"])], ["b", new Set(["L1"])], ["c", new Set(["L1", "L2"])], ["d", new Set(["L2"])]]);
-  const c = classifyCommits(commits, lanesOf);
-  assert.deepEqual([...c].map(([id, v]) => [id, v.who, v.lane ?? v.why]), [["a", "lane", "L1"], ["b", "lane", "L1"], ["c", "lead", "split over 2 lanes"], ["d", "lead", "parent c not in the lane"], ["m", "lead", "merge"], ["e", "lead", "no planned files"]]);
-  const meta = parseCommit("tree t1\nparent p1\nauthor A B <a@b> 1700000000 +0800\ncommitter C D <c@d> 1700000001 -0500\nencoding ISO-8859-1\n\nsubject\n\nbody\n");
-  assert.deepEqual([meta.tree, meta.parents, meta.author, meta.committer.date, meta.encoding, meta.message, meta.extra], ["t1", ["p1"], { name: "A B", email: "a@b", date: "1700000000 +0800" }, "1700000001 -0500", "ISO-8859-1", "subject\n\nbody\n", []]);
-  assert.deepEqual(parseCommit("tree t\ngpgsig x\n\nm").extra, ["gpgsig x"], "a signed commit is visible, so its id mismatch is explained");
-  const lane = laneCommitScript({ lane: "L1", commit: "abc", meta, add: ["x y.txt"], remove: ["z"], msgFile: "/tmp/m" });
-  assert.match(lane, /GIT_INDEX_FILE=\.git\/lanes\/L1\/index/);
-  assert.match(lane, /git read-tree p1\ngit add -f -- 'x y\.txt'\ngit rm --cached -q -- 'z'/);
-  assert.match(lane, /git -c i18n\.commitEncoding='ISO-8859-1' commit-tree "\$t" -p p1 -F \/tmp\/m/);
-  assert.match(lane, /git update-ref refs\/heads\/lanes\/L1 "\$c"\n\[ "\$c" = abc \]$/);
-  const lead = leadCommitScript({ commit: "abc", meta: { ...meta, encoding: null }, entries: [{ mode: "100644", blob: "b1", path: "a.txt" }], remove: ["gone"], msgFile: "/tmp/m" });
-  assert.match(lead, /git update-index --add --cacheinfo 100644,b1,'a\.txt'\ngit update-index --force-remove -- 'gone'/);
-  assert.equal(hashScript(["a", "b c"]), "git hash-object -w -- 'a' 'b c'");
+test("vitest results.json (lead interim yes, 2026-10-18): order sorted and durations <t>, counted; any other field exact", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lfs352-vt-")), f = join(dir, "node_modules/.vite/vitest/h/results.json");
+  mkdirSync(join(dir, "node_modules/.vite/vitest/h"), { recursive: true });
+  const list = (results) => { writeFileSync(f, JSON.stringify({ version: "4.1.8", results })); return parseLister(execFileSync("sh", ["-c", listerCommand([])], { cwd: dir, encoding: "utf8" })); };
+  try {
+    const a = list([[":b.spec.ts", { duration: 72.7, failed: false }], [":a.spec.ts", { duration: 5, failed: false }]]);
+    const b = list([[":a.spec.ts", { duration: 9.1, failed: false }], [":b.spec.ts", { duration: 1, failed: false }]]);
+    const g = (x) => x.groups.find((y) => y.g === "node_modules/.vite").digest;
+    assert.equal(g(a), g(b));
+    assert.deepEqual(a.normalized.vitest, { files: 1, entries: 2, reordered: 1, durations: 2, unparsed: 0 });
+    assert.equal(b.normalized.vitest.reordered, 0);
+    assert.notEqual(g(list([[":a.spec.ts", { duration: 9.1, failed: true }], [":b.spec.ts", { duration: 1, failed: false }]])), g(a), "a failed flag stays exact");
+    assert.notEqual(g(list([[":a.spec.ts", { duration: 9.1, failed: false }]])), g(a), "the set of spec paths stays exact");
+    writeFileSync(f, "not json");
+    assert.equal(parseLister(execFileSync("sh", ["-c", listerCommand([])], { cwd: dir, encoding: "utf8" })).normalized.vitest.unparsed, 1);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("F-031 option (c): seed pack, lane commits with their own index and ref, the lead writes dsh's ids exactly", async () => {
+  const g = await import("../gitlanes.mjs");
+  const dir = mkdtempSync(join(tmpdir(), "lfs352-git-")), src = join(dir, "src"), bin = join(dir, "bin");
+  // the scripts run in the Debian image (GNU date, sha1sum); on a macOS host two shims stand in
+  mkdirSync(bin);
+  writeFileSync(join(bin, "date"), '#!/bin/sh\nif [ "$1" = "+%s%N" ]; then node -e "process.stdout.write(String(BigInt(Date.now())*1000000n))"; echo; else exec /bin/date "$@"; fi\n', { mode: 0o755 });
+  writeFileSync(join(bin, "sha1sum"), '#!/bin/sh\nexec shasum "$@"\n', { mode: 0o755 });
+  const sh = (cwd, cmd, env = {}) => execFileSync("sh", ["-c", cmd], { cwd, encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", ...env } });
+  const at = (n) => ({ GIT_AUTHOR_NAME: "A", GIT_AUTHOR_EMAIL: "a@x", GIT_COMMITTER_NAME: "C", GIT_COMMITTER_EMAIL: "c@x", GIT_AUTHOR_DATE: `${1700000000 + n} +0000`, GIT_COMMITTER_DATE: `${1700000000 + n} +0000` });
+  try {
+    mkdirSync(src);
+    sh(src, "git init -q -b main . && mkdir d && echo a > a.txt && echo b > d/b.txt && git add . && git commit -q -m A", at(0));
+    const A = sh(src, "git rev-parse HEAD").trim();
+    sh(src, "echo a2 > a.txt && git commit -qam B && git checkout -q -b side " + A + " && echo c > c.txt && git rm -q d/b.txt && git add c.txt && git commit -qm C", at(1));
+    sh(src, "git checkout -q main && git merge -q --no-ff -m M side; echo resolved > a.txt; git commit -qam M2", at(2));
+    const head = sh(src, "git rev-parse HEAD").trim();
+    // seed: a fresh .git from the seed ops holds exactly A
+    const { ops, facts } = g.seedOps(join(src, ".git"), A), wt = join(dir, "wt");
+    for (const o of ops) { if (o.op === "mkdir") mkdirSync(join(wt, o.path), { recursive: true }); else writeFileSync(join(wt, o.path), o.bytes); }
+    assert.equal(facts.commits, 1);
+    sh(wt, `git -C ${src} archive ${A} | tar -x`);
+    assert.equal(g.marks(sh(wt, g.seedScript(A, 1))).statusLines, 0);
+    // a lane step: its paths added with the lane index, one lane commit on its own ref; the shared index untouched
+    const before = readFileSync(join(wt, ".git/index"));
+    writeFileSync(join(wt, "a.txt"), "a2\n"); rmSync(join(wt, "d/b.txt"));
+    const cmds = g.laneCommands({ lane: "L1", add: ["a.txt"], remove: ["d/b.txt"], message: "r016.s0010", date: "1700000001 +0000", status: true }, join(dir, "scratch"));
+    let out = ""; for (const c of cmds) out = sh(wt, c);
+    const m = g.marks(out);
+    assert.equal(sh(wt, "git rev-parse refs/heads/lanes/L1").trim(), m.commit);
+    assert.equal(sh(wt, "git rev-parse refs/heads/lanes/L1^").trim(), A, "the first lane commit's parent is HEAD");
+    assert.equal(sh(wt, `git ls-tree -r --name-only ${m.commit}`).trim(), "a.txt");
+    assert.ok(readFileSync(join(wt, ".git/index")).equals(before), "a lane never rewrites the shared index");
+    assert.ok(m.statusLines > 0 && "sumScan" in m);
+    // the lead: every commit after A from the job, blobs no step wrote unpacked from the pack, ids equal
+    const job = g.leadJob(join(src, ".git"), A, head, new Set());
+    assert.deepEqual([job.commits.length, job.commits.filter((c) => c.parents.length > 1).length], [4, 1]);
+    assert.ok(job.missing.blobs >= 2 && job.pack.length > 0);
+    writeFileSync(join(dir, "missing.pack"), job.pack); writeFileSync(join(dir, "job.json.gz"), g.jobBytes(job.commits));
+    sh(wt, `git unpack-objects -q < ${join(dir, "missing.pack")}`);
+    const w = g.marks(sh(wt, `node -e '${g.LEAD_WRITER.replaceAll("'", "'\\''")}' ${join(dir, "job.json.gz")} ${join(dir, "lead.index")} 0 60000`));
+    assert.equal(w.next, 4);
+    sh(wt, `git -C ${src} archive ${head} | tar -x`);
+    const fin = g.marks(sh(wt, g.finishScript({ checkpoint: head, prev: A, count: 4 }).replace(`rm -rf ${g.JOB_DIR}\n`, "") + "\n"));
+    assert.deepEqual([fin.head, fin.count, fin.refsLeft, fin.laneRefs, fin.looseAfter], [head, 4, 0, 1, 0]);
+    assert.ok(fin.lane_commit === 1, "the lane commit is packed and counted apart");
+    assert.ok(g.GIT_ALLOWED.test(".git/objects/pack/pack-" + "0".repeat(40) + ".idx") && !g.GIT_ALLOWED.test(".git/ORIG_HEAD") && !g.GIT_ALLOWED.test(".git/lanes/L1/index"));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("devcheck (lead 2026-10-18, 120 s rule): dev checks after the publish; the verdicts; a native rerun equal to ours passes", async () => {
