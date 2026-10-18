@@ -8,6 +8,7 @@ mod decide;
 mod entry;
 pub mod lww;
 pub mod markers;
+mod metadata;
 mod names;
 mod places;
 mod rows;

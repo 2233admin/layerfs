@@ -710,3 +710,20 @@
   OPEN/READ replies and the kernel's cached size at the failing step.
   Do not weaken the assertion.
   [fixes/032-359-fa2-facts-window.md](fixes/032-359-fa2-facts-window.md).
+
+- **F-052 · a chmod is lost when the other side edits the same file
+  (product; owner, 2026-10-19).**
+  - A merge kept the decided entry's metadata whole when both sides' metadata
+    differed from the base. A content edit always moves the mtime, so a chmod
+    on one side and an edit on the other both "changed the metadata". The
+    edit was decided and its base mode won. The chmod was dropped without a
+    conflict, on the SDK merge and the Commit merge, for root-form,
+    inline-form and hard-linked files.
+  - Modes changed differently on both sides were merged silently.
+
+  **Status: FIXED** in `6c66519aa` (`claude/issue353-metadata-merge`, off
+  staging `d679c84ee`). Mode and mtime now merge three-way each, and modes
+  changed differently on both sides are a `mode` conflict. Regression test:
+  `merge_metadata_only` (6 tests); 5 fail on the old code with `mode=644` or
+  no conflict. The 35-merge corpus is unchanged (140/140).
+  [fixes/035-f052-metadata-only-merge.md](fixes/035-f052-metadata-only-merge.md).

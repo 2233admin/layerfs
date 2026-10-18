@@ -26,10 +26,9 @@ use super::codec::{put_entry, Cursor};
 use super::decide::{Decider, Pick, Resolver, BASE, OURS, THEIRS};
 use super::names::{Listing, Mode, PathSlot};
 use super::spill::{single, Run, RunReader, RunWriter, Spill, DROP, REVIVE, REVIVE_ALL, SURVIVE};
-use crate::compare::tree::{inode_changes, same_inode, same_value, EntryFacts};
+use crate::compare::tree::{inode_changes, same_value, EntryFacts};
 use crate::compare::{BindingHints, DifferenceWork, NamingWork};
 use crate::error::{ContentError, ContentResult};
-use crate::filesystem::attributes::AttributeReadWork;
 use crate::filesystem::FilesystemObjects;
 use crate::object::inode_leaf::{InodeKind, InodeValue};
 use crate::object::{AuthenticatedObjects, FinalizedConsumer, FinalizedObject, ObjectId};
@@ -277,7 +276,7 @@ impl Ctx<'_, '_> {
                     })
                 };
                 let result = self.decide(&path, [c.b.and_then(entry), entry(f), entry(i)])?;
-                if let Some(value) = self.result_value(c, result)? {
+                if let Some(value) = self.result_value(c, result, Some(&path))? {
                     if !same_value(&value, &i) {
                         self.plan.value(c.serial, value)?;
                     }
@@ -313,11 +312,14 @@ impl Ctx<'_, '_> {
     }
 
     /// The value a decision gives one serial present on both sides: the
-    /// decided entry's, with each metadata change only one side made.
+    /// decided entry's, with its metadata merged field by field
+    /// ([`Self::merged_metadata`]). `path` names a decided file, whose
+    /// conflicting modes are reported there.
     pub(super) fn result_value(
-        &self,
+        &mut self,
         c: Change,
         result: Option<Result<EntryFacts, (EntryFacts, InodeValue)>>,
+        path: Option<&str>,
     ) -> ContentResult<Option<InodeValue>> {
         let Some(result) = result else {
             return Ok(None);
@@ -328,30 +330,10 @@ impl Ctx<'_, '_> {
         };
         if let (Some(b), Some(f), Some(i)) = (c.b, c.f, c.i) {
             if f.kind == i.kind && value.kind == i.kind {
-                value.metadata_root = if self.same_metadata(f, b)? {
-                    i.metadata_root
-                } else if self.same_metadata(i, b)? {
-                    f.metadata_root
-                } else {
-                    value.metadata_root
-                };
+                value.metadata_root = self.merged_metadata([b, f, i], value, path)?;
             }
         }
         Ok(Some(value))
-    }
-
-    /// True when `a`'s metadata is `b`'s by value: #360's root and inline
-    /// forms of equal metadata differ in bytes but are no change, as
-    /// `inode_changes` already judges them (`same_inode`).
-    fn same_metadata(&self, a: InodeValue, b: InodeValue) -> ContentResult<bool> {
-        if a.metadata_root == b.metadata_root {
-            return Ok(true);
-        }
-        let a = InodeValue {
-            metadata_root: a.metadata_root,
-            ..b
-        };
-        same_inode(self.reader, &a, &b, &mut AttributeReadWork::default())
     }
 
     /// The three listings of one changed directory, built on its own serial.
@@ -397,6 +379,7 @@ impl Ctx<'_, '_> {
                                 serial: s,
                                 value: theirs,
                             })),
+                            None,
                         )?
                         .map_or(i.metadata_root, |value| value.metadata_root)
                     };
@@ -489,7 +472,7 @@ impl Ctx<'_, '_> {
             f: Some(f.value),
             i: None,
         };
-        if let Some(value) = self.result_value(c, result)? {
+        if let Some(value) = self.result_value(c, result, None)? {
             self.plan.fresh(s)?;
             self.plan.value(s, value)?;
             self.place(s, &from_path)?;
@@ -561,7 +544,7 @@ impl Ctx<'_, '_> {
             f: None,
             i: Some(i),
         };
-        if let Some(value) = self.result_value(c, result)? {
+        if let Some(value) = self.result_value(c, result, None)? {
             if !same_value(&value, &i) {
                 self.plan.value(s, value)?;
             }

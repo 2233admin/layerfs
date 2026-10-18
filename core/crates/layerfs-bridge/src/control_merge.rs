@@ -168,7 +168,7 @@ pub(crate) fn merged(input: &mut Reader<'_>) -> Result<MergedCommit, ControlErro
     })
 }
 
-const KINDS: [ConflictKind; 7] = [
+const KINDS: [ConflictKind; 8] = [
     ConflictKind::Content,
     ConflictKind::AddAdd,
     ConflictKind::ModifyDelete,
@@ -176,6 +176,7 @@ const KINDS: [ConflictKind; 7] = [
     ConflictKind::Type,
     ConflictKind::Binary,
     ConflictKind::Markers,
+    ConflictKind::Mode,
 ];
 
 pub(crate) fn put_lines(out: &mut Writer, lines: &[String]) -> Result<bool, ControlError> {
@@ -256,7 +257,7 @@ pub(crate) fn report(input: &mut Reader<'_>) -> Result<ConflictReport, ControlEr
     for _ in 0..count {
         let path = input.text(TEXT_FIELD_LIMIT)?;
         let kind = match input.byte()? {
-            index @ 1..=7 => KINDS[index as usize - 1],
+            index @ 1..=8 => KINDS[index as usize - 1],
             _ => return Err(ControlError("conflict kind")),
         };
         let hunks = u16::from_be_bytes(input.array()?);
