@@ -473,3 +473,13 @@
   Next diagnosis: a heap profile of the native addon (which allocator, which
   caches, whether it grows with calls or Stores). No owner assigned; the
   owner assigns.
+  **Split recorded (correctness lane, 2026-10-18, before the fix):** in-process
+  probe of the runner's call mix on a range-14 Store copy, base addon
+  `413ae60d`: RSS 1,246 MB = anonymous 1,198 MB + file-backed 48 MB (binaries;
+  the Store has `mmap_size=0`, so no SQLite file or WAL mapping); JS heap 6 MB.
+  It plateaus per process (1,222 MB at range 0, 1,437 MB at p3p), so it does
+  not grow per range. **Cause:** each Save allocates a zero-filled 16 MiB zstd
+  encode arena, which glibc keeps in the arena of each pool thread (dynamic mmap
+  threshold). **Fixed** (branch `claude/issue352-correctness-644bbc`, unmerged):
+  arenas are reused: 281 MB, flat over 3,600 writes. Record:
+  [fixes/c03-f043-runner-memory.md](fixes/c03-f043-runner-memory.md).

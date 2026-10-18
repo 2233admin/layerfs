@@ -1,0 +1,149 @@
+# c03 · F-043: replay runner memory is allocator retention of 16 MiB encode arenas
+
+> **Status:** fixed on branch `claude/issue352-correctness-644bbc` (correctness
+> lane, 2026-10-18). Not merged. Kind 1 (no format change). The proof uses an
+> in-process probe (below). No replay range was played on the fixed addon: see
+> "Not done".
+
+## Finding
+
+BUGS F-043: the replay runner process (SDK in-process Store plus native addon)
+peaked at 1.5–1.9 GB RSS per fast dev range and kept it at range end. The JS
+heap held only 16–52 MB of that. dev352-p3p r015 recorded `peakRssMb` 1,873.9
+with `rssMb` 1,873.9, so nothing was released at the end of the range.
+
+## 1. Split: file-backed vs anonymous (before any fix)
+
+`/proc/self/smaps_rollup` was sampled inside the process. The workload is the
+runner's in-process call mix, with no daemon needed: `branch.fork` and
+`fs.write` (one Commit each), plus `fs.grep`, `fs.list`, `fs.read` and
+`diff_commits`, in 4 concurrent lanes. It ran against a byte copy of the
+range-14 snapshot Store, with the pinned p3p addon `438bae05` and then the
+base addon `413ae60d` (built from `bb19d9d7d`, this branch before the fix).
+
+| Probe (base addon) | RSS | Anonymous | File-backed | JS heap |
+| --- | --- | --- | --- | --- |
+| start | 64 MB | 17 MB | 47 MB | 5 MB |
+| after 80 writes (pinned `438bae05`) | 1,114 MB | 1,066 MB | 48 MB | 7 MB |
+| after 720 writes | 1,246 MB | 1,198 MB | 48 MB | 6 MB |
+| after 3,600 writes (30 rounds) | 1,287 MB | 1,239 MB | 48 MB | — |
+
+The file-backed share stays at 48 MB, made of binaries and libraries. The
+Store profile sets `mmap_size=0` (`persistence backend/sqlite/profile.rs:80`),
+so neither the SQLite file nor the WAL is mapped. **More than 95% of the memory
+is anonymous native memory.**
+
+## 2. Per range or with history length?
+
+The same probe was run on Stores at three history depths (720 writes each, one
+sample per arm, final RSS):
+
+| Store | Base | Fixed |
+| --- | --- | --- |
+| range 0 (snapshot) | 1,222 MB | 237 MB |
+| range 14 (snapshot) | 1,246 MB | 281 MB |
+| dev352-p3p (range 17 done; 14,171 Commits, 62 Branches, `node_modules`) | 1,437 MB | 356 MB |
+
+Memory does **not** accumulate across Commits or ranges: base plateaus by
+round 5, and the fix is flat from round 10 to round 29 (below). The modest
+rise with depth comes from larger per-call working sets on larger trees: p3p
+carries `node_modules`, and its rounds take 1.3 s against 0.4 s at range 0.
+It is not retained history.
+
+## 3. What the anonymous memory is
+
+A native heap profiler could not be installed: building a heaptrack image
+exceeded the 2-minute command limit at `apt-get`. The attribution below comes
+from allocator experiments plus source, one call at a time (`steps.mjs`, base
+addon):
+
+- **Each sequential `fs.write` adds 21 MB of anonymous memory.** Reads, lists
+  and greps add about 2 MB each.
+- **With `MALLOC_ARENA_MAX=1`, writes add about 0.4 MB each.** So glibc arenas
+  keep the memory; it is not reachable Rust data.
+- **With a fixed `MALLOC_MMAP_THRESHOLD_=1048576`, writes add about 2 MB each**,
+  and 720 writes plateau at 135 MB of anonymous memory. So the retained blocks
+  are large ones.
+- **Source:** every Save makes a `CompressionWorkspace`
+  (`save/state.rs:93`), which allocates and zero-fills
+  `ENCODE_WORKSPACE_BYTES` = 16 MiB (`encoding/codec.rs:55`, `:206`). Every
+  Commit is a new producer `Storage` (`store-service store/open.rs:127`), so
+  every Commit gets a new Save. Each Save and read also makes a 1 MiB
+  `DecompressionWorkspace`.
+
+**Mechanism.** The first 16 MiB block is mmapped and then freed. glibc then
+raises its dynamic mmap threshold above 16 MiB. From then on each 16 MiB block
+comes from the arena of whichever thread runs the Save. Store calls run on a
+pool of threads (71 threads in the process), and a non-main arena is not
+trimmed below twice the threshold. So each arena keeps a zero-filled, resident
+16 MiB region. The 8-CPU VM allows up to 64 arenas: 64 × ~17 MiB ≈ 1.1 GB, the
+measured plateau.
+
+## 4. Fix
+
+`encoding/codec.rs` keeps the zstd **arenas** (region plus static context) of
+dropped workspaces in two process-wide idle lists, one for encode and one for
+decode:
+
+- `CompressionWorkspace::new` takes an idle arena if there is one, else
+  allocates.
+- `DecompressionWorkspace` takes an idle arena when it first decodes, else
+  allocates.
+- `Drop` returns the arena to its list.
+
+So retained memory is one arena per workspace alive at the same time (peak
+concurrent Saves and reads), whatever the Commit count or thread count. A
+reused context carries nothing over: every encode and decode entry point
+already resets `session_and_parameters` before use. `Arena<T>` is `Send` (its
+SAFETY note is in the code). No call site or type outside `codec.rs` changes.
+There is no cap: the lists hold what was in use at the peak, and nothing
+bounds them.
+
+Rejected options:
+- Capping arenas (`MALLOC_ARENA_MAX`, `mallopt`): the single-arena arm runs
+  about 2× slower per round (1.4 s vs 0.7 s), and an addon must not change its
+  host process's allocator.
+- Reusing the per-Commit `Candidates` tables: measured, no effect on the
+  per-write growth. Reverted.
+
+## 5. Proof
+
+| Probe (range-14 copy, 4 lanes) | Base `413ae60d` | Encode only `0eb6ed67` | Encode + decode `dc928427` (final) |
+| --- | --- | --- | --- |
+| 720 writes: RSS / anonymous at end | 1,246 / 1,198 MB | 362 / 313 MB | 281 / 233 MB |
+| 3,600 writes (30 rounds): RSS, rounds 10 → 29 | 1,272 → 1,287 MB | — | 291 → 291 MB (round 15–25: 295) |
+| round time, 720-write probe (diagnostic) | 0.73–0.98 s | 0.66–0.77 s | 0.64–0.70 s |
+
+The final arm is flat over 3,600 writes, which is 3.6× the roughly 1,000
+`fs.write` of a fast dev range. Times are diagnostic only (host load 8–12,
+other lanes' containers running; recorded in `*.load`). No speed claim is made.
+
+**Regression test:** `layerfs-storage/tests/save_encoder_reuse.rs` (Linux,
+glibc). Eight long-lived threads take turns, each making one Save per turn.
+- Without the fix: **FAIL**, 117 MiB anonymous after one Save per thread,
+  134 MiB after four more rounds.
+- With the fix: pass, 21 → 22 MiB, 0.01 s.
+
+Receipts: `~/lfs-history/runs/issue352c-f043/`. It holds the probe scripts
+(`mem.mjs`, `steps.mjs`, `run.sh`, `fresh.sh`), one JSONL per arm, host load
+per arm, and `binaries.sha256` (addons `438bae05`, `413ae60d`, `0eb6ed67`,
+`dc928427`, and the rejected Candidates arm `db9d6032`). Stores: byte copies
+in this lane's volumes `layerfs-issue352c-mem14`, `-mem00` and `-mem-p3p-src`;
+dev352-p3p was only read.
+
+Checks: Linux `cargo test -p layerfs-storage` 62 passed, 0 failed. Clippy
+`-D warnings` clean (host). rustfmt clean on changed files. Boundary guard
+unchanged (16 pre-existing violations, none in storage).
+
+## Not done
+
+- **No replay range was played on the fixed addon.** The harness names every
+  volume and container `layerfs-issue352-<run>` and uses the shared runner
+  `layerfs-issue352-runner`, outside this lane's `layerfs-issue352c-` prefix.
+  "Flat across many consecutive ranges" is shown by the 3,600-write
+  in-process probe, not by runner ranges. A dev range on the fixed addon is
+  the open confirmation.
+- The daemon runs the same Saves per Commit and should benefit the same way.
+  Not measured.
+- No heaptrack profile. The attribution in §3 rests on the allocator
+  experiments and the source.

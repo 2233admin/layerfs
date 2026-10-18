@@ -33,6 +33,7 @@ use crate::policy::StorageCapacities;
 
 use std::ffi::c_void;
 use std::ptr;
+use std::sync::{Mutex, PoisonError};
 
 use zstd_sys::{
     ZSTD_CCtx, ZSTD_CCtx_refPrefix, ZSTD_CCtx_reset, ZSTD_CCtx_setCParams, ZSTD_CCtx_setFParams,
@@ -194,6 +195,47 @@ fn workspace_bytes(words: &[u64]) -> usize {
     std::mem::size_of_val(words)
 }
 
+/// One materialised static context and the region it lives in.
+struct Arena<T> {
+    memory: Vec<u64>,
+    context: *mut T,
+}
+
+// SAFETY: a static context lives inside `memory`, which the arena owns and
+// moves with it (the heap region itself does not move). zstd keeps no
+// thread-local state for a static context, and every encode and decode entry
+// point resets the session and parameters before use, so an arena carries
+// nothing from its last user.
+unsafe impl<T> Send for Arena<T> {}
+
+/// Arenas of dropped workspaces, kept for the next workspace (F-043).
+///
+/// Each Save used to allocate and zero its own 16 MiB encode arena (and each
+/// read its 1 MiB decode arena) and free it at the end. glibc then kept the
+/// freed region in the allocator arena of the thread that ran it, so a process
+/// making Commits on a thread pool held about one encode arena per thread
+/// arena: 1.2 GB measured in the SDK runner, and a 16 MiB fill per Commit.
+/// Reuse holds one arena per workspace alive at the same time, whatever the
+/// Save count.
+static IDLE_ENCODE: Mutex<Vec<Arena<ZSTD_CCtx>>> = Mutex::new(Vec::new());
+static IDLE_DECODE: Mutex<Vec<Arena<ZSTD_DCtx>>> = Mutex::new(Vec::new());
+
+fn take_idle<T>(idle: &Mutex<Vec<Arena<T>>>) -> Option<Arena<T>> {
+    idle.lock().unwrap_or_else(PoisonError::into_inner).pop()
+}
+
+fn keep_idle<T>(idle: &Mutex<Vec<Arena<T>>>, memory: &mut Vec<u64>, context: &mut *mut T) {
+    if !context.is_null() {
+        let arena = Arena {
+            memory: std::mem::take(memory),
+            context: std::mem::replace(context, ptr::null_mut()),
+        };
+        idle.lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(arena);
+    }
+}
+
 /// Owned encode workspace plus the static context built inside it.
 pub struct CompressionWorkspace {
     memory: Vec<u64>,
@@ -201,8 +243,12 @@ pub struct CompressionWorkspace {
 }
 
 impl CompressionWorkspace {
-    /// Allocates the bounded encode workspace and its static context.
+    /// Takes an idle encode arena, else allocates the bounded workspace and
+    /// its static context.
     pub fn new() -> StorageResult<Self> {
+        if let Some(Arena { memory, context }) = take_idle(&IDLE_ENCODE) {
+            return Ok(Self { memory, context });
+        }
         let mut memory = workspace(ENCODE_WORKSPACE_BYTES)?;
         // SAFETY: the region is live, eight-byte aligned and owned by `memory`;
         // the static context neither allocates nor needs a C free.
@@ -453,9 +499,10 @@ impl CompressionWorkspace {
 
 impl Drop for CompressionWorkspace {
     fn drop(&mut self) {
-        // A static context must never be released with the C free function; the
-        // owned region is released by `memory` alone.
-        self.context = ptr::null_mut();
+        // A static context must never be released with the C free function: the
+        // arena goes back to the idle list, and its region is freed, if ever, by
+        // `memory` alone.
+        keep_idle(&IDLE_ENCODE, &mut self.memory, &mut self.context);
     }
 }
 
@@ -484,6 +531,11 @@ impl DecompressionWorkspace {
     /// Materialises the decode arena and returns its static context.
     fn context(&mut self) -> StorageResult<*mut ZSTD_DCtx> {
         if self.context.is_null() {
+            if let Some(Arena { memory, context }) = take_idle(&IDLE_DECODE) {
+                self.memory = memory;
+                self.context = context;
+                return Ok(context);
+            }
             let mut memory = workspace(DECODE_WORKSPACE_BYTES)?;
             // SAFETY: the static decoder neither allocates nor needs a free.
             let context = unsafe {
@@ -672,7 +724,7 @@ impl DecompressionWorkspace {
 
 impl Drop for DecompressionWorkspace {
     fn drop(&mut self) {
-        self.context = ptr::null_mut();
+        keep_idle(&IDLE_DECODE, &mut self.memory, &mut self.context);
     }
 }
 
