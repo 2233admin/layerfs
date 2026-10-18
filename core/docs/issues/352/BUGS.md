@@ -540,7 +540,7 @@
   [fixes/018-359-b4-readdirplus.md](fixes/018-359-b4-readdirplus.md).
 
 - **F-046 · a terminal unmount in two mount tests fails intermittently
-  (test or product, not yet diagnosed; #359 §4.8 test runs, 2026-10-18).**
+  (test harness; #359 §4.8 test runs, 2026-10-18; fixed 2026-10-19).**
   - `tests/support/mounted.rs:133` (`unmount`, `try_unmount(..).unwrap()`)
     panicked twice, in different targets. Both runs were on `4db0ceb9e`'s
     test build in the pinned image, at host load 4.7–8:
@@ -592,12 +592,56 @@
     - `mounted_commit` `r5_3`, again, on `1c0cf4b0d`'s test build.
 
 
-  **Status: OPEN. Owner: unassigned.** Next step: confirm or rule out the
-  fork race. One way is to run each affected target with
-  `--test-threads=1` once. Another is to record `/proc/*/fd` of the test
-  process's children at the Busy reply. Do not weaken the unmount
-  assertion.
-  [fixes/022-359-mtime-only-live-rows.md](fixes/022-359-mtime-only-live-rows.md).
+  - **Seventh occurrence** (staging step 8): `kernel_coherence`
+    `mutations_racing_the_unmount_probe_keep_normal_results_and_persist`,
+    at its final normal unmount, with the same text.
+  - **Eighth occurrence** (integration step 11, staging `b2c43386d`, pinned
+    image, one container per binary, load 11.1): `mounted_install`
+    `a_directory_of_more_than_one_name_window_is_listed`, with the same text
+    at `mounted.rs:133`, after all three listings matched (65/64/65). Not
+    rerun. That build predates the gate below.
+  - **Root cause (test harness, reproduced deterministically 2026-10-19).**
+    A fork from any thread of the test process copies the whole descriptor
+    table. That holds both for std's fork path (`uid`/`gid` or `pre_exec`)
+    and for glibc `posix_spawn`. Until the child's exec closes its
+    close-on-exec copies, the child holds every mount file another test
+    thread had open at that instant. Libtest runs a binary's tests on
+    parallel threads, and every affected binary spawns `bash`, `sh` or
+    `sleep` from several tests. So one test's plain unmount can land while
+    another test's child still holds this test's file. The kernel's EBUSY is
+    then correct, and so is the product's single attempt (`Detach::Busy`).
+    The product and the FUSE session open no path in the mount.
+  - **Reproduction:** `tests/f046_fork_reference.rs`. Thread A opens a
+    mount file. Thread B spawns `true`, whose `pre_exec` waits on a pipe.
+    A closes its descriptor and unmounts. One run in the pinned image at
+    load 14: `Busy` / `unmount:kernel`, and `/proc/<child>/fd` names
+    `mounts/1/held`. After the child is released to exec, the same mount
+    unmounts with `Drained`.
+  - **Fix (harness only, no product change):** `support/mounted.rs` gets a
+    process-wide gate that every `Harness` holds for its whole life, so the
+    mounted tests of one binary run one at a time. Nested Harnesses on one
+    thread share the gate, and the wait is bounded at 110 s. A test's own
+    children are waited for or killed before its unmount. No retry was
+    added, and the unmount assertion is unchanged.
+  - **Checked once each after the fix** (pinned image, load 21–32):
+    `mounted_commit` 9/9 (2 s), `mounted_install` 4/4 (2 s),
+    `mounted_cycles` 4/4 (5 s), `kernel_coherence` 6/6 (1 s). One run of
+    each is not proof that the intermittent failure is gone. The
+    reproduction is the evidence for the cause.
+
+  - **Outside tests** (fix record 036): the daemon never forks, and the SDK
+    and runner processes hold no mount file. So F-046 cannot occur in the
+    product. Forked copies of Store descriptors cannot affect SQLite
+    `fcntl` locks or the writer-lane `flock`. One narrow product window
+    remains, reported and not fixed: the SDK discovery `flock` is released
+    by close, not by `LOCK_UN`.
+
+  **Status: FIXED (test harness).** Tests in the same binary that spawn
+  processes without a `Harness` are outside the gate. None of the
+  affected binaries has one that runs alongside a mount.
+  [fixes/036-f046-fork-copied-mount-file.md](fixes/036-f046-fork-copied-mount-file.md)
+  (cause and fix); [fixes/022-359-mtime-only-live-rows.md](fixes/022-359-mtime-only-live-rows.md)
+  (first occurrences).
 
 - **F-047 · `fp21_detach_stages` fails 0/2 after the A1 merge (test premise,
   likely; #359 head run, 2026-10-18).**
