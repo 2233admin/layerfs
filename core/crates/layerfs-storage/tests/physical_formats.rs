@@ -8,9 +8,11 @@
 mod support;
 
 use layerfs_storage::pack::layout::{
-    body_area_offset, group_view, parse_header, PackLane, PACK_MAGIC, USED_OFFSET, VERSION_CHUNK,
-    VERSION_CHUNK_STORED, VERSION_CHUNK_TIGHT, VERSION_ORDINARY, VERSION_ORDINARY_TIGHT,
-    VERSION_SINGLETON, VERSION_SINGLETON_STORED, VERSION_WHOLE_FILE, VERSION_WHOLE_FILE_GROUPED,
+    body_area_offset, directory_entry_len, directory_group_views, group_view, parse_header,
+    sized_body_offset, PackLane, PACK_MAGIC, TIGHT_GROUPS, USED_OFFSET, VERSION_CHUNK,
+    VERSION_CHUNK_SIZED, VERSION_CHUNK_STORED, VERSION_CHUNK_TIGHT, VERSION_ORDINARY,
+    VERSION_ORDINARY_SIZED, VERSION_ORDINARY_TIGHT, VERSION_SINGLETON, VERSION_SINGLETON_STORED,
+    VERSION_WHOLE_FILE, VERSION_WHOLE_FILE_GROUPED, VERSION_WHOLE_FILE_SIZED,
     VERSION_WHOLE_FILE_STORED, VERSION_WHOLE_FILE_TIGHT,
 };
 use layerfs_storage::StorageError;
@@ -28,6 +30,9 @@ fn pack_of(lane: PackLane, version: u32, groups: u32, body: usize) -> Vec<u8> {
         (PackLane::WholeFile, VERSION_WHOLE_FILE_TIGHT)
         | (PackLane::Ordinary, VERSION_ORDINARY_TIGHT)
         | (PackLane::Chunk, VERSION_CHUNK_TIGHT) => body_area_offset(lane) + body,
+        (PackLane::WholeFile, VERSION_WHOLE_FILE_SIZED)
+        | (PackLane::Ordinary, VERSION_ORDINARY_SIZED)
+        | (PackLane::Chunk, VERSION_CHUNK_SIZED) => sized_body_offset(lane, groups as usize) + body,
         (PackLane::WholeFile, _) => 24 + 4 * 256 + body,
         (PackLane::Ordinary | PackLane::Chunk, _) => 24 + 16 * 256 + body,
         _ => body_area_offset(lane) + body,
@@ -51,6 +56,7 @@ fn grouped_whole_file_versions_keep_their_own_body_offsets() {
     for (version, offset) in [
         (VERSION_WHOLE_FILE_GROUPED, 24 + 4 * 256),
         (VERSION_WHOLE_FILE_TIGHT, 24 + 4 * 16),
+        (VERSION_WHOLE_FILE_SIZED, 24 + 4),
     ] {
         let body = [1_u8, 2, 3, 4];
         let used = offset + body.len();
@@ -72,11 +78,25 @@ fn grouped_whole_file_versions_keep_their_own_body_offsets() {
 
 #[test]
 fn ordinary_and_chunk_versions_keep_their_own_body_offsets() {
-    for (lane, old, tight) in [
-        (PackLane::Ordinary, VERSION_ORDINARY, VERSION_ORDINARY_TIGHT),
-        (PackLane::Chunk, VERSION_CHUNK_STORED, VERSION_CHUNK_TIGHT),
+    for (lane, old, tight, sized) in [
+        (
+            PackLane::Ordinary,
+            VERSION_ORDINARY,
+            VERSION_ORDINARY_TIGHT,
+            VERSION_ORDINARY_SIZED,
+        ),
+        (
+            PackLane::Chunk,
+            VERSION_CHUNK_STORED,
+            VERSION_CHUNK_TIGHT,
+            VERSION_CHUNK_SIZED,
+        ),
     ] {
-        for (version, offset) in [(old, 24 + 16 * 256), (tight, 24 + 16 * 16)] {
+        for (version, offset) in [
+            (old, 24 + 16 * 256),
+            (tight, 24 + 16 * 16),
+            (sized, 24 + 16),
+        ] {
             let mut pack = pack_of(lane, version, 1, 4);
             pack[24..40].copy_from_slice(&[
                 (offset & 255) as u8,
@@ -102,11 +122,13 @@ fn ordinary_and_chunk_versions_keep_their_own_body_offsets() {
             let group = group_view(&pack, header, 0).unwrap();
             assert_eq!(&pack[group.start..group.end], &[1, 2, 3, 4]);
         }
-        let oversized = pack_of(lane, tight, 17, 4);
-        assert!(matches!(
-            parse_header(&oversized),
-            Err(StorageError::Integrity("pack group count"))
-        ));
+        for version in [tight, sized] {
+            let oversized = pack_of(lane, version, 17, 4);
+            assert!(matches!(
+                parse_header(&oversized),
+                Err(StorageError::Integrity("pack group count"))
+            ));
+        }
     }
 }
 
@@ -120,13 +142,16 @@ fn every_implemented_framing_is_recognized_by_its_own_version() {
     for (version, lane) in [
         (VERSION_ORDINARY, PackLane::Ordinary),
         (VERSION_ORDINARY_TIGHT, PackLane::Ordinary),
+        (VERSION_ORDINARY_SIZED, PackLane::Ordinary),
         (VERSION_CHUNK, PackLane::Chunk),
         (VERSION_CHUNK_STORED, PackLane::Chunk),
         (VERSION_CHUNK_TIGHT, PackLane::Chunk),
+        (VERSION_CHUNK_SIZED, PackLane::Chunk),
         (VERSION_WHOLE_FILE, PackLane::WholeFile),
         (VERSION_WHOLE_FILE_STORED, PackLane::WholeFile),
         (VERSION_WHOLE_FILE_GROUPED, PackLane::WholeFile),
         (VERSION_WHOLE_FILE_TIGHT, PackLane::WholeFile),
+        (VERSION_WHOLE_FILE_SIZED, PackLane::WholeFile),
         (VERSION_SINGLETON, PackLane::Singleton),
         (VERSION_SINGLETON_STORED, PackLane::Singleton),
     ] {
@@ -315,4 +340,62 @@ fn closing_a_pack_and_retaining_its_tail_assemble_the_same_bytes() {
         let consumed = assemble_consuming(lane, groups).expect("consuming assembly");
         assert_eq!(borrowed, consumed, "{lane:?}");
     }
+}
+
+#[test]
+fn written_packs_size_their_directory_to_their_groups() {
+    // #352 F-027 item 1: every lane but the singleton writes a sized version,
+    // whose directory holds exactly the pack's groups, so a written pack carries
+    // no reserved directory byte. Each group still resolves to the body bytes
+    // the assembly laid down, at one, two and the maximum group count.
+    use layerfs_storage::encoding::CompressionWorkspace;
+    use layerfs_storage::pack::{assemble, assemble_consuming, body_bytes, build_group};
+
+    let mut workspace = CompressionWorkspace::new().expect("encode workspace");
+    for (lane, version) in [
+        (PackLane::Ordinary, VERSION_ORDINARY_SIZED),
+        (PackLane::Chunk, VERSION_CHUNK_SIZED),
+        (PackLane::WholeFile, VERSION_WHOLE_FILE_SIZED),
+    ] {
+        assert_eq!(lane.version(), version, "{lane:?} writes its sized version");
+        for count in [1, 2, TIGHT_GROUPS] {
+            let groups: Vec<_> = (0..count)
+                .map(|n| {
+                    let records = [vec![n as u8; 256 + n], vec![0xA5; 64]];
+                    let workspace = (lane != PackLane::WholeFile).then_some(&mut workspace);
+                    build_group(lane, &records, workspace).expect("group")
+                })
+                .collect();
+            let pack = assemble(lane, &groups).expect("assembly");
+            let body = body_bytes(lane, &groups).expect("body");
+            let header = parse_header(&pack).expect("header");
+            let offset = 24 + directory_entry_len(lane) * count;
+            assert_eq!(header.body_offset, offset, "{lane:?} x{count}");
+            assert_eq!(header.group_count, count);
+            assert_eq!(pack.len(), offset + body.len(), "no reserved byte");
+            assert_eq!(&pack[offset..], &body[..]);
+            let views = directory_group_views(&pack, header).expect("views");
+            assert_eq!(views.len(), count);
+            let mut cursor = offset;
+            for (n, view) in views.iter().enumerate() {
+                assert_eq!(
+                    view.start, cursor,
+                    "{lane:?} group {n} starts after its predecessor"
+                );
+                cursor = view.end;
+                let single = group_view(&pack, header, n).expect("group view");
+                assert_eq!((single.start, single.end), (view.start, view.end));
+            }
+            assert_eq!(cursor, pack.len());
+            let reserved = directory_entry_len(lane) * (TIGHT_GROUPS - count);
+            assert_eq!(
+                body_area_offset(lane) - header.body_offset,
+                reserved,
+                "{lane:?} x{count} saves the unused reserved slots"
+            );
+            assert_eq!(assemble_consuming(lane, groups).expect("consuming"), pack);
+        }
+    }
+    // The singleton lane holds one group and keeps its one-slot version.
+    assert_eq!(PackLane::Singleton.version(), VERSION_SINGLETON_STORED);
 }

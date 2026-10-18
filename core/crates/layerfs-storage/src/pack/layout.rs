@@ -22,6 +22,13 @@
 //! any `UPDATE` of a row holding a 256 KiB BLOB rewrites the whole BLOB, which is
 //! the cost this format exists to remove.
 //!
+//! **Sized directories (v23-v25, #352 F-027 item 1).** Saves seal every pack
+//! whole and nothing appends to a published pack, so the reserved region only
+//! stored zeros. The sized versions write exactly `group_count` entries; the
+//! reserved versions stay readable at their own offsets. Placement still charges
+//! the reserved width when it decides whether a group fits, which is safe
+//! because a sized pack is never longer.
+//!
 //! Versions 1, 2, 4, 6 and 7 are the **pre-v9 framings**: a directory that grows
 //! at the front and no declared length. They belong to the schema-8 Store, which
 //! is refused at open, and the reader refuses them here as well rather than
@@ -56,7 +63,7 @@ pub const WHOLE_FILE_ENTRY_LEN: usize = 4;
 pub const WHOLE_FILE_COMPACT_DROP: usize = 8;
 
 /// Ordinary framing version: canonical objects in multi-record groups.
-/// Still read; new packs use [`VERSION_ORDINARY_TIGHT`].
+/// Still read; new packs use [`VERSION_ORDINARY_SIZED`].
 pub const VERSION_ORDINARY: u32 = 9;
 /// Chunk framing version: one chunk record per group entry.
 ///
@@ -101,6 +108,15 @@ pub const VERSION_ORDINARY_TIGHT: u32 = 19;
 pub const VERSION_CHUNK_TIGHT: u32 = 20;
 /// Maximum groups the tight directories can describe.
 pub const TIGHT_GROUPS: usize = 16;
+/// Compact whole-file groups whose directory holds exactly the pack's groups
+/// (#352 F-027 item 1). The tight versions reserved sixteen slots and every
+/// Save seals its packs whole, so the unused slots were stored as zeros.
+/// 21 and 22 belonged to the retired pooled value-group lane and stay refused.
+pub const VERSION_WHOLE_FILE_SIZED: u32 = 23;
+/// Ordinary groups with a directory of exactly the pack's groups.
+pub const VERSION_ORDINARY_SIZED: u32 = 24;
+/// Chunk groups with a directory of exactly the pack's groups.
+pub const VERSION_CHUNK_SIZED: u32 = 25;
 /// Singleton framing that may carry a payload stored verbatim.
 pub const VERSION_SINGLETON_STORED: u32 = 16;
 
@@ -133,9 +149,9 @@ impl PackLane {
     /// which is what keeps every pack this Store has already written readable.
     pub const fn version(self) -> u32 {
         match self {
-            Self::Ordinary => VERSION_ORDINARY_TIGHT,
-            Self::Chunk => VERSION_CHUNK_TIGHT,
-            Self::WholeFile => VERSION_WHOLE_FILE_TIGHT,
+            Self::Ordinary => VERSION_ORDINARY_SIZED,
+            Self::Chunk => VERSION_CHUNK_SIZED,
+            Self::WholeFile => VERSION_WHOLE_FILE_SIZED,
             Self::Singleton => VERSION_SINGLETON_STORED,
         }
     }
@@ -238,18 +254,26 @@ impl EncodedGroup {
     }
 }
 
-/// Bytes `lane` reserves for its group directory.
+/// Bytes the tight versions reserved for a group directory of `lane`.
 ///
-/// The region is fixed at the lane's own width and group bound, so a body's
-/// offset never depends on how many groups precede it. An append writes one entry
-/// into this region and its body after it; nothing else moves.
+/// Placement still charges this width when it decides whether a group fits
+/// (`append_fits`, the Save's queue budget): a pack written in a sized version
+/// is never longer, so the decision stays safe.
 pub const fn directory_capacity(lane: PackLane) -> usize {
     directory_entry_len(lane) * lane.group_count_limit()
 }
 
-/// Offset of the first group body inside a pack of `lane`.
+/// Offset of the first group body under a full reserved directory of `lane`.
 pub const fn body_area_offset(lane: PackLane) -> usize {
     HEADER_LEN + directory_capacity(lane)
+}
+
+/// Offset of the first group body in a written pack of `lane` holding
+/// `groups` groups: the control area and one directory entry per group
+/// (#352 F-027 item 1). A sealed pack never gains a group, so its directory
+/// needs no spare slot.
+pub const fn sized_body_offset(lane: PackLane, groups: usize) -> usize {
+    HEADER_LEN + directory_entry_len(lane) * groups
 }
 
 /// Bytes one group's directory entry costs in `lane`.
@@ -295,11 +319,9 @@ pub fn assembled_length(lane: PackLane, groups: &[EncodedGroup]) -> StorageResul
     if groups.is_empty() || groups.len() > lane.group_count_limit() {
         return Err(StorageError::Integrity("pack group count"));
     }
-    // The whole reserved region counts, not the entries in use: the region is
-    // allocated whether or not this pack fills it, and the fit decision has to
-    // measure the pack that will exist rather than the pack that would exist if
-    // the directory had been sized to the groups.
-    let mut total = body_area_offset(lane);
+    // The directory is sized to the groups (#352 F-027 item 1): this is the
+    // length the pack is written at.
+    let mut total = sized_body_offset(lane, groups.len());
     for group in groups {
         total = total
             .checked_add(group.body_size(lane)?)
@@ -372,12 +394,15 @@ pub fn parse_control_header(bytes: &[u8], total_length: usize) -> StorageResult<
             .map_err(|_| StorageError::Integrity("pack version"))?,
     );
     let lane = match version {
-        VERSION_ORDINARY | VERSION_ORDINARY_TIGHT => PackLane::Ordinary,
-        VERSION_CHUNK | VERSION_CHUNK_STORED | VERSION_CHUNK_TIGHT => PackLane::Chunk,
+        VERSION_ORDINARY | VERSION_ORDINARY_TIGHT | VERSION_ORDINARY_SIZED => PackLane::Ordinary,
+        VERSION_CHUNK | VERSION_CHUNK_STORED | VERSION_CHUNK_TIGHT | VERSION_CHUNK_SIZED => {
+            PackLane::Chunk
+        }
         VERSION_WHOLE_FILE
         | VERSION_WHOLE_FILE_STORED
         | VERSION_WHOLE_FILE_GROUPED
-        | VERSION_WHOLE_FILE_TIGHT => PackLane::WholeFile,
+        | VERSION_WHOLE_FILE_TIGHT
+        | VERSION_WHOLE_FILE_SIZED => PackLane::WholeFile,
         VERSION_SINGLETON | VERSION_SINGLETON_STORED => PackLane::Singleton,
         _ => {
             return Err(StorageError::UnsupportedPolicy {
@@ -390,9 +415,14 @@ pub fn parse_control_header(bytes: &[u8], total_length: usize) -> StorageResult<
             .try_into()
             .map_err(|_| StorageError::Integrity("pack group count"))?,
     ) as usize;
+    let sized = matches!(
+        version,
+        VERSION_ORDINARY_SIZED | VERSION_CHUNK_SIZED | VERSION_WHOLE_FILE_SIZED
+    );
     let slots = match version {
         VERSION_ORDINARY_TIGHT | VERSION_CHUNK_TIGHT | VERSION_WHOLE_FILE_TIGHT => TIGHT_GROUPS,
         VERSION_SINGLETON | VERSION_SINGLETON_STORED => 1,
+        _ if sized => TIGHT_GROUPS,
         _ => GROUP_COUNT_LIMIT,
     };
     let count_limit = if lane == PackLane::Singleton {
@@ -403,6 +433,8 @@ pub fn parse_control_header(bytes: &[u8], total_length: usize) -> StorageResult<
     if !(1..=count_limit).contains(&group_count) {
         return Err(StorageError::Integrity("pack group count"));
     }
+    // A sized directory holds exactly the pack's groups.
+    let slots = if sized { group_count } else { slots };
     if header[20..24] != [0, 0, 0, 0] {
         return Err(StorageError::Integrity("pack reserved field"));
     }
@@ -427,7 +459,7 @@ pub fn parse_control_header(bytes: &[u8], total_length: usize) -> StorageResult<
     if lane == PackLane::Chunk
         && !matches!(
             version,
-            VERSION_CHUNK | VERSION_CHUNK_STORED | VERSION_CHUNK_TIGHT
+            VERSION_CHUNK | VERSION_CHUNK_STORED | VERSION_CHUNK_TIGHT | VERSION_CHUNK_SIZED
         )
     {
         return Err(StorageError::Integrity("chunk framing version"));

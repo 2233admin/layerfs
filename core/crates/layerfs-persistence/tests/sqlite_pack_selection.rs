@@ -89,10 +89,11 @@ fn sqlite_selected_ranges_scan_once_close_and_match_the_full_body() {
         scoped.ranges()[0].1,
         body[range.offset..range.offset + range.length]
     );
-    let directory = layerfs_storage::pack::layout::parse_header(body)
-        .unwrap()
-        .body_offset;
-    assert_eq!(directory, 280);
+    let header = layerfs_storage::pack::layout::parse_header(body).unwrap();
+    let directory = header.body_offset;
+    // A sized directory (#352 F-027 item 1): the control area and one 16-byte
+    // entry per group, with no reserved slot.
+    assert_eq!(directory, 24 + 16 * header.group_count);
     assert_eq!(scoped.prefix().len(), directory);
     let acquired = directory + range.length;
     assert_eq!(scoped.acquired_bytes(), acquired);
