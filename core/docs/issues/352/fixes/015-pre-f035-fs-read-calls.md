@@ -235,12 +235,52 @@ their transaction. That argument is flagged for the owner.
 Full record: [#354 continuation findings](../../354/FINDINGS-20261018.md).
 The text above is unchanged.
 
-- **Timing:** the 17:26 pass was not quiet (load 8.8–10.3). Its figures are diagnostic on macOS, and the native reference is BSD grep 2.6.0. No timing on this branch is qualified.
-- **Memory:** the 19.6, 23.6 and 38.0 MB figures are process max RSS from three different builds and modes. Live heap peaks on P3 whole-tree grep are 3.29 MB at P0 and 9.36 MB at P5. The rest of the RSS is allocator retention plus SQLite's page cache. The bounded holders and the output-sensitive holders are listed there.
-- **fs.read per file on P3:** 42 statements at P5. Fixed overhead is 39.4 of them (open 7.0, lookup 31.5, size 0.9) and chain depth adds 2.6. Every query plan is an index or primary-key SEARCH.
-- **`b83871223`:** inode-value reads run without BEGIN/COMMIT. fs.read on P3 drops to 29 statements per file (115,818 for 4,000 files, was 167,990). Results are byte-identical.
-- **Safety:** the argument is extended to `inode_value` (one INSERT per ordinal; ordinals are given back only while unwritten). It is checked against #353's tables. The new `immutable_reads_under_reclamation` test covers reads during free-page reclamation.
-- **Paging:** paging is still count-based (O(R²/k) for full pagination). Tokens are held; see the [cursor proposal](../../354/PAGE-CURSOR-PROPOSAL.md).
-- **Linux qualification at `b83871223`:**
-  - persistence 29, storage 19, content 61, store-service 23 and daemon non-mount 28: all pass, and clippy passes.
+**Load labels.** The statement, object and pack-byte tables above and below
+are deterministic counts, so host load does not change them. Only the timing
+tables are load-sensitive:
+
+- the 17:26 pass: load 8.8–10.3, not quiet;
+- the final-identity pass: load 7.1–7.3 over 1 minute and about 10 over 5 minutes, with declared interference (#353's `sdk_merge_scale`, fseventsd, mds_stores).
+
+Both are diagnostic on macOS. No timing on this branch is qualified.
+
+**`b83871223`: inode-value reads without BEGIN/COMMIT.**
+
+- `inode_value` is insert-only.
+  - Writes: one plain INSERT per ordinal at publish, and a second INSERT of the same ordinal fails.
+  - No production UPDATE or DELETE exists. The only ones are the test's deliberate corruption at `sqlite_inode_values.rs:196` and `:207`. The liaison checked `dsh-history-replay` and `issue360-storage` too.
+  - `release_ordinals` gives back only an unwritten tail.
+- **Revisit trigger:** a change that updates or deletes `inode_value` rows (#360 item 3, any GC) must move `inode_values` back into a transaction.
+- Missing ordinals behave as before. At the port they are omitted (`sqlite_inode_values.rs:74-85`); a leaf read with a missing row still fails with "metadata ordinal missing" (`:205-215`).
+- The exact-count test changes from 3 statements and 1 transaction to 1 statement and 0 transactions. It is updated to match the new behaviour, not weakened.
+- Effect: fs.read on P3 drops from 42 to 29 statements per file.
+- Commit order: it follows item 3 (`0b0a883f0`) with only a docs commit between them, so it can be dropped together with that commit.
+
+**Final-identity proof** (product `b83871223`, old arm `2943275c8`):
+
+- **Statements per file, old → new:**
+  - P3 fs.read: 179.86 → 28.95; pack bytes 292,303 → 210,265 per file.
+  - Range-14 fs.read: 163.44 → 40.63; pack bytes 87,018 → 47,288.
+  - P3 grep: 15.40 → 0.80; pack bytes 12,126 → 447.
+  - Range-14 grep: 39.31 → 5.51; pack bytes 5,777 → 644.
+- **Delta depth or per-file overhead:** per-file overhead dominates. Chain depth adds about 6 statements per step, and only in the content phase.
+- **Equivalence:** every grep, glob, list and read battery on both trees is equal to the pre-#354 dumps.
+  - Range 14: full paging at page sizes 7 and 100 equals paging at 1,000 and the old dump.
+  - P3: full paging of two greps and a list equals old at page size 500.
+  - P3 glob `**` paging (49,710 items): the new arm is self-consistent, but the old arm cannot finish within the 120 s ceiling, so that comparison is NOT_RUN.
+- **Memory:** P3 grep peaks at 9.37 MB, inside the 9.44 MB sum of the declared holders, against 7.43 MB on range 14, a 32× smaller tree.
+- **Timing:** new grep 3.26 s and fs.read ×4,000 7.46 s.
+- **Checks:**
+  - Host `+1.85.1`: content, storage, persistence and store-service suites pass, each command ≤120 s, and clippy is clean.
+  - Linux: the same suites pass, plus daemon non-mount 28/28.
   - The daemon mount tests are NOT_RUN: the container has no FUSE device.
+
+**Paging** is still count-based (O(R²/k)). Tokens are held; see the
+[cursor proposal](../../354/PAGE-CURSOR-PROPOSAL.md).
+
+**Choices where the brief was silent:**
+
+- inode values are read without a transaction, with byte-identical results, and the change adds no new code;
+- equivalence old dumps were reused, not regenerated (same old identity);
+- the old timed arms were not sampled again;
+- no cross-call cache was added (it is an owner memory decision).

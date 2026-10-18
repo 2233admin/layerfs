@@ -12,8 +12,9 @@ application composition. Failure returns once, without conversion or fallback.
 One Store owns one byte-bounded CanonicalCache shared by all its Workspaces.
 Bind opens one read-only session for each Workspace before its root checks and
 readiness. Each provider demand holds only that Workspace reader lock and at
-most one short read transaction; object locates and pack reads take none, each
-statement reading rows that never change in its own snapshot (#352 F-035). No
+most one short read transaction; object locates, pack reads and stored
+inode-value reads take none, each statement reading rows that never change in
+its own snapshot (#352 F-035). No
 exclusive lease or transaction spans request steps. StorePorts forwards a complete object
 or length batch to Reader, retaining order/cardinality and the existing4096-id,
 32MiB canonical demand bounds. These are windows, not file/namespace caps.

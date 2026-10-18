@@ -600,7 +600,15 @@ fn dump() {
         ("fs.list", vec![("path", SdkValue::text("/"))]),
     ]
     .into_iter()
-    .filter(|_| part("pages"))
+    .enumerate()
+    // `LFS354_PAGES` (comma list of indexes) selects some of these calls, so
+    // one command fits its limit on a large tree.
+    .filter(|(index, _)| {
+        part("pages")
+            && std::env::var("LFS354_PAGES")
+                .map_or(true, |v| v.split(',').any(|i| i == index.to_string()))
+    })
+    .map(|(_, call)| call)
     {
         let size = std::env::var("LFS354_PAGE").map_or(7, |s| s.parse().unwrap());
         let small = pages(&p, method, &base, size);
