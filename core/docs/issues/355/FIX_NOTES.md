@@ -601,3 +601,25 @@ tree 498dd1917812).
 
 Deleted tests: none. `candidates.rs` and `revive.rs` (the path route) are
 deleted; they held no tests.
+
+## `r5_10_producer_profile` after F-025 fix 4 (integration dry run, 2026-10-19)
+
+The #352 correctness lane's integration dry run found
+`r5_10_producer_profile` failing at its line 385 at `d37821838`
+(`storage.policy` 0, expected 1). Diagnosed on Linux (pinned image
+`sha256:378b799e…`, FUSE flags, 120 s timeout, built with `--no-run`):
+rounds 1–3 on the first mount pass. Round 4, the first Commit on the second
+mount, reads no policy row.
+
+**Cause: a stale test premise, not a #353/#355/M1 regression.** #352 F-025
+fix 4 (`04d07a293`, already on `dsh-history-replay` and inherited from the
+merge base `ecf3255a4`) makes a closing Workspace hand its idle producer
+handle to the Store, and the next Workspace takes it. Unmounting the first
+mount hands its handle on, and the second mount's first Commit reuses it, so
+it opens no handle and reads no policy. The test still expected every
+Workspace's first Commit to open one.
+
+**Change.** The test now expects exactly what the design does: only the open
+Store's first Commit opens a producer handle (`opens = round == 1`). The
+receipt and writer-port counts are still compared for exact equality; no
+assertion is weakened. It passes on Linux in 0.31 s. Deleted tests: none.
