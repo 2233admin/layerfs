@@ -161,7 +161,7 @@ is retained as research with the later owner direction appended.
 | [`commit-history/implementation.md`](commit-history/implementation.md) | 2 | operations, schema, file/LOC plan and acceptance; implementation/remediation status and qualification limits linked at entry |
 | [`04-boundary-and-trust.md`](04-boundary-and-trust.md) | 3 | **initialized** — decisions open |
 | [`service-daemon-transport/`](service-daemon-transport/README.md) | 3 foundation; later 1 integration | detailed architecture, layout, operations and resource proposal — implementation/qualification open |
-| [`sandbox-command-launcher.md`](sandbox-command-launcher.md) | — | **owner-approved 2026-10-18, implementation open**: a long-lived command launcher per Sandbox instead of a Docker exec per call; ownership, protocol, output limits, failure, cancel, proofs |
+| [`sandbox-command-launcher.md`](sandbox-command-launcher.md) | — | **declined 2026-10-18** (record only): a long-lived command launcher per Sandbox instead of a Docker exec per call; ownership, protocol, output limits, failure, cancel, proofs |
 
 **Not a pair, and deliberately absent:** storage placement. Where the owner's index
 and packs live is owner-internal and invisible to every consumer, so it neither

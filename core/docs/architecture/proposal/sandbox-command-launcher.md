@@ -1,7 +1,9 @@
 # Proposal: a long-lived command launcher per Sandbox
 
-> **Status:** Owner-approved proposal (2026-10-18), **not yet implemented**.
-> Written 2026-10-18 by the #352 liaison; decisions in §12. Nothing here changes current
+> **Status:** **Declined by the owner, 2026-10-18** (§13). Not implemented;
+> kept as a record. `sandbox.exec` keeps one Docker exec per call. Written
+> 2026-10-18 by the #352 liaison; an earlier approval (§12) was withdrawn the
+> same day before any code was written. Nothing here changes current
 > behaviour or the execution-ownership rules in
 > [core/AGENTS.md](../../../AGENTS.md#filesystem-access-and-execution-ownership).
 > Evidence: #352 finding 013.a1 (`core/docs/issues/352/fixes/013-a1-oneshot-exec-launch.md`,
@@ -203,3 +205,20 @@ filesystem work is drained; those rules are unchanged.
    `layerfs-sandbox` only. #352 F-029 (per-call `discovery::refresh` on exec)
    is folded into the same work. The switch shares the P3 re-baseline after
    F-027 rather than forcing a second one.
+
+## 13. Declined, 2026-10-18
+
+The owner withdrew the approval in §12 the same day: the launcher is a new
+command-launch route (a launcher program in every Sandbox, a custom frame
+protocol, lost-session rules) to save about 35 ms per call, which is Docker's
+process-start cost, not LayerFS work. The implementation session was stopped
+before any change or commit.
+
+Instead, within the current route:
+- `sandbox.exec` keeps one Docker exec per call (create, start, inspect).
+- #352 F-029: exec stops running the full `discovery::refresh()` on every
+  call (one daemon `workspace.status` per mounted Workspace).
+- Docker Engine connection reuse in `layerfs-sandbox/src/backend/docker/http.rs`
+  instead of a new Unix-socket connection per request, one attempt per request.
+Both go to the #352 fixer as small fixes. The gates judge LayerFS work
+separately from process start (the split one-shot probe).
