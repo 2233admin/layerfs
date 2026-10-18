@@ -16,7 +16,7 @@
 | Old data | still read as before |
 | Compatibility test | fix 0: **passed**. A fresh fork of `p2-main-c`'s range-11 snapshot (written by `58a60046`) passes `compat.mjs` range 11 on daemon `bd6fbeee`: 1,057 files, 296 ids, paths ok. Fix 1: **passed**. A fresh fork (`f009-compat-fix1`) of `p2-main-e`'s range-13 snapshot passes `compat.mjs` range 13 on daemon `dbf906df` (addon `59f7f8dd`): 1,167 files, 240 ids, paths 240/240, nothing missing, extra or changed, 3,401 ms. Fixes 2–4: *pending* |
 | Binaries | daemon `58a60046…` (and the evidence from `c25119ac…`) → fix 0: `bd6fbeee08156326895e16c1e0a688854f004231d55e0c359ea7ec8af256972a`, kept in `core/target/issue352/daemon-bd6fbeee/` (addon unchanged, `799e3ca6`). Fix 1: daemon `dbf906df…`, addon `59f7f8dd…` (below). Fixes 2–4: *pending* |
-| Commits | fix 0: the commit that adds its section below, on branch `dsh-352-f025-fix0`. Fixes 1–4: *pending* |
+| Commits | fix 0: the commit that adds its section below, on branch `dsh-352-f025-fix0`. Fix 1: `3dff9c5cb` (branch `dsh-352-f025-fix1-topdown`, merged `9815dbc95`); its proof on `dsh-352-f025-fix1-proof`. Fixes 2–4: *pending* |
 | Regression tests | fix 0: `core/crates/layerfs-daemon/tests/sdk_timing_coverage.rs` (moved to `layerfs-store-service` by F-020). Fix 1: `layerfs-store-service/tests/sdk_merge_paths.rs` (bound) and `history_diff_oracle.rs` (naming equals the walk). Others *pending*, listed under Proof |
 | Recovery | fork the newest good `p2-main-c` snapshot; rerun the range that trips next (or the next unplayed range) measured on the new daemon. No rebuild |
 | Order | **fix 1 first** (the cause that grows), then 2, 3, 4. Each lands, is proved, and is measured old vs new before the next |
@@ -285,10 +285,8 @@ it takes LayerFS heads (`NoSuchBranch`, nothing played). The second, with
   whole tree 1,167 files, none missing, extra, changed or with a mode change.
   Receipt `core/target/f009/compat-fix1.txt`. The diag volume is removed after
   the record lands.
-- **Still pending:** the recorded-merge replay and the old vs new table
-  (columns: merge statements, merge ms, lane hold, Commit p50/p95 for the same
-  range-14 calls, `58a60046`/`bd6fbeee` against the merge-commit build). They
-  run after the coordinator's range-14 rerun, before P3.
+- **Proof 4, recorded merges: passed.** See Proof 1 below.
+- **Old vs new: done.** See "Performance, old vs new"; merged at `9815dbc95`.
 
 ### Fix 2 · Narrow the publication lane
 
@@ -357,7 +355,20 @@ new table, not by a gate change.
      every time. `candidates` depends on the trees only through those names,
      so its candidate set, and the picks, conflicts and merged root that
      follow, are unchanged.
-   - **Recorded merges (pending):** the Store is Linux-only, so this waits for
+   - **Recorded merges (done, fixer, 2026-10-18).** Two diag forks of
+     `p2-main-f`'s range-14 snapshot (`f009-replay-old`, `f009-replay-new`).
+     `core/target/f009/replay-merges.mjs` lists every Branch (168), takes
+     every Commit with `via: merge` and a second parent (35: every
+     `branch.merge` in the Store's history, ranges 5–14), forks its two
+     recorded inputs (parent, or the base Layer when the left side was main,
+     and the second parent) and merges them again. With the old addon
+     `7b90b9fb` and with the new `438bae05`, all 35 are Merged (none
+     fast-forward, no conflicts) to exactly the recorded root. Receipts
+     `core/target/f009/replay-{old,new}.json`. Not covered: merge-at-publish
+     inside a Workspace Commit, whose `ours` root is a captured Workspace and
+     is not kept; its outcomes are covered by the old vs new plays below
+     (checkpoint ok on both, same outcomes classes) and by the synthetic oracle.
+     Earlier text, kept: the Store is Linux-only, so this waits for
      the Docker clear.
 2. **Bound test:** a merge of one changed file at depth 6, on trees of 1×, 10×
    and 100× the directory count: `merge.paths` directory listings equal across
@@ -377,20 +388,82 @@ new table, not by a gate change.
 
 ## Performance, old vs new
 
-Same snapshot fork, same cache state, one sample per case; each column
-labeled with its binaries. *pending*.
+Fix 1, fixer 2026-10-18. Same snapshot (`p2-main-e` range 13, forked twice:
+`f009-fix1-old`, `f009-fix1-new`), range 14 played measured once on each,
+back to back in the lead's quiet window (opened 05:55:18Z; builder quiet).
+Cache: each play starts from its own fresh fork, cold daemon, no warm-up.
 
-| Measure | Snapshot | Cache | Old (`58a60046`) | New | Change |
-| --- | --- | --- | --- | --- | --- |
-| `merge.paths` p50 / p95, by depth d3–d6 | | | | | |
-| merged fs.write p50 / p95 | | | | | |
-| unmerged fs.write overlapped by a merge, p50 / p95 | | | | | |
-| unmerged fs.write, isolated, p50 / p95 | | | | | |
-| fs.rm 1 file p50 / p95 | | | | | |
-| branch.merge p50 / p95 by entries | | | | | |
-| lane hold per Commit, merged / unmerged | | | | | |
-| in-lane merge ms per wall second | | | | | |
-| writer statements, vm_steps, fullscan_steps (isolated calls) | | | | | |
+- **Old:** daemon `a2926cf2` / addon `7b90b9fb`, built from `d85bfdf50`, which
+  has no product difference from `4402c698a` (the merge commit just before fix
+  1). It is the exact pre-fix-1 tree. `58a60046`/`bd6fbeee`, named earlier,
+  were not used: they predate F-020, so they cannot serve the in-process SDK
+  Store route the current runner and addon use. The lead accepted this.
+- **New:** daemon `57141b57` / addon `438bae05`, built from `9815dbc95`.
+- **Host load (1-min):** old play 05:55:34–05:56:22Z, 11.15 → 9.04; new play
+  05:56:22–05:56:49Z, 9.04 → 9.64. About 9.9 before the window came from work
+  outside the crew.
+- Both checkpoints ok; gate verdict watch on both. Play wall 30.4 s old,
+  9.7 s new.
+
+Table from `core/target/f009/fix1-table.mjs` over the two traces
+(`~/lfs-history/runs/f009-fix1-{old,new}/trace/range-014.a1.jsonl`). Commit-
+bearing calls are fs.write, fs.rm, fs.apply and sandbox.commit. Lane hold is
+the sum of the Commit's phases after `lane`: head, merge, logical.known,
+finish, logical.count, bindings, validate, publish. Uncontended uses
+`steps.mjs` `markContention`. No merging Commit is isolated: a merge happens
+because another Commit moved the head.
+
+| Measure | Old | New |
+| --- | --- | --- |
+| merge ms (in Commit) p50 / p95 | 49.46 / 166.81 (n 324) | 3.489 / 6.839 (n 249) |
+| merge.paths ms p50 / p95 | 63.875 / 164.989 (n 295) | 1.963 / 3.846 (n 222) |
+| merged Commit statements, isolated, p50 / p95 | — | — |
+| unmerged Commit statements, isolated, p50 / p95 | 451 / 1048 (n 145) | 451 / 1159 (n 145) |
+| branch.merge statements p50 / p95 | 413 / 11772 (n 9) | 245 / 12864 (n 9) |
+| branch.merge ms p50 / p95 | 13.023 / 364.409 (n 9) | 10.95 / 331.224 (n 9) |
+| lane hold merged ms p50 / p95 | 51.567 / 169.428 (n 324) | 6.259 / 11.607 (n 249) |
+| lane hold unmerged ms p50 / p95 | 2.881 / 5.669 (n 883) | 2.941 / 6.574 (n 956) |
+| merged Commit ms p50 / p95 | 242.174 / 486.803 (n 324) | 30.314 / 50.953 (n 249) |
+| unmerged Commit ms p50 / p95 | 17.071 / 294.321 (n 883) | 17.111 / 36.843 (n 956) |
+| uncontended Commit ms p50 / p95 | 8.813 / 14.745 (n 145) | 8.758 / 16.442 (n 145) |
+| fs.write ms p50 / p95 | 21.794 / 428.017 (n 982) | 18.966 / 42.117 (n 982) |
+| sandbox.commit ms p50 / p95 | 24.23 / 242.174 (n 144) | 15.251 / 33.045 (n 144) |
+| merged / all Commit-bearing calls | 324 / 1256 | 249 / 1256 |
+
+**Per branch.merge** (range-end lane merges into `r014-main`, then the five
+fork probes), `merge.paths` ms old → new:
+
+| Merge | Old | New |
+| --- | --- | --- |
+| r014-2-packages-ui | fast-forward | fast-forward |
+| r014-1-examples-acp-agent | 175.0 | 50.1 |
+| r014-3-docs-rfc | 172.3 | 118.7 |
+| r014-4-packages-core | 166.8 | 137.9 |
+| probe ×5, each | 3.35–3.82 | 1.16–1.21 |
+
+Reading:
+- The in-Commit merge, the cause of F-025, fell from 49.5 to 3.5 ms p50 and
+  from 166.8 to 6.8 ms p95. Merged-Commit lane hold fell from 51.6 to 6.3 ms
+  p50. Merged Commits fell from 242 to 30 ms p50; the contended tail of every
+  Commit followed (unmerged p95 294 → 37 ms, fs.write p95 428 → 42 ms,
+  sandbox.commit p95 242 → 33 ms).
+- Uncontended Commits and unmerged lane hold are unchanged within one sample
+  (8.8 / 8.8 ms p50; 2.9 / 2.9 ms), as expected: fix 1 only touches merges.
+  Unmerged Commit statements, isolated, are 451 p50 on both.
+- The three large lane merges still take 50–138 ms in `merge.paths`. They
+  merge each lane's whole range into `r014-main` in sequence, so the main
+  side carries one, then two, then three lanes' changes; the cost rises with
+  that change count (O(changed × depth)), as the bound allows. The
+  per-merge statement totals are about equal old and new (9,977 → 9,011,
+  10,915 → 11,071, 11,772 → 12,864): they are dominated by the merge's
+  other work, not by naming. Whether those three merges used the hints or
+  fell back to `locate` is not traced (`MergeOutcome.hinted` is not in the
+  trace); the 1.2–3.5× drop says the hints served at least part. Not a
+  finding on its own; noted for the lane-hold metric P3 adds (DEFER D-1's
+  trigger reads it).
+- Storage: sealed Store 48,803,840 B old, 48,656,384 B new (−0.30%). Same
+  input; the difference is Commit interleaving (fewer merged Commits, 324 →
+  249), not a format change.
 
 Counter exponents of `merge.paths` against tree directory count: before →
 after (*pending*). Storage: unchanged expected; stated after measuring.

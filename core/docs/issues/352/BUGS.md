@@ -212,6 +212,16 @@
   Owner 2026-10-18: one database, one writer, short holds is the design;
   fix 1 and fix 4 go ahead, fixes 2–3 are deferred; judged on the uncontended
   and contended series (SPEC §5).
+  **Fix 1 done** (`3dff9c5cb`, merged `9815dbc95`; daemon `57141b57`, addon
+  `438bae05`): changed inodes are named from the recorded bindings, not
+  by walking the tree. On the same range-14 input, measured once per arm:
+  - in-Commit merge p50 fell from 49.5 to 3.5 ms;
+  - merged-Commit lane hold p50 fell from 51.6 to 6.3 ms;
+  - merged-Commit p50 fell from 242 to 30 ms;
+  - fs.write p95 fell from 428 to 42 ms;
+  - the uncontended series is unchanged.
+  All 35 recorded `branch.merge`s replay to the root they recorded, on both
+  addons. Fix 4 is next.
 - **F-026 · a listing re-read the inode table per entry (product, 011.a1,
   2026-10-18).** `fs.list` looked each entry up separately from the inode
   table's root, so the cost per entry grew with the table (`list_largest`
