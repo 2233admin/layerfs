@@ -494,6 +494,27 @@ What a walk still costs: a run segment and a merge at a time over the local
 Commits no Layer has absorbed; a fork from a Commit, one step per run on the
 chain. Disk and memory as admitted are the only bounds.
 
+### C1 — merge (#355, 2026-10-18)
+
+A merge has no count limit. The in-memory build budget (65,536 topology
+entries) and `MAXIMUM_MERGE_PATHS` (262,144 decided paths), which refused a
+merge past them with `BoundedCapacityExceeded`, are deleted. The merge's
+working state lives in the global Store's merge scratch rows
+([81-compare-and-merge](81-compare-and-merge.md)):
+
+| Limit | Value | Enforced by |
+| --- | ---: | --- |
+| candidate / decided paths per merge | none | sorted runs in `merge_record` |
+| merge state held in memory before it spills | 8 MiB | `merge/spill.rs` `HELD_BYTES` |
+| run chunk / merge fan-in | 60 KiB / 16 runs | `CHUNK_BYTES`, `FAN_IN` |
+| record write-back buffer | 256 KiB | `storage/merge_records.rs` `BUFFER_BYTES` |
+| paths the in-lane Commit step merges | 1,024; more refuses the Commit `LaneMerge` | `LANE_MERGE_PATHS` |
+| written paths a conflicted Commit lists | 4,096, `truncated` when cut | `WRITTEN_PATHS` |
+
+The in-lane bound keeps the lane's work independent of the tree; it is a
+refusal of that Commit, never a partial merge. Disk as admitted is the only
+other bound.
+
 ### Service/Bridge — final file save (#252)
 
 | Limit | Value | Enforced by |

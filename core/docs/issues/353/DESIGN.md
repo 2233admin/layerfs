@@ -1,6 +1,7 @@
 # #353 — History walks without the 4,096 lineage cap
 
-> **Status:** Design note, 2026-10-18, written before code. Implements the owner
+> **Status:** Implemented in `45ba293b4` (2026-10-18); measured in
+> `0b6f5b35e`; results in §9. Written before code as a design note that implements the owner
 > decision on [#352 F-033](../352/BUGS.md): no history walk fails `Capacity` on
 > history or Commit counts, answers stay exact, and no work that grows with
 > history runs inside the publication lane
@@ -247,3 +248,34 @@ production lines.** Measured with `tools/production_loc.py --root` at commit.
 - Statements per publish and per merge at 1k / 4k / 40k are equal.
 - `history_ancestry_oracle` keeps matching a whole-history walk (tie rule above).
 - A Store written before the tables opens, migrates and answers like a fresh one.
+
+## 9. Implemented and measured (2026-10-18)
+
+| Commit | What | Production LOC |
+| --- | --- | --- |
+| `c863c337c` | this design note | 97,211 -> 97,211 (0) |
+| `45ba293b4` | lineage tables, walks and backfill; `MAXIMUM_LINEAGE_ROWS` deleted | 97,211 -> 97,600 (+389) |
+| `0b6f5b35e` | backfill and Store cost measured (§6) | 97,600 -> 97,600 (0) |
+
+The scope is core+sdk+dsh production (`tools/production_loc.py --root`). The
+estimate in §7 was +350 to +700. Deleted tests: none; no test asserted the
+4,096 refusal.
+
+**Tests at `16a19429a`** (macOS, debug, each command ≤120 s):
+- `scale_lineage_cap.rs`, 3 tests (4,097 and 10× cases): pass, 23.8 s.
+- `history_ancestry_oracle`: pass, 8.4 s.
+- `lineage_backfill`: pass.
+
+`lineage_backfill_measure` is ignored (it needs a replay Store); its one
+sample is in §6.
+
+**Merges.** Branch merges and Commit merges use these walks for
+`merge_base`. The merge itself at scale, and its own caps, are #355
+([fix notes](../355/FIX_NOTES.md)).
+
+**Gaps.**
+- Linux proofs are not run.
+- The range-90 replay integration obligation needs the replay branch.
+- The one-off backfill hold extrapolates to 2 s near 72,000 Commits (§6).
+  That is left to an owner decision.
+

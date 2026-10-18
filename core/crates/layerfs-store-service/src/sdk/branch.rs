@@ -467,28 +467,30 @@ pub fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
             .map_or(stack.head_layer, |b| b.base_layer),
     };
     let message = args.get_text("message").map(str::to_owned);
-    let snapshot = catalog
-        .merge_branch(&request(MergeHead::Commit(Box::new(MergeCommit {
-            base,
-            parent: match ln {
-                NodeId::Commit(id) => Some(id),
-                NodeId::Layer(_) => None,
+    let publish = request(MergeHead::Commit(Box::new(MergeCommit {
+        base,
+        parent: match ln {
+            NodeId::Commit(id) => Some(id),
+            NodeId::Layer(_) => None,
+        },
+        second_parent: rn,
+        root: merged.root.0,
+        meta: CommitMeta {
+            message: Some(message.unwrap_or_else(|| format!("Merge {left} and {right}"))),
+            lww: merged.lww.clone(),
+            statistics: layerfs_history::CommitStatistics {
+                logical,
+                new_canonical: saved.canonical_bytes,
+                new_stored: saved.stored_bytes,
+                new_metadata: saved.metadata_bytes,
             },
-            second_parent: rn,
-            root: merged.root.0,
-            meta: CommitMeta {
-                message: Some(message.unwrap_or_else(|| format!("Merge {left} and {right}"))),
-                lww: merged.lww.clone(),
-                statistics: layerfs_history::CommitStatistics {
-                    logical,
-                    new_canonical: saved.canonical_bytes,
-                    new_stored: saved.stored_bytes,
-                    new_metadata: saved.metadata_bytes,
-                },
-                ..CommitMeta::new(CommitVia::Merge)
-            },
-        }))))
-        .map_err(history)?;
+            ..CommitMeta::new(CommitVia::Merge)
+        },
+    })));
+    // The merge's one publish write, timed on its own: its writer hold.
+    let snapshot =
+        crate::telemetry::timed("branch.merge.publish", |_| catalog.merge_branch(&publish))
+            .map_err(history)?;
     Ok(SdkValue::map([
         ("kind", SdkValue::text("Merged")),
         ("fastForward", SdkValue::Bool(false)),

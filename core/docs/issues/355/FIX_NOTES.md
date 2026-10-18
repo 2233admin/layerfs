@@ -5,6 +5,34 @@
 > 2026-10-18 govern. Measured figures are added with their receipts; nothing
 > here is a measurement until it says so.
 
+## Summary of decisions and commits (2026-10-18)
+
+| Step | Commit | Decision | Production LOC |
+| --- | --- | --- | --- |
+| (a) A3 shown | `418819bd4` | a 70,000-file move was refused (`ordering backing`) past the in-memory build budget | 97,600 -> 97,600 (0)¹ |
+| (b) Store scratch table | `e4c74f7c3` | merge state lives in the global Store's `merge_operation` / `merge_record` rows, owner-checked; no second database | 88,102 -> 88,851 (+749) |
+| (b) Two-stage Commit merge | `e4c74f7c3` | heavy merge before the lane; inside it, only what landed since, bounded by `LANE_MERGE_PATHS` (1,024) | (same commit) |
+| (c) Lane holds only the publish | `d472edef8` | Save finish, counts and hints move before the lane | 88,851 -> 88,882 (+31) |
+| (c) Smaller-side building | — | dropped (owner): stage 1 names from ours and builds on theirs, so results stay identical | — |
+| Batching | `b7d79b001` | record jobs go through a 256 KiB write-back buffer and windowed reads | 88,882 -> 88,972 (+90) |
+| (e) F-041 | `d2fda2593` | a truthful `truncated` flag on a bounded list (not paging) | 88,972 -> 88,971 (−1) |
+| (d) No path cap | `16a19429a` | sorted runs, a 16-way stream, ancestor stacks; 8 MiB held, then records | 88,971 -> 90,391 (+1,420) |
+| #360 analysis | `40a713349` | strict `same_value` kept; proof stated for integration | 90,391 -> 90,391 (0) |
+| Records and publish timing | this commit | `branch.merge.publish` timed; docs, receipts | see commit |
+
+¹ Scope core+sdk+dsh; from `e4c74f7c3` on, core only (the pinned counter's
+scope). The scopes are not comparable.
+
+Deleted tests: none in any step.
+
+**Where the brief was silent** (owner rule: results identical, lane work
+independent of tree size, least new code, no cap):
+- The written-path list stays bounded with a flag, not paged.
+- `HELD_BYTES` is a constant 8 MiB, not tuned.
+- The in-lane step keeps the resident route, bounded by `LANE_MERGE_PATHS`.
+- The publish hold is measured by a timing phase, not a new counter in
+  persistence.
+
 ## (a) A3 shown (`418819bd4`)
 
 `tests/sdk_merge_scale.rs` moved a directory of 70,000 empty files on one
@@ -284,19 +312,78 @@ the timed test stays under 120 s. Built at the uncommitted (d) tree on
 Pre-(d) refuses the 135k case at the cap. The 135k merge's root is
 `176c8969…b3`.
 
-**Not yet shown.** The quiet-window comparisons are pending:
-- peak memory at 35k against 135k;
-- batching old (`d472edef8`) against new (`d2fda2593`) on the 100k case.
+## Old vs new, and (d) at 70k and 270k paths (diagnostic, 2026-10-18)
+
+One sample per arm, run back to back. There are no go windows any more (root
+AGENTS.md §4). These are diagnostics, not gate receipts: macOS host,
+Disposable, release test binaries, `LAYERFS_CONSTRUCTION_WORKERS=1`. Receipts
+are in [receipts/](receipts/): binary sha256, load and peak memory.
+
+- **Declared interference.** 1-minute load before each arm: 7.34, 6.72, 6.95,
+  5.01 and 5.40. No other worktree's cargo, rustc or test process was above
+  1% CPU at any arm's start. #354 and the #359/#360 RCA agent were active in
+  other worktrees during the session.
+- **Fixtures (AGENTS §2).** `prepare_a3_fixtures` built
+  `a3-100000.sqlite` once: 47,800,320 B, sha256 `3692e875…5be0`, 27.8 s. It
+  keeps an existing fixture, so the 35k and 135k ones above are unchanged.
+- **Same input.** Every arm merged an independent copy of the same fixture.
+  The old and new binaries are their commits' product with this branch's
+  `sdk_merge_scale.rs` and test support copied in (test code only).
+- **Measures.** "History writes" are the writer transactions other than the
+  merge records' own: binding hints, serial reservations and the publish. The
+  publish's own write is timed as `branch.merge.publish`, added for this
+  measurement; it is the merge's only hold of the history writer.
+
+**Batching: the 100,000-move A3 merge (about 200k candidate paths).**
+
+| | Old `d472edef8` | New `d2fda2593` | (d) `16a19429a` |
+| --- | ---: | ---: | ---: |
+| SDK merge | 37.28 s | 30.47 s | 49.06 s |
+| Time per moved file | 0.373 ms | 0.305 ms | 0.491 ms |
+| Record read statements | 1,206,308 | 228,312 | 277,321 |
+| Record write transactions | 104,824 | 1,692 | 1,776 |
+| Record writer hold, total / longest | 4.58 s / 33.5 ms | 1.20 s / 13.4 ms | 5.31 s / 150.8 ms |
+| History writes (count / total hold) | 30 / 1.02 s | 30 / 0.98 s | 30 / 1.08 s |
+| Session statements | 2,676,603 | 790,750 | 889,635 |
+| Peak RSS | 366.1 MB | 366.2 MB | 134.7 MB |
+| Merged root | `1462f053…44c3` | `1462f053…44c3` | `1462f053…44c3` |
+
+Batching cuts the time by 18%, write transactions by 98% and the total record
+hold by 74%, and the root is the same in all three arms. (d) costs 61% more
+time than batching alone, in exchange for 63% less peak memory and no cap.
+The longest record hold grows from 13 ms to 151 ms: still 13× inside the 2 s
+admission window, but larger. The likely cause is that spilled chunks make
+each 256 KiB flush touch more pages against the 2 MiB page cache; a WAL
+auto-checkpoint may also land in one flush. Neither cause is verified.
+
+**(d): memory flat from 70k to 270k candidate paths.**
+
+| Moved files (candidate paths) | 35,000 (~70k) | 135,000 (~270k, past the former cap) |
+| --- | ---: | ---: |
+| SDK merge | 10.84 s | 66.32 s |
+| Time per moved file | 0.310 ms | 0.491 ms |
+| Peak RSS (whole process) | 140.2 MB | 134.9 MB |
+| Publish write (`branch.merge.publish`), the merge's lane hold | 0.82 ms | 1.16 ms |
+| Record write transactions; total / longest hold | 597; 0.45 s / 8.8 ms | 2,418; 7.68 s / 169.3 ms |
+| History writes (count / total hold) | 14 / 0.34 s | 38 / 1.38 s |
+| Merged root | `e6cd2050…33d4dd` (same as pre-(d)) | `176c8969…79b3` |
+
+Pre-(d) refuses the 135k case at the cap. Memory does not grow with the
+paths. The publish hold stays about 1 ms, and nothing tree-sized runs inside
+it.
+
+Most history writes are binding hints in transactions of at most 4,096 rows.
+They are written before the publish, not inside it.
 
 **Gaps.**
 - The conflict and `.lww` lists stay resident. They grow with conflicts, not
   with paths.
 - Compare's per-directory listing and `locate`'s queue stay resident.
 - The in-lane step's resident route is not checked by an oracle.
-- Time grows faster than linearly: 135k moves take 6× the 35k time for 3.9×
-  the files. The Store's 2 MiB page cache churns under spill traffic.
-- The longest writer hold at 135k is 168 ms, a 256 KiB flush. It is inside
-  the 2 s admission window but larger than at 35k.
+- Time per moved file grows once the state outgrows the 8 MiB held layer:
+  0.31 ms at 35k, 0.49 ms at 100k and 135k. `HELD_BYTES` was not tuned to the
+  fixtures (no benchmark fitting); a larger constant budget is an owner choice.
+- The longest record hold at 270k paths is 169 ms (see above).
 - Linux proofs are not run.
 
 ## #360 mixed metadata forms and the merge's serial reuse (analysis, no change)
