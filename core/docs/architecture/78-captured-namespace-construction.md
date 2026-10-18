@@ -148,7 +148,11 @@ takes a Workspace, a provider, a `CapturedReader` and an `OperationOwner`.
    constructed for it. Base records come from one grouped lookup per page.
    - File content: the existing `CapturedFileEdits` under its own record scope
      (`file_scope = serial`), one file at a time. It returns the base root when
-     the content is unchanged.
+     the content is unchanged. A fresh file has no base. It takes
+     `CapturedFileEdits::construct_new`: the same binding, which must find no
+     base file, then Content's run construction straight over the captured
+     runs. No normalized-edit or context record is written, because its one
+     edit, an insert of the whole file, is never read (issue #352 record 033 F2).
    - Fresh symlink: `captured_symlink`, then Content's symlink object. A stored
      symlink keeps its base content root.
    - Metadata: mode and mtime in Content's portable grammar, under the keys

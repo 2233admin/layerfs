@@ -182,6 +182,9 @@ impl<P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> IndexedEditSourc
 pub(super) struct Complete<'s, 'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> {
     pub input: Input<'s, 'a, P>,
     pub position: u64,
+    /// Whether the runs follow a sealed context record, checked again before
+    /// the stream ends. A base-less file on the direct route has none.
+    pub sealed: bool,
 }
 impl<P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> FileRuns for Complete<'_, '_, P> {
     fn read_run(&mut self, output: &mut [u8]) -> ContentResult<FileRun> {
@@ -189,7 +192,9 @@ impl<P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> FileRuns for Com
         // checked again before the stream may end, so no file completes over
         // a context that changed underneath it.
         if self.position == self.input.facts.final_size {
-            context::verify(self.input.shared, self.input.context)?;
+            if self.sealed {
+                context::verify(self.input.shared, self.input.context)?;
+            }
             return Ok(FileRun::End);
         }
         let run = self.input.run(
