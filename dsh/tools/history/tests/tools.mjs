@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { blockify, due, manifestOf, manifestPath, newManifestPath, orphans, pageSizeOf, rebuild, verify } from "../snapshot.mjs";
 import { parseIds, ROLES, storeFigures, trend } from "../inspect.mjs";
 import { chooseRun, compareResults, packageOf, parseVitestJson, selectTests, vitestCommand } from "../unit-tests.mjs";
-import { dockerArgs, FETCH, INSTALL, noInstall, parseProbe } from "../calibrate-tests.mjs";
+import { dockerArgs, FETCH, INSTALL, nextSlice, noInstall, parseProbe } from "../calibrate-tests.mjs";
 import { evaluate } from "../gates.mjs";
 import { change, checkFinding, checkRebuild, checkRecord, checkRecords, loadFindings } from "../findings.mjs";
 import { renderOptimization } from "../report.mjs";
@@ -183,6 +183,18 @@ test("LayerFS's test results are compared file by file with the native ones", ()
   assert.deepEqual([...results], [["x.spec.ts", "pass"], ["y.spec.ts", "fail"]]);
   assert.deepEqual(compareResults(["x.spec.ts", "y.spec.ts", "z.spec.ts"], results), { run: 3, equal: 1, differ: [
     { path: "y.spec.ts", native: "pass", layerfs: "fail" }, { path: "z.spec.ts", native: "pass", layerfs: "missing" }] });
+});
+
+test("calibration probes a large range across bounded commands", () => {
+  const files = ["a", "b", "c", "d", "e"];
+  assert.deepEqual(nextSlice(files, null, "c1", 0), { kept: [], todo: files, left: 0 }, "no limit: the whole range at once");
+  const first = nextSlice(files, null, "c1", 2);
+  assert.deepEqual([first.todo, first.left], [["a", "b"], 3]);
+  const partial = { checkpoint: "c1", native: [{ path: "a" }, { path: "b" }] };
+  const second = nextSlice(files, partial, "c1", 2);
+  assert.deepEqual([second.kept.length, second.todo, second.left], [2, ["c", "d"], 1]);
+  assert.deepEqual(nextSlice(files, { ...partial, native: [...partial.native, { path: "c" }, { path: "d" }] }, "c1", 2).todo, ["e"]);
+  assert.deepEqual(nextSlice(files, partial, "c2", 2).kept, [], "another checkpoint's partial results are not kept");
 });
 
 test("calibration runs offline in the runtime image", () => {
