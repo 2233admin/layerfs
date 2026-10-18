@@ -356,6 +356,17 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   setup (forks, fixture writes, the stats that size its input) runs untimed
   under `probe-setup:<name>`; only the probed call is timed and counted under
   `probe:<name>`. `report.mjs regate --metrics <dir>` is the gates' dry run.
+- **Phase-matched speed baselines** (lead decision 2026-10-18). From P2 on,
+  the speed baseline is the pilot's ranges 2–4 replayed with the current
+  phase's player on the current binaries: `run.mjs rebaseline --phase p2
+  --daemon <file> [--addon <file>]` forks the newest pilot range-1 snapshot
+  (`p1-rebase-d`, else `p1-pilot-b`), moves the fork to the phase, plays
+  ranges 2–4 measured (label `baseline`) and writes
+  `baseline-<daemon12>-<addon12>-<phase>.json`. An attempt from P2 on is
+  compared only with the baseline of its own daemon, addon and phase; with
+  none, Speed is not judged. `new` and `fork` take `--addon <file>`; the
+  manifest records both binaries and the guard checks both before every range,
+  measured or fast.
 - **A speed baseline per daemon.** `baseline.json` stays the pilot's
   (`511dceed`, `p1-pilot-b` ranges 2–4). A later daemon gets its own
   `baseline-<daemon12>.json` beside it, built by `report.mjs baseline --run

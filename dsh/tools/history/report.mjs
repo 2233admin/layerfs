@@ -160,13 +160,30 @@ export function leadNote(old) {
 export function loadBaselines(metricsDir, pilot = null) {
   const out = new Map(pilot ? [[pilot.daemon ?? null, pilot]] : []);
   if (!existsSync(metricsDir)) return out;
-  for (const f of readdirSync(metricsDir).filter((f) => /^baseline-[0-9a-f]{12}\.json$/.test(f))) {
+  for (const f of readdirSync(metricsDir).filter((f) => /^baseline-[0-9a-f]{12}(-[0-9a-f]{12}-p\d)?\.json$/.test(f))) {
     const b = JSON.parse(readFileSync(join(metricsDir, f), "utf8"));
-    if (!b.daemon || f !== `baseline-${b.daemon.slice(0, 12)}.json`) throw new Error(`${f} is not named by its daemon ${b.daemon}`);
-    if (out.has(b.daemon)) throw new Error(`two baselines for daemon ${b.daemon.slice(0, 12)}`);
-    out.set(b.daemon, b);
+    if (!b.daemon || f !== baselineName(b)) throw new Error(`${f} is not named by its daemon, addon and phase (${baselineName(b)})`);
+    const key = baselineKey(b);
+    if (out.has(key)) throw new Error(`two baselines for ${key}`);
+    out.set(key, b);
   }
   return out;
+}
+
+/** A baseline's file name: by daemon (P1, before phase matching), or by daemon, addon and phase. */
+export const baselineName = (b) => `baseline-${b.daemon.slice(0, 12)}${b.phase ? `-${String(b.sdk).slice(0, 12)}-${b.phase}` : ""}.json`;
+const baselineKey = (b) => (b.phase ? `${b.daemon}|${b.sdk}|${b.phase}` : b.daemon ?? null);
+
+/**
+ * The speed baseline of an attempt (never a mix): the phase-matched one for its
+ * daemon, addon and phase; for P1 only, a P1 daemon baseline (by daemon) or the
+ * pilot's. From P2 on, no phase-matched baseline means none (Speed not judged).
+ */
+export function baselineFor(baselines, m, pilot = null) {
+  const exact = baselines.get(`${m.binary?.daemon}|${m.binary?.sdk}|${m.phase}`);
+  if (exact) return exact;
+  if (m.phase && m.phase !== "p1") return null;
+  return baselines.get(m.binary?.daemon ?? null) ?? pilot;
 }
 
 /**
@@ -175,14 +192,16 @@ export function loadBaselines(metricsDir, pilot = null) {
  * <out>/baseline-<daemon12>.json. Refuses unmeasured attempts, a mix of
  * daemons, a missing range and a daemon that has a baseline (one series per binary, F2).
  */
-export function writeBaseline({ metricsDir, ranges, out, run }) {
+export function writeBaseline({ metricsDir, ranges, out, run, phase = null }) {
   const attempts = loadAttempts(metricsDir);
   const ms = ranges.map((k) => { const m = attempts.get(k)?.at(-1); if (!m) throw new Error(`no attempt of range ${k} in ${metricsDir}`); return m; });
   if (ms.some((m) => m.mode !== "measured")) throw new Error("a baseline takes measured attempts only");
-  const b = { ...buildBaseline(ms), run, source: metricsDir, built: new Date().toISOString() };
+  const sdks = new Set(ms.map((m) => m.binary?.sdk)), phases = new Set(ms.map((m) => m.phase));
+  if (phase && (sdks.size > 1 || phases.size > 1 || !phases.has(phase))) throw new Error(`a ${phase} baseline mixes addons (${[...sdks].join(", ")}) or phases (${[...phases].join(", ")})`);
+  const b = { ...buildBaseline(ms), ...(phase ? { sdk: [...sdks][0], phase } : {}), run, source: metricsDir, built: new Date().toISOString() };
   const pilot = join(out, "baseline.json");
-  if (loadBaselines(out, existsSync(pilot) ? JSON.parse(readFileSync(pilot, "utf8")) : null).has(b.daemon)) throw new Error(`daemon ${b.daemon.slice(0, 12)} already has a baseline in ${out}`);
-  const file = join(out, `baseline-${b.daemon.slice(0, 12)}.json`);
+  if (loadBaselines(out, existsSync(pilot) ? JSON.parse(readFileSync(pilot, "utf8")) : null).has(baselineKey(b))) throw new Error(`${baselineKey(b)} already has a baseline in ${out}`);
+  const file = join(out, baselineName(b));
   writeFileSync(file, JSON.stringify(b, null, 1));
   return { file, baseline: b };
 }
@@ -409,7 +428,7 @@ export function regate({ metricsDir, oracleDir, baselinesDir = metricsDir }) {
   const baselines = loadBaselines(baselinesDir, pilot);
   const seeds = loadSeeds(metricsDir).map((p) => withInputs(p, oracleDir));
   return last.map((m) => {
-    const g = evaluate(m, last.filter((x) => x.range < m.range), m.range < 5 ? null : baselines.get(m.binary?.daemon ?? null) ?? pilot, undefined, seeds);
+    const g = evaluate(m, last.filter((x) => x.range < m.range), m.range < 5 ? null : baselineFor(baselines, m, pilot), undefined, seeds);
     const rank = { pass: 0, watch: 1, optimize: 2, stop: 3 };
     const worst = g.checks.reduce((w, c) => (rank[c.result] > rank[w.result] ? c : w), { name: "—", result: "pass", value: "" });
     return { range: m.range, attempt: m.attempt, run: m.run, daemon: String(m.binary?.daemon ?? "?").slice(0, 8), stored: m.gate?.verdict ?? "—", verdict: g.verdict,
@@ -431,7 +450,7 @@ export function reportRange({ metricsDir, planDir, docs, oracleDir, range }) {
   const pilotBaseline = existsSync(baselineFile) ? JSON.parse(readFileSync(baselineFile, "utf8"))
     : pilot.length === 5 && pilotOwn.length >= MINIMUM_POINTS ? buildBaseline(pilotOwn) : null;
   const baselines = loadBaselines(metricsDir, pilotBaseline);
-  const baselineOf = (m) => baselines.get(m.binary?.daemon ?? null) ?? pilotBaseline;
+  const baselineOf = (m) => baselineFor(baselines, m, pilotBaseline);
   const baseline = baselineOf(xs.at(-1));
   const seeds = loadSeeds(metricsDir).map((p) => withInputs(p, oracleDir));
   if (pilotBaseline && !existsSync(baselineFile)) writeFileSync(baselineFile, JSON.stringify(pilotBaseline, null, 1));

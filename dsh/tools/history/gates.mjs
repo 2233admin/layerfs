@@ -275,7 +275,9 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   add("Health", `${h.workspacesOpen ?? "?"} open, ${h.overlaysLeft ?? "?"} overlays${grow.length ? `; rising: ${grow.join(", ")}` : ""}`, "0, 0, flat",
     leaked ? "stop" : grow.length ? "optimize" : "pass");
   // Speed: worst ratio to the baseline per op and class; act only when it also keeps rising.
-  if (baseline && (baseline.daemon ?? null) !== (m.binary?.daemon ?? null)) {
+  if (baseline && ((baseline.phase && (baseline.phase !== m.phase || baseline.sdk !== m.binary?.sdk)))) {
+    add("Speed", `baseline measured in ${baseline.phase} with addon ${String(baseline.sdk).slice(0, 12)}, not this attempt's; not judged`, `≤ ${t.speed.watch}×`, "watch");
+  } else if (baseline && (baseline.daemon ?? null) !== (m.binary?.daemon ?? null)) {
     add("Speed", `baseline measured with daemon ${(baseline.daemon ?? "unknown").slice(0, 12)}; ${insufficient(0)}`, `≤ ${t.speed.watch}×`, "watch");
   } else if (baseline) {
     let worstRow = null;

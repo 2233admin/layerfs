@@ -2,7 +2,11 @@
 // The headless player of the history replay (#352 SPEC §2, §3, §7; SCRIPTS.md §1):
 //   node dsh/tools/history/run.mjs new  --run <id> --phase p1 [--label measured|baseline|dev|control] [--policy default|control] [--daemon <path>]
 //   node dsh/tools/history/run.mjs play --run <id> --from N --to M [--mode measured|fast]
-//   node dsh/tools/history/run.mjs fork --run <new id> --from-run <id> --range N [--label …] [--daemon <path>]
+//   node dsh/tools/history/run.mjs fork --run <new id> --from-run <id> --range N [--label …] [--daemon <path>] [--addon <path>]
+//   node dsh/tools/history/run.mjs rebaseline --phase p2 --daemon <path> [--addon <path>] [--from-run <id>] [--run <id>]
+// --addon pins the SDK addon file the same way (default: sdk/js/native, or the
+// source run's for `fork`); the manifest records both binaries' SHA-256 and the
+// binary guard checks both before every range, measured or fast.
 // --daemon pins the run to that daemon file (default: the release build for
 // `new`, the source run's for `fork`); a fork onto a newer daemon is a kind 1
 // or 2 continuation (REBUILD.md). A `baseline` run re-measures ranges under a
@@ -48,7 +52,7 @@ import { aggregate } from "./gates.mjs";
 import { PLAN_VERSION } from "./plan.mjs";
 import {
   binaries, closure, consolidate, HISTORY, Mismatch, probeFixture, probes, readTrace, REPO, Run,
-  sandboxHealth, step, teardown, verify, versionStats, writeJson,
+  sandboxHealth, sha256, step, teardown, verify, versionStats, writeJson,
 } from "./lib.mjs";
 import { addDelta, checkpointDiff, deltaSummary, diskGuard, EXIT, nextPhase, pad, PHASES, phaseOps, Tree } from "./steps.mjs";
 import { consolidateLanes, playAgents, pool, startRange } from "./agents.mjs";
@@ -58,6 +62,7 @@ import { area } from "./plan-range.mjs";
 const here = new URL(".", import.meta.url).pathname;
 const IMAGE = "sha256:d3773b4eac6a7a644887b17e36956cd1553786d47103f0170a3bb2b0ff6988de";
 const DAEMON = join(REPO, "core/target/cluster2-linux/release/layerfs-daemon");
+const ADDON = join(REPO, "sdk/js/native/layerfs.node");
 /** SPEC §8's control arm: the old depths. */
 export const POLICIES = { default: null, control: { smallFileThreshold: 131072, wholeFileDepth: 8, chunkDepth: 4 } };
 /** The depth cap per role of a run's Store policy (the defaults of SPEC §8, or its override). */
@@ -184,7 +189,7 @@ export function nextAttempt(metrics, k) {
   return 1 + Math.max(0, ...readdirSync(metrics).map((f) => Number(re.exec(f)?.[1] ?? 0)));
 }
 
-function create({ id, phase, label, policy, image, daemon, source }) {
+function create({ id, phase, label, policy, image, daemon, addon = ADDON, source }) {
   if (!RUN_ID.test(id)) throw new Error(`run id ${id}: lowercase letters, digits and -`);
   if (!PHASES[phase]) throw new Error(`phase ${phase} has no player yet (built: ${Object.keys(PHASES).join(", ")})`);
   const dir = join(HISTORY, "runs", id);
@@ -193,7 +198,7 @@ function create({ id, phase, label, policy, image, daemon, source }) {
   const host = docker(["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"]);
   const env = {
     LAYERFS_HOME: join(dir, "home"), LAYERFS_DOCKER: host.replace(/^unix:\/\//, ""), LAYERFS_IMAGE: image, LAYERFS_VOLUME: volume,
-    LAYERFS_DAEMON: daemon, LAYERFS_NATIVE: join(REPO, "sdk/js/native/layerfs.node"), LAYERFS_CONTAINER_PREFIX: `layerfs-issue352-${id}-`,
+    LAYERFS_DAEMON: daemon, LAYERFS_NATIVE: addon, LAYERFS_CONTAINER_PREFIX: `layerfs-issue352-${id}-`,
     LAYERFS_CONSTRUCTION_WORKERS: "1",
   };
   return { dir, volume, env, manifest: {
@@ -204,7 +209,7 @@ function create({ id, phase, label, policy, image, daemon, source }) {
 }
 
 async function cmdNew(o) {
-  const { dir, volume, env, manifest } = create({ id: o.run, phase: o.phase ?? "p1", label: o.label ?? "measured", policy: o.policy ?? "default", image: o.image ?? IMAGE, daemon: resolve(o.daemon ?? DAEMON) });
+  const { dir, volume, env, manifest } = create({ id: o.run, phase: o.phase ?? "p1", label: o.label ?? "measured", policy: o.policy ?? "default", image: o.image ?? IMAGE, daemon: resolve(o.daemon ?? DAEMON), addon: resolve(o.addon ?? ADDON) });
   const summary = JSON.parse(readFileSync(join(manifest.plan, "plan.json"), "utf8"));
   if (summary.version !== PLAN_VERSION) throw new Error(`the plan is v${summary.version}; regenerate it as v${PLAN_VERSION}`);
   manifest.binary = binaries(env);
@@ -523,13 +528,44 @@ function cmdPhase(o) {
   return EXIT.done;
 }
 
+/** The pilot lines a phase-matched re-baseline forks from, newest format first (their range-1 snapshot). */
+export const REBASELINE_SOURCES = ["p1-rebase-d", "p1-pilot-b"];
+
+/**
+ * A phase-matched speed baseline (lead decision, 2026-10-18): the pilot's
+ * ranges 2-4 replayed with `phase`'s player on the given daemon and addon. It
+ * forks the newest pilot range-1 snapshot (REBASELINE_SOURCES, or --from-run),
+ * moves the fork to the phase, plays ranges 2-4 measured (label baseline,
+ * its own folders), and writes baseline-<daemon12>-<addon12>-<phase>.json
+ * beside the others. A range that does not pass or watch stops it; no baseline.
+ */
+async function cmdRebaseline(o) {
+  if (!o.phase || !o.daemon) return usage();
+  const daemon = resolve(o.daemon), addon = resolve(o.addon ?? ADDON);
+  const from = o["from-run"] ?? REBASELINE_SOURCES.find((r) => existsSync(join(HISTORY, "runs", r, "run.json"))
+    && existsSync(manifestPath(new Run(join(HISTORY, "runs", r)).manifest.outputs.snapshots, 1, r)));
+  if (!from) { console.error(`no pilot range-1 snapshot in ${REBASELINE_SOURCES.join(", ")}`); return EXIT.usage; }
+  const id = o.run ?? `rb-${o.phase}-${sha256(daemon).slice(0, 8)}-${sha256(addon).slice(0, 8)}`;
+  await cmdFork({ run: id, "from-run": from, range: 1, label: "baseline", daemon, addon });
+  const run = new Run(join(HISTORY, "runs", id));
+  if (run.manifest.phase !== o.phase && cmdPhase({ run: id, phase: o.phase }) !== EXIT.done) return EXIT.usage;
+  const code = await cmdPlay({ run: id, from: 2, to: 4, mode: "measured" });
+  const played = new Run(join(HISTORY, "runs", id)).state.next;
+  if (code !== EXIT.done || played !== 5) { console.error(`rebaseline ${id}: stopped at range ${played} (exit ${code}); no baseline written`); return code === EXIT.done ? EXIT.stop : code; }
+  const { writeBaseline } = await import("./report.mjs");
+  const r = writeBaseline({ metricsDir: run.manifest.outputs.metrics, ranges: [2, 3, 4], out: join(HISTORY, "metrics"), run: id, phase: o.phase });
+  run.note({ kind: "baseline", name: r.file, phase: o.phase, from: { run: from, range: 1 } });
+  console.log(JSON.stringify({ run: id, from, phase: o.phase, file: r.file, ops: Object.keys(r.baseline.ops).length }));
+  return EXIT.done;
+}
+
 /** A new run from run `from`'s snapshot of range N (SPEC §7, Forking): its file rebuilt into a new volume and home. */
 async function cmdFork(o) {
   const source = new Run(join(HISTORY, "runs", o["from-run"]));
   const k = Number(o.range);
   const manifest = JSON.parse(readFileSync(manifestPath(source.manifest.outputs.snapshots, k, source.manifest.run), "utf8"));
   if (!manifest.state) throw new Error(`snapshot ${k} carries no runner state`);
-  const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), source: { run: source.manifest.run, range: k } });
+  const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), addon: resolve(o.addon ?? source.manifest.env.LAYERFS_NATIVE ?? ADDON), source: { run: source.manifest.run, range: k } });
   runManifest.binary = binaries(env);
   runManifest.planVersion = source.manifest.planVersion;
   mkdirSync(dir, { recursive: true });
@@ -592,7 +628,7 @@ async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const o = options(rest);
   if (!o.run) process.exit(usage());
-  const code = cmd === "new" ? (await cmdNew(o), EXIT.done) : cmd === "play" ? await cmdPlay(o) : cmd === "phase" ? cmdPhase(o) : cmd === "fork" ? (await cmdFork(o), EXIT.done) : cmd === "cleanup" ? await cmdCleanup(o) : usage();
+  const code = cmd === "new" ? (await cmdNew(o), EXIT.done) : cmd === "play" ? await cmdPlay(o) : cmd === "phase" ? cmdPhase(o) : cmd === "fork" ? (await cmdFork(o), EXIT.done) : cmd === "cleanup" ? await cmdCleanup(o) : cmd === "rebaseline" ? await cmdRebaseline(o) : usage();
   process.exit(code);
 }
 

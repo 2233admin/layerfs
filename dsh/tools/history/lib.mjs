@@ -30,7 +30,7 @@ export const REPO = resolve(here, "../../..");
 export const HISTORY = process.env.LFS_HISTORY ?? join(process.env.HOME, "lfs-history");
 export class Mismatch extends Error {}
 
-const sha256 = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
+export const sha256 = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
 const readJson = (file) => JSON.parse(readFileSync(file, "utf8"));
 export function writeJson(file, value) {
   mkdirSync(dirname(file), { recursive: true });

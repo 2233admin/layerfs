@@ -14,7 +14,7 @@ import { aggregate, evaluate, probeSeries } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
 import { parseReport } from "../frozen.mjs";
-import { leadNote, loadBaselines, probeSetupCommits, regate, writeBaseline } from "../report.mjs";
+import { baselineFor, leadNote, loadBaselines, probeSetupCommits, regate, writeBaseline } from "../report.mjs";
 import { atHead } from "../frozen.mjs";
 import { laneChanges, mergedTree } from "../agents.mjs";
 import { measure, record } from "../lib.mjs";
@@ -503,4 +503,27 @@ test("F-016: chain-reading probes are judged as a bound over a delta-cap period,
   // too few points to see a period
   const few = rows(series((i) => cyc[i], 5));
   for (const r of few) { assert.equal(r.result, "watch"); assert.match(r.value, /not judged: list_small.*of 9 points/); }
+});
+
+test("phase-matched baselines: chosen by daemon, addon and phase; P2 never falls back to a P1 baseline", () => {
+  const d = mkdtempSync(join(tmpdir(), "pbase-")), run = join(d, "run"), main = join(d, "main");
+  mkdirSync(run); mkdirSync(main);
+  const D = "c25119ac".padEnd(64, "c"), S = "5baa0f5d".padEnd(64, "5"), S0 = "3da0f665".padEnd(64, "3");
+  const m = (range, phase, sdk = S) => ({ range, attempt: 1, mode: "measured", phase, binary: { daemon: D, sdk }, ops: [{ op: "fs.read", sizeClass: "≤8 KiB", p50: range, p95: 2 * range }], probes: {} });
+  for (const k of [2, 3, 4]) writeFileSync(join(run, `range-00${k}.a1.json`), JSON.stringify(m(k, "p2")));
+  writeFileSync(join(main, `baseline-${D.slice(0, 12)}.json`), JSON.stringify({ daemon: D, ranges: [2, 3, 4], ops: {}, probes: {} }));
+  const { file } = writeBaseline({ metricsDir: run, ranges: [2, 3, 4], out: main, run: "rb", phase: "p2" });
+  assert.equal(file, join(main, `baseline-${D.slice(0, 12)}-${S.slice(0, 12)}-p2.json`));
+  const all = loadBaselines(main);
+  assert.equal(baselineFor(all, m(7, "p2")).phase, "p2");
+  assert.equal(baselineFor(all, m(7, "p2", S0)), null, "another addon: no baseline, never the P1 one");
+  assert.equal(baselineFor(all, m(7, "p1")).phase, undefined, "P1 keeps its daemon baseline");
+  assert.throws(() => writeBaseline({ metricsDir: run, ranges: [2, 3, 4], out: main, run: "again", phase: "p2" }), /already has a baseline/);
+  writeFileSync(join(run, "range-003.a2.json"), JSON.stringify(m(3, "p2", S0)));
+  rmSync(file);
+  assert.throws(() => writeBaseline({ metricsDir: run, ranges: [2, 3, 4], out: main, run: "mixed", phase: "p2" }), /mixes addons/);
+  // the gate refuses a baseline of another phase or addon
+  const g = evaluate({ ...m(7, "p2", S0), checks: {} }, [], { daemon: D, sdk: S, phase: "p2", ops: {} });
+  assert.match(g.checks.find((c) => c.name === "Speed").value, /not this attempt's; not judged/);
+  rmSync(d, { recursive: true, force: true });
 });
