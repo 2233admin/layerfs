@@ -72,6 +72,32 @@ The oracle cannot take ignored files from git. Their expected state:
   file's git blob id and mode), recorded once and then compared;
 - build outputs: they exist and the tests pass.
 
+### `.git` in Workspaces (owner decision 2026-10-18, F-031; from P3)
+
+From P3 on, the replay's Workspaces carry a real `.git`, as AGENTS requires
+(a Workspace includes `.git` and its index). Before P3 they had none: the seed
+was checked out with `--git-dir`/`--work-tree` from a bare clone
+([BUGS.md F-031](BUGS.md)). Ranges 0–14 keep their recorded workload.
+
+- **Seed:** a full clone of `~/lfs-history/dsh.git` (all history, ~304 MB),
+  checked out at the range's start commit. Not a shallow clone.
+- **Cadence:** one `git commit` per replayed dsh commit. After a step writes a
+  commit's files, the agent runs `git add` on exactly that commit's paths, then
+  `git commit` with the original message, author and dates, so the Workspace's
+  HEAD equals the replayed dsh commit id where the history allows it. Each is
+  an ordinary exec in a mounted Workspace. Git's index, objects, refs and any
+  repack are captured like any other files. Merge commits (reconciled, not
+  replayed, §P0) are handled as the builder records in SCRIPTS.md before P3.
+- **Proof:** the checkpoint tree without `.git` is checked against git as
+  before (§7, Proof checkpoint). In addition, `.git`'s HEAD must equal the
+  checkpoint commit and `git status` must be clean.
+- **Counts change:** every replayed dsh commit adds at least one exec and its
+  Commit. P0's Bash, exec and Commit totals and §5/§7 growth expectations are
+  re-derived at the P3 re-baseline from the builder's dev-range measurements.
+  Those report Store growth per git commit, split into index rewrites, loose
+  objects and packs, and the wall time added per range. A dated
+  STORAGE_STUDY section, "Recalibration for `.git` (F-031)", follows.
+
 ### Tests: cheap unit tests only
 
 The replay runs tests to give exec over FUSE real work, not to test dsh. So only
@@ -219,6 +245,10 @@ dsh/scenarios/dsh-history/
   gates (expected, closed, order, final tree) at every checkpoint.
 
 ### P0 results (2026-10-17, plan v1, seed 352)
+
+> From P3, `.git` (§2, `.git` in Workspaces) adds about one exec and Commit
+> per replayed dsh commit (13,749 in total) on top of these counts; they are
+> re-derived at the P3 re-baseline.
 
 `plan.mjs` and `oracle.mjs` are built and tested
 (`dsh/tools/history/tests/history.mjs`, 15 tests on a synthetic repository). Over
@@ -600,6 +630,10 @@ for a ~5% storage gain. Report raw deltas for both.
 
 ## 5. Gates per range
 
+> From P3 (F-031), ranges carry `.git` and about one more exec and Commit per
+> replayed dsh commit. P3's re-baseline is taken with `.git` in place, so no
+> gate compares a `.git` range with a pre-`.git` baseline.
+
 > **Time-only trips (owner direction 2026-10-18).** A probe's time trip
 > (Scaling) whose SQL counters are identical at every point of its series
 > reads **watch**. It escalates to optimize only when the same probe also
@@ -963,6 +997,9 @@ After consolidation, the runner verifies the range's oracle:
 - the range's unit tests, against their native results (§2, Tests).
 
 So the check grows with the range's changes, not with the tree (§4).
+
+From P3, the checkpoint also checks `.git`: HEAD equals the checkpoint commit and
+`git status` is clean (§2, `.git` in Workspaces).
 
 The result goes to `ranges/range-NNN.md` and `RANGES.md`, with:
 - the LayerFS main head Commit id and the depth;
