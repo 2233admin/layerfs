@@ -318,6 +318,23 @@ differently only when a concurrent winner publishes a base, which never
 happens in the single-writer P3 replay. F-036 and F-043 are other lanes'
 changes, measured in their own records.
 
+**Recheck at `cc6058878` (liaison, 2026-10-19).** The correctness commit
+`f98cc199e` is an ancestor of `5ae2b7034`, so `01dc7eefa` contains it. Read
+against c01: every chain walk re-asks with `base_location` and so never uses
+an "absent" taken before a publish. That covers the branch reconstruct
+(`pool/branch.rs`), the leaf chain (`pool/read.rs`), the payload chain
+(`delta/read.rs`), selection's depth walk (`delta/select.rs`) and the
+prefetch (`read/prefetch.rs`).
+
+The one plain `location` on the branch path is the first lookup of the
+writer's advisory predecessor (`delta/branch.rs`), as for pooled leaves
+(`save/pooled.rs`) and payload deltas (`delta/select.rs`). A stale "absent"
+there only stores the branch whole; it never yields a wrong read.
+
+Run once, each binary under a 120 s timeout: all 23 `layerfs-storage` test
+binaries pass, including `concurrent_winner_chain` and `inode_branch_deltas`.
+`save_encoder_reuse` is Linux-gnu only and runs 0 tests on this macOS host.
+
 ## Verdict
 
 - **Lookup cost bound: holds** (counter test above). A lookup reconstructs
@@ -378,8 +395,8 @@ changes, measured in their own records.
 ## Resources
 
 Volumes:
-- kept as this record's inputs: `layerfs-issue360-i3-p3-old`,
-  `layerfs-issue360-i3-p3-new`;
+- kept as this record's inputs, releasable at handoff (liaison,
+  2026-10-19): `layerfs-issue360-i3-p3-old`, `layerfs-issue360-i3-p3-new`;
 - build caches, kept: `layerfs-issue360-i3-cargo-target`,
   `layerfs-issue360-i3-cargo-home`;
 - removed: the compat fork `layerfs-issue360-i3-i3-compat`. Every case
