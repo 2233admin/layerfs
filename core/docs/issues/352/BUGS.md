@@ -382,6 +382,10 @@
   [fixes/015-pre-f035-fs-read-calls.md](fixes/015-pre-f035-fs-read-calls.md),
   GitHub #354, worked in its own worktree on `issue354-fs-read-calls`. Until it
   lands `grep_tree` stays the whole-tree series.
+  **Scope extended (owner, 2026-10-18):** #354 also optimizes the Store read
+  path (delta-chain resolution, ~28 SQL statements per object fetch,
+  `FileView::open`); no delta-depth or storage policy change. See the fix
+  record.
 
 - **F-036 · concurrent first installs from two daemons: one Commit fails
   "object … is not stored" (product, correctness, scale-experiments S4,
@@ -440,3 +444,11 @@
   - **F-037, F-038 and F-041 are grouped in GitHub #355 (merge at scale) with
     watch-out S2 risk 1, deferred by the owner as DEFER.md D-6.** F-039 and
     F-040 stay unassigned.
+- **F-042 · exec over committed content is slow: vitest 3.7×, `tsc -b` 1.5×
+  native; base reads grow with directory size (product, P3 dev range 15 and
+  the #356 flatness probe, 2026-10-18).** RCA first (per-op counts and times,
+  `ENOENT` lookups, cache hits, statements per op, cold vs steady, strace
+  native vs FUSE), then fix the top causes. **Owner: the #352 lead and fixer**;
+  the lead places it. GitHub #357,
+  [fixes/015-pre-f042-exec-base-reads.md](fixes/015-pre-f042-exec-base-reads.md).
+  Builds on #356's cache change and #354's read-path work.

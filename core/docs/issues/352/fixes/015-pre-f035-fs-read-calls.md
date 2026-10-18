@@ -72,6 +72,26 @@ Results are byte-identical to today: same order, line numbers, `Binary` skips
 (NUL or invalid UTF-8), truncation flags and `hasMore`. Only the page token's
 contents change.
 
+## Scope extension: the Store read path (owner, 2026-10-18)
+
+#354's measurement on range 14 main (1,263 files, 10.3 MB) showed `fs.read` is
+read-bound in the Store, not in scanning: 594 of 606 ms in `FileView::open`,
+29.2 SQL statements per file (36,900 total) for ~1.05 canonical objects per
+file, so ~28 statements per object fetch, most likely delta-chain resolution
+(whole-file chain depth up to 16). The owner extends #354 to optimize that
+path: delta-chain resolution, the SQL statements per object fetch, and
+`FileView::open` (for example batched chain lookups in one query, bounded
+reuse of resolved bases within a read). Rules:
+- measure first: statements, pages and time per chain step on range 14 and
+  the P3 Store copy;
+- results byte-identical; caches bounded and declared;
+- **no change to delta depth or storage policy** (that trades storage for
+  speed and needs a separate owner decision);
+- files outside `sdk/` (`layerfs-content` file view, `layerfs-storage` read
+  path) are now in scope; coordinate file overlap with the #352 fixer's #356
+  work (workspace base lookups) through the #352 lead before editing.
+F-042 (#357, exec over committed content) consumes this result.
+
 ## Complexity
 
 *B* bytes scanned, *D* bytes of distinct content, *M* matches, *R* results paged
