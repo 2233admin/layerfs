@@ -18,4 +18,4 @@
 | 011 | 87 | 7,783 | **watch** | Speed | 6.3 MiB | [range-011](ranges/range-011.md) |
 | 012 | 50 | 8,519 | **watch** | Speed | 4.8 MiB | [range-012](ranges/range-012.md) |
 | 013 | 64 | 9,385 | **optimize** | Scaling | 5.8 MiB | [range-013](ranges/range-013.md) |
-| 014 | 79 | 10,548 | **optimize** | Scaling | 7.8 MiB | [range-014](ranges/range-014.md) |
+| 014 | 79 | 10,548 | **watch** | Speed | 7.8 MiB | [range-014](ranges/range-014.md) |
