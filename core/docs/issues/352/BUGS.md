@@ -629,6 +629,13 @@
     each is not proof that the intermittent failure is gone. The
     reproduction is the evidence for the cause.
 
+  - **Outside tests** (fix record 036): the daemon never forks, and the SDK
+    and runner processes hold no mount file. So F-046 cannot occur in the
+    product. Forked copies of Store descriptors cannot affect SQLite
+    `fcntl` locks or the writer-lane `flock`. One narrow product window
+    remains, reported and not fixed: the SDK discovery `flock` is released
+    by close, not by `LOCK_UN`.
+
   **Status: FIXED (test harness).** Tests in the same binary that spawn
   processes without a `Harness` are outside the gate. None of the
   affected binaries has one that runs alongside a mount.

@@ -77,6 +77,74 @@ depend on the gate below.
 - There is no retry, no change to `try_unmount` or `unmount`, and no
   change to the product.
 
+A second test, `nested_harnesses_on_one_thread_share_the_gate`, nests two
+Harnesses on one thread. Without nesting support it would wait out the
+110 s bound and panic. It also starts a third Harness on another thread,
+which proceeds once the owner stops. The 110 s wait is a readiness wait,
+not a retry: on expiry the Harness panics with "mounted test gate held for
+110 s".
+
+## Outside tests: can a fork→exec copy happen in the product?
+
+All of this is from source at `77fe3b20ec`.
+
+- **(a) The daemon process: no.** No product source under
+  `core/crates/*/src` creates a process. There is no `Command`, `fork`,
+  `posix_spawn` or `exec`; the `fork` names there are Branch forks.
+  - The mount is our own `mount(2)` with `fd=`, and the session is
+    `fuser::Session::from_fd`, built without default features. So no
+    `fusermount` runs (the `Command` in fuser 0.18 is in its own test
+    module).
+  - Sandbox Exec goes to the Docker Engine API over the socket
+    (`layerfs-sandbox` `backend/docker/socket.rs`). Its processes run in
+    containers and are real holders of the mount, so EBUSY from them is
+    correct.
+  - So nothing can copy the daemon's `/dev/fuse`, mount or Store
+    descriptors.
+- **(b) The SDK addon process: no mount copy; Store copies are harmless,
+  with one narrow exception.**
+  - The addon itself (`sdk/js/native/src`, `sdk/js/src`) starts no process.
+  - Its host Node process may start processes (`child_process`, through
+    libuv: fork or clone, then exec) while the addon has the Store open.
+    The child then holds copies of the Store, WAL and SHM descriptors and
+    of the writer-lane directory descriptor until its exec. Every one of
+    them is close-on-exec: std `OpenOptions` always sets it, and the
+    bundled SQLite's `robust_open` adds `O_CLOEXEC`
+    (libsqlite3-sys 0.38.2 `sqlite3.c:41025`).
+  - The SDK process holds no file in any mount; mounts live in the daemon's
+    container. So it cannot produce an F-046 Busy.
+  - **Exception (product, reported, not fixed): the discovery ownership
+    lock.** `sdk/js/native/src/discovery.rs` `os_lock` takes
+    `flock(LOCK_EX|LOCK_NB)` on `ownership.lock`, and `Guard` releases it
+    only by closing the file. A flock belongs to the open file description,
+    which a forked child shares. So if the host forks while a Guard is held,
+    the lock outlives the Guard until the child's exec. In that window,
+    another process's discovery mutation is refused `Busy` ("another
+    process owns this discovery mutation"). Explicit `flock(LOCK_UN)` before
+    the close would remove the window. The window needs a concurrent
+    discovery mutation from a second process and is narrow. Owner:
+    unassigned.
+- **(c) The range runner (`dsh/tools/history`): no mount copy.**
+  - `run.mjs`, `lib.mjs` and `runner.mjs` start `docker`, `git`, `sh`,
+    `node`, `df`, `chmod` and `cp` with `execFileSync`/`spawnSync`, in the
+    same Node process that loads the SDK addon.
+  - It reaches Workspaces only through SDK calls and `sandbox.exec`, and it
+    opens no path inside a mount. So its forks copy Store descriptors only,
+    which is case (b).
+- **SQLite locking under a forked copy: no effect.**
+  - SQLite's unix VFS uses process-associated `fcntl` locks, also on the
+    `-shm` file. A child never inherits them. Closing the child's copy at
+    exec releases only the child's own locks, which are none. The rule that
+    "closing any descriptor drops the process's locks" applies within the
+    parent and is untouched by a child.
+  - The writer lane (`writer_admission.rs`) is a `flock` on the Store
+    directory, which a child does share. It is released by explicit
+    `unlock()` (`LOCK_UN`), which drops it for every copy. Closing a child's
+    copy releases nothing while the parent's description stays open.
+  - The telemetry retention lock is a nix `Flock`, which unlocks on drop.
+  - So a forked child cannot hold or break a Store lock. That applies in
+    tests and outside them.
+
 ## Checks
 
 All runs were in the pinned image, each target in its own container,
@@ -84,7 +152,8 @@ with a 110 s limit and one attempt each.
 
 | Target | Result | Wall | Host load (1 min) |
 | --- | --- | --- | --- |
-| `f046_fork_reference` | 1/1 | 0.04 s | 14.4 |
+| `f046_fork_reference` (reproduction only) | 1/1 | 0.04 s | 14.4 |
+| `f046_fork_reference` (with the nested test) | 2/2 | 0.09 s | 11.0 |
 | `mounted_commit` | 9/9 | 2 s | 31.9 |
 | `mounted_install` | 4/4 | 2 s | 31.9 |
 | `mounted_cycles` | 4/4 | 5 s | 22.7 |

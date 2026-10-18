@@ -127,3 +127,26 @@ fn a_descriptor_copied_by_another_threads_fork_keeps_the_plain_unmount_busy() {
     h.stop();
     f.cleanup();
 }
+
+/// The gate is taken once per thread: a second Harness on the holding thread
+/// shares it (without that it would wait out the 110 s bound and panic), and
+/// a Harness on another thread proceeds once the owning one stops.
+#[test]
+fn nested_harnesses_on_one_thread_share_the_gate() {
+    let (outer_fixture, outer) = harness("-f046-outer");
+    let (inner_fixture, inner) = harness("-f046-inner");
+    let ready = inner.mount(4);
+    unmounted(&inner, &ready);
+    inner.stop();
+    inner_fixture.cleanup();
+    let ready = outer.mount(5);
+    let after = std::thread::spawn(|| {
+        let (f, h) = harness("-f046-after");
+        h.stop();
+        f.cleanup();
+    });
+    unmounted(&outer, &ready);
+    outer.stop();
+    outer_fixture.cleanup();
+    after.join().unwrap();
+}
