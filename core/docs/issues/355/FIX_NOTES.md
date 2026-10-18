@@ -19,7 +19,10 @@
 | (d) No path cap | `16a19429a` | sorted runs, a 16-way stream, ancestor stacks; 8 MiB held, then records | 88,971 -> 90,391 (+1,420) |
 | #360 analysis | `40a713349` | strict `same_value` kept; proof stated for integration | 90,391 -> 90,391 (0) |
 | Records and publish timing | `5d37e1a3c` | `branch.merge.publish` timed; docs, receipts | 90,391 -> 90,392 (+1) |
-| M1 merge by serial | see [M1](#m1-merge-by-serial-owner-decision-2026-10-18) | walk `from`'s changed serials, not candidate paths | 90,392 -> 90,859 (+467) |
+| M1 merge by serial | `9f0756466` | walk `from`'s changed serials, not candidate paths ([M1](#m1-merge-by-serial-owner-decision-2026-10-18)) | 90,392 -> 90,859 (+467) |
+| M1 notes and samples | `f277f54e8` | equivalence, differences, old-vs-M1 timing | 90,859 -> 90,859 (0) |
+| M1 (b) both directions | `05aca99a0` | a deletion against a move with an edit conflicts whichever side deleted | 90,859 -> 90,881 (+22) |
+| M1 owner decisions | this commit | (a), (b), (c) approved; corpus scope; #360 note | 90,881 -> 90,881 (0) |
 
 ¹ Scope core+sdk+dsh; from `e4c74f7c3` on, core only (the pinned counter's
 scope). The scopes are not comparable.
@@ -446,9 +449,11 @@ refused. It is a finding for (d) and the 50k/300k measurements, not a gate.
 ## M1: merge by serial (owner decision 2026-10-18)
 
 **Decision.** The merge walks changed inode serials instead of candidate
-paths. The owner approved two semantic changes: merged root ids may differ
-from before, and a move on one side plus an edit inside the moved directory on
-the other now merges, with the edit following the serial. The two-stage
+paths. The owner approved two semantic changes up front: merged root ids may
+differ from before, and a move on one side plus an edit inside the moved
+directory on the other now merges, with the edit following the serial.
+Differences (a), (b) and (c) below were found by the equivalence work and
+approved by the owner on 2026-10-18, as implemented (via the liaison). The two-stage
 Commit merge, the scratch records, bounded memory and the absence of caps
 are kept. The algorithm is described in
 [81-compare-and-merge](../../architecture/81-compare-and-merge.md#merge).
@@ -484,40 +489,62 @@ lane work independent of tree size, least new code, no cap):
   That costs a decision, never a wrong content result; a form-only metadata
   change on one side is kept in that side's form.
 
-**Semantic differences found (old `5d37e1a3c` vs M1, decoded views).**
+**Semantic differences (old `5d37e1a3c` vs M1, decoded views).** Each has a
+test in `merge_by_serial.rs` (`mbs::`) or `merge_root_oracle.rs` (oracle case)
+that fails on the old merge and passes on M1.
 
-| Case | Old | M1 | Class |
+| Case | Old | M1 | Class | Test |
+| --- | --- | --- | --- | --- |
+| move on one side, edit inside on the other | `delete/modify` conflict | merged, the edit at the new path | approved up front | `mbs::an_edit_follows_a_moved_directory`, `..._move_into_a_directory`, oracle `move-and-edit-inside` |
+| metadata changed only by one side (file mode, directory mtime) | dropped (base's kept) | kept | (a), owner-approved | `mbs::a_one_sided_mode_change_is_kept`; the r14 replay's mtime lines |
+| one side deletes a directory, the other moves it and edits inside | merged silently, the moved copy kept | `modify/delete` conflict on the edited file, whichever side deleted | (b), owner-approved | `mbs::a_deleted_directory_against_a_move_and_edit_conflicts` |
+| directory renamed differently on both sides | `/left` and `/right`, files hard-linked across both | `type` conflict | (c), owner-approved | `mbs::a_directory_renamed_on_both_sides_conflicts` |
+
+(a) and #360: under #360 item 2 a directory whose entries did not change keeps
+its base row, mtime included (spec §4.8), and an mtime-only change is not a
+change at Commit. After #353/#355 is integrated with #360, most class-(a)
+mtime-only differences will therefore never reach a merge; the mode change
+still does, and its test covers it.
+
+(c) stands by owner decision: reproducing the old result needs fresh serials
+for the whole subtree, which makes the work grow with the subtree.
+
+(b) had first been one-sided: deleting on ours conflicted, but deleting on
+theirs resurrected ours' moved subtree with the edit, as before. A file `from`
+edited inside a subtree it resurrects is now decided as a deletion against an
+edit, so both directions conflict alike. A deletion against a move alone still
+keeps the moved directory both ways, as before
+(`mbs::a_deleted_directory_against_a_move_keeps_the_moved_directory`, which
+passes on both arms).
+
+**Old-merge bugs M1 fixes.**
+
+| Bug | Old | M1 | Test |
 | --- | --- | --- | --- |
-| move on one side, edit inside on the other | `delete/modify` conflict | merged, the edit at the new path | approved |
-| directory metadata (mtime) changed only by ours | base's kept | ours' kept | (a), one-sided metadata kept |
-| file mode changed only by one side | dropped | kept | (a) |
-| one side deletes `/d2`, the other adds `/d2/new.txt` | the add is lost | `/d2` survives with `new.txt` | old data loss, fixed |
-| crossed moves `/d1 -> /d2/d1` and `/d2 -> /d1/d2` | merged; `/d2/c.txt` lost | `type` conflict | old data loss, fixed |
-| hard-linked file edited on one side | the link group splits | the group stays | old bug, fixed |
-| directory renamed differently on both sides | `/left` and `/right`, files hard-linked across both | `type` conflict | (c), reported to the liaison |
-
-Difference (c) is not one of the approved changes. Reproducing the old result
-needs fresh serials for the whole subtree, which makes the work grow with the
-subtree; the conflict keeps the work bounded by the change. It stands unless
-the owner asks for the old result.
+| data loss: one side deletes a directory, the other adds a file in it | the added file is lost | the directory survives with the add | oracle `revive-deleted-parent`, `mbs::a_deleted_directory_against_an_add_below_keeps_only_the_add` |
+| data loss: crossed moves `/d1 -> /d2/d1`, `/d2 -> /d1/d2` | merged, `/d2/c.txt` lost | `type` conflict | `mbs::crossed_moves_that_would_make_a_cycle_conflict` |
+| a hard-linked file edited on one side | the link group splits | the group stays | `mbs::hard_links_keep_their_group_across_a_one_sided_edit` |
 
 **Equivalence by decoded view.** A view lists each path with its kind,
 content id, mode, mtime and hard-link group
 ([`support/view.rs`](../../crates/layerfs-store-service/tests/support/view.rs)).
-- Replay corpus: r14 only (35 recorded Branch merges, `LAYERFS_355_REPLAY_STORE`).
-  r7a2–r13 were not reachable from this worktree; that is the corpus gap.
-  All 35 merge under M1. 22 merges differ from old, in 116 lines, all class
+- Replay corpus: every recorded merge. History is append-only, so the r14
+  Store holds all ranges' Commits (10,612, r7a2–r14 included); exactly 35 have
+  a `second_parent_id`, the same 35 as `via=3`, and Layers record no merges.
+  Each is replayed from its recorded base, ours and theirs. All 35 merge under
+  M1. 22 merges differ from old, in 116 lines, all class
   (a): a directory mtime only ours changed. There are no content, presence,
   kind, mode or link differences.
 - `merge_root_oracle` (13 rule cases): two differences, the approved move+edit
   and the fixed `revive-deleted-parent` data loss.
-- New `merge_by_serial.rs` (11 cases: move+edit, move into a directory,
+- New `merge_by_serial.rs` (13 cases: move+edit, move into a directory,
   rename/rename of a file and of a directory, crossed moves, delete against an
-  edit and against an add below, hard links edited, removed and both, one-sided
-  chmod). All pass on M1; 7 fail on old, as classified above.
-- Suites: content, persistence, store-service and daemon (164 test binaries,
-  each under a 120 s alarm, run from its crate) and the API's
-  `sdk_merge_diagnostics` pass. The two failures are environmental, as at
+  edit, an add, a move and a move with an edit below, hard links edited,
+  removed and both, one-sided chmod). All pass on M1; 8 fail on old, as
+  classified above.
+- Suites: content, persistence, store-service, daemon and API (169 test
+  binaries at the final (b) change, each under a 120 s alarm, run from its
+  crate) pass. The two failures are environmental, as at
   `5d37e1a3c`: `huge_kernel_namespace_is_complete_after_install` needs
   `LAYERFS_Q1_PREPARED` and `host_handoff` needs Docker. F-008's
   `concurrent_commits` is unchanged and passes. Clippy `+1.85.1` is clean;
@@ -531,7 +558,9 @@ content id, mode, mtime and hard-link group
   described the path route. It is replaced by the stronger M1 property that
   the merge names none.
 
-**Timing (diagnostic, one sample per arm, 2026-10-18).** Disposable, macOS
+**Timing (diagnostic, one sample per arm, 2026-10-18).** Sampled at
+`9f0756466`; the later (b) change touches only files inside a resurrected
+subtree, which no timed case has, so the samples were not repeated. Disposable, macOS
 host, release `sdk_merge_scale`, `LAYERFS_CONSTRUCTION_WORKERS` unset (the
 merge has one producer). Declared interference: 1-minute load 7.5–11.8 from
 other worktrees' builds and tests; `fseventsd` and `mds_stores` were busy in
