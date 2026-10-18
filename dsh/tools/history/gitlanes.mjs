@@ -1,17 +1,23 @@
-// F-031 owner option (c) (F031_DESIGN.md): `.git` in the Workspaces from P3.
+// F-031 (F031_DESIGN.md, GIT_RULE.md; owner decisions 2026-10-19): `.git`
+// in the Workspaces from P3.
 //
 // Seed: the first P3 range's lead Branch gets a `.git` packed natively from
 // dsh.git (everything reachable from the previous checkpoint), written with one
 // fs.apply, then one exec builds the index (read-tree HEAD, update-index
 // --refresh) and checks it.
-// Lanes: each lane step that changes tracked files runs one git exec in a
-// one-shot Workspace on its lane: real `git add` / `git rm --cached` with the
-// lane-private index, write-tree, commit-tree, update-ref of its own lane ref.
-// New ids, a fixed replay identity and the step's dsh commit date.
+// Lanes (Q3, porcelain): each lane step that changes tracked files runs one git
+// exec in a one-shot Workspace on its lane, in the lane's linked worktree
+// folder `.git/worktrees/<lane>/` (its own HEAD on refs/heads/lanes/<lane>,
+// its own index, `commondir` to the shared objects and refs), with
+// `GIT_DIR=.git/worktrees/<lane> GIT_WORK_TREE=.`: `git status --porcelain`
+// and `git diff --stat` without optional locks, then real `git add -f`,
+// `git rm --cached` and porcelain `git commit`. New ids, a fixed replay
+// identity and the step's dsh commit date. A lane writes only its worktree
+// folder, its lane ref and new loose objects (the lane guard, laneAllowed).
 // Lead: after the merges and the reconcile, every dsh commit of the range is
 // written in topological order with real write-tree and commit-tree, and each
 // printed id must equal dsh's; then main moves to the checkpoint, the index is
-// rebuilt, the range's objects are packed, the lane refs and indexes go.
+// rebuilt, the range's objects are packed, the lane refs and worktree folders go.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -77,7 +83,8 @@ export const statusProbe = ({ locks = true } = {}) => [
   "b=$(sha1sum .git/index | cut -c1-40)",
   `s0=$(date +%s%N); ${locks ? "" : "GIT_OPTIONAL_LOCKS=0 "}GIT_TRACE2_PERF=$t2 git status --porcelain > $st; e=$?; echo "@@statusMs $(( ($(date +%s%N) - s0) / 1000000 ))"; echo "@@statusExit $e"`,
   `echo "@@sumScan $(grep -o 'refresh/sum_scan:[0-9]*' $t2 | cut -d: -f2 | awk '{n+=$1} END {print n+0}')"`,
-  `echo "@@sumLstat $(grep -o 'refresh/sum_lstat:[0-9]*' $t2 | cut -d: -f2 | awk '{n+=$1} END {print n+0}')"`,
+  // git 2.39 stats the index in preload threads: refresh/sum_lstat alone reported 1 where git stat-ed 1,261 (GIT_RULE, native baseline)
+  `echo "@@sumLstat $(grep -oE '(preload|refresh)/sum_lstat:[0-9]*' $t2 | cut -d: -f2 | awk '{n+=$1} END {print n+0}')"`,
   `echo "@@indexChanged $([ "$(sha1sum .git/index | cut -c1-40)" = "$b" ] && echo 0 || echo 1)"`,
   `echo "@@statusLines $(wc -l < $st)"; echo @@status; head -20 $st; echo @@end; rm -f $t2 $st`,
 ].join("\n");
@@ -102,35 +109,61 @@ export const statusLines = (stdout) => {
   return out;
 };
 
+/** A lane's linked-worktree git folder (Q3). */
+export const laneGitDir = (lane) => `.git/worktrees/${lane}`;
+/** trace2 lstat (preload and refresh) and scan counts of one timed command, as `@@<name>Lstat` and `@@<name>Scan`. */
+const traced = (name, file) => [
+  `echo "@@${name}Lstat $(grep -oE '(preload|refresh)/sum_lstat:[0-9]*' ${file} | cut -d: -f2 | awk '{n+=$1} END {print n+0}')"`,
+  `echo "@@${name}Scan $(grep -o 'refresh/sum_scan:[0-9]*' ${file} | cut -d: -f2 | awk '{n+=$1} END {print n+0}')"; rm -f ${file}`,
+];
+/** `@@<name>Ms` around one command (GNU date in the image). */
+const timed = (name, cmd) => `s0=$(date +%s%N); ${cmd}; echo "@@${name}Ms $(( ($(date +%s%N) - s0) / 1000000 ))"`;
+
 /**
- * One lane step's git exec: the paths travel NUL-separated in scratch files
- * (any count), then real git add / git rm --cached with the lane index (read
- * from HEAD on the lane's first step), write-tree, commit-tree on the lane ref
- * (HEAD on the first), update-ref. `status` adds a timed `git status
- * --porcelain` without optional locks (the shared index is never rewritten
- * in a lane). Returns exec commands with `.scratch`.
+ * One lane step's git exec (GIT_RULE.md, Q3): the paths travel NUL-separated
+ * in scratch files (any count). On the lane's first step the worktree folder
+ * is made (HEAD, commondir, gitdir), its ref set to the range base (the shared
+ * HEAD) and its index read and refreshed. Then, each timed on its own and with
+ * GIT_OPTIONAL_LOCKS=0 for the two reads: `git status --porcelain`, `git diff
+ * --stat`, `git add -f`, `git rm --cached`, porcelain `git commit`. The lane's
+ * loose-object count and the commit's tree close it. Returns exec commands
+ * with `.scratch`.
  */
-export function laneCommands({ lane, add, remove, message, date, status = false }, scratch) {
+export function laneCommands({ lane, add, remove, message, date }, scratch) {
   const commands = [`rm -rf ${scratch} && mkdir -p ${scratch}`];
   const ship = (name, list) => {
     const b64 = Buffer.from(list.map((p) => `${p}\0`).join("")).toString("base64");
     for (let at = 0; at < b64.length; at += 45_000) commands.push(`printf %s ${q(b64.slice(at, at + 45_000))} >> ${scratch}/${name}.b64`);
     return `base64 -d < ${scratch}/${name}.b64 > ${scratch}/${name}`;
   };
-  const idx = `.git/lanes/${lane}/index`, ref = `refs/heads/lanes/${lane}`;
+  const gd = laneGitDir(lane), ref = `refs/heads/lanes/${lane}`, t2 = `${scratch}/t2`;
   const who = `GIT_AUTHOR_NAME='lfs352 lane' GIT_AUTHOR_EMAIL=${q(`${lane}@lfs352.invalid`)} GIT_AUTHOR_DATE=${q(date)} GIT_COMMITTER_NAME='lfs352 lane' GIT_COMMITTER_EMAIL=${q(`${lane}@lfs352.invalid`)} GIT_COMMITTER_DATE=${q(date)}`;
-  const script = ["set -e", GIT_ENV, `export GIT_INDEX_FILE=${idx}`, "t0=$(date +%s%N)", `mkdir -p .git/lanes/${lane}`,
-    `[ -f ${idx} ] || git read-tree HEAD`];
-  if (add.length) script.push(ship("add", add), `git add -f --pathspec-from-file=${scratch}/add --pathspec-file-nul`);
-  if (remove.length) script.push(ship("rm", remove), `git rm --cached -q --ignore-unmatch --pathspec-from-file=${scratch}/rm --pathspec-file-nul`);
-  script.push("t=$(git write-tree)", `p=$(git rev-parse -q --verify ${ref} || git rev-parse HEAD)`,
-    `c=$(printf '%s\\n' ${q(message)} | ${who} git commit-tree --no-gpg-sign "$t" -p "$p")`, `git update-ref ${ref} "$c"`,
-    "echo \"@@tree $t\"; echo \"@@commit $c\"; echo \"@@gitMs $(( ($(date +%s%N) - t0) / 1000000 ))\"");
-  if (status) script.push("unset GIT_INDEX_FILE", statusProbe({ locks: false }));
-  script.push(`rm -rf ${scratch}`);
+  const script = ["set -e", GIT_ENV, "t0=$(date +%s%N)",
+    // the lane's first step: its worktree folder on its own ref at the range base, its index from HEAD with real stat data
+    `if [ ! -f ${gd}/HEAD ]; then ${timed("setup", `mkdir -p ${gd} && printf 'ref: ${ref}\\n' > ${gd}/HEAD && printf '../..\\n' > ${gd}/commondir && printf '%s/.git\\n' "$PWD" > ${gd}/gitdir && git update-ref ${ref} "$(git rev-parse HEAD)" && GIT_DIR=${gd} GIT_WORK_TREE=. git read-tree HEAD && GIT_DIR=${gd} GIT_WORK_TREE=. git update-index -q --refresh`)}; fi`,
+    `export GIT_DIR=${gd} GIT_WORK_TREE=.`,
+    timed("status", `GIT_OPTIONAL_LOCKS=0 GIT_TRACE2_PERF=${t2} git status --porcelain > ${scratch}/st`), `echo "@@statusLines $(wc -l < ${scratch}/st)"`, ...traced("status", t2),
+    timed("diff", `GIT_OPTIONAL_LOCKS=0 GIT_TRACE2_PERF=${t2} git diff --stat > ${scratch}/df`), `echo "@@diffLines $(wc -l < ${scratch}/df)"`, ...traced("diff", t2)];
+  if (add.length) script.push(ship("add", add), timed("add", `git add -f --pathspec-from-file=${scratch}/add --pathspec-file-nul`), `echo "@@addPaths ${add.length}"`);
+  if (remove.length) script.push(ship("rm", remove), timed("rm", `git rm --cached -q --ignore-unmatch --pathspec-from-file=${scratch}/rm --pathspec-file-nul`), `echo "@@rmPaths ${remove.length}"`);
+  script.push(`export ${who}`, timed("commit", `GIT_TRACE2_PERF=${t2} git commit -q --allow-empty --no-verify -m ${q(message)}`), ...traced("commit", t2),
+    "echo \"@@commit $(git rev-parse HEAD)\"; echo \"@@tree $(git rev-parse 'HEAD^{tree}')\"",
+    "echo \"@@loose $(GIT_DIR=.git git count-objects | cut -d' ' -f1)\"; echo \"@@laneIndexBytes $(wc -c < " + gd + "/index)\"",
+    "echo \"@@gitMs $(( ($(date +%s%N) - t0) / 1000000 ))\"", `rm -rf ${scratch}`);
   commands.push(script.join("\n"));
   commands.scratch = scratch;
   return commands;
+}
+
+/**
+ * The lane guard (F031_DESIGN A4, owner 2026-10-19): the `.git` paths a lane
+ * may change against the range base, exactly. New loose objects and their
+ * folders, its worktree folder with HEAD, commondir, gitdir, index and
+ * COMMIT_EDITMSG, and its own lane ref.
+ */
+export function laneAllowed(lane) {
+  const l = lane.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^\\.git/(objects/[0-9a-f]{2}(/[0-9a-f]{38})?|worktrees(/${l}(/(HEAD|commondir|gitdir|index|COMMIT_EDITMSG))?)?|refs/heads/lanes(/${l})?)$`);
 }
 
 /** A dsh commit's raw header fields and message (git cat-file commit). */
@@ -209,7 +242,7 @@ export const jobBytes = (commits) => gzipSync(JSON.stringify(commits.map(({ id, 
  * The lead's last exec: main to the checkpoint, the index rebuilt with real
  * stat data, the range packed while the lane refs exist (so lane-only objects
  * are packed too), the lane-only objects' share measured, the lane refs and
- * indexes and the job folder removed, then the checks.
+ * worktree folders and the job folder removed, then the checks.
  */
 export function finishScript({ checkpoint, prev, count }) {
   return [
@@ -227,7 +260,7 @@ export function finishScript({ checkpoint, prev, count }) {
     "echo \"@@laneRefs $(echo $lanes | wc -w)\"",
     "if [ -n \"$lanes\" ]; then git rev-list --objects --no-object-names $lanes --not main | git cat-file --batch-check='%(objecttype) %(objectsize:disk)' | awk '{n[$1]++; b[$1]+=$2} END {for (t in n) print \"@@lane_\" t \" \" n[t] \"\\n@@laneBytes_\" t \" \" b[t]}'; fi",
     "for r in $lanes; do git update-ref -d \"$r\"; done",
-    "rm -rf .git/lanes",
+    "echo \"@@worktrees $(ls .git/worktrees 2>/dev/null | wc -l)\"; rm -rf .git/worktrees .git/lanes",
     "echo \"@@looseAfter $(git count-objects | cut -d' ' -f1)\"",
     "echo \"@@indexBytes $(wc -c < .git/index)\"",
     "echo \"@@head $(git rev-parse HEAD)\"; echo \"@@tree $(git rev-parse 'HEAD^{tree}')\"",

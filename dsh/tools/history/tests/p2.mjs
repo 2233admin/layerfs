@@ -1065,6 +1065,35 @@ test("/.lww from every .gitignore (owner S4): nested patterns prefixed, deeper r
   assert.ok(!hit("packages/a/src/index.ts") && !hit("pnpm-lock.yaml") && !hit("pkg/src/out.ts"));
 });
 
+test("F-031 Q1: `!/.git` is the last /.lww rule, so no .git path matches whatever a .gitignore lists", async () => {
+  const { generateLww, GIT_PROBES, LWW_GIT_RULE, lwwMatch, parseRules } = await import("../lww.mjs");
+  const { text } = generateLww(new Map([[".gitignore", "node_modules/\nindex\n*.pack\nlogs/\nHEAD\n"], ["a/.gitignore", "*\n"]]));
+  assert.equal(text.trim().split("\n").at(-1), LWW_GIT_RULE);
+  const rules = parseRules(text);
+  assert.deepEqual(GIT_PROBES.filter((p) => lwwMatch(rules, p)), []);
+  assert.ok(lwwMatch(rules, "x/index") && lwwMatch(rules, "node_modules/.pnpm/a/index.js"), "the rules still decide everything else");
+});
+
+test("F-031 A4 lane guard: .git paths from the lead's base, scanned from the cursor /.git in either order; a violation stops", async () => {
+  const { laneGuard } = await import("../gitplay.mjs");
+  const pages = (items, size = 2) => { const out = []; for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size)); return out; };
+  const fake = (items) => {
+    const calls = [];
+    const ps = pages(items.map((p) => ({ path: p })));
+    return { calls, run: { label() {}, lf: { branch: { diff_branches: async (from, to, n, pos, o) => { calls.push(o.cursor); const i = o.cursor === "/.git" ? 0 : Number(o.cursor.split("#")[1]); return { items: ps[i] ?? [], hasMore: i + 1 < ps.length, nextCursor: `c#${i + 1}` }; } } } } };
+  };
+  const ok = ["/.git/objects/ab", "/.git/objects/ab/" + "c".repeat(38), "/.git/refs/heads/lanes/L1", "/.git/worktrees/L1/index"];
+  for (const order of [[...ok, "/.gitignore", "/x/a.ts", "/y"], ["/.git-x", ...ok, "/a"]]) {
+    const ctx = { lead: "r015-main", git: { guard: [] } }, f = fake(order);
+    await laneGuard(f.run, 15, ctx, "L1");
+    assert.deepEqual([ctx.git.guard[0].paths, ctx.git.guard[0].violations], [4, []]);
+    assert.ok(f.calls.length <= 3, "stops once past .git");
+  }
+  const ctx = { lead: "r015-main", git: { guard: [] } };
+  await assert.rejects(laneGuard(fake([...ok, "/.git/index", "/.git/worktrees/L2/index"]).run, 15, ctx, "L1"), /2 \.git path\(s\) outside/);
+  assert.deepEqual(ctx.git.guard[0].violations, [".git/index", ".git/worktrees/L2/index"]);
+});
+
 test("DEFER D-6 (#355): merge errors from the trace; untraced values named, never estimated", async () => {
   const { d6Triggers, d6Text } = await import("../gates.mjs");
   const lines = [{ method: "branch.merge", phase: "end", ok: true, kind: "Merged" }, { method: "branch.merge", phase: "end", ok: false, kind: "Busy" }, { method: "branch.merge", phase: "start" }];
@@ -1115,17 +1144,33 @@ test("F-031 option (c): seed pack, lane commits with their own index and ref, th
     assert.equal(facts.commits, 1);
     sh(wt, `git -C ${src} archive ${A} | tar -x`);
     assert.equal(g.marks(sh(wt, g.seedScript(A, 1))).statusLines, 0);
-    // a lane step: its paths added with the lane index, one lane commit on its own ref; the shared index untouched
+    // a lane step (Q3, porcelain): status, diff, git add, git rm --cached, git commit in the lane's linked worktree
     const before = readFileSync(join(wt, ".git/index"));
+    sh(dir, "sleep 1; touch marker");
     writeFileSync(join(wt, "a.txt"), "a2\n"); rmSync(join(wt, "d/b.txt"));
-    const cmds = g.laneCommands({ lane: "L1", add: ["a.txt"], remove: ["d/b.txt"], message: "r016.s0010", date: "1700000001 +0000", status: true }, join(dir, "scratch"));
+    const cmds = g.laneCommands({ lane: "L1", add: ["a.txt"], remove: ["d/b.txt"], message: "r016.s0010", date: "1700000001 +0000" }, join(dir, "scratch"));
     let out = ""; for (const c of cmds) out = sh(wt, c);
     const m = g.marks(out);
     assert.equal(sh(wt, "git rev-parse refs/heads/lanes/L1").trim(), m.commit);
-    assert.equal(sh(wt, "git rev-parse refs/heads/lanes/L1^").trim(), A, "the first lane commit's parent is HEAD");
+    assert.equal(sh(wt, "git rev-parse refs/heads/lanes/L1^").trim(), A, "the first lane commit's parent is the range base (HEAD)");
     assert.equal(sh(wt, `git ls-tree -r --name-only ${m.commit}`).trim(), "a.txt");
+    assert.equal(sh(wt, "git rev-parse HEAD").trim(), A, "the shared HEAD and main stay at the base");
     assert.ok(readFileSync(join(wt, ".git/index")).equals(before), "a lane never rewrites the shared index");
-    assert.ok(m.statusLines > 0 && "sumScan" in m);
+    assert.equal(readFileSync(join(wt, ".git/worktrees/L1/HEAD"), "utf8"), "ref: refs/heads/lanes/L1\n");
+    assert.ok(m.statusLines === 2 && m.diffLines > 0 && m.setupMs != null && m.addMs != null && m.rmMs != null && m.commitMs != null, JSON.stringify(m));
+    assert.equal(m.tree, sh(wt, `git rev-parse ${m.commit}^{tree}`).trim());
+    // a second step on the lane: no setup, the commit's parent is the lane's first
+    writeFileSync(join(wt, "a.txt"), "a3\n");
+    out = ""; for (const c of g.laneCommands({ lane: "L1", add: ["a.txt"], remove: [], message: "r016.s0011", date: "1700000002 +0000" }, join(dir, "scratch"))) out = sh(wt, c);
+    const m2 = g.marks(out);
+    assert.ok(m2.setupMs == null && m2.statusLines === 1);
+    assert.equal(sh(wt, "git rev-parse refs/heads/lanes/L1^").trim(), m.commit);
+    writeFileSync(join(wt, "a.txt"), "a2\n");
+    // the lane guard's allowed set: exactly what the lane wrote (A4)
+    const wrote = sh(wt, "find .git -newer ../marker -type f | sort").trim().split("\n").filter((p) => !/^\.git\/objects\/pack\//.test(p));
+    const ok = g.laneAllowed("L1");
+    assert.deepEqual(wrote.filter((p) => !ok.test(p)), [], "every file a lane exec writes is in its allowed set");
+    for (const p of [".git/index", ".git/HEAD", ".git/refs/heads/main", ".git/worktrees/L2/index", ".git/refs/heads/lanes/L2", ".git/worktrees/L1/ORIG_HEAD", ".git/packed-refs"]) assert.equal(ok.test(p), false, p);
     // the lead: every commit after A from the job, blobs no step wrote unpacked from the pack, ids equal
     const job = g.leadJob(join(src, ".git"), A, head, new Set());
     assert.deepEqual([job.commits.length, job.commits.filter((c) => c.parents.length > 1).length], [4, 1]);
@@ -1136,8 +1181,9 @@ test("F-031 option (c): seed pack, lane commits with their own index and ref, th
     assert.equal(w.next, 4);
     sh(wt, `git -C ${src} archive ${head} | tar -x`);
     const fin = g.marks(sh(wt, g.finishScript({ checkpoint: head, prev: A, count: 4 }).replace(`rm -rf ${g.JOB_DIR}\n`, "") + "\n"));
-    assert.deepEqual([fin.head, fin.count, fin.refsLeft, fin.laneRefs, fin.looseAfter], [head, 4, 0, 1, 0]);
-    assert.ok(fin.lane_commit === 1, "the lane commit is packed and counted apart");
+    assert.deepEqual([fin.head, fin.count, fin.refsLeft, fin.laneRefs, fin.looseAfter, fin.worktrees], [head, 4, 0, 1, 0, 1]);
+    assert.ok(fin.lane_commit === 2, "the lane commits are packed and counted apart");
+    assert.ok(!existsSync(join(wt, ".git/worktrees")), "the finish removes the lane worktree folders");
     assert.ok(g.GIT_ALLOWED.test(".git/objects/pack/pack-" + "0".repeat(40) + ".idx") && !g.GIT_ALLOWED.test(".git/ORIG_HEAD") && !g.GIT_ALLOWED.test(".git/lanes/L1/index"));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

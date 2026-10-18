@@ -1,11 +1,14 @@
-// F-031 owner option (c) played (F031_DESIGN.md; scripts in gitlanes.mjs):
-// the seed on the first git range's lead Branch, a git exec after each lane
-// step that changes tracked files, and the lead's writing of every dsh commit
-// before the closure. On only when the run's manifest says so (`run.mjs git`),
-// in a closure phase; dev runs prove it before any measured range uses it.
+// F-031 played (F031_DESIGN.md, GIT_RULE.md; scripts in gitlanes.mjs): the
+// seed on the first git range's lead Branch (`.git-seed`), a porcelain git
+// exec in the lane's linked worktree after each lane step that changes
+// tracked files (`.git-commit`), the lane guard before each lane merge, and
+// the lead's writing of every dsh commit before the closure (`.git-main`).
+// The step labels' suffixes are what storage.mjs stepSource attributes to
+// `.git`. On only when the run's manifest says so (`run.mjs git`), in a
+// closure phase; dev runs prove it before any measured range uses it.
 import { execAll, expectCall, Mismatch, scratchDir, setup } from "./lib.mjs";
 import { git } from "./git.mjs";
-import { catFiles, finishScript, GIT_ENV, JOB_DIR, jobBytes, laneCommands, LEAD_WRITER, leadJob, marks, parseCommit, seedOps, seedScript, statusLines, statusProbe } from "./gitlanes.mjs";
+import { catFiles, finishScript, GIT_ENV, JOB_DIR, jobBytes, laneAllowed, laneCommands, LEAD_WRITER, leadJob, marks, parseCommit, seedOps, seedScript, statusLines, statusProbe } from "./gitlanes.mjs";
 import { pad, quote } from "./steps.mjs";
 
 /** Per-exec deadline of the lead's commit writer: each exec stays well under the 120 s command ceiling. */
@@ -33,7 +36,7 @@ export function gitContext(run, plan) {
   if (!run.manifest.git?.on) return null;
   const ids = [...new Set(plan.steps.map((s) => s.commit).filter(Boolean)), plan.checkpoint];
   const raw = catFiles(run.repo, ids), dates = new Map(ids.map((id) => [id, parseCommit(raw.get(id)).committer.date]));
-  return { dates, locks: new Map(), lane: { execs: 0, commits: 0, wallMs: 0, gitMs: 0, status: [] }, seed: null, lead: null };
+  return { dates, locks: new Map(), lane: { execs: 0, commits: 0, wallMs: 0, gitMs: 0 }, lanes: {}, timings: { status: [], diff: [], add: [], rm: [], commit: [], exec: [] }, trace2: [], guard: [], laneTrees: {}, seed: null, lead: null };
 }
 
 /** The seed (first git range): fs.apply of the packed `.git` on the lead Branch, then the index and its checks. */
@@ -51,26 +54,70 @@ export async function seedGit(run, k, ctx) {
 }
 
 /**
- * The lane's git exec after step `s` landed: its written and decoy paths
- * added, its removed paths removed from the lane index, one lane commit.
- * One at a time per lane (the lane index and ref are single files).
+ * The lane's git exec after step `s` landed (GIT_RULE.md, Q3): status and
+ * diff, its written and decoy paths added, its removed paths removed from the
+ * lane index, one porcelain lane commit. One at a time per lane (the lane's
+ * worktree folder is one index and one HEAD). Counted per lane for the P3
+ * report (REPORT_FORMAT §10.1 `git.lanes`), each command timed on its own.
  */
 export async function laneGit(a, k, s, ctx, { add, remove }) {
   if (!ctx.git || (!add.length && !remove.length)) return;
-  const lane = s.lane, prev = ctx.git.locks.get(lane) ?? Promise.resolve();
-  const run = async () => {
-    const label = `${s.id}.git`, status = Number(String(s.id).replace(/^.*\.s/, "")) % 10 === 0;
+  const lane = s.lane;
+  return laneLock(ctx, lane, async () => {
+    const label = `${s.id}.git-commit`;
     a.label(label);
-    const commands = laneCommands({ lane, add, remove, message: `${s.id} (dsh ${String(s.commit ?? "none").slice(0, 12)})`, date: ctx.git.dates.get(s.commit) ?? ctx.git.dates.get(ctx.checkpoint), status }, scratchDir());
+    const commands = laneCommands({ lane, add, remove, message: `${s.id} (dsh ${String(s.commit ?? "none").slice(0, 12)})`, date: ctx.git.dates.get(s.commit) ?? ctx.git.dates.get(ctx.checkpoint) }, scratchDir());
     const { results, ms } = await oneShot(a, lane, label, commands);
-    const m = marks(results.at(-1).stdout), g = ctx.git.lane;
-    g.execs++; g.commits++; g.wallMs += ms; g.gitMs += m.gitMs ?? 0;
-    if (status) g.status.push({ step: s.id, ms: m.statusMs, lines: m.statusLines });
+    const m = marks(results.at(-1).stdout), g = ctx.git;
+    g.lane.execs++; g.lane.commits++; g.lane.wallMs += ms; g.lane.gitMs += m.gitMs ?? 0;
+    const l = (g.lanes[lane] ??= { lane, status: 0, diff: 0, add: 0, rm: 0, commits: 0, loose: 0, setupMs: null, indexBytes: null, statusLstat: 0, diffLstat: 0, commitLstat: 0, commitScan: 0 });
+    l.status++; l.diff++; if (add.length) l.add++; if (remove.length) l.rm++; l.commits++;
+    l.loose = m.loose ?? l.loose; l.indexBytes = m.laneIndexBytes ?? l.indexBytes; if (m.setupMs != null) l.setupMs = m.setupMs;
+    for (const x of ["status", "diff", "commit"]) l[`${x}Lstat`] += m[`${x}Lstat`] ?? 0;
+    l.commitScan += m.commitScan ?? 0;
+    for (const x of ["status", "diff", "add", "rm", "commit"]) if (m[`${x}Ms`] != null) g.timings[x].push(m[`${x}Ms`]);
+    g.timings.exec.push(ms);
+    g.laneTrees[lane] = { step: s.id, tree: m.tree, commit: m.commit };
     ctx.work.commits++;
-  };
-  const next = prev.then(run);
-  ctx.git.locks.set(lane, next.catch(() => {}));
+    return m;
+  });
+}
+
+/** Runs `work` after the lane's previous git or Node work (one Workspace at a time per lane for its single files). */
+export function laneLock(ctx, lane, work) {
+  const locks = ctx.git?.locks ?? (ctx.laneLocks ??= new Map());
+  const next = (locks.get(lane) ?? Promise.resolve()).then(work);
+  locks.set(lane, next.catch(() => {}));
   return next;
+}
+
+/**
+ * The lane guard (F031_DESIGN A4), before the lane's merge: the lane's
+ * changes against the lead's Branch it forked from, under `/.git` only
+ * (diff_branches from the cursor `/.git`; mtime-only changes are never
+ * committed, §4.8), must all be paths laneAllowed names. Any other path is a
+ * violation, recorded and a stop before the merge.
+ */
+export async function laneGuard(run, k, ctx, lane) {
+  if (!ctx.git) return;
+  const allowed = laneAllowed(lane), seen = [];
+  run.label(`r${pad(k)}.git-guard ${lane}`);
+  const t0 = performance.now();
+  scan: for (let cursor = "/.git"; ;) {
+    const page = await run.lf.branch.diff_branches(ctx.lead, lane, 1000, 0, { cursor, hunks: false });
+    for (const i of page.items) {
+      const p = String(i.path);
+      if (p.startsWith("/.git/")) { seen.push(p.slice(1)); continue; }
+      // path order or tree order: past `/.git/…` once a `.git` child was seen, or once beyond every `/.git/` path
+      if (seen.length || p > "/.git/\uffff") break scan;
+    }
+    if (!page.hasMore) break;
+    if (!page.nextCursor || page.nextCursor === cursor) throw new Error(`diff_branches answered hasMore without a new nextCursor (${cursor})`);
+    cursor = page.nextCursor;
+  }
+  const bad = seen.filter((p) => !allowed.test(p));
+  ctx.git.guard.push({ lane, paths: seen.length, violations: bad, ms: Math.round(performance.now() - t0) });
+  if (bad.length) throw new Mismatch(`r${pad(k)} lane guard ${lane}: ${bad.length} .git path(s) outside the lane's allowed set (F031_DESIGN A4): ${bad.slice(0, 5).join(", ")}`);
 }
 
 /**
@@ -80,7 +127,7 @@ export async function laneGit(a, k, s, ctx, { add, remove }) {
  * writer deadline) and finish (main, index, repack, lane refs gone, checks).
  */
 export async function leadGit(run, k, plan, ctx, cur) {
-  const label = `r${pad(k)}.git-lead`, t0 = performance.now();
+  const label = `r${pad(k)}.git-main`, t0 = performance.now();
   // blobs a lane's git add wrote: lane step writes (the reconcile's are on the lead Branch, never added; they travel in the pack)
   const written = new Set();
   for (const s of plan.steps) for (const f of s.files ?? []) if (f.op === "write" && f.blob) written.add(f.blob);
@@ -139,4 +186,4 @@ export async function freshStatus(run, k, ctx, branch) {
 }
 
 /** The range's git facts for the metrics (null when git is off). */
-export const gitFacts = (ctx) => (ctx?.git ? { seed: ctx.git.seed, lane: ctx.git.lane, lead: ctx.git.lead, fresh: ctx.git.fresh ?? null } : null);
+export const gitFacts = (ctx) => (ctx?.git ? { seed: ctx.git.seed, lane: ctx.git.lane, lanes: Object.values(ctx.git.lanes ?? {}), timings: ctx.git.timings, guard: ctx.git.guard, lead: ctx.git.lead, fresh: ctx.git.fresh ?? null } : null);

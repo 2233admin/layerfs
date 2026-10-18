@@ -30,7 +30,7 @@ import {
 } from "./lib.mjs";
 import { sandboxVolumes } from "./closure.mjs";
 import { generateLww, gitignores } from "./lww.mjs";
-import { gitContext, laneGit, leadGit, seedGit } from "./gitplay.mjs";
+import { gitContext, laneGit, laneGuard, leadGit, seedGit } from "./gitplay.mjs";
 import { createHash } from "node:crypto";
 import { abs, consolidationSteps, decoyBytes, p2Plan, pad, PHASES, quote, route, sandboxExpect, STEP_KINDS, Tree } from "./steps.mjs";
 
@@ -277,7 +277,10 @@ export async function startRange(run, k, plan, measured) {
 export async function consolidateLanes(run, k, plan, ctx, { beforePublish = null } = {}) {
   let cur = ctx.lead, n = 0;
   const changes = (lane) => laneChanges(ctx.base, ctx.trees.get(lane)).size;
+  // F031_DESIGN A4: each lane's .git changes are checked once, before its first merge or publish
+  const guard = async (lane) => { if (ctx.git && !ctx.git.guard.some((g) => g.lane === lane)) await laneGuard(run, k, ctx, lane); };
   const merge = async (who, lane, want = "Merged") => {
+    await guard(lane);
     const name = `${ctx.lead}-${++n}`;
     who.label(`r${pad(k)}.merge ${lane}`);
     who.rec.next = { kind: "entries", n: changes(lane) };
@@ -294,6 +297,7 @@ export async function consolidateLanes(run, k, plan, ctx, { beforePublish = null
       await merge(run, c.lane);
       ctx.leadSteps.push({ op: c.again ? "merge again" : "merge", category: "branch" });
     } else if (c.op === "race") {
+      await guard(c.publish);
       const publisher = await run.agent("lead", run.pool[0]);
       publisher.label(`r${pad(k)}.race publish ${c.publish}`);
       const t0 = performance.now();

@@ -34,6 +34,9 @@ export function prefixed(dir, pattern) {
   return `${negated ? "!" : ""}${out}${trailing ? "/" : ""}`;
 }
 
+/** The last generated rule (F-031 Q1): every `.git` path un-matched, so a two-sided `.git` change stops the range. */
+export const LWW_GIT_RULE = "!/.git";
+
 /**
  * The `/.lww` text for a tree: `files` maps each `.gitignore` path to its text.
  * Returns the text and the rule count per source file.
@@ -46,6 +49,8 @@ export function generateLww(files) {
     sources[path] = rules.length;
     lines.push(`# ${path}`, ...rules);
   }
+  // F-031 Q1 (owner 2026-10-19): last, so /.lww never decides a .git path, whatever a .gitignore lists (git never ignores .git)
+  lines.push("# F-031 Q1: never a .git path", LWW_GIT_RULE);
   return { text: `${lines.join("\n")}\n`, sources };
 }
 
@@ -108,6 +113,10 @@ export function lwwMatch(rules, path) {
   return hit;
 }
 
+/** `.git` paths the Q1 assertion checks: every file kind the seed, a lane and the lead write. */
+export const GIT_PROBES = [".git", ".git/HEAD", ".git/index", ".git/config", ".git/logs/HEAD", ".git/refs/heads/main", ".git/refs/heads/lanes/r015-1-a",
+  ".git/objects/pack/pack-0000000000000000000000000000000000000000.pack", ".git/objects/ab/cdef0000000000000000000000000000000000", ".git/worktrees/r015-1-a/index", ".git/worktrees/r015-1-a/HEAD"];
+
 /**
  * The proof against git (owner S4): at range k's checkpoint, natively in the
  * image, with the install and the build's ignored output present, every path
@@ -128,7 +137,10 @@ export function checkAgainstGit({ repo, checkpoint, image, volume, build = [] })
   const out = r.stdout.split("\n"), at = out.indexOf("@@IGNORED"), kept = out.indexOf("@@KEPT");
   const ignored = out.slice(at + 1, kept).filter(Boolean), notIgnored = out.slice(kept + 1).filter(Boolean);
   const missed = ignored.filter((p) => !lwwMatch(rules, p)), wrong = notIgnored.filter((p) => lwwMatch(rules, p));
-  return { lines: text.split("\n").filter((l) => l && !l.startsWith("#")).length, bytes: Buffer.byteLength(text), ignored: ignored.length, notIgnored: notIgnored.length, missed: missed.length, wrong: wrong.length, missedSample: missed.slice(0, 10), wrongSample: wrong.slice(0, 10) };
+  // F-031 Q1: no .git path may match, including names a .gitignore could list (index, logs/, *.pack)
+  const gitMatched = GIT_PROBES.filter((p) => lwwMatch(rules, p));
+  if (gitMatched.length) throw new Error(`/.lww matches .git paths (F-031 Q1): ${gitMatched.join(", ")}`);
+  return { gitProbes: GIT_PROBES.length, gitMatched: 0, lines: text.split("\n").filter((l) => l && !l.startsWith("#")).length, bytes: Buffer.byteLength(text), ignored: ignored.length, notIgnored: notIgnored.length, missed: missed.length, wrong: wrong.length, missedSample: missed.slice(0, 10), wrongSample: wrong.slice(0, 10) };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

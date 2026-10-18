@@ -26,7 +26,8 @@ export function ctxToJson(ctx) {
     ...rest,
     trees: [...trees].map(([lane, t]) => [lane, [...t.files]]),
     base: entries(base), merged: entries(merged), tries: entries(tries), published: [...(published ?? [])], played: entries(played), steps: entries(steps),
-    git: git ? { dates: entries(git.dates), lane: git.lane, seed: git.seed, lead: git.lead ?? null } : null,
+    // plain-JSON git counters (lanes, timings, guard, lane trees) travel as they are; the per-lane locks are rebuilt empty
+    git: git ? { ...Object.fromEntries(Object.entries(git).filter(([key]) => !["dates", "locks"].includes(key))), dates: entries(git.dates), lead: git.lead ?? null } : null,
   };
 }
 
