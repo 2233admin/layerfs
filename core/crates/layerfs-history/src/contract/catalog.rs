@@ -113,15 +113,13 @@ pub trait HistoryCatalog: Send + Sync {
     /// One Layer by identity.
     fn layer(&self, id: LayerId) -> HistoryResult<Option<LayerRecord>>;
 
-    /// Ancestry walk of one Branch, newest first, bounded by
-    /// [`crate::records::MAXIMUM_LINEAGE_ROWS`].
+    /// Ancestry walk of one Branch, newest first, one bounded page at a time.
     fn commit_history(
         &self,
         request: &CommitHistoryRequest,
     ) -> HistoryResult<PageResult<CommitRecord>>;
 
-    /// Publication chain of one stack, newest first, bounded by
-    /// [`crate::records::MAXIMUM_LINEAGE_ROWS`].
+    /// Publication chain of one stack, newest first, one bounded page at a time.
     fn layer_history(
         &self,
         request: &LayerHistoryRequest,
@@ -130,16 +128,31 @@ pub trait HistoryCatalog: Send + Sync {
     /// The newest common ancestor of two history nodes, through Commit parents
     /// (including second parents), base Layers, Layer parents and the Commit
     /// each Layer was published from. Absent when the two share no ancestor.
-    /// A stack's Layers form one chain, so walks stop at Layers: the work
-    /// follows the Commits made since the Layers the two sides reach, not the
-    /// history's length. Each walk is bounded by
-    /// [`crate::records::MAXIMUM_LINEAGE_ROWS`]; exhausting it is `Capacity`,
-    /// never a guessed base.
+    /// The answer is exact and has no history-size bound: the work follows the
+    /// merges and runs the sides made since the Layers that absorbed them, not
+    /// the number of Commits or Layers. Among several maximal common
+    /// ancestors (criss-cross) the one with the newest Layer in its ancestry
+    /// wins, then the deepest first parent, then the smallest identity.
     fn merge_base(&self, left: NodeId, right: NodeId) -> HistoryResult<Option<NodeId>>;
 
     /// True when `ancestor` equals `descendant` or is reachable from it over
-    /// the same edges as [`HistoryCatalog::merge_base`], with the same bound.
+    /// the same edges as [`HistoryCatalog::merge_base`].
     fn is_ancestor(&self, ancestor: NodeId, descendant: NodeId) -> HistoryResult<bool>;
+
+    /// The Layers a publication overwrote, newest first: up to `limit` of
+    /// them after skipping `position`. Each page is one bounded read,
+    /// whatever the list's length.
+    fn overwritten(
+        &self,
+        layer: LayerId,
+        position: u64,
+        limit: u16,
+    ) -> HistoryResult<Vec<LayerId>> {
+        let _ = (layer, position, limit);
+        Err(crate::error::HistoryError::Unsupported(
+            "overwritten Layers",
+        ))
+    }
 
     /// Reads maintained Store totals; no full object/history scan.
     fn statistics(&self) -> HistoryResult<crate::records::StoreStatistics> {

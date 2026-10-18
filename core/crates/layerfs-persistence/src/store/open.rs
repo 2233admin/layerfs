@@ -85,6 +85,7 @@ impl Handles {
         )?);
         if writable {
             session.add_binding_hints()?;
+            session.add_lineage(crate::history::backfill_lineage)?;
         }
         Self::validated(session, directory, binding, cursor_key)
     }

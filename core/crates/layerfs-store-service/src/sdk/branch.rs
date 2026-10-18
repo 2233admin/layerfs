@@ -11,15 +11,15 @@ use super::args::{
     short, text, Answer,
 };
 use crate::store::{CommitError, Store};
-use layerfs_bridge::control::SdkValue;
+use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use layerfs_content::{
     filesystem::FilesystemRootId,
     merge::{merge_roots, MergeInput, RulesFrom},
 };
 use layerfs_history::{
     AddLayerOutcome, AddLayerRequest, BranchId, BranchMergeRequest, CommitHistoryRequest,
-    CommitMeta, CommitVia, ForkRequest, ForkSource, LayerStackRecord, MergeCommit, MergeHead,
-    MergeSide, NodeId, MAXIMUM_PAGE_RECORDS,
+    CommitMeta, CommitVia, ForkRequest, ForkSource, LayerId, LayerStackRecord, MergeCommit,
+    MergeHead, MergeSide, NodeId, MAXIMUM_PAGE_RECORDS,
 };
 use layerfs_workspace::InodeSerials;
 use std::sync::Arc;
@@ -525,30 +525,32 @@ pub fn publish(store: &Arc<Store>, args: &SdkValue) -> Answer {
         })
         .map_err(history)?;
     Ok(match outcome {
-        AddLayerOutcome::Added { layer, overwrote } => SdkValue::map([
-            ("kind", SdkValue::text("Added")),
-            (
-                "source",
-                SdkValue::map([
-                    ("branch", SdkValue::text(branch.name.as_str())),
-                    ("commit", SdkValue::text(hex(commit.as_slice()))),
-                ]),
-            ),
-            (
-                "publishedLayer",
-                layer_value(&layer, Some(branch.name.as_str())),
-            ),
-            ("basedOn", SdkValue::text(hex(branch.base_layer.as_slice()))),
-            (
-                "overwrote",
-                SdkValue::List(
-                    overwrote
-                        .iter()
-                        .map(|id| SdkValue::text(hex(id.as_slice())))
-                        .collect(),
+        AddLayerOutcome::Added { layer } => {
+            // The overwritten Layers are read after the publication, one
+            // page; `project.list_overwritten` pages the rest.
+            let (overwrote, more) = overwritten(store, layer.id, 0, 50)?;
+            SdkValue::map([
+                ("kind", SdkValue::text("Added")),
+                (
+                    "source",
+                    SdkValue::map([
+                        ("branch", SdkValue::text(branch.name.as_str())),
+                        ("commit", SdkValue::text(hex(commit.as_slice()))),
+                    ]),
                 ),
-            ),
-        ]),
+                (
+                    "publishedLayer",
+                    layer_value(&layer, Some(branch.name.as_str())),
+                ),
+                ("basedOn", SdkValue::text(hex(branch.base_layer.as_slice()))),
+                (
+                    "overwroteCount",
+                    SdkValue::Int(layer.overwrote_count as i64),
+                ),
+                ("overwrote", SdkValue::List(overwrote)),
+                ("overwroteHasMore", SdkValue::Bool(more)),
+            ])
+        }
         AddLayerOutcome::UpToDate { layer } => SdkValue::map([
             ("kind", SdkValue::text("UpToDate")),
             ("layer", SdkValue::text(hex(layer.as_slice()))),
@@ -558,4 +560,48 @@ pub fn publish(store: &Arc<Store>, args: &SdkValue) -> Answer {
             ("headLayer", SdkValue::text(hex(head.as_slice()))),
         ]),
     })
+}
+
+/// Up to `limit` Layers `layer` overwrote after `position`, newest first, and
+/// whether more follow.
+fn overwritten(
+    store: &Arc<Store>,
+    layer: LayerId,
+    position: u64,
+    limit: usize,
+) -> Result<(Vec<SdkValue>, bool), SdkRefusal> {
+    let mut items = Vec::new();
+    loop {
+        let want = (limit + 1 - items.len()).min(usize::from(MAXIMUM_PAGE_RECORDS));
+        let page = store
+            .history()
+            .overwritten(layer, position + items.len() as u64, want as u16)
+            .map_err(history)?;
+        let done = page.len() < want;
+        items.extend(page.iter().map(|id| SdkValue::text(hex(id.as_slice()))));
+        if done || items.len() > limit {
+            break;
+        }
+    }
+    let more = items.len() > limit;
+    items.truncate(limit);
+    Ok((items, more))
+}
+
+/// `project.list_overwritten({ layer, pageSize?, pagePos? })`: the Layers a
+/// publication overwrote, newest first, one page.
+pub fn list_overwritten(store: &Arc<Store>, args: &SdkValue) -> Answer {
+    args::project(store, args)?;
+    let layer = match args::node(text(args, "layer")?)? {
+        NodeId::Layer(layer) => layer,
+        NodeId::Commit(_) => return Err(invalid("list_overwritten takes a Layer")),
+    };
+    let (limit, pos) = args::paging(args)?;
+    let (items, more) = overwritten(store, layer, pos, limit)?;
+    let next = args::next_page(pos, items.len(), more);
+    Ok(SdkValue::map([
+        ("items", SdkValue::List(items)),
+        ("hasMore", SdkValue::Bool(more)),
+        ("nextPagePos", next),
+    ]))
 }

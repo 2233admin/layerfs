@@ -111,19 +111,8 @@ pub fn commit_value(record: &CommitRecord, branch: Option<&str>) -> SdkValue {
 pub fn layer_value(record: &LayerRecord, source_branch: Option<&str>) -> SdkValue {
     SdkValue::map([
         (
-            "overwrote",
-            SdkValue::List(
-                record
-                    .overwrote
-                    .iter()
-                    .take(32)
-                    .map(|id| SdkValue::text(hex(id.as_slice())))
-                    .collect(),
-            ),
-        ),
-        (
-            "overwroteTruncated",
-            SdkValue::Bool(record.overwrote.len() > 32),
+            "overwroteCount",
+            SdkValue::Int(record.overwrote_count as i64),
         ),
         ("logical", SdkValue::Int(record.logical as i64)),
         ("id", SdkValue::text(hex(record.id.as_slice()))),

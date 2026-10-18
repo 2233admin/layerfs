@@ -1,9 +1,10 @@
 //! LayerStack creation, Layer publication, reads and the publication chain.
 //!
 //! Publication is a bounded metadata operation with no content traversal: a
-//! Layer records a root the caller already saved, and the only write besides its
-//! own row is one conditional stack-head advance. Both happen inside the
-//! caller's transaction, so a refused advance inserts nothing.
+//! Layer records a root the caller already saved; besides its own row it writes
+//! its lineage (`lineage.rs`) and one conditional stack-head advance. All of it
+//! happens inside the caller's transaction, so a refused advance inserts
+//! nothing.
 //!
 //! An exact earlier publication is checked before any expected-head comparison,
 //! because asking twice is idempotent while a re-read of the head is not: the
@@ -83,6 +84,7 @@ pub(crate) fn initialize_layerstack(
         ],
     )
     .map_err(sql)?;
+    super::lineage::record_layer(tx, genesis, request.stack, 0, 0)?;
     layer_stack(tx, request.stack)?.ok_or(HistoryError::Integrity("LayerStack insertion"))
 }
 
@@ -177,7 +179,7 @@ pub(crate) fn verify_layer(tx: &Transaction<'_>, expected: &LayerRecord) -> Hist
                 && stored.source_branch == expected.source_branch
                 && stored.source_commit == expected.source_commit
                 && stored.logical == expected.logical
-                && stored.overwrote == expected.overwrote
+                && stored.overwrote_count == expected.overwrote_count
             {
                 Ok(true)
             } else {
@@ -320,9 +322,13 @@ pub(crate) fn add_layer(
             head: stack.head_layer,
         });
     }
-    let overwrote = skipped_layers(tx, stack.head_layer, request.commit)?;
+    // Skipped Layers are the chain above the newest one the Commit covers:
+    // only their count is written, whatever lies between.
+    let head = super::lineage::layer_line(tx, stack.head_layer)?.height;
+    let source = super::lineage::commit_line(tx, request.commit)?;
+    let covered = super::lineage::covered(tx, request.stack, head, &source)?;
     let layer = LayerRecord {
-        overwrote: overwrote.clone(),
+        overwrote_count: (head - covered) as u64,
         id: LayerId::derive(request.stack, Some(stack.head_layer), commit.root),
         stack: request.stack,
         parent: Some(stack.head_layer),
@@ -342,14 +348,14 @@ pub(crate) fn add_layer(
                 layer.source_branch.map(|id| id.to_bytes().to_vec()),
                 layer.source_commit.map(|id| id.to_bytes().to_vec()),
                 layer.logical as i64,
-                layer
-                    .overwrote
-                    .iter()
-                    .flat_map(|id| id.as_slice().iter().copied())
-                    .collect::<Vec<_>>(),
+                // Overwritten Layers are addressed by height (`overwritten`);
+                // only Layers published before #353 list them here.
+                Vec::<u8>::new(),
             ],
         )
         .map_err(sql)?;
+        super::lineage::record_layer(tx, layer.id, request.stack, head + 1, head - covered)?;
+        super::lineage::absorb(tx, request.stack, &source, head + 1)?;
     }
     let advanced = tx
         .execute(
@@ -371,37 +377,7 @@ pub(crate) fn add_layer(
             actual: LayerId::from_slice(&actual)?,
         });
     }
-    Ok(AddLayerOutcome::Added { layer, overwrote })
-}
-
-/// Stack Layers from `head` down that the Commit does not contain: neither
-/// the Layer nor the Commit it was published from is the Commit's ancestor.
-fn skipped_layers(
-    tx: &Transaction<'_>,
-    head: LayerId,
-    commit: layerfs_history::identity::CommitId,
-) -> HistoryResult<Vec<LayerId>> {
-    use layerfs_history::identity::NodeId;
-    let target = NodeId::Commit(commit);
-    let mut out = Vec::new();
-    let mut current = Some(head);
-    while let Some(id) = current {
-        if out.len() as u64 >= layerfs_history::records::MAXIMUM_LINEAGE_ROWS {
-            return Err(HistoryError::Capacity("lineage work"));
-        }
-        let record = layer(tx, id)?.ok_or(HistoryError::Integrity("Layer chain"))?;
-        let covered = super::ancestry::is_ancestor(tx, NodeId::Layer(id), target)?
-            || match record.source_commit {
-                Some(source) => super::ancestry::is_ancestor(tx, NodeId::Commit(source), target)?,
-                None => false,
-            };
-        if covered {
-            break;
-        }
-        out.push(id);
-        current = record.parent;
-    }
-    Ok(out)
+    Ok(AddLayerOutcome::Added { layer })
 }
 
 fn published_source(

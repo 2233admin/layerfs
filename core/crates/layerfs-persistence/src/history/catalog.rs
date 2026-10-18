@@ -100,6 +100,18 @@ impl HistoryCatalog for HistoryProvider {
         })
     }
 
+    fn overwritten(
+        &self,
+        layer: LayerId,
+        position: u64,
+        limit: u16,
+    ) -> HistoryResult<Vec<LayerId>> {
+        if limit == 0 || limit > layerfs_history::records::MAXIMUM_PAGE_RECORDS {
+            return Err(layerfs_history::HistoryError::InvalidInput("page limit"));
+        }
+        self.read(|tx| super::lineage::overwritten(tx, layer, position, usize::from(limit)))
+    }
+
     fn layer_history(
         &self,
         request: &LayerHistoryRequest,

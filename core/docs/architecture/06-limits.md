@@ -475,6 +475,25 @@ slice (`04-filesystem.md` §5.8).
 | sessions per Store | budget + 2, +1 refusal slot | `session_capacity` |
 | delta depth (whole-file / chunk / metadata) | 8 / 4 / 8 defaults, ≤ 50 | policy validation |
 
+### C5 — history walks (#353, 2026-10-18)
+
+History has no count limit. `MAXIMUM_LINEAGE_ROWS` (4,096), which refused
+`is_ancestor`, `merge_base`, publish's skipped-Layer walk and fork-from-Commit
+with `Capacity("lineage work")` past 4,096 rows, is deleted (#352 F-033). The
+walks read lineage records instead
+([16-history](16-history.md), [#353 design](../issues/353/DESIGN.md)):
+
+| Limit | Value | Enforced by |
+| --- | ---: | --- |
+| Commits since a Branch's base Layer | none | `lineage.rs` runs and absorption |
+| Layers between two sides | none | `layer_lineage.height` |
+| first-parent depth of a fork or history start | none | `commit_lineage` run and depth |
+| overwritten Layers per publication | none; paged, 128 per catalog page | `overwritten`, `MAXIMUM_PAGE_RECORDS` |
+
+What a walk still costs: a run segment and a merge at a time over the local
+Commits no Layer has absorbed; a fork from a Commit, one step per run on the
+chain. Disk and memory as admitted are the only bounds.
+
 ### Service/Bridge — final file save (#252)
 
 | Limit | Value | Enforced by |

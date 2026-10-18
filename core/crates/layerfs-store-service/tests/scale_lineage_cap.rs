@@ -1,12 +1,11 @@
-//! #352 scale experiment S1 (crazy_work_load_watch_out.md): the three walks
-//! MAXIMUM_LINEAGE_ROWS (4,096) bounds, each driven just past the bound
-//! through the SDK dispatch, with the exact outcome printed:
-//! (a) Commits since a Branch's base Layer, then branch.merge and publish;
-//! (b) Layers between two sides: 4,097 publishes on main, then merge a Branch
-//!     forked before them (time-boxed: it stops and reports the rate if the
-//!     publishes cannot finish inside the box);
-//! (c) branch.fork from a Commit more than 4,096 first-parent Commits back.
-//! Experiment record, not a gate: it asserts only that calls return.
+//! #353: the three history walks the 4,096 lineage cap used to refuse
+//! (#352 F-033) succeed at 1k, 4k and 40k, and the statements a publish, a
+//! merge's ancestry and a fork take stay the same as the count grows:
+//! (a) Commits since a Branch's base Layer;
+//! (b) Layers between two sides;
+//! (c) fork from a Commit deep on its Branch's first-parent chain.
+//! Long histories are built through the catalog with real roots alternating,
+//! so the SDK merge and publish at the end read real trees. Disposable profile.
 #[path = "support/installed_store.rs"]
 #[allow(dead_code)]
 mod installed;
@@ -15,23 +14,46 @@ mod installed;
 mod support;
 
 use layerfs_bridge::control::SdkValue;
-use layerfs_history::{BranchId, HistoryName, LayerStackId, NodeId};
+use layerfs_content::ObjectId;
+use layerfs_history::records::{
+    AddLayerOutcome, AddLayerRequest, CommitMeta, CommitOutcome, CommitRequest, CommitVia,
+    ForkRequest, ForkSource,
+};
+use layerfs_history::{BranchId, CommitId, HistoryName, LayerId, LayerStackId, NodeId};
+use std::fmt::Write;
 use std::fs;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use support::{write, Fixture, Work};
 
 const STACK: [u8; 16] = [23; 16];
-const PAST: usize = 4097;
+const COUNTS: [usize; 3] = [1_000, 4_097, 40_970];
+
+fn stack() -> LayerStackId {
+    LayerStackId::from_authority(STACK)
+}
+
+fn id(name: &str) -> BranchId {
+    BranchId::named(stack(), &HistoryName::new(name).unwrap())
+}
 
 fn head(fixture: &Fixture, name: &str) -> NodeId {
-    let stack = LayerStackId::from_authority(STACK);
-    let id = BranchId::named(stack, &HistoryName::new(name).unwrap());
-    let branch = fixture.service.store.history().branch(id).unwrap().unwrap();
-    NodeId::Commit(branch.head_commit.unwrap())
+    let branch = fixture
+        .service
+        .store
+        .history()
+        .branch(id(name))
+        .unwrap()
+        .unwrap();
+    branch
+        .head_commit
+        .map_or(NodeId::Layer(branch.base_layer), NodeId::Commit)
 }
 
 fn hex(node: NodeId) -> String {
-    node.as_slice().iter().map(|b| format!("{b:02x}")).collect()
+    node.as_slice().iter().fold(String::new(), |mut out, b| {
+        let _ = write!(out, "{b:02x}");
+        out
+    })
 }
 
 fn text(value: &str) -> SdkValue {
@@ -46,97 +68,332 @@ fn fixture(label: &str) -> Fixture {
     })
 }
 
+fn root_of(fixture: &Fixture, node: NodeId) -> ObjectId {
+    let history = fixture.service.store.history();
+    match node {
+        NodeId::Commit(commit) => history.commit(commit).unwrap().unwrap().root,
+        NodeId::Layer(layer) => history.layer(layer).unwrap().unwrap().root,
+    }
+}
+
+/// Real roots from SDK writes on a side Branch: one per content.
+fn roots(fixture: &Fixture, contents: &[&str]) -> Vec<ObjectId> {
+    fixture.fork("roots");
+    contents
+        .iter()
+        .map(|content| {
+            fixture.apply("roots", vec![write("/lane/roots.txt", *content)]);
+            root_of(fixture, head(fixture, "roots"))
+        })
+        .collect()
+}
+
+fn fork(fixture: &Fixture, name: &str, source: ForkSource) {
+    fixture
+        .service
+        .store
+        .history()
+        .fork(&ForkRequest {
+            stack: stack(),
+            branch: id(name),
+            name: HistoryName::new(name).unwrap(),
+            source,
+        })
+        .unwrap();
+}
+
+/// One catalog Commit of `root` on the Branch's head.
+fn commit(fixture: &Fixture, name: &str, root: ObjectId) -> CommitId {
+    let history = fixture.service.store.history();
+    let branch = history.branch(id(name)).unwrap().unwrap();
+    let layers = history.layer_stack(stack()).unwrap().unwrap();
+    let current = head(fixture, name);
+    let outcome = history
+        .commit_branch(&CommitRequest {
+            branch: branch.id,
+            expected_head: branch.head_commit,
+            expected_base: branch.base_layer,
+            expected_root: root_of(fixture, current),
+            candidate_root: root,
+            profile: layers.profile,
+            scope: layers.scope,
+            second_parent: None,
+            meta: CommitMeta::new(CommitVia::Files),
+            force: false,
+        })
+        .unwrap();
+    let CommitOutcome::Committed { record, .. } = outcome else {
+        panic!("{name}: {outcome:?}");
+    };
+    record.id
+}
+
+/// `count` Commits on `name`, alternating two roots, ending at `roots[0]`.
+fn commits(fixture: &Fixture, name: &str, count: usize, roots: [ObjectId; 2]) {
+    for i in 1..=count {
+        commit(fixture, name, roots[(count - i) % 2]);
+    }
+}
+
+fn publish(fixture: &Fixture, name: &str) -> (LayerId, u64) {
+    let history = fixture.service.store.history();
+    let branch = history.branch(id(name)).unwrap().unwrap();
+    let outcome = history
+        .add_layer(&AddLayerRequest {
+            stack: stack(),
+            branch: branch.id,
+            commit: branch.head_commit.unwrap(),
+            expected_stack_head: history.layer_stack(stack()).unwrap().unwrap().head_layer,
+            expected_branch_base: branch.base_layer,
+        })
+        .unwrap();
+    let AddLayerOutcome::Added { layer } = outcome else {
+        panic!("{name}: {outcome:?}");
+    };
+    (layer.id, layer.overwrote_count)
+}
+
 /// The SDK merge's ancestry questions for two heads, each answered once.
-fn ancestry(fixture: &Fixture, a: &str, b: &str) -> (Work, String) {
+fn ancestry(fixture: &Fixture, a: &str, b: &str) -> (Work, Option<NodeId>) {
     let (a, b) = (head(fixture, a), head(fixture, b));
     let history = fixture.service.store.history();
     let before = fixture.work();
-    let one = history.is_ancestor(b, a);
-    let two = history.is_ancestor(a, b);
-    let base = history.merge_base(a, b);
-    let outcome = format!("is_ancestor(b,a)={one:?} is_ancestor(a,b)={two:?} merge_base={base:?}");
-    (fixture.since(before), outcome)
+    assert!(!history.is_ancestor(b, a).unwrap());
+    assert!(!history.is_ancestor(a, b).unwrap());
+    let base = history.merge_base(a, b).unwrap();
+    (fixture.since(before), base)
 }
 
-fn merge_and_publish(fixture: &Fixture, case: &str, branch: &str, with: &str) {
+fn sdk_merge(fixture: &Fixture, branch: &str, with: &str, name: &str) -> Work {
     let before = fixture.work();
-    let merged = fixture.try_call(
+    let merged = fixture.call(
         "branch.merge",
         vec![
             ("branch", text(branch)),
             ("with", text(with)),
-            ("name", text("merged")),
-            ("message", text("s1")),
+            ("name", text(name)),
+            ("message", text("s353")),
         ],
     );
-    println!("SCALE_S1{case} branch.merge({branch},{with}) work={:?} outcome={merged:?}", fixture.since(before));
+    assert_eq!(merged.get_text("kind"), Some("Merged"), "{merged:?}");
+    fixture.since(before)
+}
+
+fn sdk_publish(fixture: &Fixture, branch: &str) -> (Work, SdkValue) {
     let before = fixture.work();
-    let published = fixture.try_call("branch.publish", vec![("branch", text(branch))]);
-    println!("SCALE_S1{case} branch.publish({branch}) work={:?} outcome={published:?} profile=Disposable", fixture.since(before));
+    let published = fixture.call("branch.publish", vec![("branch", text(branch))]);
+    assert_eq!(published.get_text("kind"), Some("Added"), "{published:?}");
+    (fixture.since(before), published)
+}
+
+fn flat(what: &str, works: &[(usize, Work)]) {
+    let first = works[0].1.statements;
+    assert!(
+        works.iter().all(|(_, work)| work.statements == first),
+        "{what} statements grow with the count: {works:?}"
+    );
 }
 
 #[test]
 fn a_commits_since_the_layer() {
-    let fixture = fixture("scale-s1a");
-    fixture.fork("big");
+    let fixture = fixture("scale-353a");
+    let start = Instant::now();
+    let [a, b] = <[ObjectId; 2]>::try_from(roots(&fixture, &["a\n", "b\n"])).unwrap();
     fixture.fork("other");
     fixture.apply("other", vec![write("/lane/other.txt", "other\n")]);
-    let start = Instant::now();
-    for i in 1..=PAST {
-        fixture.apply("big", vec![write("/lane/big.txt", format!("big {i}\n"))]);
-        if matches!(i, 1000 | 2000 | 4000 | PAST) {
-            let (work, outcome) = ancestry(&fixture, "big", "other");
-            println!("SCALE_S1a commits_since_layer={i} elapsed_ms={} ancestry={work:?} {outcome}", start.elapsed().as_millis());
-        }
+    let (mut walks, mut merges, mut publishes) = (Vec::new(), Vec::new(), Vec::new());
+    for count in COUNTS {
+        let big = format!("big{count}");
+        fixture.fork(&big);
+        commits(&fixture, &big, count, [a, b]);
+        let (work, base) = ancestry(&fixture, &big, "other");
+        assert!(matches!(base, Some(NodeId::Layer(_))), "{base:?}");
+        walks.push((count, work));
+        sdk_merge(&fixture, &big, "other", &format!("warm{count}"));
+        merges.push((
+            count,
+            sdk_merge(&fixture, &big, "other", &format!("m{count}")),
+        ));
     }
-    merge_and_publish(&fixture, "a", "big", "other");
+    // The first publish moves main; each big Branch then skips the Layers
+    // published since its base, through the same path.
+    sdk_publish(&fixture, "other");
+    for count in COUNTS {
+        // Every big head has root `a`; a filler publication of `b` between
+        // them keeps each one a change.
+        let filler = format!("filler{count}");
+        fixture.fork(&filler);
+        commit(&fixture, &filler, b);
+        sdk_publish(&fixture, &filler);
+        let (work, published) = sdk_publish(&fixture, &format!("big{count}"));
+        println!(
+            "SCALE_353a commits_since_layer={count} publish={work:?} overwroteCount={:?}",
+            published.get("overwroteCount")
+        );
+        publishes.push((count, work));
+    }
+    println!(
+        "SCALE_353a ancestry={walks:?} merge={merges:?} elapsed_ms={} profile=Disposable",
+        start.elapsed().as_millis()
+    );
+    flat("ancestry", &walks);
+    flat("merge", &merges);
+    flat("publish", &publishes);
     fixture.cleanup();
 }
 
 #[test]
 fn b_layers_between_two_sides() {
-    let fixture = fixture("scale-s1b");
+    let fixture = fixture("scale-353b");
+    let start = Instant::now();
+    let [a, b, c] = <[ObjectId; 3]>::try_from(roots(&fixture, &["a\n", "b\n", "c\n"])).unwrap();
     fixture.fork("x");
     fixture.apply("x", vec![write("/lane/x.txt", "x\n")]);
-    let start = Instant::now();
-    let budget = Duration::from_secs(95);
-    let mut layers = 0usize;
-    while layers < PAST && start.elapsed() < budget {
-        let name = format!("p{layers}");
-        fixture.fork(&name);
-        fixture.apply(&name, vec![write("/lane/main.txt", format!("main {layers}\n"))]);
-        let published = fixture.call("branch.publish", vec![("branch", text(&name))]);
-        assert_eq!(published.get_text("kind"), Some("Added"), "{published:?}");
+    let genesis = fixture
+        .service
+        .store
+        .history()
+        .branch(id("x"))
+        .unwrap()
+        .unwrap()
+        .base_layer;
+    let (mut walks, mut merges, mut publishes) = (Vec::new(), Vec::new(), Vec::new());
+    let mut layers = 0;
+    for count in COUNTS {
+        while layers < count {
+            let name = format!("p{layers}");
+            let main = fixture
+                .service
+                .store
+                .history()
+                .layer_stack(stack())
+                .unwrap()
+                .unwrap()
+                .head_layer;
+            fork(&fixture, &name, ForkSource::Layer(main));
+            let root = if root_of(&fixture, NodeId::Layer(main)) == a {
+                b
+            } else {
+                a
+            };
+            commit(&fixture, &name, root);
+            publish(&fixture, &name);
+            layers += 1;
+        }
+        let main = fixture
+            .service
+            .store
+            .history()
+            .layer_stack(stack())
+            .unwrap()
+            .unwrap()
+            .head_layer;
+        let y = format!("y{count}");
+        fork(&fixture, &y, ForkSource::Layer(main));
+        commit(&fixture, &y, c);
+        let (work, base) = ancestry(&fixture, "x", &y);
+        assert_eq!(base, Some(NodeId::Layer(genesis)));
+        walks.push((count, work));
+        sdk_merge(&fixture, "x", &y, &format!("warm{count}"));
+        merges.push((count, sdk_merge(&fixture, "x", &y, &format!("m{count}"))));
+        // A Branch from genesis publishes over every Layer since.
+        let probe = format!("probe{count}");
+        fork(&fixture, &probe, ForkSource::Layer(genesis));
+        commit(&fixture, &probe, c);
+        let before = fixture.work();
+        let (layer, overwrote) = publish(&fixture, &probe);
+        publishes.push((count, fixture.since(before)));
+        assert_eq!(overwrote as usize, layers);
+        // The whole list pages out: the newest is the Layer below the probe's,
+        // the oldest is the one just above genesis.
+        let history = fixture.service.store.history();
+        let parent = history.layer(layer).unwrap().unwrap().parent.unwrap();
+        assert_eq!(history.overwritten(layer, 0, 128).unwrap()[0], parent);
+        let last = history.overwritten(layer, overwrote - 1, 128).unwrap();
+        assert_eq!(last.len(), 1);
+        assert_eq!(
+            history.layer(last[0]).unwrap().unwrap().parent,
+            Some(genesis)
+        );
+        assert!(history
+            .overwritten(layer, overwrote, 128)
+            .unwrap()
+            .is_empty());
         layers += 1;
+        println!(
+            "SCALE_353b layers_between={count} elapsed_ms={} overwrote={overwrote}",
+            start.elapsed().as_millis()
+        );
     }
-    let ms = start.elapsed().as_millis();
-    println!("SCALE_S1b layers_published={layers} elapsed_ms={ms} rate_per_s={:.1}", layers as f64 * 1000.0 / ms as f64);
-    if layers < PAST {
-        println!("SCALE_S1b NOT_REACHED: {layers} of {PAST} publishes in the {}s box; merge not attempted", budget.as_secs());
-    } else {
-        fixture.fork("y");
-        fixture.apply("y", vec![write("/lane/y.txt", "y\n")]);
-        let (work, outcome) = ancestry(&fixture, "x", "y");
-        println!("SCALE_S1b layers_between={layers} ancestry={work:?} {outcome}");
-        merge_and_publish(&fixture, "b", "x", "y");
-    }
+    let (work, published) = sdk_publish(&fixture, "x");
+    let id = published
+        .get("publishedLayer")
+        .and_then(|l| l.get_text("id"))
+        .unwrap()
+        .to_owned();
+    let total = published
+        .get("overwroteCount")
+        .and_then(|c| match c {
+            SdkValue::Int(n) => Some(*n),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(
+        published.get("overwroteHasMore"),
+        Some(&SdkValue::Bool(true))
+    );
+    let tail = fixture.call(
+        "project.list_overwritten",
+        vec![
+            ("layer", text(&id)),
+            ("pageSize", SdkValue::Int(1000)),
+            ("pagePos", SdkValue::Int(total - 10)),
+        ],
+    );
+    assert_eq!(support::items(&tail).len(), 10, "{tail:?}");
+    assert_eq!(tail.get("hasMore"), Some(&SdkValue::Bool(false)));
+    println!("SCALE_353b ancestry={walks:?} merge={merges:?} publish_probe={publishes:?} publish_x={work:?} overwroteCount={:?} profile=Disposable", published.get("overwroteCount"));
+    flat("ancestry", &walks);
+    flat("merge", &merges);
+    flat("publish", &publishes);
     fixture.cleanup();
 }
 
 #[test]
 fn c_fork_from_a_deep_commit() {
-    let fixture = fixture("scale-s1c");
+    let fixture = fixture("scale-353c");
+    let [a, b] = <[ObjectId; 2]>::try_from(roots(&fixture, &["a\n", "b\n"])).unwrap();
     fixture.fork("deep");
     fixture.apply("deep", vec![write("/lane/deep.txt", "deep 0\n")]);
     let first = hex(head(&fixture, "deep"));
-    for i in 1..=PAST {
-        fixture.apply("deep", vec![write("/lane/deep.txt", format!("deep {i}\n"))]);
+    let mut done = 0;
+    let mut forks = Vec::new();
+    for count in COUNTS {
+        let mut current = root_of(&fixture, head(&fixture, "deep"));
+        for _ in done..count {
+            current = if current == a { b } else { a };
+            commit(&fixture, "deep", current);
+        }
+        done = count;
+        let near = hex(head(&fixture, "deep"));
+        fixture.call(
+            "branch.fork",
+            vec![
+                ("name", text(&format!("near{count}"))),
+                ("from", text(&near)),
+            ],
+        );
+        let before = fixture.work();
+        fixture.call(
+            "branch.fork",
+            vec![
+                ("name", text(&format!("old{count}"))),
+                ("from", text(&first)),
+            ],
+        );
+        forks.push((count, fixture.since(before)));
     }
-    let near = hex(head(&fixture, "deep"));
-    let shallow = fixture.try_call("branch.fork", vec![("name", text("near")), ("from", text(&near))]);
-    println!("SCALE_S1c fork_from_head outcome={shallow:?}");
-    let before = fixture.work();
-    let forked = fixture.try_call("branch.fork", vec![("name", text("old")), ("from", text(&first))]);
-    println!("SCALE_S1c fork_from_commit first_parent_depth={} work={:?} outcome={forked:?} profile=Disposable", PAST + 1, fixture.since(before));
+    println!("SCALE_353c first_parent_depth={COUNTS:?} fork={forks:?} profile=Disposable");
+    flat("fork", &forks);
     fixture.cleanup();
 }

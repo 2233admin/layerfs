@@ -80,9 +80,20 @@ height so far, so it replaces every row of its key with `x >= ` its own; what
 remains increases in both `x` and height, and the query is one indexed lookup:
 `SELECT height FROM reach WHERE key=? AND x<=? ORDER BY x DESC LIMIT 1`.
 
-`LayerRecord` gains `overwrote_count`; the stored and returned `overwrote` list
-keeps at most the newest 32 ids (the SDK already shows only 32). Old rows keep
-their full list and their count is its length.
+**Overwritten Layers (owner ruling 2026-10-18: full list, paged).** The
+Layers a publication skips are always the newest run of the chain below it:
+heights `(covered, H]` (the old walk stopped at the first covered Layer). So
+the full list is already stored, one row per displaced Layer: their
+`layer_lineage` rows, addressed by that height range. The publication writes
+only `overwrote_count`; nothing is dropped, there is no fixed count, and lane
+work does not depend on the list's length. `LayerRecord.overwrote` is replaced
+by `overwrote_count`; `AddLayerOutcome::Added` no longer carries a list.
+`HistoryCatalog::overwritten(layer, position, limit)` returns one page (newest
+first, at most 128) with one indexed range read on `layer_heights`, outside the
+lane. The SDK's `branch.publish` reads the first 50 after the publication and
+returns `overwroteCount` and `overwroteHasMore`; `project.list_overwritten({
+layer, pageSize, pagePos })` pages the rest. Layers published before #353 keep
+their stored list (same set), and its length becomes their count.
 
 ## 3. The walks after the change
 
@@ -120,7 +131,8 @@ the maximal ones with `is_ancestor`. Without the history's length in it, the
 work is both explores plus pairwise checks of the candidates (one per run of
 `S`'s unabsorbed region, usually one).
 
-**Tie rule (behaviour change, criss-cross only).** When several maximal common
+**Tie rule (behaviour change, criss-cross only; accepted by the owner
+2026-10-18).** When several maximal common
 ancestors exist, today's answer is the first in breadth-first order from the
 right side, which needs the whole region in order. The new rule picks the one
 with the newest Layer in its ancestry, then the deepest first parent, then the
@@ -135,8 +147,8 @@ walk.
    newest Layer published from a source in `C`'s ancestry: the stack's late
    frontier at `x <= T`, and for each segment of `explore(C, T + 1)` the run's
    frontier at `x <= d`. When `T = H` nothing is skipped and no explore runs.
-2. `overwrote_count = H - covered`; the list is one indexed range read
-   (`layer_heights`, newest 32).
+2. `overwrote_count = H - covered`; the list is not written (it is the
+   height range `(covered, H]`).
 3. Insert the Layer and its `layer_lineage` row; record `C`'s absorbed height
    before this publish (late when it exists).
 4. Absorb: each segment of `explore(C, ∞)` gets `absorbed(run, d, h)`.
