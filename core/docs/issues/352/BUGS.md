@@ -583,6 +583,14 @@
     with the same `Busy` / `unmount:kernel` text. Not rerun as a pass. The
     liaison (2026-10-19) finds the fork race plausible and leaves the
     finding with its owner, still unassigned.
+  - **Fifth and sixth occurrences** (2026-10-19, `issue359-facts-window`,
+    record 032), both with the same `Busy` / `unmount:kernel` text at
+    `mounted.rs:133`. Neither was rerun as a pass.
+    - `mounted_install` `a_directory_of_more_than_one_name_window_is_listed`,
+      on `dce9aea51`'s test build. This is the first occurrence outside
+      `mounted_commit` and `mounted_cycles`.
+    - `mounted_commit` `r5_3`, again, on `1c0cf4b0d`'s test build.
+
 
   **Status: OPEN. Owner: unassigned.** Next step: confirm or rule out the
   fork race. One way is to run each affected target with
@@ -625,3 +633,80 @@
   `an_unmount_without_discard_succeeds_after_an_mtime_only_commit`. It fails
   on the old code with the `Dirty` reply above.
   [fixes/029-359-e10-kept-live-rows.md](fixes/029-359-e10-kept-live-rows.md).
+
+- **F-049 · `fp31` TooSmall's staged premise races an early kernel FORGET
+  (test premise, likely; #359 F-A2 test runs, 2026-10-19).**
+  - `fp31_forget_underflow`
+    `fp31_a_kernel_forget_of_two_against_a_row_of_one_underflows_and_the_row_keeps_exactly_one`
+    failed once on `dace472a3`'s test build (pre-reword `24910c806`). The first of
+    two failed expectations was: "the kernel's unit was not retained:
+    MountWork { .. retained: 1, completed: 3, served: 4, .. forget_units: 1 }
+    -> MountWork { ..identical.. }". The run script did not keep the second
+    one.
+  - The snapshot taken at staging already counts the FORGET unit as served
+    and retained. So the counts the test compares after the refusal cannot
+    rise by one. The kernel delivered its FORGET before the test took the
+    snapshot that should precede it.
+  - Inferred from the two identical snapshots and the source, not proven.
+    No product behaviour is shown wrong: the unit was retained and served
+    once. It passed on one diagnostic run alone, which is not a pass. The
+    other `fp31` case passed in the same run.
+
+  - **Recurrences and candidate cause** (2026-10-19): the TooSmall case
+    failed again on `0efe2b772`'s test build, and the Absent case failed
+    once on `50b04e1ab`'s, with the same identical-snapshot text. Each
+    passed alone or in other runs.
+  - **Candidate (inferred from source, not proven):** the two cases run as
+    parallel test threads in one container, and each calls
+    `reclaim.request()`, which reclaims across the whole cgroup. One case's
+    reclaim can therefore make the kernel FORGET the other case's inode
+    before that case stages its snapshot.
+
+  **Status: OPEN. Owner: unassigned.** Next step: stage the snapshot before
+  the kernel can deliver the FORGET, or wait for the unit by its own count;
+  or run the two cases serially. Do not weaken the retained assertion.
+  [fixes/032-359-fa2-facts-window.md](fixes/032-359-fa2-facts-window.md).
+
+- **F-050 · a full-case `cost.mjs` run warms the daemon cache for its
+  LayerFS arm (harness; #359 F-A2 controls, 2026-10-19).**
+  - Without `--part`, a case runs `native.mount` and `native.copy` before
+    the `lfs` arm, through the same daemon and Store open. The native copy
+    reads the tree through the daemon's `CanonicalCache` (one allowance per
+    Store open, `store/open.rs`), so the LayerFS arm starts with a warmed
+    and churned cache. A `--part lfs` arm starts cold.
+  - Evidence: git commit reads 223 Store readers in the head full run (seq
+    349's case set) and **371** in every `--part lfs` arm, including the
+    no-window control (seq 585, `caa59784`). Head's status-cold shows 7,488
+    evictions; every `--part lfs` arm shows 0.
+  - AGENTS §1: an earlier phase's warmth credits a measured phase. Small
+    trees are affected most. rm-rf-nm counts per entry are unchanged
+    (38.16 hits, 4.21 misses in both), so its LOOKUP counts are not
+    confounded, but its timings are not like-for-like.
+  - Affected: record 026's head table, which is used as the head arm in
+    records 025–032, and #362's baseline comparisons wherever they compare
+    a full run against an `lfs`-only run.
+  - Harness and run selection only. No product change, and no historical
+    verdict is changed.
+
+  **Status: OPEN. Owner: unassigned** (the cost harness owner, or #362).
+  Until fixed, compare `--part lfs` arms only with `--part lfs` arms. Next
+  step: give each arm its own daemon, or declare the shared cache state per
+  arm.
+  [fixes/032-359-fa2-facts-window.md](fixes/032-359-fa2-facts-window.md).
+
+- **F-051 · `kernel_coherence` `size_never_shrinks_under_concurrent_append_and_refusals_stay_refused`
+  failed once (not yet diagnosed; #359 F-A2 test run, 2026-10-19).**
+  - On `51133cdcf`'s test build at host load 15–19, the reader thread
+    panicked at `kernel_coherence.rs:459` with "read length: 0 after 1000".
+    An `fs::read` of the growing file returned no bytes after a size of
+    1000 had been seen.
+  - The file is created in the overlay, so its LOOKUP asks no base facts,
+    and the read-ahead and window code under test there does not run for
+    it. Not attributed to that change.
+  - It passed on one diagnostic run alone, which is not a pass. There is no
+    earlier recorded failure.
+
+  **Status: OPEN. Owner: unassigned.** Next step: record the reader's
+  OPEN/READ replies and the kernel's cached size at the failing step.
+  Do not weaken the assertion.
+  [fixes/032-359-fa2-facts-window.md](fixes/032-359-fa2-facts-window.md).
