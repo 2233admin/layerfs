@@ -1,9 +1,15 @@
 //! #355: merges past the former merge caps. A3: moving a directory with more
 //! descendants than the former in-memory build budget (65,536 topology
 //! entries) builds a new directory holding all of them in the merged root.
-//! The build keeps its state in merge records in the Store file. Until the
-//! merge path cap goes (#355 (d)), a move of `n` files makes about `2n`
-//! candidate paths, so this checks a move past the budget and under that cap.
+//! A move of `n` files makes about `2n` candidate paths; past the former path
+//! cap (262,144) the merge keeps its paths in sorted runs in the merge's
+//! records (#355 (d)).
+//!
+//! The larger moves reuse a prepared Store (AGENTS section 2): run
+//! `prepare_a3_fixtures` once with `LAYERFS_355_FIXTURES` set to a directory;
+//! it writes `a3-<files>.sqlite`, closed, with the move and the small change
+//! on two Branches. Each merge test copies one and merges the copy, so only
+//! the merge runs in its process.
 #[path = "support/installed_store.rs"]
 #[allow(dead_code)]
 mod installed;
@@ -43,8 +49,9 @@ fn scratch(fixture: &Fixture) -> (i64, i64) {
     (count("merge_operation"), count("merge_record"))
 }
 
-fn moved(label: &str, count: usize) {
-    let start = Instant::now();
+/// A Store holding `count` empty files in `/big`, with `left` moving `/big`
+/// to `/moved` and `right` changing `/small.txt`.
+fn prepare(label: &str, count: usize) -> Fixture {
     let fixture = Fixture::new(label, |source| {
         let big = source.join("big");
         fs::create_dir(&big).unwrap();
@@ -54,7 +61,6 @@ fn moved(label: &str, count: usize) {
         fs::write(source.join("small.txt"), b"small\n").unwrap();
         count + 2
     });
-    let built = start.elapsed();
     fixture.fork("left");
     fixture.fork("right");
     let mv = SdkValue::map([
@@ -64,6 +70,24 @@ fn moved(label: &str, count: usize) {
     ]);
     fixture.apply("left", vec![mv]);
     fixture.apply("right", vec![write("/small.txt", "small, changed\n")]);
+    fixture
+}
+
+fn fixtures() -> std::path::PathBuf {
+    std::env::var_os("LAYERFS_355_FIXTURES")
+        .expect("LAYERFS_355_FIXTURES names the prepared fixtures")
+        .into()
+}
+
+/// An independent copy of the prepared Store for `count` files.
+fn prepared(label: &str, count: usize) -> Fixture {
+    let store = fixtures().join(format!("a3-{count}.sqlite"));
+    assert!(store.exists(), "run prepare_a3_fixtures first: {store:?}");
+    Fixture::open(installed::Fixture::cloned(label, &store, count + 2))
+}
+
+/// Merges `left` with `right` and checks the merged tree.
+fn merge_moved(fixture: Fixture, count: usize) {
     let before = fixture.work();
     let records = fixture.service.store.merge_record_work();
     let merge_start = Instant::now();
@@ -81,10 +105,10 @@ fn moved(label: &str, count: usize) {
     records_after.writes -= records.writes;
     records_after.write_ns -= records.write_ns;
     println!(
-        "SDK_MERGE_A3 moved={count} init_ms={} merge_ms={merge_ms} records={records_after:?} work={:?} kind={:?}",
-        built.as_millis(),
+        "SDK_MERGE_A3 moved={count} merge_ms={merge_ms} records={records_after:?} work={:?} kind={:?} root={:?}",
         fixture.since(before),
         merged.as_ref().map(|value| value.get_text("kind")),
+        merged.as_ref().map(|value| value.get_text("root")),
     );
     assert_eq!(scratch(&fixture), (0, 0), "the merge removed its records");
     let merged = merged.expect("the move merges");
@@ -103,9 +127,45 @@ fn moved(label: &str, count: usize) {
     fixture.cleanup();
 }
 
+/// File counts of the prepared moves: about 70,000 and 270,000 candidate
+/// paths, the second past the former 262,144-path cap.
+const PREPARED: [usize; 2] = [35_000, 135_000];
+
+#[test]
+#[ignore = "setup: writes the prepared Stores into LAYERFS_355_FIXTURES"]
+fn prepare_a3_fixtures() {
+    let directory = fixtures();
+    fs::create_dir_all(&directory).unwrap();
+    for count in PREPARED {
+        let start = Instant::now();
+        let host = prepare(&format!("sdk-merge-a3-prepare-{count}"), count).close();
+        let store = directory.join(format!("a3-{count}.sqlite"));
+        fs::copy(&host.config.path, &store).unwrap();
+        println!(
+            "SDK_MERGE_A3_PREPARED files={count} store={store:?} bytes={} ms={}",
+            fs::metadata(&store).unwrap().len(),
+            start.elapsed().as_millis()
+        );
+        host.cleanup();
+    }
+}
+
+#[test]
+#[ignore = "needs the prepared Stores in LAYERFS_355_FIXTURES"]
+fn a3_move_of_70k_candidate_paths() {
+    merge_moved(prepared("sdk-merge-a3-35k", PREPARED[0]), PREPARED[0]);
+}
+
+#[test]
+#[ignore = "needs the prepared Stores in LAYERFS_355_FIXTURES"]
+fn a3_move_past_the_former_path_cap() {
+    merge_moved(prepared("sdk-merge-a3-135k", PREPARED[1]), PREPARED[1]);
+}
+
 #[test]
 fn a3_directory_move_past_the_former_budget() {
-    moved("sdk-merge-a3", BUDGET + 34_464);
+    let count = BUDGET + 34_464;
+    merge_moved(prepare("sdk-merge-a3", count), count);
 }
 
 /// A refused merge removes its records too.

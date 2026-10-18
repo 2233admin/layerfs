@@ -3,15 +3,18 @@
 //! Entry module: declarations and re-exports only.
 
 mod build;
+mod candidates;
+mod codec;
 mod decide;
 mod entry;
 pub mod lww;
 pub mod markers;
+mod revive;
 mod rows;
+mod spill;
 pub mod text;
 mod types;
 
-pub use decide::MAXIMUM_MERGE_PATHS;
 pub use entry::merge_roots;
 pub use lww::{Rule, Rules};
 pub use markers::paths_with_markers;

@@ -101,6 +101,24 @@ impl Fixture {
             count,
         }
     }
+    /// An independent writable copy of a closed installed Store (setup
+    /// reuse, AGENTS section 2): the copy is new to this process and removed
+    /// with it.
+    pub fn cloned(label: &str, store: &std::path::Path, count: usize) -> Self {
+        let directory =
+            std::env::temp_dir().join(format!("layerfs-installed-{}-{label}", std::process::id()));
+        std::fs::create_dir(&directory).unwrap();
+        let installed = directory.join("store.sqlite");
+        std::fs::copy(store, &installed).unwrap();
+        Self {
+            directory,
+            config: PersistenceConfig::sqlite(&installed)
+                .with_sqlite_profile(SqlitePersistenceProfile::Disposable)
+                .with_sqlite_acquisition(SqliteAcquisitionSchema::Tables),
+            branch: BranchId::from_authority([24; 16]),
+            count,
+        }
+    }
     pub fn cleanup(self) {
         std::fs::remove_dir_all(self.directory).unwrap();
     }

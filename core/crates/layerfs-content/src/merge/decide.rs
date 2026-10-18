@@ -1,15 +1,11 @@
-//! Which paths a merge must decide, and the decision for each.
+//! The decision at each candidate path ([`super::candidates`]).
 //!
-//! Only a path whose entry ours changed can differ from theirs in the result:
-//! everywhere else the result is theirs. Ours' changed inodes come from the
-//! page-skipping inode difference; each changed directory contributes its
-//! changed names, with the whole subtree below a name it bound or unbound, and
-//! each file changed in place contributes its own path. Every candidate is
-//! then resolved by path in the base, ours and theirs and decided with the
-//! simulator's rules: an entry is its kind plus, for a file or symlink, its
-//! content (two directories are the same entry; their children decide).
+//! Every candidate is resolved by path in the base, ours and theirs and
+//! decided with the simulator's rules: an entry is its kind plus, for a file
+//! or symlink, its content (two directories are the same entry; their
+//! children decide).
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::HashMap;
 
 use layerfs_telemetry::timer::{Active, TimingScope};
 
@@ -17,8 +13,7 @@ use super::lww::Rules;
 use super::text::{deletion_markers, merge3, Hunk};
 use super::{Conflict, ConflictKind, LwwDecision};
 use crate::compare::text::{as_text, MAXIMUM_TEXT_BYTES};
-use crate::compare::tree::{binding_changes, join, locate, subtree, EntryFacts, TreeTable};
-use crate::compare::{BindingHints, DifferenceWork, NamingWork};
+use crate::compare::tree::{EntryFacts, TreeTable};
 use crate::error::{ContentError, ContentResult};
 use crate::filesystem::attributes::{read_portable, AttributeReadWork};
 use crate::filesystem::directory::read::lookup;
@@ -28,8 +23,9 @@ use crate::filesystem::sorted::DirectoryRoot;
 use crate::object::inode_leaf::{InodeKind, InodeValue};
 use crate::object::AuthenticatedObjects;
 
-/// Paths one merge may decide, and directories one path search may list.
-pub const MAXIMUM_MERGE_PATHS: usize = 1 << 18;
+/// Paths one side's resolution cache holds before it starts again: a cache,
+/// so its bound changes work, never an answer.
+const RESOLVED: usize = 1 << 16;
 
 /// Base, ours and theirs, in that order.
 pub(super) const BASE: usize = 0;
@@ -45,11 +41,12 @@ pub(super) enum Pick {
     Absent,
     /// Our entry.
     Take(EntryFacts),
-    /// New file bytes with the kind and metadata of `like`.
-    Write { like: EntryFacts, bytes: Vec<u8> },
+    /// New file bytes, spilled as text `text`, with the kind and metadata of
+    /// `like`.
+    Write { like: EntryFacts, text: u64 },
 }
 
-/// Path resolution in the three trees, cached per path.
+/// Path resolution in the three trees, with a bounded cache per side.
 pub(super) struct Resolver<'r> {
     pub(super) reader: &'r dyn AuthenticatedObjects,
     pub(super) roots: [FilesystemRootId; 3],
@@ -108,6 +105,9 @@ impl<'r> Resolver<'r> {
             }),
             None => None,
         };
+        if self.cache[side].len() >= RESOLVED {
+            self.cache[side].clear();
+        }
         self.cache[side].insert(path.to_owned(), found);
         Ok(found)
     }
@@ -116,127 +116,6 @@ impl<'r> Resolver<'r> {
     pub(super) fn value(&self, side: usize, serial: u64) -> ContentResult<Option<InodeValue>> {
         self.trees[side].value(self.reader, serial)
     }
-}
-
-/// How many paths one merge may decide, and how a larger one is named.
-#[derive(Clone, Copy)]
-pub(super) struct Cap {
-    pub(super) limit: usize,
-    /// True for a caller's bound (`merge.bound`), false for the merge's own.
-    pub(super) bound: bool,
-}
-
-impl Cap {
-    fn exceeded(self, what: &'static str, actual: usize) -> ContentError {
-        ContentError::BoundedCapacityExceeded {
-            what: if self.bound { "merge.bound" } else { what },
-            limit: self.limit as u64,
-            actual: actual as u64,
-        }
-    }
-}
-
-/// Every path whose entry may differ between the base and the `from` side.
-/// With `hints`, the changed inodes are named from recorded bindings when
-/// that names all of them; otherwise, and without hints, by the
-/// breadth-first walk. The second value is true when the hints named them.
-pub(super) fn candidates(
-    resolver: &Resolver<'_>,
-    from: usize,
-    cap: Cap,
-    hints: Option<&dyn BindingHints>,
-    work: &mut DifferenceWork,
-    naming: &mut NamingWork,
-    timing: &TimingScope<'_, Active>,
-) -> ContentResult<(BTreeSet<String>, bool)> {
-    let reader = resolver.reader;
-    let (base, side) = (resolver.trees[BASE], resolver.trees[from]);
-    let mut changed = Vec::new();
-    timing.child("merge.changes").run(|_| {
-        crate::compare::tree::inode_changes(reader, &base, &side, work, |serial, b, o| {
-            if let (Some(b), Some(o)) = (b, o) {
-                changed.push((serial, *b, *o));
-            }
-            Ok(())
-        })
-    })?;
-    let wanted = changed
-        .iter()
-        .map(|(serial, _, _)| *serial)
-        .collect::<BTreeSet<_>>();
-    if wanted.len() > cap.limit {
-        return Err(cap.exceeded("merge.locate", wanted.len()));
-    }
-    // The trace shows which naming ran: `merge.named` (recorded bindings),
-    // and `merge.locate` only when they could not name every inode (#352).
-    let hinted = match hints {
-        Some(hints) => timing.child("merge.named").run(|_| {
-            Ok::<_, ContentError>(
-                match crate::compare::name_from_hints(reader, hints, &side, &wanted, naming)? {
-                    Some(in_side) => {
-                        crate::compare::name_from_hints(reader, hints, &base, &wanted, naming)?
-                            .map(|in_base| (in_side, in_base))
-                    }
-                    None => None,
-                },
-            )
-        })?,
-        None => None,
-    };
-    let named = hinted.is_some();
-    let (in_side, in_base) = match hinted {
-        Some(found) => found,
-        None => timing.child("merge.locate").run(|_| {
-            Ok::<_, ContentError>((
-                locate(reader, &side, &wanted, cap.limit)?,
-                locate(reader, &base, &wanted, cap.limit)?,
-            ))
-        })?,
-    };
-    if in_side.len() < wanted.len() || in_base.len() < wanted.len() {
-        return Err(cap.exceeded("merge.locate", cap.limit));
-    }
-    let mut out = BTreeSet::new();
-    for (serial, b, o) in changed {
-        let paths = [&in_base[&serial], &in_side[&serial]];
-        if b.kind != InodeKind::Directory || o.kind != InodeKind::Directory {
-            out.extend(paths.map(String::clone));
-            continue;
-        }
-        let mut names = Vec::new();
-        binding_changes(
-            reader,
-            Some(b.content_root),
-            Some(o.content_root),
-            work,
-            |name, was, now| {
-                names.push((name.clone(), was, now));
-                Ok(())
-            },
-        )?;
-        for (name, was, now) in names {
-            for path in paths {
-                out.insert(join(path, &name));
-            }
-            for (index, tree, bound) in [(0, &base, was), (1, &side, now)] {
-                let Some(child) = bound else { continue };
-                if tree.value(reader, child)?.map(|value| value.kind) == Some(InodeKind::Directory)
-                {
-                    let mut below = Vec::new();
-                    let room = cap.limit.saturating_sub(out.len());
-                    let path = join(paths[index], &name);
-                    if !subtree(reader, tree, &path, child, room, &mut below)? {
-                        return Err(cap.exceeded("merge.paths", cap.limit));
-                    }
-                    out.extend(below.into_iter().map(|(path, _, _)| path));
-                }
-            }
-        }
-        if out.len() > cap.limit {
-            return Err(cap.exceeded("merge.paths", out.len()));
-        }
-    }
-    Ok((out, named))
 }
 
 /// Everything one decision pass needs besides the resolver.
@@ -315,10 +194,12 @@ impl Decider<'_> {
     }
 
     /// The pick at one candidate path.
+    /// `write` spills a merged file's bytes and returns their text number.
     pub(super) fn decide(
         &mut self,
         resolver: &mut Resolver<'_>,
         path: &str,
+        write: &mut dyn FnMut(Vec<u8>) -> ContentResult<u64>,
     ) -> ContentResult<Pick> {
         let b = resolver.entry(BASE, path)?;
         let o = resolver.entry(OURS, path)?;
@@ -369,7 +250,7 @@ impl Decider<'_> {
             }
             return Ok(Pick::Write {
                 like,
-                bytes: merged.text.into_bytes(),
+                text: write(merged.text.into_bytes())?,
             });
         }
         let present = match (o, t) {
@@ -397,7 +278,7 @@ impl Decider<'_> {
                     });
                     Pick::Write {
                         like: kept,
-                        bytes: marked.into_bytes(),
+                        text: write(marked.into_bytes())?,
                     }
                 }
                 None if kept_ours => Pick::Take(kept),
@@ -408,80 +289,4 @@ impl Decider<'_> {
             .push(conflict(ConflictKind::Type, Vec::new()));
         Ok(o.map_or(Pick::Keep, Pick::Take))
     }
-}
-
-/// Makes every kept path's parents directories: a parent decided absent is
-/// revived from theirs when theirs holds a directory there, else from ours.
-/// A path below a parent that stays a file cannot be kept and is dropped.
-/// An unpicked path holds what the `into` side holds.
-pub(super) fn revive(
-    resolver: &mut Resolver<'_>,
-    picks: &mut BTreeMap<String, Pick>,
-    into: usize,
-) -> ContentResult<()> {
-    let mut work = picks.keys().cloned().collect::<Vec<_>>();
-    while let Some(path) = work.pop() {
-        if path == "/" || !kept(resolver, picks, &path, into)? {
-            continue;
-        }
-        let parent = split(&path).0.to_owned();
-        let directory = |entry: Option<EntryFacts>| {
-            entry.filter(|entry| entry.value.kind == InodeKind::Directory)
-        };
-        let current = match picks.get(&parent) {
-            None => {
-                // An unpicked parent is the `into` side's; picking it makes
-                // its own parents checked in turn.
-                let entry = resolver.entry(into, &parent)?;
-                if let Some(held) = entry {
-                    let pick = if into == THEIRS {
-                        Pick::Keep
-                    } else {
-                        Pick::Take(held)
-                    };
-                    picks.insert(parent.clone(), pick);
-                    work.push(parent.clone());
-                }
-                entry
-            }
-            Some(Pick::Keep) => resolver.entry(THEIRS, &parent)?,
-            Some(Pick::Absent) => None,
-            Some(Pick::Take(entry)) => Some(*entry),
-            Some(Pick::Write { like, .. }) => Some(*like),
-        };
-        match current {
-            Some(entry) if entry.value.kind == InodeKind::Directory => {}
-            Some(_) => {
-                picks.insert(path, Pick::Absent);
-            }
-            None => {
-                let revived = if directory(resolver.entry(THEIRS, &parent)?).is_some() {
-                    Pick::Keep
-                } else if let Some(entry) = directory(resolver.entry(OURS, &parent)?) {
-                    Pick::Take(entry)
-                } else {
-                    picks.insert(path, Pick::Absent);
-                    continue;
-                };
-                picks.insert(parent.clone(), revived);
-                work.push(parent);
-            }
-        }
-    }
-    Ok(())
-}
-
-/// True when the pick leaves an entry at the path.
-fn kept(
-    resolver: &mut Resolver<'_>,
-    picks: &BTreeMap<String, Pick>,
-    path: &str,
-    into: usize,
-) -> ContentResult<bool> {
-    Ok(match picks.get(path) {
-        Some(Pick::Keep) => resolver.entry(THEIRS, path)?.is_some(),
-        None => resolver.entry(into, path)?.is_some(),
-        Some(Pick::Absent) => false,
-        Some(_) => true,
-    })
 }

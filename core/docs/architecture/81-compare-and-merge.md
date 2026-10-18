@@ -56,7 +56,7 @@ splits them.
 
 ## Merge
 
-`merge_roots(reader, consumer, input, fresh, timing)` merges `ours` into
+`merge_roots(reader, consumer, input, fresh, records, timing)` merges `ours` into
 `theirs` against `base`. The result is built on `theirs` with one
 `update_filesystem` call, the same canonical producer as every other root. File
 bytes it writes (merged text or marker text) go through `construct_bytes` into
@@ -66,9 +66,9 @@ the same consumer first.
    in the result. They come from `inode_changes(base, ours)`: a directory
    changed in place contributes its changed names, with the whole subtree below
    any name it bound or unbound; a file changed in place contributes its path.
-   The paths are named with `locate` in both base and ours. At most
-   `MAXIMUM_MERGE_PATHS` paths are decided; more is `BoundedCapacityExceeded`,
-   never a partial merge.
+   The paths are named with `locate` in both base and ours. There is no cap
+   on their number (#355 (d)); a caller's `bound` (the in-lane Commit step)
+   refuses past it, never as a partial merge.
 2. **Decisions.** Each candidate is resolved by path in all three trees and
    decided with the simulator's rules. An entry is its kind plus, for a file or
    symlink, its content. Two directories are the same entry, and their children
@@ -94,6 +94,21 @@ the same consumer first.
    the serial's only binding. Otherwise the caller's `fresh` allocator supplies
    a new serial, so one serial never carries two values. A directory serial
    theirs already holds is always given a fresh serial.
+
+**Working state (#355 (d)).** Memory does not grow with the merge. The
+candidate paths are sorted runs of 60 KiB chunks merged 16 at a time with
+duplicates dropped; the subtree walk's stack, the decided run, revival's
+change run, spilled text and the build's plan rows (changed names per parent,
+values, fresh and assigned serials) are records in the caller's
+`IndexedConstructionBacking`, the global Store's merge scratch rows. Up to
+8 MiB of them is held in memory first, and a consumed run chunk is released at
+once. Revival walks the decided run from the last path to the first and holds
+only picks that prefix the visited path; decided parents it has not reached
+are point records keyed by a path digest. The build reads the decided run and
+revival's changes in path order with a stack of open directories, then calls
+`update_filesystem_streamed_backed` over the plan rows. Without records (the
+in-lane step) the same state is a resident map, and the caller's `bound`
+limits it.
 
 The `/.lww` rules are gitignore-style, with `%include <file>`. They are read
 from the side `RulesFrom` names: theirs for a Workspace Commit, ours for a

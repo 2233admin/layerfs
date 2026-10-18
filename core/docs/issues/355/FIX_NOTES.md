@@ -214,6 +214,91 @@ build 8.9 s of which `merge.update` 5.6 s. Deciding is now the main cost per
 entry; (d) replaces the per-path resolution with a sorted walk, which is also
 what bounds its memory.
 
+## (d) No merge path cap; memory bounded by sorted runs
+
+`MAXIMUM_MERGE_PATHS` (262,144 decided paths) is removed. The merge's working
+state no longer grows in memory with the number of paths; it is records in the
+merge's Store scratch rows (`merge_record`, owner-checked as in (b)), with at
+most `HELD_BYTES` (8 MiB) of them held in memory first.
+
+- **Candidates** (`merge/candidates.rs`): the changed inodes are named a
+  window of 4,096 at a time (hints, then `locate`). The paths go into sorted
+  runs of 60 KiB chunks, merged 16 at a time with duplicates dropped
+  (`spill.rs`: `Sorter`, `Merge`). The subtree walk under a bound or unbound
+  name is a spilled stack. A caller `bound` (the in-lane step) is still checked
+  and refused past it.
+- **Decisions** (`merge/entry.rs`, `decide.rs`): one path at a time in path
+  order, into a decided run that also carries the `into` side's entry. A
+  decided path with decided paths below it is also a point record keyed by
+  the blake3 of its path. The ancestors are a stack of string prefixes: every
+  key between P and X has P as a prefix when P prefixes X. Text written by a
+  decision is spilled as text records. Its file is constructed only at build,
+  so a path revival drops stores no object. The resolver's per-side cache is
+  cleared at 65,536 entries.
+- **Revival** (`merge/revive.rs`): walks the decided run from the last path
+  to the first, replaying the resident version's last-in-first-out order
+  exactly. It holds only picks that prefix the visited path (bounded by path
+  length) and writes a run of the picks it changed or added.
+- **Build** (`merge/build.rs`, `rows.rs`): reads the decided run and
+  revival's run in path order with a stack of open directories. The plan rows
+  are point records: per-parent chunks of changed names with a first-name
+  index, values, and fresh and assigned serials. A fixed 1 MiB Bloom filter
+  skips most assignment lookups. `update_filesystem_streamed_backed` reads
+  them through memos of the current header, chunk and fresh-serial window.
+- A consumed run chunk is released at once. Spilled kinds are flagged, so a
+  key of a kind that never spilled needs no read.
+
+Results are unchanged:
+- The 35 recorded replay merges (`replay_merges.rs`, the replay Store copy)
+  re-merge to exactly their recorded roots: 35/35.
+- The 13 rule cases (`merge_root_oracle.rs`) end merged or refused as under
+  pre-(d) `d2fda2593`. Their roots carry wall-clock mtimes, so only the
+  outcomes are compared. The case "directory-becomes-file" merges under both
+  builds: the path below a parent that stays a file is dropped.
+- The 35,000-move A3 fixture merges to the same root under pre-(d) and (d)
+  (`e6cd2050…33d4dd`).
+
+**Smaller side: dropped (owner, 2026-10-18).** Stage 1 keeps naming paths from
+ours and building on theirs, as recorded in (c). Building on the smaller side
+would change merged roots' serials.
+
+**Fixtures (AGENTS §2).** `prepare_a3_fixtures` (ignored, setup) writes two
+closed Stores once into `LAYERFS_355_FIXTURES`; each test clones an
+independent writable copy (`installed::Fixture::cloned`) and merges only, so
+the timed test stays under 120 s. Built at the uncommitted (d) tree on
+`d2fda2593`:
+
+| Fixture | Moved files (candidate paths) | Bytes | sha256 | Prepare |
+| --- | --- | --- | --- | --- |
+| `a3-35000.sqlite` | 35,000 (~70k) | 16,842,752 | `9b4031b5…eb` | 9.2 s |
+| `a3-135000.sqlite` | 135,000 (~270k, past the former cap) | 64,454,656 | `9da22a13…de` | 45 s |
+
+**Diagnostic runs (one each, macOS, release, not window samples):**
+
+| Case | Merge | Record reads | Write transactions | Writer hold total / longest | Statements |
+| --- | --- | --- | --- | --- | --- |
+| 35k, pre-(d) | 10.9 s | 79,930 | — | — / 51 ms | — |
+| 35k, (d) | 11.0 s | — | — | 0.47 s / 7.6 ms | — |
+| 135k, (d) | 66.6 s | 391,828 | 2,418 | 7.75 s / 168 ms | 1,235,821 |
+
+Pre-(d) refuses the 135k case at the cap. The 135k merge's root is
+`176c8969…b3`.
+
+**Not yet shown.** The quiet-window comparisons are pending:
+- peak memory at 35k against 135k;
+- batching old (`d472edef8`) against new (`d2fda2593`) on the 100k case.
+
+**Gaps.**
+- The conflict and `.lww` lists stay resident. They grow with conflicts, not
+  with paths.
+- Compare's per-directory listing and `locate`'s queue stay resident.
+- The in-lane step's resident route is not checked by an oracle.
+- Time grows faster than linearly: 135k moves take 6× the 35k time for 3.9×
+  the files. The Store's 2 MiB page cache churns under spill traffic.
+- The longest writer hold at 135k is 168 ms, a 256 KiB flush. It is inside
+  the 2 s admission window but larger than at 35k.
+- Linux proofs are not run.
+
 ## Measurements so far (one sample each, Disposable, macOS host, not quiet-window receipts)
 
 Lane holds are timed by the test's catalog wrapper from `publish_lane`

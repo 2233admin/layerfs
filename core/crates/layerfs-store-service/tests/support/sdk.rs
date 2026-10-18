@@ -34,7 +34,11 @@ pub struct Work {
 
 impl Fixture {
     pub fn new(label: &str, build: impl FnOnce(&Path) -> usize) -> Self {
-        let host = installed::Fixture::built(label, build);
+        Self::open(installed::Fixture::built(label, build))
+    }
+
+    /// Opens an installed Store that no other owner holds.
+    pub fn open(host: installed::Fixture) -> Self {
         let config = OwnerConfig::default();
         let opened = open_store_observed(
             host.config.clone(),
@@ -220,10 +224,15 @@ impl Fixture {
         }
     }
 
-    pub fn cleanup(self) {
+    /// Closes the Store and its owner, keeping the installed files.
+    pub fn close(self) -> installed::Fixture {
         drop(self.service);
         self.owner.stop().unwrap();
-        self.host.cleanup();
+        self.host
+    }
+
+    pub fn cleanup(self) {
+        self.close().cleanup();
     }
 }
 

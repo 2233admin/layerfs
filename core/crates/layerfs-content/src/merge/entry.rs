@@ -1,12 +1,12 @@
 //! The merge entry point: candidates, decisions, revival and the build.
 
-use std::collections::BTreeMap;
-
 use layerfs_telemetry::timer::{Active, TimingScope};
 
-use super::{build, decide, MergeInput, MergeOutcome, Rules, RulesFrom, Side};
+use super::codec::decided;
+use super::spill::{digest, Resident, RunWriter, Spill, ANCESTOR};
+use super::{build, candidates, decide, revive, MergeInput, MergeOutcome, Rules, RulesFrom, Side};
 use crate::compare::DifferenceWork;
-use crate::error::ContentResult;
+use crate::error::{ContentError, ContentResult};
 use crate::filesystem::FilesystemObjects;
 use crate::object::{AuthenticatedObjects, FinalizedConsumer};
 use crate::IndexedConstructionBacking;
@@ -16,9 +16,10 @@ use crate::IndexedConstructionBacking;
 /// Merged and marker files are constructed into `consumer`, followed by the
 /// merged root's own objects; `reader` must read what `consumer` accepted.
 /// `fresh` returns one never-exposed serial of the roots' scope each call.
-/// `records` holds the merged root's build state; the caller owns its scope
-/// and releases it after this call returns. Without records the merged root
-/// is built in memory under the update's own budgets.
+/// `records` holds the merge's working state: its sorted runs, its plan and
+/// the update's validation and reference state (#355). The caller owns their
+/// scope and releases it after this call returns. Without records the same
+/// state is kept in memory; a caller passes none only with a `bound`.
 pub fn merge_roots(
     reader: &dyn AuthenticatedObjects,
     consumer: &mut dyn FinalizedConsumer,
@@ -45,26 +46,26 @@ pub fn merge_roots(
     }
     let mut resolver = decide::Resolver::new(reader, [input.base, input.ours, input.theirs])?;
     if resolver.trees[decide::OURS].root.scope() != resolver.trees[decide::THEIRS].root.scope() {
-        return Err(crate::ContentError::InvalidRecord("merge scope"));
+        return Err(ContentError::InvalidRecord("merge scope"));
     }
     let (from, into) = match input.decide_from {
         Side::Ours => (decide::OURS, decide::THEIRS),
         Side::Theirs => (decide::THEIRS, decide::OURS),
     };
-    let cap = decide::Cap {
-        limit: input.bound.map_or(decide::MAXIMUM_MERGE_PATHS, |bound| {
-            bound.min(decide::MAXIMUM_MERGE_PATHS)
-        }),
-        bound: input.bound.is_some(),
-    };
-    let (candidates, hinted) = timing.child("merge.paths").run(|scope| {
-        decide::candidates(
+    let mut resident = Resident::default();
+    let spill = Spill::new(match records {
+        Some(records) => records,
+        None => &mut resident,
+    });
+    let (mut paths, hinted) = timing.child("merge.paths").run(|scope| {
+        candidates::candidates(
             &resolver,
             from,
-            cap,
+            input.bound,
             input.hints,
             &mut outcome.work,
             &mut outcome.naming,
+            &spill,
             scope,
         )
     })?;
@@ -85,25 +86,53 @@ pub fn merge_roots(
         decider.text(reader, entry)
     })?;
     decider.rules = &rules;
-    let mut picks = BTreeMap::new();
-    for path in &candidates {
-        picks.insert(path.clone(), decider.decide(&mut resolver, path)?);
+    // Decisions in path order. Each decided path that has decided paths
+    // below it is also a point record, for revival's parent lookups; the
+    // decided ancestors of the current path are the stack's entries, which
+    // all prefix it.
+    let mut out = RunWriter::new(&spill);
+    let mut ancestors: Vec<(String, decide::Pick, bool)> = Vec::new();
+    let mut write = |bytes| spill.put_text(bytes);
+    while let Some(path) = paths.next(&spill)? {
+        let path =
+            String::from_utf8(path).map_err(|_| ContentError::InvalidRecord("merge path"))?;
+        let pick = decider.decide(&mut resolver, &path, &mut write)?;
+        let here = resolver.entry(into, &path)?;
+        while ancestors
+            .last()
+            .is_some_and(|(above, _, _)| !path.starts_with(above.as_str()))
+        {
+            ancestors.pop();
+        }
+        for (above, pick, recorded) in &mut ancestors {
+            let below = above == "/" || path.as_bytes().get(above.len()) == Some(&b'/');
+            if below && !*recorded {
+                spill.insert(ANCESTOR, digest(above), decided(above, pick, None)?)?;
+                *recorded = true;
+            }
+        }
+        out.push(&spill, &decided(&path, &pick, here.as_ref())?)?;
+        ancestors.push((path, pick, false));
     }
-    decide::revive(&mut resolver, &mut picks, into)?;
-    if into == decide::OURS {
-        picks = build::onto_ours(&mut resolver, picks)?;
-    }
+    let decisions = out.finish(&spill)?;
+    outcome.conflicts = std::mem::take(&mut decider.conflicts);
+    outcome.lww = std::mem::take(&mut decider.lww);
+    let (revived, count) = revive::revive(&mut resolver, decisions, into, &spill)?;
     let mut objects = FilesystemObjects::new_with_accepted(reader, consumer, reader);
     let mut writer = build::Writer {
         policy: input.policy,
         capacities: input.capacities,
         fresh,
         timing,
-        records: records.map(|records| records as &mut dyn IndexedConstructionBacking),
     };
-    outcome.root = build::build(&mut objects, &mut resolver, &picks, into, &mut writer)?;
-    outcome.decided = picks.len();
-    outcome.conflicts = decider.conflicts;
-    outcome.lww = decider.lww;
+    outcome.root = build::build(
+        &mut objects,
+        &mut resolver,
+        (decisions, revived),
+        into,
+        &spill,
+        &mut writer,
+    )?;
+    outcome.decided = count;
     Ok(outcome)
 }
