@@ -49,3 +49,10 @@
   F-025's fixes, before P3; items in order 1 → 2 → 3, each proved and
   measured. Spec: [STORAGE_BATCH_SPEC.md](STORAGE_BATCH_SPEC.md); record:
   [fixes/011-study-f027-storage-batch.md](fixes/011-study-f027-storage-batch.md).
+  **Item 1 done** (`925567e59`, daemon `20b7fde1`, addon `c41ae8c5`): pack
+  versions 23/24/25 write a directory of exactly the pack's groups. Range 14
+  from the `p2-main-e` range-13 fork, one sample per arm: Store growth
+  6,057,984 → 4,804,608 B (−20.7%), new packs' reserved bytes 632,640 → 0.
+  Old packs keep 11.6% of the Store as reserved bytes. Speed within 1.1×
+  except p95 watches on fs.read, fs.list and sandbox.mount (1.14–1.15, flat
+  counters, load ~13). [fixes/014-f027-item1-sized-pack-directories.md](fixes/014-f027-item1-sized-pack-directories.md).

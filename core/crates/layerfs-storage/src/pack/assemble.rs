@@ -9,8 +9,8 @@
 use crate::encoding::codec::{CompressionWorkspace, GROUP_LIMIT};
 use crate::error::{StorageError, StorageResult};
 use crate::pack::layout::{
-    assembled_length, body_area_offset, directory_entry_len, EncodedGroup, GroupCodec, PackLane,
-    DIRECTORY_ENTRY_LEN, GROUP_COUNT_OFFSET, HEADER_LEN, PACK_MAGIC, USED_OFFSET,
+    assembled_length, body_area_offset, directory_entry_len, sized_body_offset, EncodedGroup,
+    GroupCodec, PackLane, GROUP_COUNT_OFFSET, HEADER_LEN, PACK_MAGIC, USED_OFFSET,
     WHOLE_FILE_COMPACT_DROP,
 };
 use crate::policy::RECORD_COUNT_LIMIT;
@@ -236,7 +236,7 @@ pub fn build_group(
 /// releases each constituent body as it is copied.
 pub fn assemble(lane: PackLane, groups: &[EncodedGroup]) -> StorageResult<Vec<u8>> {
     let length = checked_pack_length(lane, groups)?;
-    let entries = directory_entries(lane, groups, body_area_offset(lane))?;
+    let entries = directory_entries(lane, groups, sized_body_offset(lane, groups.len()))?;
     let mut bytes = Vec::with_capacity(length);
     write_control_and_directory(lane, groups.len(), length, &entries, &mut bytes)?;
     for group in groups {
@@ -258,7 +258,7 @@ pub fn assemble(lane: PackLane, groups: &[EncodedGroup]) -> StorageResult<Vec<u8
 /// - instead of the assembly plus the whole retained tail.
 pub fn assemble_consuming(lane: PackLane, groups: Vec<EncodedGroup>) -> StorageResult<Vec<u8>> {
     let length = checked_pack_length(lane, &groups)?;
-    let entries = directory_entries(lane, &groups, body_area_offset(lane))?;
+    let entries = directory_entries(lane, &groups, sized_body_offset(lane, groups.len()))?;
     let mut bytes = Vec::with_capacity(length);
     write_control_and_directory(lane, groups.len(), length, &entries, &mut bytes)?;
     // Bodies are appended in group order and each group is dropped at the end of
@@ -398,11 +398,10 @@ fn append_body(_lane: PackLane, group: &EncodedGroup, bytes: &mut Vec<u8>) -> St
     Ok(())
 }
 
-/// Writes the control area and the reserved directory region into `bytes`.
+/// Writes the control area and the directory into `bytes`.
 ///
-/// The region is the lane's full width and its unused tail is zero, so a pack
-/// holding three groups and a pack holding two hundred put their bodies at the
-/// same offset. `entries` are this pack's first `group_count` entries.
+/// The directory holds exactly `group_count` entries (#352 F-027 item 1): a
+/// sealed pack never gains a group, so no slot is reserved for one.
 fn write_control_and_directory(
     lane: PackLane,
     group_count: usize,
@@ -411,18 +410,11 @@ fn write_control_and_directory(
     bytes: &mut Vec<u8>,
 ) -> StorageResult<()> {
     let area = control_area(lane, group_count, used)?;
-    let region = body_area_offset(lane);
-    if DIRECTORY_ENTRY_LEN > region - HEADER_LEN {
+    let region = sized_body_offset(lane, group_count);
+    if entries.len() != region - HEADER_LEN {
         return Err(StorageError::Integrity("pack directory width"));
     }
     bytes.extend_from_slice(&area);
-    bytes.resize(region, 0);
-    let directory = bytes
-        .get_mut(HEADER_LEN..region)
-        .ok_or(StorageError::Integrity("pack directory"))?;
-    if entries.len() > directory.len() {
-        return Err(StorageError::Integrity("pack directory width"));
-    }
-    directory[..entries.len()].copy_from_slice(entries);
+    bytes.extend_from_slice(entries);
     Ok(())
 }
