@@ -1,6 +1,6 @@
 //! Native argument conversion and disjoint public/operator method tables.
 use crate::job::{refused, Job, Outcome};
-use crate::{convert, exec, job, project, registry, sandbox};
+use crate::{convert, direct, exec, job, project, registry, sandbox};
 use layerfs_bridge::control::SdkValue;
 use napi::{bindgen_prelude::AsyncTask, JsUnknown};
 
@@ -43,13 +43,15 @@ fn dispatch(op: &str, args: SdkValue) -> Outcome {
             "UnknownMethod",
             "operator methods require operatorCall",
         )),
-        _ if op.contains('.') => sdk(op, args),
+        // Store calls run in this process; there is no other route.
+        _ if op.contains('.') => direct::call(op, args, false),
         _ => Err(refused("UnknownMethod", format!("no operation {op}"))),
     }
 }
 
-/// Every other method is one daemon SDK call through the named Sandbox.
-fn sdk(op: &str, args: SdkValue) -> Outcome {
+/// A daemon operator call through the named Sandbox: its Workspaces and the
+/// read model that lists them.
+fn daemon_operator(op: &str, args: SdkValue) -> Outcome {
     let state = registry::sandbox(&args)?;
     let args = match args {
         SdkValue::Map(fields) => SdkValue::Map(
@@ -60,11 +62,8 @@ fn sdk(op: &str, args: SdkValue) -> Outcome {
         ),
         other => other,
     };
-    let answer = if op.starts_with("operator.") {
-        layerfs_api::operator::call(&mut *crate::trace::control(&state.controls)?, op, args)
-    } else {
-        layerfs_api::call(&mut *crate::trace::control(&state.controls)?, op, args)
-    };
+    let answer =
+        layerfs_api::operator::call(&mut *crate::trace::control(&state.controls)?, op, args);
     answer.map_err(|error| match error {
         layerfs_api::SdkError::Refused(refusal) => refusal,
         layerfs_api::SdkError::Operation(failure) => {
@@ -72,6 +71,15 @@ fn sdk(op: &str, args: SdkValue) -> Outcome {
         }
         layerfs_api::SdkError::Mount(failure) => job::failed(failure),
     })
+}
+
+/// Opens or releases a Store of this process.
+pub(crate) fn store(
+    args: JsUnknown,
+    run: fn(&SdkValue) -> Outcome,
+) -> napi::Result<AsyncTask<Job>> {
+    let args = convert::from_js(args)?;
+    Ok(AsyncTask::new(Job::new(move || run(&args))))
 }
 
 /// Runs one internal operator call through its separate method table.
@@ -84,13 +92,13 @@ pub(crate) fn operator_call(op: String, args: JsUnknown) -> napi::Result<AsyncTa
             "operator.process.list" => exec::processes(&args),
             "operator.process.cancel" => exec::cancel(&args),
             "operator.project.progress" => crate::project::progress(&args),
-            "operator.inspect.snapshot"
-            | "operator.store.stats"
+            "operator.store.stats"
             | "operator.store.commits"
             | "operator.files.stats"
-            | "operator.files.history"
+            | "operator.files.history" => direct::call(&op, args, true),
+            "operator.inspect.snapshot"
             | "operator.workspace.overlay"
-            | "operator.workspace.changes" => sdk(&op, args),
+            | "operator.workspace.changes" => daemon_operator(&op, args),
             _ => Err(refused(
                 "UnknownMethod",
                 format!("no operator operation {op}"),

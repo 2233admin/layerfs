@@ -3,7 +3,11 @@ import { snapshot } from "./inspect/snapshot.js";
 import { invokeOperator, sandboxId, page } from "../src/client.js";
 export class LayerFSOperator {
   constructor(client) {
-    const call = async (method, args = {}, sandbox) => invokeOperator(`operator.${method}`, { ...args, project: client.projectName, home: client.options.home, sandbox: sandbox ? sandboxId(sandbox) : await client.service() }, client.options);
+    // Workspace and process calls go to the named Sandbox; Store calls run in
+    // this process against the client's Store.
+    const call = async (method, args = {}, sandbox) => sandbox
+      ? invokeOperator(`operator.${method}`, { ...args, project: client.projectName, home: client.options.home, sandbox: sandboxId(sandbox) }, client.options)
+      : (await client.store(), invokeOperator(`operator.${method}`, { ...args, project: client.projectName, home: client.options.home, storePath: client.options.storePath }, client.options));
     this.store = {
       stats: async () => { const v = await call("store.stats"); return { ...v, dedupe: v.dedupe === null ? null : Number(v.dedupe), compression: v.compression === null ? null : Number(v.compression) }; },
       commits: (branch, pageSize, pagePos) => call("store.commits", { branch, ...page(pageSize,pagePos) }),

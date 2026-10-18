@@ -107,6 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         controller_private: keys.private,
         daemon_peer: daemon.public,
         startup_wait: Duration::from_secs(3),
+        connect_host: None,
     };
     let mut first = api
         .create(make(setup(daemon.private, keys.public)), &project)

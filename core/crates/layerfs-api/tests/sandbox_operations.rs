@@ -147,6 +147,7 @@ impl Fixture {
             controller_private: [31; 32],
             daemon_peer: duplex::public_key(&[32; 32]).unwrap(),
             startup_wait: Duration::from_secs(2),
+            connect_host: None,
         };
         // No Store is constructed or opened. This is the original InstallPending
         // startup used by component proofs, not a fabricated SDK owner.
@@ -443,6 +444,7 @@ fn create_mismatched_existing_project_refuses_before_any_deployment_or_control_e
             controller_private: [31; 32],
             daemon_peer: duplex::public_key(&[32; 32]).unwrap(),
             startup_wait: Duration::from_secs(2),
+            connect_host: None,
         },
         &project.project,
     );

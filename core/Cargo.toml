@@ -17,6 +17,7 @@ members = [
     "crates/layerfs-telemetry",
     "crates/layerfs-overlay",
     "crates/layerfs-workspace",
+    "crates/layerfs-store-service",
     "crates/layerfs-daemon",
     "crates/layerfs-api",
     "crates/layerfs-bridge",

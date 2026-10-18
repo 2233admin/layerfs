@@ -28,10 +28,22 @@ use std::sync::Arc;
 /// fence: a stopped mount starts nothing new and still gives back what it
 /// holds.
 struct FilesystemPort(StoreOperation, Fence);
-impl MountServices for BoundWorkspace {
+/// A bound Workspace as one kernel mount's services.
+pub struct Mounted(pub Arc<BoundWorkspace>);
+impl MountServices for Mounted {
     fn request(&self, fence: &Fence) -> Result<Arc<dyn RequestServices>, ServiceError> {
-        Ok(Arc::new(FilesystemPort(self.operation()?, fence.clone())))
+        request(&self.0, fence)
     }
+}
+/// One kernel request's services over `workspace`, under `fence`.
+pub fn request(
+    workspace: &BoundWorkspace,
+    fence: &Fence,
+) -> Result<Arc<dyn RequestServices>, ServiceError> {
+    Ok(Arc::new(FilesystemPort(
+        workspace.operation()?,
+        fence.clone(),
+    )))
 }
 impl FilesystemPort {
     fn fenced(&self, gated: bool) -> Result<(), ServiceError> {

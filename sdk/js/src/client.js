@@ -47,19 +47,34 @@ export function deployment(options = {}, needsImage = true) {
     volume: options.volume ?? env("VOLUME"),
     daemon: options.daemon ?? env("DAEMON"),
     containerPrefix: options.containerPrefix ?? env("CONTAINER_PREFIX"),
+    daemonHost: options.daemonHost ?? env("DAEMON_HOST"),
   };
   for (const [name, value] of Object.entries(deploy)) {
-    if ((name === "image" && !needsImage) || name === "containerPrefix") continue;
+    if ((name === "image" && !needsImage) || name === "containerPrefix" || name === "daemonHost") continue;
     if (!value) throw new LayerFSError("InvalidInput", `deploy.${name} is not configured (LAYERFS_${name.toUpperCase()})`, null);
   }
   if (!deploy.image) delete deploy.image;
   if (!deploy.containerPrefix) delete deploy.containerPrefix;
+  if (!deploy.daemonHost) delete deploy.daemonHost;
   return deploy;
 }
 
-/** One client's deployment selection, including cross-process discovery home. */
+/** One client's deployment selection, including cross-process discovery
+ * home and the Store this process opens. */
 export function invokeClient(client, op, args) {
-  return invoke(op, { ...args, project: client.projectName, home: client.options.home, deploy: client.options.deploy }, client.options);
+  return invoke(op, { ...args, project: client.projectName, home: client.options.home, deploy: client.options.deploy, ...storeArgs(client) }, client.options);
+}
+
+const storeArgs = (client) => (client.options.storePath ? { storePath: client.options.storePath } : {});
+
+/** Opens the client's Store in this process (one more client of it). */
+export async function storeOpen(client) {
+  return outcome(await native().storeOpen({ project: client.projectName, home: client.options.home, ...storeArgs(client) }));
+}
+
+/** Releases the client's Store; the last client of the process closes it. */
+export async function storeClose(client) {
+  return outcome(await native().storeClose({ project: client.projectName, home: client.options.home, ...storeArgs(client) }));
 }
 
 export function page(pageSize = 50, pagePos = 0) {

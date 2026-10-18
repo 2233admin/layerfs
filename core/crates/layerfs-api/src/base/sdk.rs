@@ -1,7 +1,7 @@
-//! One SDK call over the control channel, and its failure.
+//! One daemon operator call over the control channel, and its failure.
 //!
-//! Every non-Workspace JavaScript method is one daemon call: its arguments
-//! and result are plain values, and a refusal carries a stable code.
+//! Its arguments and result are plain values, and a refusal carries a stable
+//! code. Store calls are not daemon calls (#352 F-020).
 use crate::{
     base::failure::exchange_with,
     internal::{Control, ControlCause, ControlPhase},
@@ -58,25 +58,13 @@ impl fmt::Display for SdkError {
 }
 impl std::error::Error for SdkError {}
 
-/// Calls one daemon SDK method once; nothing is retried.
-pub fn call(control: &mut Control, method: &str, args: SdkValue) -> SdkResult {
-    if method.starts_with("operator.") {
-        return Err(SdkError::Refused(SdkRefusal {
-            code: "UnknownMethod".into(),
-            message: "operator methods require operator::call".into(),
-            detail: SdkValue::Null,
-        }));
-    }
-    exchange_call(control, method, args)
-}
-
+/// Calls one daemon operator method once; nothing is retried.
 pub(crate) fn exchange_call(control: &mut Control, method: &str, args: SdkValue) -> SdkResult {
-    let (args, bodies) = super::stream::split(method, args);
     let request = Request::Sdk(SdkCall {
         method: method.to_owned(),
         args,
     });
-    match exchange_with(control, request.clone(), &bodies)? {
+    match exchange_with(control, request.clone(), &[])? {
         Reply::Sdk(value) => Ok(value),
         Reply::SdkRefused(refusal) => Err(SdkError::Refused(refusal)),
         reply => Err(SdkError::Operation(OperationFailure::unexpected(

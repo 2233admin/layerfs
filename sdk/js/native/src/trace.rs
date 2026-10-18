@@ -56,6 +56,20 @@ pub(crate) fn run<T>(scope: Option<[u8; 32]>, work: impl FnOnce() -> T) -> (T, V
     (value, COLLECTED.with_borrow_mut(std::mem::take))
 }
 
+/// True while this thread runs a traced call.
+pub(crate) fn traced() -> bool {
+    SCOPE.get().is_some()
+}
+
+/// Keeps one telemetry value of an in-process call for its trace line.
+pub(crate) fn collect(value: SdkValue) {
+    COLLECTED.with_borrow_mut(|collected| {
+        if collected.len() < TELEMETRY {
+            collected.push(value);
+        }
+    });
+}
+
 /// A Sandbox's control connection, traced while this thread is.
 pub(crate) struct Traced<'a>(Lease<'a>);
 

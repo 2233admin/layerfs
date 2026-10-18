@@ -1,5 +1,6 @@
 //! Node entry points for the public SDK and internal operator.
 mod convert;
+mod direct;
 mod discovery;
 mod dispatch;
 mod exec;
@@ -18,6 +19,18 @@ use napi_derive::napi;
 #[napi]
 pub fn call(op: String, args: JsUnknown) -> napi::Result<AsyncTask<Job>> {
     dispatch::call(op, args)
+}
+
+/// One more client of the Store at `args.storePath` in this process.
+#[napi]
+pub fn store_open(args: JsUnknown) -> napi::Result<AsyncTask<Job>> {
+    dispatch::store(args, direct::acquire)
+}
+
+/// One client less of the Store at `args.storePath`; the last one closes it.
+#[napi]
+pub fn store_close(args: JsUnknown) -> napi::Result<AsyncTask<Job>> {
+    dispatch::store(args, direct::release)
 }
 
 /// Runs one internal operator operation on its separate method table.

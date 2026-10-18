@@ -20,8 +20,6 @@ pub(super) struct Binding {
     pub activity: Activity,
     pub epoch: u64,
     pub published: Option<CommitOutcome>,
-    /// Original private filesystem publication failure and its construction custody.
-    pub file_failure: Option<Box<crate::store::CommitFailure>>,
 }
 pub(super) enum Entry {
     Binding,

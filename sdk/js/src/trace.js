@@ -11,7 +11,7 @@ let next = 0;
 /** Fields whose text is file content: only their byte length is traced. */
 const CONTENT = new Set(["content", "bytes", "oldText", "newText"]);
 /** Deployment and discovery settings are not call arguments. */
-const SETTINGS = new Set(["deploy", "home", "project"]);
+const SETTINGS = new Set(["deploy", "home", "project", "storePath"]);
 const TEXT = 200;
 
 const size = (value) => (typeof value === "string" ? Buffer.byteLength(value) : value?.length ?? 0);

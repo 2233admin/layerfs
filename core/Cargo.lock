@@ -586,6 +586,7 @@ dependencies = [
  "layerfs-persistence",
  "layerfs-project",
  "layerfs-storage",
+ "layerfs-store-service",
  "layerfs-telemetry",
  "layerfs-workspace",
  "nix",
@@ -621,6 +622,7 @@ dependencies = [
  "layerfs-persistence",
  "layerfs-sandbox",
  "layerfs-storage",
+ "layerfs-store-service",
  "layerfs-telemetry",
  "napi",
  "napi-build",
@@ -676,6 +678,22 @@ dependencies = [
  "layerfs-telemetry",
  "sha2 0.11.0",
  "zstd-sys",
+]
+
+[[package]]
+name = "layerfs-store-service"
+version = "0.1.7"
+dependencies = [
+ "layerfs-bridge",
+ "layerfs-content",
+ "layerfs-history",
+ "layerfs-overlay",
+ "layerfs-persistence",
+ "layerfs-project",
+ "layerfs-storage",
+ "layerfs-telemetry",
+ "layerfs-workspace",
+ "nix",
 ]
 
 [[package]]

@@ -1,4 +1,6 @@
-//! Daemon service ownership. SQL stays in the independently usable overlay crate.
+//! The daemon: Workspaces (FUSE, kernel Attach/Ready, Commit, unmount) over
+//! the Store service crate's Store and overlay. Store calls are not served
+//! here; they run in the SDK's process (#352 F-020).
 //!
 //! Each Workspace owns one overlay connection behind one lock; a caller runs
 //! its own short typed call under it and keeps exact failure custody and reply tickets.
@@ -7,24 +9,21 @@
 //! command launch and supervision stay with the Sandbox or external executor.
 #![forbid(unsafe_code)]
 
-pub mod bootstrap;
 pub mod install;
 mod install_file;
 pub mod install_types;
 mod operator;
-mod overlay;
-mod sdk;
 mod service;
-pub mod store;
+pub use service::{request as mount_request, Mounted};
 pub mod telemetry;
-pub(crate) use overlay::owner;
+pub(crate) use layerfs_store_service::sdk;
+pub use layerfs_store_service::{bootstrap, store};
 
-pub use owner::{OriginalInput, Owner, OwnerClient, OwnerConfig, OwnerError, WorkspacePanic};
-pub use service::observations::JobWork;
-pub use service::results::ServiceClass;
-pub use service::startup::OwnerStart;
+pub use layerfs_store_service::{
+    JobWork, OriginalInput, Owner, OwnerClient, OwnerConfig, OwnerError, OwnerStart, OwnerWork,
+    ServiceClass, WorkspacePanic,
+};
 
 pub mod control;
 
 pub mod application;
-pub use service::owner_work::OwnerWork;

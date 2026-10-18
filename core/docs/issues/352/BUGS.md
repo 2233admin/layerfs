@@ -175,7 +175,12 @@
   [DIRECT_STORE_IMPL.md](DIRECT_STORE_IMPL.md); record:
   [fixes/007-a1-f020-direct-store-access.md](fixes/007-a1-f020-direct-store-access.md).
   One route, Linux only (owner): the daemon stops serving Store calls and the
-  old-route tests are deleted, not converted.
+  old-route tests are deleted, not converted. **Fixed on `dsh-352-f020`**
+  (fixer; steps 1–3 `91cde4d50`, daemon host `ce83289f1`, proofs `373b0357c`),
+  awaiting merge. Step 6 on range 12: read p50 6.08 → 2.84 ms, write p50
+  14.73 → 11.81 ms, Workspace calls unchanged; isolated-call SQL equal; Store
+  bytes +0.10% (interleaving; serial sequence equal). fs-bench-pro is a known
+  break left for the owner.
 - **F-021 · F4 judged the with-vs-without table by the before/after shape
   (tooling, builder, 2026-10-18, range 007 attempt 2).** The check read every
   table line after the before/after header, so the attempt-vs-rerun table

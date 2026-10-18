@@ -903,10 +903,10 @@ fn simultaneous_mounts_over_related_roots_are_isolated_and_a_stale_token_never_r
     let tree_1 = host(root(&k));
     let c1 = rig.committed(k.token, "FP-24 descendant 1");
     let fork = BranchId::from_authority([75; 16]);
-    let forked = match rig
-        .harness
-        .service
-        .execute_control(&Request::Fork(ForkRequest {
+    let forked = rig
+        .store
+        .history()
+        .fork(&ForkRequest {
             stack: bound_a.branch.stack,
             branch: fork,
             name: HistoryName::new("fork").unwrap(),
@@ -914,13 +914,8 @@ fn simultaneous_mounts_over_related_roots_are_isolated_and_a_stale_token_never_r
                 branch: main,
                 commit: c1.id,
             },
-        }))
-        .unwrap()
-        .reply
-    {
-        Reply::Forked(snapshot) => snapshot,
-        other => panic!("{other:?}"),
-    };
+        })
+        .unwrap();
     assert_eq!((forked.branch.id, forked.effective_root), (fork, c1.root));
     passed(
         &bash_in(

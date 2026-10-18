@@ -374,7 +374,7 @@ pub fn recognized(
     offset: u64,
     data: &[u8],
 ) -> layerfs_workspace::WriteData {
-    use layerfs_fuse::ports::{Fence, MountServices};
+    use layerfs_fuse::ports::Fence;
     use std::{
         sync::mpsc,
         task::{Context, Poll, Wake, Waker},
@@ -385,7 +385,7 @@ pub fn recognized(
             let _ = self.0.try_send(());
         }
     }
-    let services = workspace.request(&Fence::default()).unwrap();
+    let services = layerfs_daemon::mount_request(workspace, &Fence::default()).unwrap();
     let mut pass = services.recognize(serial, offset, data.into());
     let (send, woken) = mpsc::sync_channel(1);
     let waker = Waker::from(Arc::new(Event(send)));

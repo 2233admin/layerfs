@@ -10,7 +10,6 @@ use crate::store::{
 };
 use layerfs_bridge::control::{
     Activity, ConflictReport, ControlCode, MergedCommit, Reply, Request, WorkspaceToken,
-    HISTORY_WINDOW,
 };
 use layerfs_content::filesystem::FilesystemRootId;
 use layerfs_content::merge::{Conflict, ConflictKind};
@@ -76,7 +75,7 @@ impl Service {
     pub(crate) fn execute_control_with(
         &self,
         request: &Request,
-        bodies: &mut crate::sdk::Bodies<'_>,
+        _bodies: &mut crate::sdk::Bodies<'_>,
     ) -> Result<Success, Failure> {
         match request {
             Request::Observed { .. } => Err(Failure::Rejected(
@@ -87,12 +86,18 @@ impl Service {
             Request::Sdk(call) if call.method.starts_with("operator.") => {
                 Ok(Success::reply(crate::operator::dispatch(self, call)))
             }
-            Request::Sdk(call) => Ok(Success::reply(
-                match crate::sdk::dispatch(self, call, bodies) {
-                    Ok(value) => Reply::Sdk(value),
-                    Err(refusal) => Reply::SdkRefused(refusal),
+            // Store calls run in the SDK's process (#352 F-020): one route.
+            // Bodies a refused call declared are drained by the connection.
+            Request::Sdk(call) => Ok(Success::reply(Reply::SdkRefused(
+                layerfs_bridge::control::SdkRefusal {
+                    code: "UnknownMethod".into(),
+                    message: format!(
+                        "{}: Store calls are not served by the daemon; they run in the SDK's process",
+                        call.method
+                    ),
+                    detail: layerfs_bridge::control::SdkValue::Null,
                 },
-            )),
+            ))),
             Request::Hello(_) => Err(Failure::Rejected(
                 ControlCode::Invalid,
                 "daemon Hello requires application startup owner",
@@ -119,38 +124,10 @@ impl Service {
                 self.attach(*token, timing)
             }),
             Request::Locate(workspace) => self.locate(*workspace),
-            Request::Fork(request) => self
-                .store
-                .history()
-                .fork(request)
-                .map(|snapshot| Success::reply(Reply::Forked(snapshot)))
-                .map_err(Failure::History),
-            Request::Branches { stack, page } => {
-                if page.limit == 0 || page.limit > HISTORY_WINDOW {
-                    return Err(Failure::Rejected(
-                        ControlCode::Invalid,
-                        "branches processing window",
-                    ));
-                }
-                self.store
-                    .history()
-                    .branches(*stack, page)
-                    .map(|page| Success::reply(Reply::Branches(page)))
-                    .map_err(Failure::History)
-            }
-            Request::History(request) => {
-                if request.limit == 0 || request.limit > HISTORY_WINDOW {
-                    return Err(Failure::Rejected(
-                        ControlCode::Invalid,
-                        "history processing window",
-                    ));
-                }
-                self.store
-                    .history()
-                    .commit_history(request)
-                    .map(|page| Success::reply(Reply::History(page)))
-                    .map_err(Failure::History)
-            }
+            // History calls are Store calls: they run in the SDK's process.
+            Request::Fork(_) | Request::Branches { .. } | Request::History(_) => Err(
+                Failure::Rejected(ControlCode::Invalid, "Store calls are not served by the daemon"),
+            ),
         }
     }
     pub(crate) fn mount(
@@ -232,7 +209,6 @@ impl Service {
                     activity: Activity::Idle,
                     epoch: 1,
                     published: None,
-                    file_failure: None,
                 })),
             )
         });

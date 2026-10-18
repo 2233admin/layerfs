@@ -12,7 +12,7 @@
 //! of any operation: nothing is sent before the connection is ready.
 use crate::job::{failed, refused};
 use layerfs_api::internal::Control;
-use layerfs_bridge::control::{DaemonPhase, HelloRequest, Reply, Request, SdkRefusal};
+use layerfs_bridge::control::{DaemonPhase, HelloRequest, Reply, Request, SdkRefusal, SdkValue};
 use layerfs_bridge::duplex::initiate_observed;
 use std::net::SocketAddr;
 use std::ops::{Deref, DerefMut};
@@ -24,10 +24,24 @@ use std::time::{Duration, Instant};
 /// stay for other processes.
 pub(crate) const CONNECTIONS: usize = 6;
 
+/// The host this process dials for a daemon's loopback-published port:
+/// `deploy.daemonHost` (the client's `daemonHost`, else LAYERFS_DAEMON_HOST),
+/// for a client in a container that does not share the Docker host's
+/// loopback. `None` dials 127.0.0.1 as published.
+pub(crate) fn daemon_host(args: &SdkValue) -> Option<String> {
+    args.get("deploy")
+        .and_then(|deploy| deploy.get_text("daemonHost"))
+        .filter(|host| !host.is_empty())
+        .map(str::to_owned)
+}
+
 /// How to open another connection to the same daemon instance.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct Dial {
     pub(crate) endpoint: SocketAddr,
+    /// Host to dial instead of the endpoint's loopback address
+    /// ([`daemon_host`]); `None` dials the endpoint.
+    pub(crate) host: Option<String>,
     pub(crate) secret: [u8; 32],
     pub(crate) peer: [u8; 32],
     pub(crate) instance: [u8; 32],
@@ -36,7 +50,9 @@ pub(crate) struct Dial {
 impl Dial {
     /// One authenticated connection, checked to reach the same daemon.
     pub(crate) fn open(&self) -> Result<Control, SdkRefusal> {
-        let stream = std::net::TcpStream::connect_timeout(&self.endpoint, Duration::from_secs(10))
+        let address =
+            layerfs_api::connect_address(self.endpoint, self.host.as_deref()).map_err(failed)?;
+        let stream = std::net::TcpStream::connect_timeout(&address, Duration::from_secs(10))
             .map_err(failed)?;
         stream
             .set_read_timeout(Some(Duration::from_secs(10)))

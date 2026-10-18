@@ -75,6 +75,7 @@ client when its Sandbox closes; construct a new client for a new Sandbox.
 | `LAYERFS_DAEMON` | Host path to the built Linux daemon executable. |
 | `LAYERFS_NATIVE` | Optional addon path; defaults to `native/layerfs.node`. |
 | `LAYERFS_CONTAINER_PREFIX` | Optional. Names every container this client creates `<prefix><Sandbox id>`, the service Sandbox as `<prefix>service.<project>`, so a run can tell its own containers apart. Docker's name rule applies (an ASCII letter or digit, then letters, digits, `_`, `.`, `-`, at most 128). A name another container holds refuses the create before any effect. Unset, Docker chooses the name. |
+| `LAYERFS_DAEMON_HOST` | Optional; the client option `daemonHost` wins. The host this process dials for a daemon's port. Each daemon publishes its port on the Docker host's `127.0.0.1` only, and that stays so. A client inside a container does not share that loopback, so it names the host that reaches it, `host.docker.internal` on Docker Desktop. One resolution, its first address, one connect; nothing is tried again. Unset, the client dials `127.0.0.1`. |
 | `LAYERFS_TRACE` | Optional per-call trace file (see [Call trace](#call-trace)); unset means no trace. |
 | `LAYERFS_TRACE_STEP` | Optional step label put on each trace line as `step`; read at every call. |
 | `LAYERFS_TRACE_START` | `1` adds a start line before each traced call; read at every call. |

@@ -2,10 +2,12 @@
 //! the head current at its publication: different paths are Committed with a
 //! merge, the same path is the planned Conflict. Nothing here sleeps; barriers
 //! start the Commits together and every wait is bounded by the test ceiling.
-#[path = "support/installed_store.rs"]
+//! Workspace Commits go through the daemon; the SDK calls that set up and read
+//! back run in-process over the same Store (#352 F-020).
+#[path = "../../layerfs-store-service/tests/support/installed_store.rs"]
 #[allow(dead_code)]
 mod installed;
-#[path = "support/sdk_compare.rs"]
+#[path = "../../layerfs-store-service/tests/support/sdk.rs"]
 #[allow(dead_code)]
 mod support;
 
@@ -13,18 +15,34 @@ use layerfs_bridge::control::{CommitControl, Reply, Request, SdkValue, UnmountCo
 use layerfs_content::filesystem::PathName;
 use layerfs_history::{BranchId, HistoryName, LayerStackId, WorkspaceId};
 use layerfs_workspace::{Operation, Outcome, Position, Time};
+use layerfs_daemon::control::Service;
 use std::{fs, sync::Barrier};
-use support::Fixture;
 
 const LANE: &str = "lane";
 
+/// SDK calls in-process and a daemon `Service` over the same opened Store.
+struct Fixture {
+    sdk: support::Fixture,
+    service: Service,
+}
+impl Fixture {
+    fn call(&self, method: &str, fields: Vec<(&str, SdkValue)>) -> SdkValue {
+        self.sdk.call(method, fields)
+    }
+    fn cleanup(self) {
+        drop(self.service);
+        self.sdk.cleanup();
+    }
+}
+
 fn fixture(label: &str) -> Fixture {
-    let fixture = Fixture::new(label, |source| {
+    let sdk = support::Fixture::new(label, |source| {
         fs::write(source.join("seed.txt"), b"seed\n").unwrap();
         1
     });
-    fixture.fork(LANE);
-    fixture
+    sdk.fork(LANE);
+    let service = Service::new(sdk.service.store.clone(), &sdk.owner);
+    Fixture { sdk, service }
 }
 
 /// Mounts a Workspace on the lane and creates `/name` holding `bytes`,

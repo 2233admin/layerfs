@@ -376,6 +376,7 @@ pub(crate) fn reopen(args: &SdkValue) -> Result<Arc<SandboxState>> {
     .map_err(failed)?;
     let dial = crate::pool::Dial {
         endpoint: runtime.endpoint().map_err(failed)?,
+        host: crate::pool::daemon_host(args),
         secret: bytes(&value, "secret")?,
         peer: bytes(&value, "peer")?,
         instance: bytes(&value, "instance")?,

@@ -5,45 +5,6 @@ use layerfs_bridge::control::{Reply, Request, WorkspaceToken};
 use std::sync::Arc;
 
 impl Service {
-    pub(crate) fn retain_files_failure(
-        &self,
-        token: WorkspaceToken,
-        failure: Box<crate::store::CommitFailure>,
-    ) -> layerfs_bridge::control::SdkRefusal {
-        let refusal = crate::sdk::args::refuse(
-            "Unknown",
-            failure.to_string(),
-            layerfs_bridge::control::SdkValue::map([
-                (
-                    "workspace",
-                    layerfs_bridge::control::SdkValue::text(crate::sdk::hex(
-                        &token.workspace.to_bytes(),
-                    )),
-                ),
-                (
-                    "namespace",
-                    layerfs_bridge::control::SdkValue::Int(token.namespace),
-                ),
-            ]),
-        );
-        if let Ok(mut entries) = self.entries.lock() {
-            if let Ok(binding) = super::registry::bound_mut(&mut entries, token) {
-                binding.activity = layerfs_bridge::control::Activity::Uncertain;
-                binding.published = failure.published.clone();
-                binding.file_failure = Some(failure);
-            }
-        }
-        refusal
-    }
-
-    pub(crate) fn files_workspace(
-        &self,
-        token: WorkspaceToken,
-    ) -> Result<Arc<crate::store::BoundWorkspace>, Failure> {
-        let entries = self.entries.lock().map_err(|_| Failure::Poisoned)?;
-        Ok(bound(&entries, token)?.workspace.clone())
-    }
-
     pub(crate) fn operator_workspace(
         &self,
         directory: &str,

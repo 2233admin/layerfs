@@ -212,3 +212,30 @@ pub fn oracle(installed: &InstalledStore, overlay: &Path) {
     owner.stop().unwrap();
     println!("INSTALL_ROOT_ORACLE paths=6 full_regular_bytes={} hardlink=true raw_symlink=true host_sqlite={} daemon_sqlite={} work={:?}",2*FILE_BYTES+14,installed.manifest.host_sqlite,installed.manifest.daemon_sqlite.as_deref().unwrap(),installed.work);
 }
+
+/// The newest Commits of `branch` in an installed Store, read in this
+/// process. Store calls are not served by the daemon (#352 F-020).
+#[allow(dead_code)]
+pub fn commits(
+    manifest: &layerfs_bridge::provision::StoreManifest,
+    branch: BranchId,
+    limit: u16,
+) -> layerfs_history::PageResult<layerfs_history::CommitRecord> {
+    use layerfs_history::HistoryCatalog;
+    let handles = layerfs_persistence::Handles::open_read_only(
+        PersistenceConfig::sqlite(&manifest.locator)
+            .with_sqlite_profile(SqlitePersistenceProfile::Disposable),
+        &manifest.binding,
+        manifest.cursor_key,
+    )
+    .unwrap();
+    handles
+        .history
+        .commit_history(&layerfs_history::CommitHistoryRequest {
+            branch,
+            start: None,
+            cursor: None,
+            limit,
+        })
+        .unwrap()
+}

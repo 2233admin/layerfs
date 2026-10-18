@@ -9,7 +9,7 @@ use layerfs_bridge::{
     daemon_setup::{DaemonLimits, DaemonSetup},
     duplex,
 };
-use layerfs_history::{CommitHistoryRequest, WorkspaceId};
+use layerfs_history::WorkspaceId;
 use std::{
     fs::{self, File},
     io::{BufRead, BufReader, Read},
@@ -149,16 +149,7 @@ fn actual_daemon_install_hello_bind_status_no_constructor_and_session_end() {
         .unwrap();
     assert_eq!(after.binding, before.binding);
     assert_eq!(after.activity, before.activity);
-    let history = layerfs_api::internal::commits(
-        &mut control,
-        CommitHistoryRequest {
-            branch: bound.binding.branch.id,
-            start: None,
-            cursor: None,
-            limit: 1,
-        },
-    )
-    .unwrap();
+    let history = support::commits(&installed.manifest, bound.binding.branch.id, 1);
     assert!(history.records.is_empty());
     layerfs_api::internal::workspace(&mut control)
         .unmount(bound.token, false)

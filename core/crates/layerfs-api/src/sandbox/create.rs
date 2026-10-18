@@ -24,6 +24,11 @@ pub struct SandboxCreate {
     pub daemon_peer: [u8; 32],
     /// Explicit listener event wait; does not apply to ordinary commands.
     pub startup_wait: Duration,
+    /// Host to dial for the daemon's loopback-published port, when this
+    /// process does not share the Docker host's loopback (a client in a
+    /// container: `host.docker.internal`). `None` dials the observed
+    /// 127.0.0.1 endpoint. The publish and its check are unchanged.
+    pub connect_host: Option<String>,
 }
 impl fmt::Debug for SandboxCreate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -34,8 +39,28 @@ impl fmt::Debug for SandboxCreate {
             .field("controller_private", &"[redacted]")
             .field("daemon_peer", &self.daemon_peer)
             .field("startup_wait", &self.startup_wait)
+            .field("connect_host", &self.connect_host)
             .finish()
     }
+}
+/// The address to dial for a daemon `endpoint` observed on the Docker host's
+/// loopback: the endpoint itself, or the port on `host` (one resolution, its
+/// first address; nothing is tried twice).
+pub fn connect_address(
+    endpoint: std::net::SocketAddr,
+    host: Option<&str>,
+) -> io::Result<std::net::SocketAddr> {
+    let Some(host) = host else {
+        return Ok(endpoint);
+    };
+    std::net::ToSocketAddrs::to_socket_addrs(&(host, endpoint.port()))?
+        .next()
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("daemon host {host} has no address"),
+            )
+        })
 }
 /// Concrete boundary reached by one original lifecycle operation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -323,8 +348,10 @@ pub(crate) fn create(
         phase = SandboxPhase::Endpoint;
         let endpoint = owner.endpoint().map_err(SandboxCause::Runtime)?;
         phase = SandboxPhase::Connect;
-        let stream = TcpStream::connect_timeout(&endpoint, request.startup_wait)
-            .map_err(SandboxCause::Io)?;
+        let address =
+            connect_address(endpoint, request.connect_host.as_deref()).map_err(SandboxCause::Io)?;
+        let stream =
+            TcpStream::connect_timeout(&address, request.startup_wait).map_err(SandboxCause::Io)?;
         stream
             .set_read_timeout(Some(request.startup_wait))
             .map_err(SandboxCause::Io)?;
