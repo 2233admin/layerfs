@@ -171,7 +171,8 @@ fn wide(f: &fixture::Fixture, reader: &mut FilesystemRead<'_>, operation: &Store
             .collect::<Vec<_>>();
         let ids = values
             .iter()
-            .flat_map(|v| [Some(v.content_root), v.metadata_root.root()]).flatten()
+            .flat_map(|v| [Some(v.content_root), v.metadata_root.root()])
+            .flatten()
             .collect::<Vec<_>>();
         operation.client().read_canonical_batch(&ids).unwrap();
         for ((name, _), value) in page.entries.iter().zip(&values) {

@@ -78,8 +78,11 @@ fn bounded_bind_batches_lengths_cache_and_original_failure() {
         let before = store.work();
         let first = bind(&store, &owner, &fixture, 1);
         let cold = store.work().object_batches - before.object_batches;
+        // Since #360 item 2 (`683666d45`) Init writes mode and mtime inline,
+        // so a cold bind no longer reads an attribute leaf: one batch fewer
+        // than the earlier floor of four.
         assert!(
-            (4..=16).contains(&cold),
+            (3..=16).contains(&cold),
             "bounded root paths, count={count}, batches={cold}"
         );
         let before = store.work();

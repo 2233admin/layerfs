@@ -11,8 +11,8 @@ mod harness;
 mod oracle;
 mod producer;
 use harness::Bench;
-use layerfs_overlay::Inode;
 use layerfs_content::filesystem::attributes::{read_portable, AttributeReadWork};
+use layerfs_overlay::Inode;
 use oracle::{absent, value};
 use producer::{
     build_over, drain, evidence, record, Built, Call, Drive, Log, Recording, FRESH, HEADER, VALUE,
@@ -303,10 +303,7 @@ fn a_base_file_with_only_metadata_changes_keeps_its_content_root() {
     let built = build_over(&b, &recording, &quiet, "base metadata");
     let store = &b.fixture.store;
     {
-        let (old, new) = (
-            value(store, b.fixture.root, 2),
-            value(store, built.root, 2),
-        );
+        let (old, new) = (value(store, b.fixture.root, 2), value(store, built.root, 2));
         assert_eq!(new.content_root, old.content_root);
         assert_ne!(new.metadata_root, old.metadata_root);
         assert_eq!(new.namespace_ref_count, old.namespace_ref_count);
@@ -360,10 +357,7 @@ fn a_base_directory_and_symlink_keep_their_content_roots_under_new_metadata() {
     let built = build_over(&b, &recording, &quiet, "base non-files");
     let store = &b.fixture.store;
     {
-        let (old, new) = (
-            value(store, b.fixture.root, 7),
-            value(store, built.root, 7),
-        );
+        let (old, new) = (value(store, b.fixture.root, 7), value(store, built.root, 7));
         assert_eq!(new.content_root, old.content_root);
         assert_ne!(new.metadata_root, old.metadata_root);
     }
@@ -410,8 +404,20 @@ fn link_count_changes_alone_keep_content_and_metadata_roots() {
         // them, so compare the decoded portable values.
         assert_eq!(new.content_root, old.content_root);
         assert_eq!(
-            read_portable(store, new.metadata_root, new.kind, &mut AttributeReadWork::default()).unwrap(),
-            read_portable(store, old.metadata_root, old.kind, &mut AttributeReadWork::default()).unwrap()
+            read_portable(
+                store,
+                new.metadata_root,
+                new.kind,
+                &mut AttributeReadWork::default()
+            )
+            .unwrap(),
+            read_portable(
+                store,
+                old.metadata_root,
+                old.kind,
+                &mut AttributeReadWork::default()
+            )
+            .unwrap()
         );
     }
     assert_eq!(

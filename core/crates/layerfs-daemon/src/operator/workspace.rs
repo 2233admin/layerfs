@@ -215,15 +215,13 @@ fn scan(
                     .map_err(args::content)?,
                     &path,
                 )? {
-                    Some(e) => {
-                        !layerfs_content::compare::tree::same_inode(
-                            op.ports(),
-                            &e.value,
-                            &old.value,
-                            &mut work,
-                        )
-                        .map_err(args::content)?
-                    }
+                    Some(e) => !layerfs_content::compare::tree::same_inode(
+                        op.ports(),
+                        &e.value,
+                        &old.value,
+                        &mut work,
+                    )
+                    .map_err(args::content)?,
                     None => true,
                 };
                 if old.serial == new.serial

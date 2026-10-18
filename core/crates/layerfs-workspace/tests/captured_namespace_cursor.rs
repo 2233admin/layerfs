@@ -424,8 +424,17 @@ fn work_follows_the_change_and_not_the_installed_base() {
     d.build("large base").install(&large);
     let over_large = probe(&mut d, "large base");
 
+    // Built against patched metadata follows the stored form: the fixture
+    // stores a metadata root, the large base's own install wrote inline
+    // values (#360 F-027 item 2). Their sum is the change's work.
+    let metadata = |mut work: layerfs_workspace::CapturedNamespaceWork| {
+        work.metadata_built += work.metadata_patched;
+        work.metadata_patched = 0;
+        work
+    };
     assert_eq!(
-        over_large.work, over_small.work,
+        metadata(over_large.work),
+        metadata(over_small.work),
         "counted producer work differs with the base"
     );
     assert_eq!(

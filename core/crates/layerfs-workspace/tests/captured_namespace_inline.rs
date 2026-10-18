@@ -39,7 +39,11 @@ fn base() -> (Fixture, Model) {
             ObjectId::for_bytes(b"root-directory"),
         ),
         (2, InodeKind::RegularFile, file(&store, A_BYTES)),
-        (3, InodeKind::Directory, ObjectId::for_bytes(b"inner-directory")),
+        (
+            3,
+            InodeKind::Directory,
+            ObjectId::for_bytes(b"inner-directory"),
+        ),
         (4, InodeKind::RegularFile, file(&store, B_BYTES)),
     ];
     let inodes: Vec<InodeUpdate> = rows
@@ -94,7 +98,11 @@ fn base() -> (Fixture, Model) {
 }
 
 /// Serials whose stored values differ between two roots.
-fn changed(store: &Store, before: layerfs_content::filesystem::FilesystemRootId, after: layerfs_content::filesystem::FilesystemRootId) -> Vec<u64> {
+fn changed(
+    store: &Store,
+    before: layerfs_content::filesystem::FilesystemRootId,
+    after: layerfs_content::filesystem::FilesystemRootId,
+) -> Vec<u64> {
     let (l, r) = (
         TreeTable::open(store, before).unwrap(),
         TreeTable::open(store, after).unwrap(),
@@ -123,7 +131,10 @@ fn an_mtime_only_capture_keeps_the_base_root_and_row() {
     // The live view holds the new time; the kept row holds the base's.
     let built = build_over(&b, &b.overlay, &model, "mtime only");
     assert_eq!(built.root, b.fixture.root);
-    assert_eq!(changed(&b.fixture.store, b.fixture.root, built.root), Vec::<u64>::new());
+    assert_eq!(
+        changed(&b.fixture.store, b.fixture.root, built.root),
+        Vec::<u64>::new()
+    );
     built.release(&b);
 }
 
@@ -159,10 +170,7 @@ fn a_real_change_writes_the_inline_form_beside_three_no_ops() {
     assert_ne!(built.root, b.fixture.root);
     let store = &b.fixture.store;
     assert_eq!(changed(store, b.fixture.root, built.root), vec![2]);
-    let (old, new) = (
-        value(store, b.fixture.root, 2),
-        value(store, built.root, 2),
-    );
+    let (old, new) = (value(store, b.fixture.root, 2), value(store, built.root, 2));
     let InodeMetadata::Inline(portable) = new.metadata_root else {
         panic!("serial 2: expected the inline metadata form");
     };

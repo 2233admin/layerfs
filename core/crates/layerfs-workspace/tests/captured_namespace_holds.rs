@@ -80,6 +80,10 @@ fn a_file_created_held_written_unlinked_and_written_again_is_never_constructed()
     d.write_open(file, "held", 0, &[5; 70_000]);
     d.remove("held");
     d.orphan_write(file, 10, b"after the last name is gone");
+    // The root's names end as they began, so its new time is an mtime-only
+    // change and not a change (#360 F-027 item 2, spec §4.8): the walk
+    // expects the base's stored time.
+    d.model.utimens("", oracle::BASE);
 
     let (built, recording) = capture(&d, "created and held");
     let row = tombstone(&recording, serial, "created and held");
