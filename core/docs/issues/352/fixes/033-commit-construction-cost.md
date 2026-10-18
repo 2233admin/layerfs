@@ -1,4 +1,4 @@
-# #352 · Commit construction cost: record windows, direct new files, measured split
+# #352 · Commit construction cost: record windows, direct new files, measured split, one-statement reads
 
 | | |
 | --- | --- |
@@ -6,7 +6,7 @@
 | Kind | code path (namespace construction cursor, captured file construction), one overlay read statement, one Workspace port method, append-only telemetry. No Store format change, no overlay schema change |
 | Branch | `claude/commit-cost-033`, based on `d679c84ee` (contains staging head `dd9193762`) |
 | Approved | F1, F2, F3 in that order (liaison 2026-10-19). Then, after F1's result, the liaison put F3 on hold and asked for the values and update split (counters only) before anything else. S1 (lazy delta-candidate load) and O1 (the Save's writer) are Storage's, record 034, not this record's. O2 and O3 are noted below |
-| Commits | F1 `d5439e71a`, F2 `e5b868f09`, split counters `53edff9bb`. F3 written, not committed: held (see F3) |
+| Commits | F1 `d5439e71a`, F2 `e5b868f09`, split counters `53edff9bb`, B1 `31a3507d4`. F3 written, not committed: recorded and skipped (see F3) |
 
 ## Root cause (before any edit)
 
@@ -162,7 +162,7 @@ each fresh file (`stored.is_none()`). Base files keep the record route.
   `captured_namespace_holds.rs`). That is not a weaker check: the VALUE row is
   what the update reads.
 
-## F3 · change points from the held page (held)
+## F3 · change points from the held page (recorded, skipped)
 
 The change pass's `check_point` asks the provider for each name the pass has
 just served (95,052 capture points in the pnpm Commit). F3 answers a point
@@ -171,8 +171,9 @@ and falls back to the provider otherwise. The code, the adapted custody and
 cursor tests and a concurrent-write test (a write to the same directory during
 the change pass is not seen by this Commit and is captured by the next) passed
 on the host (workspace suite 172/172). The liaison put it on hold after F1's
-result. It is kept as a patch (`r033-f3-held-page.patch` in the #352 shared
-notes), not committed. Measured ceiling below: at most −0.4 s, likely −0.2 s.
+result, and after the split it was recorded and skipped (liaison,
+2026-10-19). It is kept as a patch (`r033-f3-held-page.patch` in the #352
+shared notes), not committed. Measured ceiling: at most −0.4 s, likely −0.2 s.
 
 ## Values and update split (counters only)
 
@@ -227,6 +228,7 @@ and counts are the primary evidence.
 | F1 | s664 | `d5439e71a` | 20.2 | 14,753 | 12,626 | 7,765 | 4,797 | 681,412 | 2,362,012 | 45,310 | 3.17 |
 | F2 | s675 | `e5b868f09` | 21.6 | 11,019 | 9,553 | 5,078 | 4,413 | 505,767 | 2,053,604 | 45,073 | 1.54 |
 | split | s681 | `53edff9bb` | 14.4 | 10,877 | 9,347 | 4,937 | 4,346 | 505,726 | 2,053,553 | 45,023 | 1.50 |
+| B1 | s687 | `31a3507d4` | 13.1 | 11,799 | 10,169 | 5,917 | 4,190 | 505,662 | 1,352,184 | 44,966 | 2.38 |
 
 Small one-file Commit (trace ms): base s649 13.8 (wall 18.6) · F1 s661 13.1
 (wall 16.4) · F2 s673 13.1 (wall 17.0). `begin` stays 6.6–6.8 ms (S1,
@@ -253,6 +255,7 @@ Storage's). Not resampled for the split.
 | F1 record windows (overlay statement, port method, cursor, 4 telemetry fields) | +168 | record jobs 18.6 → 0.95 per inode; Commit 15,256 → 14,753 ms (s331 → s664, different load) |
 | F2 direct new-file route | +102 | construct 12,626 → 9,553 ms; owner jobs −176k; writer 3.17 → 1.54 s |
 | Split counters | +134 | none (counters only); construct 9,553 → 9,347 ms, within noise |
+| B1 one-statement `get_many` | +53 | Content state 2,624 → 2,457 ms (−167 ms); statements −701k |
 
 ## Re-ranked after the split (measured ceilings)
 
@@ -270,6 +273,79 @@ Against s681: Commit 10.9 s, target ≤ 5 s.
 Chunking and hashing (≈ 485 ms) and Content's own compute (≈ 364 ms) are the
 work itself. Ranks 1–3 together are about −5 to −6 s; with them the Commit
 would be near the 5 s target, and without rank 1 it cannot reach it.
+
+## B1 · many record keys as one statement per call
+
+Cleared by the liaison (2026-10-19) by the overlay route only; Content's
+update is untouched.
+
+### Design
+
+- **Overlay** (`database/statements.rs`, `lifetime/indexed_operation_record.rs`,
+  plan in `diagnostics/indexed_operation_record_plan.rs`):
+  `indexed_operation_record_get_many` is one statement per call. The asked
+  keys are a `VALUES` list, the outer loop of a `CROSS JOIN` with one
+  primary-key search per slot, and rows come back in asked order (checked).
+  A slot past the asked keys carries kind −1, which no row holds, so one
+  statement text serves every call. A call answers a **prefix**: it stops at
+  the keys one statement binds (SQLite's variable limit, two per key plus
+  the scope's two, and at most `PAGE_ROWS`) and before the value that would
+  take the reply past one record envelope, without copying it. It answers at
+  least one key while keys remain and never refuses on key count or bytes.
+  Before, it ran one statement per key and refused past 64 keys or the
+  envelope.
+- **Port** (`ports/operation_record.rs`): the `get_many` contract is that
+  prefix. The default (one point read per key) answers every key and stays
+  valid.
+- **Content's backing** (`construction/records.rs`,
+  `IndexedEditRecords::get_many`) asks again for the rest until every key is
+  answered in the asked order, so Content's one-call `read_keys` sees the same
+  full answer. Each call is one owner job.
+- **Tests**: overlay, 150 keys across the 64-key boundary with missing keys,
+  a repeat, other kinds and another file scope, equal to point reads, with
+  prefixes [64, 64, 22]; envelope stops with misses between ([4, 4, 2] and
+  [2, 2]); the plan searches the primary key with no temporary B-tree.
+  Workspace, 160 keys through the port in four prefixes (one envelope stop),
+  equal to point reads.
+
+### Result (s687 against s681)
+
+| | s681 split | s687 B1 | Δ |
+| --- | --- | --- | --- |
+| `operation_record` statements | 2,053,553 | 1,352,184 | −701,369 |
+| `operation_record` SQL time | 2.97 s | 2.73 s | −0.24 s |
+| Content state via `Backing` | 2,624 ms | 2,457 ms | −167 ms |
+| backing calls / keys | 222,567 / 1,348,670 | 222,560 / 1,348,670 | same |
+| owner jobs, hold | 505,726, 5.00 s | 505,662, 4.81 s | −0.19 s |
+| update | 4,346 ms | 4,190 ms | −156 ms |
+| values · Storage `Save::accept` | 2,598 ms | 3,564 ms | +966 ms (Storage writer 1.50 → 2.38 s) |
+| Commit (trace) | 10,877 ms | 11,799 ms | +922 ms |
+
+**B1 lands short of its ceiling** (−0.8 to −1.5 s estimated, −0.17 s
+measured on its own part), so per the liaison it stops here; the
+Content-window variant is not cleared. The statements fell by 701k, but the
+per-statement cost was not what the backing time paid for: SQL time fell only
+0.24 s. The rest of the 2.46 s is the 222,560 owner jobs themselves (about
+11 µs each: fence, lock, reply copy) and `apply`'s precondition read plus
+write per change, which B1 does not touch. The Commit's higher total comes
+from Storage's `Save::accept` and writer in the values pass (+0.97 s), which
+B1 does not touch either; it is one sample under different load and is not
+attributed to B1.
+
+Linux daemon checks on `31a3507d4` (pinned image, worktree-local target):
+store_commit 10, mounted_commit 9, mounted_install 4, concurrent_commits 3,
+r5_5_install_survival 4, mounted_commit_failures 4, all pass. Host: overlay
+suite 64/64, workspace suite 173/173, Clippy clean.
+
+### What remains (recorded, not built)
+
+- **O2** payload zeroing and run reads: 1,186–1,199 ms measured;
+  ceiling −0.2 to −0.5 s. Not built.
+- **O3** fewer update passes: cursor windows 677–683 ms plus part of
+  412–419 ms of name reads; ceiling −0.3 to −0.5 s. Not built.
+- **Calls, not statements**, are what remains of Content's state cost:
+  222k owner jobs at about 11 µs. Only fewer calls (the Content-window
+  variant, not cleared) or a cheaper job would reach it.
 
 ## Integration (staging, 2026-10-19)
 
