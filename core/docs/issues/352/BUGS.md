@@ -330,6 +330,10 @@
   test. **Owner: the fixer, queued after that confirmation**; the lead
   places it in the item order. See
   [crazy_work_load_watch_out.md](crazy_work_load_watch_out.md) S1.
+  **Moved out of the fixer's queue (owner, 2026-10-18):** GitHub issue #353,
+  worked now in its own worktree session on branch `issue353-lineage-cap`
+  (design note first, `core/docs/issues/353/DESIGN.md`); merging into this
+  branch is a later owner decision. The before-range-90 gate stays.
 - **F-034 · a fresh mount path per mount leaves absolute paths stale (product,
   builder, P3 dev range r016, 2026-10-18).** `sandbox.mount` takes no path, and
   the daemon picks a fresh directory for each mount and never reuses one
