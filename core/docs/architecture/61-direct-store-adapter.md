@@ -32,20 +32,14 @@ an isolated singleton pack drops it, and the next starts empty. It keeps only
 rows that never change once visible and never an absence. The Store's control
 reader (session 0), which serves every SDK call, keeps none of its own.
 
-Prototype on branch `claude/issue359-warm-daemon-cache-0d14ff` (#359 warm
-daemon, not integrated): each Store also owns one
-`layerfs_storage::read::SharedPacks`, a tier of whole pack bodies keyed by pack
-id and bounded by `SHARED_PACK_BYTES` (32 MiB) with second-chance eviction.
-Every reader of the Store, the control reader included, consults it in `Fetch`
-only after its own caches miss and fills it from whole bodies the persistence
-port authenticated and whose frame was validated; range (unit) replies are not
-kept. Objects read from it are authenticated by the reader as before. It holds
-no absence, is never shared across Stores, takes its lock for one map step
-with no Store I/O under it, and is emptied by `Store::stop_reads` and when the
-Store drops. Its work is `Store::shared_pack_work`, not yet published by the
-diagnostics schema. The same branch's prototype (a) sets the SDK's
-CanonicalCache budget to 32, then 64 MiB (the branch tip carries 64 MiB with
-the tier); the integration lines keep 8 MiB until the owner selects a budget ([fix record 031](../issues/352/fixes/031-359-warm-daemon-cache.md)).
+The daemon's CanonicalCache budget is the `cache_bytes` the SDK passes at
+Sandbox create (`sdk/js/native/src/sandbox.rs`): **64 MiB**, by owner decision
+2026-10-19 (#359, [fix record 031](../issues/352/fixes/031-359-warm-daemon-cache.md));
+it was 8 MiB, which one `find`, vitest or `ls -l` of 10,000 entries overran, so
+a later Workspace on the same daemon read it all again. The RCA LOOKUP facts
+window (record 032) charges its entries against the same allowance. A
+Store-wide tier of whole pack bodies was prototyped (record 031, prototype b),
+measured and dropped: it saved pack reads but not the per-object locate.
 A cached object invokes no Store port. The existing canonical object format and
 Storage locator/pack algorithms are unchanged. Adapter counters expose actual
 object/length demand counts and ids, and serial reservations; they are not a

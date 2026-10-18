@@ -62,8 +62,8 @@ fn setup(private: [u8; 32], peer: [u8; 32]) -> DaemonSetup {
             // daemon's own default. 64 KiB held too few directory and inode
             // pages for lookups in a large directory to stay resident
             // (#356 F-032); 8 MiB was overrun by one `find`, vitest or
-            // `ls -l` of 10,000 entries, so a later Workspace re-read it all
-            // (#359 warm daemon, prototype a, 64 MiB arm).
+            // `ls -l` of 10,000 entries, so a later Workspace re-read it all.
+            // 64 MiB by owner decision (#359 warm daemon, record 031).
             cache_bytes: 64 * 1024 * 1024,
             namespaces: 16,
             pager_kib: 1024,

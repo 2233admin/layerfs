@@ -3,11 +3,25 @@
 | | |
 | --- | --- |
 | Trigger | Owner, via the #352 liaison, 2026-10-18: "make a fresh Workspace on a warm daemon (same project) fast, with a bounded, daemon-wide cache of committed immutable content, and prove it with measurement" |
-| Kind | measurement arm (harness) and two prototypes: a budget setting (a) and a Store-wide shared pack tier (b). No Store format change |
+| Kind | measurement arm (harness) and two prototypes: a budget setting (a), kept at 64 MiB, and a Store-wide shared pack tier (b), measured and dropped. No Store format change |
 | Branch | `claude/issue359-warm-daemon-cache-0d14ff`, based on `46e17bdf3` (`issue359-impl` line; product source = `2d84fe1bb`). Not merged anywhere; integration is the owner's decision |
-| Commits | harness `615bf75f2`; (a) 32 MiB `8bc399ce1`, 64 MiB `276138ea3`; (b) `a09854c0c`; (a)+(b) `a82efb484`; this record and docs: the commit that adds it |
+| Commits | harness `615bf75f2`; (a) 32 MiB `8bc399ce1`, 64 MiB `276138ea3`; (b) `a09854c0c`; (a)+(b) `a82efb484`; record notes `668088a39`, `dee0eb089`; (b) removed `5038c3b57`; decision docs: the commit after it |
 | Binaries | release, `--locked --offline -j 6`, image `layerfs-307-fuser-patch-clippy:1.85.1` (`378b799ef433`), pinned under `core/target/issue359-warm/` with a `SOURCE` file each, registered in `~/lfs-history/runs/issue359/binaries.json`. base: daemon `cc185d13` / addon `66d774c8` (record 026's head build; my rebuild of `615bf75f2` produced the same bytes). a32: `42c19a39` / `3ad548df`. a64: `42c19a39` / `6ae65f16` (id `w64-6ae65f16`; the daemon does not use its own default, the budget is the addon's setup). b32: `afeb92f6` / `ea7bb1dc`. a64+b32: `ecf5dea6` / `b65ef9f6` |
-| Status | **prototyped and measured; on hold until the owner picks the budget** (liaison, 2026-10-18). Pushed to the branch only |
+| Status | **decided.** Owner, 2026-10-19: "Set the daemon CanonicalCache to 64 MiB and drop prototype (b), the shared pack tier." The branch carries 64 MiB (SDK setup in `sdk/js/native/src/sandbox.rs`, daemon default in `install_types.rs`); (b) is removed and `layerfs-storage` and `layerfs-store-service` are byte-identical to `issue359-impl` (`7dc323574`). Pushed to the branch only; nothing merged |
+
+## Decision
+
+- **CanonicalCache: 64 MiB**, by owner decision 2026-10-19. It replaces 8 MiB
+  wherever the daemon budget is set or documented: the SDK's `cache_bytes`,
+  the daemon's `StoreSettings` default, architecture 61 and COST_MODEL. Its
+  numbers are the a64 arm below; no new arm was run for the decision.
+- **Prototype (b) is dropped.** Its code, its `read/fetch.rs`,
+  `read/mod.rs` and `read/provider.rs` hooks, its `store/open.rs` wiring and its
+  two tests (`shared_pack_tier`, `shared_pack_reads`) are removed in
+  `5038c3b57`, and `workspace_reader_cache` has its original "the control
+  reader read again" assertion back. Its design and measured numbers stay
+  below as the record of what was tried.
+- The allowance is shared with the RCA facts window (record 032; see below).
 
 ## Cache state and conditions
 
@@ -155,11 +169,11 @@ out of the same budget and could evict objects these cases kept.
 
 The cache charges only what is read, so RSS grows towards the budget only on daemons that read that much. The RSS figures are single point samples on a loaded host. Allocator retention after W1's caches are freed makes warm-daemon RSS exceed cold RSS even at 8 MiB.
 
-My recommendation: (a) at 64 MiB, or 40 MiB if memory per daemon matters more than vitest-sized working sets. The default is the owner's decision; these prototypes report numbers and pick none. Prototype (b) is not worth its memory unless the locator rows are shared too. Sharing them would let a tier hit skip `locate`. The liaison scoped that as a possible positive-only prototype (never a miss or negative answer, per F-036), branched from the correctness lane's `fetch.rs`, then put it on hold: it is not built unless the owner asks.
+Recommendation given before the decision: (a) at 64 MiB, or 40 MiB if memory per daemon matters more than vitest-sized working sets. The owner chose 64 MiB. Prototype (b) is not worth its memory unless the locator rows are shared too. Sharing them would let a tier hit skip `locate`. The liaison scoped that as a possible positive-only prototype (never a miss or negative answer, per F-036), branched from the correctness lane's `fetch.rs`, then put it on hold: it is not built unless the owner asks.
 
-**Out-of-lane edits.** (b) touches `read/fetch.rs` (correctness lane) and `read/mod.rs` (#354 lane). Both are approved only as a prototype on this branch. If the owner drops (b), those edits drop with it (commit `a09854c0c`, and the tier half of `a82efb484`).
+**Out-of-lane edits.** (b) touched `read/fetch.rs` (correctness lane) and `read/mod.rs` (#354 lane), approved only as a prototype on this branch. With (b) dropped they are removed (`5038c3b57`); `read/*` is byte-identical to `issue359-impl`.
 
-## Prototype (b) design
+## Prototype (b) design (dropped, removed in `5038c3b57`)
 
 `layerfs-storage/src/read/shared.rs` (`SharedPacks`), consulted in `read/fetch.rs`:
 - `acquire_groups` takes a kept whole body before a selected-group read;
@@ -181,7 +195,7 @@ Wiring: `Storage::share_packs` in `read/provider.rs`. `store/handle.rs`, `read/o
 
 Its work counters are `Store::shared_pack_work()`. They are not in the daemon's diagnostics schema (the daemon's `telemetry.rs` and `schema.rs` are outside this lane), so the samples show the tier only through existing counters: pack bytes and `read_pack_selections`.
 
-## Tests
+## Tests of the prototypes (before the decision)
 
 Host (macOS, `cargo +1.85.1`, each under a 110 s alarm, built `--no-run` first):
 - New `layerfs-storage` `shared_pack_tier`: eviction under the bound with a used body spared, refusal of a different body, nothing kept or handed out after close, and 8 concurrent readers. 3/3 pass.
@@ -197,6 +211,28 @@ Linux (image `378b799ef433`, FUSE flags, each target in its own container under 
 - `concurrent_commits` 3/3
 
 Clippy `-D warnings` with `--all-targets` passes on `layerfs-storage`, `layerfs-store-service` and `layerfs-node`. rustfmt `--check` passes on every changed file. The boundary guard shows the same 19 violations as the base `615bf75f2`, none new.
+
+## Verification at the final shape (after `5038c3b57`)
+
+One run each, under a 115 s alarm (host) or `timeout 100` (Linux), built
+`--no-run` first. No new measurement arm: the decision's numbers are a64's.
+
+- Host, `cargo +1.85.1`:
+  - `layerfs-storage`: 19 targets, 60 passed, 0 failed.
+  - `layerfs-store-service`: 25 targets, 39 passed, 0 failed, including `workspace_reader_cache` with its original "the control reader read again" assertion.
+- Linux, image `378b799ef433`, FUSE flags, one container per target. The container's sources were checked by `sha256sum -c` against the host first. Results:
+  - `shared_cache_pressure` 1/1
+  - `store_reader_lifecycle` 5/5
+  - `mounted_store_read` 4/4
+  - `mounted_listing_reads` 1/1
+  - `concurrent_commits` 3/3
+- `sdk/js/native/src/sandbox.rs` passes `rustfmt --check` (comment change only).
+- `core/crates/layerfs-storage/src/read/*` is byte-identical to `issue359-impl` (`7dc323574`). So are the whole `layerfs-storage` and `layerfs-store-service` crates.
+- The branch differs from its base `46e17bdf3` only in:
+  - `install_types.rs` and `sandbox.rs` (64 MiB);
+  - `cost.mjs`;
+  - architecture 61, COST_MODEL and this record.
+  `issue359-impl` has three later commits (`9bee52d27`, `1e90114fa`, `7dc323574`) not on this branch. They touch none of these files, so a two-dot diff also shows them, reversed.
 
 ## Not run, and gaps
 
@@ -219,4 +255,9 @@ Scope and method for every line: `tools/production_loc.py --root` on `git archiv
 | `276138ea3` a64 | 98479 → 98479 (delta 0) | |
 | `a09854c0c` b | 98479 → 98664 (delta +185) | core 89797 → 89982 |
 | `a82efb484` a+b | 98664 → 98664 (delta 0) | |
-| this docs commit | 98664 → 98664 (delta 0) | |
+| `668088a39`, `dee0eb089` docs | 98664 → 98664 (delta 0) | |
+| `5038c3b57` remove (b) | 98664 → 98479 (delta −185) | core 89982 → 89797; deleted tests `shared_pack_tier`, `shared_pack_reads` |
+| decision docs commit | 98479 → 98479 (delta 0) | |
+
+Net over the base `46e17bdf3`: 98479 → 98479 (delta 0). The kept product
+change is the `cache_bytes` value and its comment.
