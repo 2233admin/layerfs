@@ -373,20 +373,6 @@
   GitHub #354, worked in its own worktree on `issue354-fs-read-calls`. Until it
   lands `grep_tree` stays the whole-tree series.
 
-- **F-036 · concurrent first-ever install Commits from two daemons: one fails
-  "object … is not stored" (product, correctness; scale-experiments S4 `/.lww`
-  run, 2026-10-18 07:12Z).** Two Sandboxes (two daemons, one Store) each
-  committed a first node_modules install at the same time. One Commit was
-  Committed (88.4 MB new); the other failed after 15,670 ms with `Failed:
-  object e8775b327467431049f20b8e2fa215332c9f380ab02c13e79ac914560af7ea37 is
-  not stored`, phase Commit Construct. Not retried. The failed Workspace stays
-  mounted and Dirty in `layerfs-issue352-scale-s4-b`; evidence (daemon logs,
-  play log, trace) in `~/lfs-history/scale-experiments/s4/lww/`. A suspected
-  cause is cross-process dedupe that trusts an object the other writer has
-  not yet published; not established. P3 lanes commit new install content
-  concurrently, so this blocks P3. **Lead decision:** the fixer diagnoses it
-  before continuing F-032; the state stays frozen until the fixer has
-  captured what it needs.
 - **F-036 · concurrent first installs from two daemons: one Commit fails
   "object … is not stored" (product, correctness, scale-experiments S4,
   2026-10-18).** Two daemons (Sandboxes a and b) committed a first-ever
