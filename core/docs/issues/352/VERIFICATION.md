@@ -103,3 +103,31 @@ the liaison notes folder as `correctness-verification-detail.md`.
 - Disclose `init-old-1792319690243` in 016, and name the binary used for the
   stat, Init and p4/p5 rows.
 - Declare budget exceptions for the long #359 cases, or split them.
+
+## Re-check of the RCA corrections (`38c72020e`, `issue359-impl`, 2026-10-18)
+
+The commit is local to the shared repository and not pushed; it was read with
+`git show`. Each item was checked against the receipts or a recount.
+
+| Item | Where | Result |
+| --- | --- | --- |
+| "Cold" relabelled | 017, 018, 019, 020, 021, 023 | **Corrected.** Each record says `cost.mjs` drops no cache, the Store is page-cache resident ("declared, not controlled"), the earlier "dropped" wording is withdrawn, and wall times are warm-Store diagnostics. No "page cache dropped" claim remains (`git grep` of the records at `38c72020e`). |
+| LOC of `c4d9893e7` | 016 "Corrections", commit message | **Corrected** to 97,396 → 97,443 (+47), which matches the lane's recount of `72782bfaa` (97,396). The pushed message stays as it was, and the correction is carried by the record and the commit message. |
+| Repeated old Init and stat samples | 016 | **Disclosed.** Old Init now reports the first sample, 23.7 s (`init-old-1792319690243`, 23,677 ms). The Store size comes from the second, the only one recorded. The first old stat (`stat-old-1792319797489`) is disclosed as having no counts and is ineligible. |
+| `76816d87` labels | 016 Init, stat and p4/p5 rows | **Labelled.** Each row names the intermediate daemon `76816d87` / addon `04cbdedb`, and none is claimed for the final `928b2872`. |
+| Declared 2-minute exception, with per-case command times | 017–021, 023 | **Declared.** Each record states the #359 owner-scoped exception (one case per command, under 2 minutes) with command times. |
+| Seq 7 disclosure | 017 | **Disclosed and matches the ledger.** Seq 7 (vitest `diagnostic`) has an end entry of 216,822 ms with verdict `FAILED`, and it is in no table. |
+
+**Verdict: all six items are corrected.** Records 016–021 and 023 now pass
+checks 1, 2, 4 and 7 as corrected, with their notes retained. The count-based
+conclusions stand, as before. No speed result is upgraded by these
+corrections: wall times stay diagnostic.
+
+One note for 023 (F-A4). Its "Dependency" paragraph says F-043 reuses
+**encode** workspaces. Since `f671d8ce7`, F-043 also reuses **decode**
+regions, and it zeroes each reused decode region on hand-out, because zstd's
+static decoder init does not clear its own struct. F-A4's "the codec sees the
+same zeroed memory" then holds in two ways:
+- for decode: always, since every region is zeroed when handed out;
+- for encode: on first allocation, while reuse is shown to be
+  content-independent (`tests/encode_region_reuse.rs`).
