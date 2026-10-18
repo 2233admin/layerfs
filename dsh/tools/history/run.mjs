@@ -418,7 +418,7 @@ async function playRange(run, k, mode) {
   run.traceTo(null, undefined);
   const head = published?.source?.commit ?? null, layer = published?.publishedLayer?.id ?? null;
   m.head = head; m.layer = layer; m.failure = failure;
-  m.depth = { before: depthBefore, after: run.state.depth.commits + ctx.work.commits };
+  m.depth = { before: depthBefore, after: run.state.depth.commits + (ctx?.work.commits ?? 0) };
   if (!measured) {
     const stages = { kind: "tooling", totalMs: Math.round(performance.now() - t0), ...wall };
     // a closure's steps and development checks are kept in fast mode too; their stored bytes need the trace (measured mode)
@@ -648,7 +648,7 @@ function cmdPhase(o) {
 /** Turns F-031 option (c) on for a dev run in a closure phase, from the range it stands at (gitplay.mjs). */
 function cmdGit(o) {
   const dir = join(HISTORY, "runs", o.run), run = new Run(dir);
-  if (!o.on) return usage();
+  if (!("on" in o)) return usage();
   if (run.manifest.label !== "dev") { console.error(`run ${o.run}: git is for dev runs until its dev proof is accepted (F031_DESIGN §5a)`); return EXIT.usage; }
   if (!PHASES[run.manifest.phase]?.closure) { console.error(`run ${o.run}: git starts in a closure phase (P3)`); return EXIT.usage; }
   if (run.state?.dirty != null) { console.error(`run ${o.run} stopped in range ${run.state.dirty}; recover by fork first`); return EXIT.guard; }

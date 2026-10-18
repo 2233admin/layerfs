@@ -63,6 +63,7 @@ export async function devcheck(run, k) {
   const sizes = (kind) => t.all.find((l) => l.method === "sandbox.commit" && l.step === `r${pad(k)}.${kind}`)?.sizes ?? null;
   Object.assign(out, judgeDevChecks(k, rows, { cleanOracle, Mismatch }));
   if (out.reinstallCheck) Object.assign(out.reinstallCheck, { newMetadata: sizes("reinstall-check")?.newMetadata ?? null, newStored: sizes("reinstall-check")?.newStored ?? null });
+  mkdirSync(run.manifest.outputs.metrics, { recursive: true });
   writeFileSync(join(run.manifest.outputs.metrics, `devcheck-${pad(k)}.json`), `${JSON.stringify(out, null, 1)}\n`);
   return out;
 }

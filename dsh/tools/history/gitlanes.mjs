@@ -13,7 +13,7 @@
 // printed id must equal dsh's; then main moves to the checkpoint, the index is
 // rebuilt, the range's objects are packed, the lane refs and indexes go.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -37,7 +37,11 @@ export const JOB_DIR = ".lfs-git-job";
 export function seedOps(repo, commit) {
   const dir = mkdtempSync(join(tmpdir(), "lfs352-seed-"));
   try {
-    const hash = execFileSync("git", ["--git-dir", repo, "pack-objects", "--revs", "-q", join(dir, "pack")], { input: `${commit}\n`, encoding: "utf8", maxBuffer: 1 << 20 }).trim();
+    // --stdout, then index-pack in the temp folder: pack-objects' own rename from the repo's objects folder to
+    // another file system fails in the runner (EXDEV, dev352-p3r r015)
+    writeFileSync(join(dir, "tmp.pack"), execFileSync("git", ["--git-dir", repo, "pack-objects", "--revs", "-q", "--stdout"], { input: `${commit}\n`, maxBuffer: 1 << 30 }));
+    const hash = execFileSync("git", ["index-pack", join(dir, "tmp.pack")], { cwd: dir, encoding: "utf8" }).trim().split(/\s+/).at(-1);
+    for (const ext of ["pack", "idx", "rev"]) if (existsSync(join(dir, `tmp.${ext}`))) renameSync(join(dir, `tmp.${ext}`), join(dir, `pack-${hash}.${ext}`));
     const files = readdirSync(dir).filter((f) => f.startsWith(`pack-${hash}.`));
     const pack = files.map((f) => ({ name: f, bytes: readFileSync(join(dir, f)) }));
     const text = (s) => Buffer.from(s);
