@@ -355,6 +355,8 @@ result.
 - A-2a (the eviction search) is skipped; see below. A-2b (a larger page
   cache) is a profile change and the owner's call. It has one diagnostic
   sample of its own, outside this record's fixes.
+- **A-2b (64 MiB SQLite cache): diagnostic negative on s695 vs s691;
+  rejected, no profile change.**
 
 ## Not done (approved skips), with ceilings
 
