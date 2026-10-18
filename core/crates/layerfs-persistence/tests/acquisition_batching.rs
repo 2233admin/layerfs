@@ -557,18 +557,52 @@ fn entry_refusal_order_and_full_unit_rollback_survive_execution_windows() {
 const DEVELOPMENT_PROFILES: [SqlitePersistenceProfile; 1] = [SqlitePersistenceProfile::Disposable];
 
 #[test]
-fn a_metadata_value_outside_the_portable_grammar_fails_the_read() {
-    // The blob decodes only through metadata_parse: a mode that fails the
-    // kind's grammar is an integrity error on the read, and the same decode
-    // rejects nonzero trailing padding in the column.
+fn a_metadata_value_outside_the_portable_grammar_is_refused_and_never_read() {
+    // Since #360 item 2 (683666d45) the write checks the portable grammar
+    // (`well_formed`): a symlink whose mode is not 0o777 is refused before any
+    // row exists. The read decode (`metadata_parse`) still rejects a stored blob
+    // outside the grammar or with nonzero padding; that is checked by changing
+    // a stored row out of band.
     let temp = Temp::new("acquisition-metadata-refusal");
     let handles = create(&temp, SqlitePersistenceProfile::Disposable);
     let owner = begin(&handles);
     let mut bad = symlink(1);
     bad.metadata.mode = 0o644;
-    handles.acquisition.put_entries(owner, &[bad]).unwrap();
+    assert!(handles.acquisition.put_entries(owner, &[bad]).is_err());
     assert!(handles
         .acquisition
         .entries(owner, None, Limits::MAXIMUM)
-        .is_err());
+        .unwrap()
+        .is_empty());
+    handles
+        .acquisition
+        .put_entries(owner, &[symlink(1)])
+        .unwrap();
+    assert_eq!(
+        handles
+            .acquisition
+            .entries(owner, None, Limits::MAXIMUM)
+            .unwrap()
+            .len(),
+        1
+    );
+    for blob in [
+        // mode 0o644 for a symlink
+        [&0o644_u32.to_be_bytes()[..], &[0; 28]].concat(),
+        // a valid mode with nonzero padding
+        [&0o777_u32.to_be_bytes()[..], &[0; 27], &[1]].concat(),
+    ] {
+        let connection = rusqlite::Connection::open(temp.join("store.sqlite")).unwrap();
+        assert_eq!(
+            connection
+                .execute("UPDATE init_entry SET metadata_root=?1", [blob])
+                .unwrap(),
+            1
+        );
+        drop(connection);
+        assert!(handles
+            .acquisition
+            .entries(owner, None, Limits::MAXIMUM)
+            .is_err());
+    }
 }
