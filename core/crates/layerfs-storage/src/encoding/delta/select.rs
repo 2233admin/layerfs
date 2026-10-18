@@ -192,7 +192,13 @@ impl DepthCache {
                 cached_edge = 1;
                 break cost;
             }
-            let Some(location) = connection.location(current, i64::MAX)? else {
+            // Past the first element `current` is a base a stored record names.
+            let location = if path.is_empty() {
+                connection.location(current, i64::MAX)?
+            } else {
+                connection.base_location(current, i64::MAX)?
+            };
+            let Some(location) = location else {
                 return Ok(None);
             };
             path.push((current, location.canonical_length as u64));

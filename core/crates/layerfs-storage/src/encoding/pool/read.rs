@@ -170,7 +170,7 @@ impl PoolReader {
                 return Err(StorageError::Integrity("pooled chain depth"));
             }
             let location = connection
-                .location(base, ceiling)?
+                .base_location(base, ceiling)?
                 .ok_or(StorageError::ObjectMissing(base))?;
             if location.role != root.role {
                 return Err(StorageError::Integrity("pooled chain role"));

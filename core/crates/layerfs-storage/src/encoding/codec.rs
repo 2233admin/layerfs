@@ -203,7 +203,18 @@ pub struct CompressionWorkspace {
 impl CompressionWorkspace {
     /// Allocates the bounded encode workspace and its static context.
     pub fn new() -> StorageResult<Self> {
-        let mut memory = workspace(ENCODE_WORKSPACE_BYTES)?;
+        Self::in_region(workspace(ENCODE_WORKSPACE_BYTES)?)
+    }
+
+    /// Builds the static context in a region returned by [`Self::into_region`]
+    /// (F-043). Its prior contents do not matter: zstd's static encoder init
+    /// clears its own struct and initialises what it uses, and every entry
+    /// point resets the session first (`tests/encode_region_reuse.rs` proves
+    /// it with poisoned regions).
+    pub fn in_region(mut memory: Vec<u64>) -> StorageResult<Self> {
+        if workspace_bytes(&memory) != ENCODE_WORKSPACE_BYTES.div_ceil(8) * 8 {
+            return Err(resource());
+        }
         // SAFETY: the region is live, eight-byte aligned and owned by `memory`;
         // the static context neither allocates nor needs a C free.
         let context = unsafe {
@@ -221,6 +232,13 @@ impl CompressionWorkspace {
     /// Bytes charged by the encode workspace.
     pub fn workspace_bytes(&self) -> usize {
         workspace_bytes(&self.memory)
+    }
+
+    /// Gives back the region for a later [`Self::in_region`]; the context
+    /// ends with it.
+    pub fn into_region(mut self) -> Vec<u64> {
+        self.context = ptr::null_mut();
+        std::mem::take(&mut self.memory)
     }
 
     /// Compresses `raw` under `profile`, returning the exact payload frame.
@@ -481,24 +499,50 @@ impl DecompressionWorkspace {
         })
     }
 
+    /// A decode workspace materialised in a region returned by
+    /// [`Self::into_region`] (F-043). The region is zeroed first: unlike the
+    /// encoder's, zstd's static decoder init does not clear its own struct,
+    /// and a prefix load reads its allocator hooks from it (a poisoned region
+    /// faulted there). A fresh region is zeroed by `workspace` the same way.
+    pub fn in_region(mut memory: Vec<u64>) -> StorageResult<Self> {
+        if workspace_bytes(&memory) != DECODE_WORKSPACE_BYTES.div_ceil(8) * 8 {
+            return Err(resource());
+        }
+        memory.fill(0);
+        let mut workspace = Self::new()?;
+        workspace.materialise(memory)?;
+        Ok(workspace)
+    }
+
+    /// Gives back the materialised region for a later [`Self::in_region`];
+    /// `None` when nothing was decoded. The context ends with it.
+    pub fn into_region(mut self) -> Option<Vec<u64>> {
+        self.context = ptr::null_mut();
+        Some(std::mem::take(&mut self.memory)).filter(|memory| !memory.is_empty())
+    }
+
     /// Materialises the decode arena and returns its static context.
     fn context(&mut self) -> StorageResult<*mut ZSTD_DCtx> {
         if self.context.is_null() {
-            let mut memory = workspace(DECODE_WORKSPACE_BYTES)?;
-            // SAFETY: the static decoder neither allocates nor needs a free.
-            let context = unsafe {
-                ZSTD_initStaticDCtx(
-                    memory.as_mut_ptr().cast::<c_void>(),
-                    workspace_bytes(&memory),
-                )
-            };
-            if context.is_null() {
-                return Err(resource());
-            }
-            self.memory = memory;
-            self.context = context;
+            self.materialise(workspace(DECODE_WORKSPACE_BYTES)?)?;
         }
         Ok(self.context)
+    }
+
+    fn materialise(&mut self, mut memory: Vec<u64>) -> StorageResult<()> {
+        // SAFETY: the static decoder neither allocates nor needs a free.
+        let context = unsafe {
+            ZSTD_initStaticDCtx(
+                memory.as_mut_ptr().cast::<c_void>(),
+                workspace_bytes(&memory),
+            )
+        };
+        if context.is_null() {
+            return Err(resource());
+        }
+        self.memory = memory;
+        self.context = context;
+        Ok(())
     }
 
     /// Bytes charged by the decode workspace, zero until it is materialised.
