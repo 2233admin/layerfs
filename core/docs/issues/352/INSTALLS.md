@@ -3,6 +3,10 @@
 > **Status:** Current, owner decision 2026-10-18 (firm). Binding on the lead, the
 > builder and the fixer from P3 on. Extends SPEC §2 "Ignored files" and
 > Speed-ups 4; where they differ, this note wins.
+>
+> **From P3, [NODE_RULE.md](NODE_RULE.md) governs** (owner-approved 2026-10-19):
+> the generic Node operation rule for installs, refreshes, builds, tests,
+> merges and proofs. Where this note and NODE_RULE differ, NODE_RULE wins.
 
 ## 1. Decision
 
