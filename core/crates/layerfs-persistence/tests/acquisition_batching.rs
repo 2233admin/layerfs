@@ -9,6 +9,14 @@ use layerfs_persistence::{
 use layerfs_storage::{port::acquisition::*, StoragePolicy};
 use support::Temp;
 
+fn meta(mode: u32) -> layerfs_content::filesystem::attributes::PortableMetadata {
+    layerfs_content::filesystem::attributes::PortableMetadata {
+        mode,
+        mtime_seconds: 0,
+        mtime_nanoseconds: 0,
+    }
+}
+
 fn object(label: &[u8]) -> ObjectId {
     ObjectId::for_bytes(label)
 }
@@ -45,7 +53,7 @@ fn directory(parent: Option<u64>, name: &[u8], position: u64) -> NewEntry {
         },
         position: Some(position),
         kind: InodeKind::Directory,
-        metadata_root: object(b"metadata"),
+        metadata: meta(0o644),
         target_root: None,
         host_path: Some(b"/source".to_vec()),
         host: None,
@@ -59,7 +67,7 @@ fn file(position: u64, identity: u64) -> NewEntry {
         },
         position: Some(position),
         kind: InodeKind::RegularFile,
-        metadata_root: object(b"metadata"),
+        metadata: meta(0o644),
         target_root: None,
         host_path: Some(format!("/source/f{position:04}").into_bytes()),
         host: Some(HostIdentity {
@@ -78,7 +86,7 @@ fn symlink(position: u64) -> NewEntry {
         },
         position: Some(position),
         kind: InodeKind::Symlink,
-        metadata_root: object(b"link-metadata"),
+        metadata: meta(0o777),
         target_root: Some(object(b"opaque-link-target")),
         host_path: None,
         host: None,
@@ -103,7 +111,7 @@ fn non_host_windows_skip_the_host_insert_without_losing_targets_or_charges() {
     assert_eq!(rows.len(), 33);
     for row in rows.iter().skip(1) {
         assert_eq!(row.kind, InodeKind::Symlink);
-        assert_eq!(row.metadata_root, object(b"link-metadata"));
+        assert_eq!(row.metadata, meta(0o777));
         assert_eq!(row.content_root, Some(object(b"opaque-link-target")));
         assert_eq!(row.canonical, None);
     }
@@ -179,7 +187,7 @@ fn narrow_bindings_preserve_mixed_payloads_after_an_existing_alias_boundary() {
         let regular = rows.iter().find(|row| row.key.name == b"f0019").unwrap();
         assert_eq!((regular.position, regular.canonical), (19, Some(19)));
         for row in rows.iter().filter(|row| row.kind == InodeKind::Symlink) {
-            assert_eq!(row.metadata_root, object(b"link-metadata"));
+            assert_eq!(row.metadata, meta(0o777));
             assert_eq!(row.content_root, Some(object(b"opaque-link-target")));
         }
         let after_placement = port.work(owner).unwrap();
@@ -547,3 +555,20 @@ fn entry_refusal_order_and_full_unit_rollback_survive_execution_windows() {
 /// deferred by owner for Disposable-only development. Durable support and its
 /// retained historical receipts are unchanged.
 const DEVELOPMENT_PROFILES: [SqlitePersistenceProfile; 1] = [SqlitePersistenceProfile::Disposable];
+
+#[test]
+fn a_metadata_value_outside_the_portable_grammar_fails_the_read() {
+    // The blob decodes only through metadata_parse: a mode that fails the
+    // kind's grammar is an integrity error on the read, and the same decode
+    // rejects nonzero trailing padding in the column.
+    let temp = Temp::new("acquisition-metadata-refusal");
+    let handles = create(&temp, SqlitePersistenceProfile::Disposable);
+    let owner = begin(&handles);
+    let mut bad = symlink(1);
+    bad.metadata.mode = 0o644;
+    handles.acquisition.put_entries(owner, &[bad]).unwrap();
+    assert!(handles
+        .acquisition
+        .entries(owner, None, Limits::MAXIMUM)
+        .is_err());
+}

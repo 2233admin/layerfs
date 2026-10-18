@@ -4,6 +4,7 @@
 //! flow is exercised without an engine. Its byte charges are its own simple
 //! estimate, not the SQLite provider's, and it has exactly one session.
 #![allow(dead_code)]
+use layerfs_content::filesystem::attributes::PortableMetadata;
 use layerfs_content::{inode_leaf::InodeKind, ObjectId};
 use layerfs_storage::port::{
     acquisition::{
@@ -29,7 +30,7 @@ struct Row {
     position: Option<u64>,
     kind: InodeKind,
     canonical: Option<u64>,
-    metadata_root: ObjectId,
+    metadata: PortableMetadata,
     content_root: Option<ObjectId>,
     host_path: Option<Vec<u8>>,
     host: Option<HostIdentity>,
@@ -290,7 +291,7 @@ impl Acquisition for MemoryAcquisition {
                         position: entry.position,
                         kind: entry.kind,
                         canonical: first,
-                        metadata_root: entry.metadata_root,
+                        metadata: entry.metadata,
                         content_root: entry.target_root,
                         host_path: entry.host_path.clone().filter(|_| directory),
                         host: entry.host.filter(|_| entry.position.is_none()),
@@ -482,7 +483,7 @@ impl Acquisition for MemoryAcquisition {
                         position: row.position.ok_or(PersistenceError::Malformed)?,
                         kind: row.kind,
                         canonical: row.canonical,
-                        metadata_root: row.metadata_root,
+                        metadata: row.metadata,
                         content_root: row.content_root,
                     })
                 })

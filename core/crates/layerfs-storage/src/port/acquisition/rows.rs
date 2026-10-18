@@ -1,4 +1,5 @@
 //! Typed acquisition facts. No engine representation appears here.
+use layerfs_content::filesystem::attributes::PortableMetadata;
 use layerfs_content::{inode_leaf::InodeKind, ObjectId};
 
 /// Bytes of host change evidence: length, mode, mtime and ctime.
@@ -97,8 +98,8 @@ pub struct NewEntry {
     pub position: Option<u64>,
     /// File kind.
     pub kind: InodeKind,
-    /// Constructed attribute root.
-    pub metadata_root: ObjectId,
+    /// The portable mode and mtime the entry's inode value carries inline.
+    pub metadata: PortableMetadata,
     /// Constructed symlink target root; `None` for other kinds.
     pub target_root: Option<ObjectId>,
     /// Host path: required for a directory and a regular file.
@@ -182,8 +183,8 @@ pub struct Entry {
     pub kind: InodeKind,
     /// Canonical position of a regular file; its own when it is the first path.
     pub canonical: Option<u64>,
-    /// Constructed attribute root.
-    pub metadata_root: ObjectId,
+    /// The portable mode and mtime the entry's inode value carries inline.
+    pub metadata: PortableMetadata,
     /// Symlink target root or recorded directory root.
     pub content_root: Option<ObjectId>,
 }

@@ -207,7 +207,7 @@ fn table(
                         kind: entry.kind,
                         namespace_ref_count: count,
                         content_root: content_root.ok_or_else(malformed)?,
-                        metadata_root: InodeMetadata::Root(entry.metadata_root),
+                        metadata_root: InodeMetadata::Inline(entry.metadata),
                     },
                 )));
             }

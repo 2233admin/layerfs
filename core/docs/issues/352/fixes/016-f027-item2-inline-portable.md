@@ -7,8 +7,8 @@
 | Kind | 1 forward-only: the value grammar is unchanged in width and version; the inline form is a new row-level encoding |
 | Old Stores | read unchanged: the root form is byte-identical to every leaf written before this change |
 | Old data | not migrated; root-form rows keep their form and bytes until a row really changes |
-| Binaries | pending — daemon + Linux addon under `core/target/issue360/` |
-| Commits | `issue360-storage` on top of `7a11f3c3e` |
+| Binaries | daemon `76fbb78b`, addon `f7c97bd6` under `core/target/issue360/`; Init-inline rebuild pending |
+| Commits | `8aed51d60` + Init-inline follow-up on `issue360-storage` |
 | Regression test | `layerfs-content/tests/inode_leaf.rs` (both forms, mixed leaf, padding/kind/value rejection, pooled inline), `layerfs-workspace/tests/captured_namespace_inline.rs` (mtime-only, identical rewrite, net-zero directory → kept base root; one real change → exactly one inline inode) |
 | Recovery | none needed: decode dispatches on the byte-0 tag bit |
 
@@ -54,17 +54,20 @@ possible change is a new target, and capture allocates a fresh serial for it,
 so the stored-symlink path in `value()` can never see a changed target and no
 stored target is ever re-read from the capture.
 
-## Deviation recorded for the owner (spec §4.5)
+## Project Init writes the inline form (owner decision, item-2 follow-up)
 
-Project Init keeps writing the **root** form. The spec's "Init writes inline
-too" needs the tagged form carried through `init_entry`, whose tables are
-created inside the Store file and persist in sealed Stores
-(`check()` requires them for stored versions 22–24); the `kind` column's
-`CHECK(kind BETWEEN 1 AND 3)` and the `init_entry_directory … WHERE kind=2`
-index block a `code|0x80` tag, and no other column encodes the form without a
-persistent schema change, which is not authorized for item 2. Item-2
-acceptance is measured on forks of an existing snapshot, so Init's form does
-not affect it; a later item can revisit the acquisition encoding.
+The earlier "Init keeps root" deviation was reversed: `init_entry` rows are
+written and read only by the live operation owning them — every read query
+filters `owner.owner_epoch = ?` and other sessions' rows are only discarded
+(abandoned/release), never resumed — so the `metadata_root` blob's content is
+private to one running binary. The acquisition port's entry metadata field is
+now `PortableMetadata` (renamed `metadata`; no #353/#354-owned file reads the
+port fields) and the SQLite provider stores it in the unchanged 32-byte
+column as `mode u32 BE | mtime_seconds i64 BE | mtime_nanoseconds u32 BE |
+16 zero bytes`, decoded with padding rejection and `validate(kind)`.
+`schema.sql` and the stored schema source are byte-identical. `scan.rs` no
+longer emits attribute objects at all and `namespace.rs` writes
+`InodeMetadata::Inline`.
 
 ## Tests
 

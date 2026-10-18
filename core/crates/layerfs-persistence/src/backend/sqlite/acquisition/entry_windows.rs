@@ -20,7 +20,7 @@ struct Input<'a> {
     name: Option<&'a [u8]>,
     position: Option<i64>,
     kind: Option<i64>,
-    metadata: Option<&'a [u8]>,
+    metadata: Option<Vec<u8>>,
     target: Option<&'a [u8]>,
     path: Option<&'a [u8]>,
     host: Option<[u8; 60]>,
@@ -48,7 +48,7 @@ impl<'a> Input<'a> {
             name: Some(&entry.key.name),
             position,
             kind: Some(i64::from(entry.kind.code())),
-            metadata: Some(entry.metadata_root.as_bytes()),
+            metadata: Some(super::metadata_blob(&entry.metadata).to_vec()),
             target: entry
                 .target_root
                 .as_ref()
