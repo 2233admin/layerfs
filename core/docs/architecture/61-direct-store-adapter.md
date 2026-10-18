@@ -30,7 +30,16 @@ most `KeptReads::ORDINARY_BYTES` (3 MiB: 2 MiB pack bodies, 512 KiB decoded
 groups, 512 KiB pooled values) between demands: a demand that fails or leaves
 an isolated singleton pack drops it, and the next starts empty. It keeps only
 rows that never change once visible and never an absence. The Store's control
-reader (session 0), which serves every SDK call, keeps none.
+reader (session 0), which serves every SDK call, keeps none of its own.
+
+The daemon's CanonicalCache budget is the `cache_bytes` the SDK passes at
+Sandbox create (`sdk/js/native/src/sandbox.rs`): **64 MiB**, by owner decision
+2026-10-19 (#359, [fix record 031](../issues/352/fixes/031-359-warm-daemon-cache.md));
+it was 8 MiB, which one `find`, vitest or `ls -l` of 10,000 entries overran, so
+a later Workspace on the same daemon read it all again. The RCA LOOKUP facts
+window (record 032) charges its entries against the same allowance. A
+Store-wide tier of whole pack bodies was prototyped (record 031, prototype b),
+measured and dropped: it saved pack reads but not the per-object locate.
 A cached object invokes no Store port. The existing canonical object format and
 Storage locator/pack algorithms are unchanged. Adapter counters expose actual
 object/length demand counts and ids, and serial reservations; they are not a

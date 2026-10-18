@@ -37,7 +37,18 @@ cumulative observation records at a traced `sandbox.status` before and after
 the arm, subtracted. SDK calls, Commits and merges carry their own traced
 telemetry.
 
-**Caches (declared).** Daemon shared immutable cache: **64 KiB** (the SDK
+*warm-daemon* (added 2026-10-18, `cost.mjs case <id> --daemon warm`; fix
+record 031): Workspace W1 mounts, runs the case's non-steady steps once and
+unmounts discarded, then a fresh W2 on the same Branch and daemon runs them
+once and is measured. Its own arm: it never credits or replaces *cold*.
+`--daemon fresh` runs *cold* and *steady* on a daemon that has served no
+Workspace (no native setup mount before them); both read the daemon's
+VmRSS/VmHWM after each step.
+
+**Caches (declared, for the samples in this document).** Since #359 (owner
+decision 2026-10-19, fix record 031) the SDK starts every daemon with a
+**64 MiB** cache (`cache_bytes`), shared with the RCA facts window (record
+032); the samples below predate that. Daemon shared immutable cache: **64 KiB** (the SDK
 starts every daemon with `cache_bytes: 65536`, `sdk/js/native/src/sandbox.rs:61`;
 recorded in each sample's Mount operation record). SDK in-process Store cache:
 64 KiB (`layerfs-store-service/src/store_service.rs:34`). The Store file sits
@@ -133,6 +144,11 @@ objects; the cache evicts 57k–426k objects per walk and misses ~1 time per
 request. Steady `find` costs the same as cold (50,014 misses for 50,014
 requests; 7.7 s vs 8.5 s). The SDK's in-process Store cache is also 64 KiB
 (`store_service.rs:34`): `fs.grep` steady = cold to the statement.
+*Status:* the daemon budget became 8 MiB after #356, then **64 MiB** by
+owner decision 2026-10-19 (#359, fix record 031; `install_types.rs` default
+and the SDK setup both carry it). At 64 MiB the measured find, vitest, tsc -b
+and `ls -l` of 10,000 entries fit, and their steady and warm-daemon arms read
+nothing from the Store.
 
 **C2 — Each object fetch costs ~6 SQL statements and ~2 read transactions, and
 reads a whole pack.** Across every walk case: 5.5–6.2 statements and 1.8–2.1
@@ -224,7 +240,7 @@ declared (AGENTS §1), and its RSS is reported beside the timing.
 
 | Order | Fix | Causes | Owner / issue | Expected effect (to be measured) |
 | ---: | --- | --- | --- | --- |
-| 1 | Bounded daemon cache sized for a walk's metadata (the daemon default is 8 MiB; the SDK passes 64 KiB), with RSS reported; same for the SDK process | C1 | #357 (Sandbox config, `sdk/js/native/src/sandbox.rs:61`); #356 already plans 8 MiB; SDK cache with #354 | steady walks drop to the kernel-warm cost; no change for cold |
+| 1 | Bounded daemon cache sized for a walk's metadata (now 64 MiB, #359 record 031; was 8 MiB after #356, 64 KiB before), with RSS reported; same for the SDK process | C1 | #357 (Sandbox config, `sdk/js/native/src/sandbox.rs:61`); #356 already plans 8 MiB; SDK cache with #354 | steady walks drop to the kernel-warm cost; no change for cold |
 | 2 | Store read path: one read transaction per request, fewer statements per fetch, range reads instead of whole packs for small objects | C2 | **#354** (owns the Store read path; its results are input here) | every row of §2 |
 | 3 | Cached negative lookups (zero-inode entry with a TTL, invalidated by the Workspace's own create) | C3 | #357 | vitest/pnpm/`git`/`cp` steady ENOENT traffic → ~0 |
 | 4 | READDIRPLUS (entries and attributes in one reply) | C4 | #357 (FUSE) | `ls -l`, `find`, `du`: one request per directory page, not per entry |

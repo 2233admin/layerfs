@@ -4,6 +4,7 @@
 //   node dsh/tools/history/cost.mjs prepare  --binary <id>     (once: golden → prepared golden)
 //   node dsh/tools/history/cost.mjs native   --binary <id>     (once: the native tree volume)
 //   node dsh/tools/history/cost.mjs case <id> --binary <id> [--label diagnostic|measured]
+//   node dsh/tools/history/cost.mjs case <id> --binary <id> --daemon fresh|warm --label <l>   (#359 warm daemon)
 //
 // Host side: every sample gets its own folder under ~/lfs-history/runs/issue359/samples
 // (refused if it exists: outputs are append-only), a fresh byte clone of the prepared
@@ -22,6 +23,14 @@
 // trace time is kept beside it. Counters per arm: the daemon's cumulative records at
 // a traced status before and after the arm, subtracted; Commit, mount, unmount and
 // SDK calls carry their own traced telemetry.
+//
+// --daemon (#359 warm daemon; absent = the behaviour above). LayerFS part only, names
+// `layerfs-issue359-warm-*`, and the daemon's VmRSS/VmHWM read from /proc after each
+// step (an extra exec outside the step's counters). fresh: the cold and steady arms on
+// a daemon that has served no Workspace (no native setup mount). warm: Workspace W1
+// mounts, runs the case's non-steady steps once and unmounts discarded (unmeasured
+// warm-up); a fresh Workspace W2 on the same Branch and daemon then runs them once:
+// arm `warm-daemon`. It is its own arm and never credits or replaces cold.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -140,6 +149,8 @@ function runInner(name, volume, home, binary, args, out) {
   const mounts = ["-v", `${REPO}:${REPO}`, "-v", `${HISTORY}:${HISTORY}`, "-v", `${volume}:/layerfs-store`,
     "-v", `/Users/yifanxu/Ephemeral-AI-Lab/layerfs/core/target/issue352:/Users/yifanxu/Ephemeral-AI-Lab/layerfs/core/target/issue352:ro`,
     "--mount", `type=bind,src=${gitCommon},dst=${gitCommon},readonly`,
+    // #359 warm daemon: a registered binary pinned outside this checkout is mounted read-only where it lies
+    ...[...new Set([b.daemon, b.addon].map((f) => resolve(f, "..")))].filter((d) => !d.startsWith(`${REPO}/`) && !d.startsWith("/Users/yifanxu/Ephemeral-AI-Lab/layerfs/core/target/issue352/")).flatMap((d) => ["--mount", `type=bind,src=${d},dst=${d},readonly`]),
     "-v", "/var/run/docker.sock:/var/run/docker.sock", ...(hostSocket !== "/var/run/docker.sock" ? ["-v", `/var/run/docker.sock:${hostSocket}`] : [])];
   const argv = ["run", "--rm", "--name", name, "--init", ...mounts, ...Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
     "-w", REPO, "--entrypoint", "node", imageId, join(REPO, "dsh/tools/history/cost.mjs"), "inner", ...args, "--out", out];
@@ -156,21 +167,22 @@ function freshHome(dir) {
 
 async function hostCase(id, args) {
   if (!CASES[id]) throw new Error(`no case ${id}`);
-  const binary = opt(args, "--binary"), label = opt(args, "--label", "diagnostic"), part = opt(args, "--part", "all");
+  const binary = opt(args, "--binary"), label = opt(args, "--label", "diagnostic"), daemon = opt(args, "--daemon"), part = daemon ? "lfs" : opt(args, "--part", "all");
   if (!["all", "native", "lfs"].includes(part)) throw new Error(`--part ${part}: all | native | lfs`);
+  if (daemon && !["fresh", "warm"].includes(daemon)) throw new Error(`--daemon ${daemon}: fresh | warm`);
   const ids = identities(binary), seq = nextSeq();
-  const name = `layerfs-issue359-s${String(seq).padStart(3, "0")}`;
+  const name = `layerfs-issue359-${daemon ? "warm-" : ""}s${String(seq).padStart(3, "0")}`;
   const out = join(ROOT, "samples", `${name.slice(17)}-${id}${part === "all" ? "" : `-${part}`}-${label}`);
   if (existsSync(out)) throw new Error(`${out} exists: outputs are append-only`);
   mkdirSync(out, { recursive: true });
   const t0 = Date.now();
   cloneVolume(PREPARED, name);
   const home = freshHome(out);
-  writeFileSync(join(out, "manifest.json"), JSON.stringify({ case: id, part, label, seq, volume: name, from: PREPARED, ids, load: (await import("node:os")).loadavg(), at: new Date().toISOString() }, null, 1));
+  writeFileSync(join(out, "manifest.json"), JSON.stringify({ case: id, part, label, seq, daemon, volume: name, from: PREPARED, ids, load: (await import("node:os")).loadavg(), at: new Date().toISOString() }, null, 1));
   ledger({ seq, case: id, part, label, event: "start", volume: name, out });
   const native = CASES[id].native !== false && !CASES[id].kind && part !== "lfs";
   if (native && !nativeExists()) throw new Error(`case ${id} has a native arm and ${NATIVE} does not exist: run \`cost.mjs native\` first`);
-  const code = await runInner(name, name, home, binary, ["case", id, "--native", native ? "yes" : "no", "--part", part], out);
+  const code = await runInner(name, name, home, binary, ["case", id, "--native", native ? "yes" : "no", "--part", part, ...(daemon ? ["--daemon", daemon] : [])], out);
   const decoded = spawnSync("python3", [join(REPO, "tools/decode_observations.py"), join(out, "daemon.log"), "--trace", join(out, "trace.jsonl")], { encoding: "utf8", maxBuffer: 1 << 28 });
   writeFileSync(join(out, "daemon.jsonl"), decoded.stdout ?? "");
   let summary = null;
@@ -286,7 +298,7 @@ async function inner(args) {
       writeFileSync(join(out, "ready"), readFileSync(join(home, "_sandboxes", sb, "container"), "utf8").trim());
       while (!existsSync(join(out, "done"))) await new Promise((r) => setTimeout(r, 1000));
     } else {
-      await playCase(CASES[args[1]], args[1], { lf, sb, label, mount, unmount, status, exec, fork, record, part: opt(args, "--part", "all") });
+      await playCase(CASES[args[1]], args[1], { lf, sb, label, mount, unmount, status, exec, fork, record, part: opt(args, "--part", "all"), daemon: opt(args, "--daemon") });
     }
   } catch (error) {
     record({ error: String(error?.stack ?? error), code: error?.code ?? null });
@@ -300,7 +312,10 @@ async function inner(args) {
 }
 const nativeExists = () => { try { docker(["volume", "inspect", NATIVE]); return true; } catch { return false; } };
 
-async function playCase(c, id, { lf, label, mount, unmount, status, exec, fork, record, sb, part }) {
+const RSS = "for p in /proc/[0-9]*; do [ \"$(cat $p/comm 2>/dev/null)\" = layerfs-daemon ] && grep -E '^(VmRSS|VmHWM)' $p/status; done";
+const rssOf = (r) => Object.fromEntries([...String(r.stdout ?? "").matchAll(/^(VmRSS|VmHWM):\s+(\d+) kB/gm)].map((m) => [m[1] === "VmRSS" ? "rssKb" : "hwmKb", Number(m[2])]));
+
+async function playCase(c, id, { lf, label, mount, unmount, status, exec, fork, record, sb, part, daemon }) {
   const branch = await fork(`cost-${id}`, c.ref, "fork");
   if (c.kind === "sdk") {
     for (const arm of ["cold", "steady"]) { label(`${arm}.sdk`); const v = await c.call(lf, branch); record({ arm, step: `${arm}.sdk`, items: v?.items?.length ?? null, kind: v?.kind ?? null }); }
@@ -326,16 +341,24 @@ async function playCase(c, id, { lf, label, mount, unmount, status, exec, fork, 
     await unmount(ws0, "native.unmount");
   }
   if (part === "native") return;
+  const steady = (step) => step === "steady" || step.endsWith("-steady");
+  const run = daemon === "warm" ? steps.filter(([step]) => !steady(step)) : steps;
+  if (daemon === "warm") {
+    const w1 = await mount(branch, "warm.w1.mount");
+    for (const [step, cmd] of run) { const r = await exec(w1, timed(".", cmd, c.cmp), `warm.w1.${step}.exec`); record({ arm: "warm-w1", step, ...parse(r) }); }
+    await unmount(w1, "warm.w1.unmount");
+  }
+  const rss = async (ws, step) => (daemon ? { daemonMem: rssOf(await exec(ws, RSS, `lfs.${step}.rss`)) } : {});
   const ws = await mount(branch, "lfs.mount");
-  for (const [step, cmd] of steps) {
+  for (const [step, cmd] of run) {
     await status(ws, `lfs.${step}.before`);
     const r = await exec(ws, timed(".", cmd, c.cmp), `lfs.${step}.exec`);
     await status(ws, `lfs.${step}.after`);
-    record({ arm: step === "steady" || step.endsWith("-steady") ? "steady" : "cold", step, ...parse(r) });
+    record({ arm: daemon === "warm" ? "warm-daemon" : steady(step) ? "steady" : "cold", step, ...parse(r), ...(await rss(ws, step)) });
   }
   if (c.commit || c.commitAfter) {
     label("lfs.commit"); const v = await lf.sandbox.commit(sb, ws, `issue359 ${id}`);
-    record({ arm: "cold", step: c.commitAfter ?? "commit", kind: v?.kind ?? null });
+    record({ arm: daemon === "warm" ? "warm-daemon" : "cold", step: c.commitAfter ?? "commit", kind: v?.kind ?? null, ...(await rss(ws, "commit")) });
   }
   await unmount(ws, "lfs.unmount", !(c.commit || c.commitAfter));
 }
@@ -358,9 +381,9 @@ export function summarize(out) {
   const byTrace = new Map(daemon.filter((g) => g.trace).map((g) => [g.trace, g]));
   const rows = arms.map((a) => {
     if (!a.step) return a;
-    const exec = byStep(`${a.arm === "native" ? "native" : "lfs"}.${a.step}.exec`)[0] ?? byStep(`native.${a.step}`)[0];
+    const exec = a.arm === "warm-w1" ? byStep(`warm.w1.${a.step}.exec`)[0] : byStep(`${a.arm === "native" ? "native" : "lfs"}.${a.step}.exec`)[0] ?? byStep(`native.${a.step}`)[0];
     const row = { ...a, execMs: exec?.ms ?? null };
-    if (a.arm !== "native") {
+    if (a.arm !== "native" && a.arm !== "warm-w1") {
       const [before, after] = [byStep(`lfs.${a.step}.before`)[0], byStep(`lfs.${a.step}.after`)[0]];
       const gb = before && byTrace.get(before.id), ga = after && byTrace.get(after.id);
       if (gb && ga) { const vb = view(gb), va = view(ga); row.counters = Object.fromEntries(Object.keys(va).map((k) => [k, sub(vb[k], va[k])])); } else row.counters = null;
@@ -369,16 +392,16 @@ export function summarize(out) {
     }
     return row;
   });
-  const calls = Object.fromEntries(["lfs.mount", "lfs.unmount", "native.mount", "setup.create"].map((s) => [s, byStep(s).map((l) => ({ ms: l.ms, ok: l.ok, sql: sqlOf(l), timing: l.daemon?.map((d) => d.timing) ?? null }))]));
+  const calls = Object.fromEntries(["lfs.mount", "lfs.unmount", "native.mount", "setup.create", "warm.w1.mount", "warm.w1.unmount"].map((s) => [s, byStep(s).map((l) => ({ ms: l.ms, ok: l.ok, sql: sqlOf(l), timing: l.daemon?.map((d) => d.timing) ?? null }))]));
   const manifest = JSON.parse(readFileSync(join(out, "manifest.json"), "utf8"));
   // sorted | exact: digest and exit must agree; exit | none: exit only (none = output legitimately differs, e.g. sizes)
   const cmp = CASES[manifest.case]?.cmp ?? "none";
-  const native = rows.filter((r) => r.arm === "native"), lfs = rows.filter((r) => r.arm && r.arm !== "native");
+  const native = rows.filter((r) => r.arm === "native"), lfs = rows.filter((r) => r.arm && r.arm !== "native" && r.arm !== "warm-w1");
   // a split part (--part native|lfs) holds one side only: agreement is checked across parts by `table`
   const agree = (manifest.part ?? "all") !== "all" ? [] : native.map((n) => { const l = lfs.find((r) => r.step === n.step); return { step: n.step, digest: !!(l && l.digest === n.digest), exit: !!(l && l.exit === n.exit) }; });
   const mismatch = agree.some((a) => !a.exit || (["sorted", "exact"].includes(cmp) && !a.digest));
   const failed = rows.some((r) => r.error) || rows.some((r) => r.exit != null && r.exit !== 0);
-  return { out, manifest, cmp, rows, calls, agree, verdict: failed ? "FAILED" : mismatch ? "MISMATCH" : rows.some((r) => r.step && r.arm !== "native" && r.counters === null && r.execMs != null) ? "INCOMPLETE" : "COMPLETE" };
+  return { out, manifest, cmp, rows, calls, agree, verdict: failed ? "FAILED" : mismatch ? "MISMATCH" : rows.some((r) => r.step && r.arm !== "native" && r.arm !== "warm-w1" && r.counters === null && r.execMs != null) ? "INCOMPLETE" : "COMPLETE" };
 }
 
 // ---------------------------------------------------------------- table (host)
@@ -399,7 +422,7 @@ export function table(label, binary) {
     const all = parts.flatMap((s) => s.rows.filter((r) => r.arm));
     const verdicts = parts.map((s) => s.verdict);
     const nat = Object.fromEntries(all.filter((r) => r.arm === "native").map((r) => [r.step, r]));
-    for (const r of all.filter((x) => x.arm !== "native")) {
+    for (const r of all.filter((x) => x.arm !== "native" && x.arm !== "warm-w1")) {
       const n = nat[r.step], k = r.counters ?? {}, g = (s, f) => k[s]?.[f] ?? null;
       const sql = r.sql ?? {};
       const agrees = !n ? null : n.exit === r.exit && (!["sorted", "exact"].includes(c.cmp) || n.digest === r.digest);
@@ -412,6 +435,7 @@ export function table(label, binary) {
         transactions: g("reader_sql", "transactions") ?? sql["readers.transactions"] ?? null, blobBytes: g("reader_sql", "blob_read_bytes") ?? sql["readers.blob_read_bytes"] ?? null,
         packBytes: g("reader_storage", "pack_read_bytes"), packReads: g("reader_storage", "read_pack_selections"), locate: g("reader_storage", "locate"),
         readerRequests: g("store_readers", "requests"), cacheHits: g("immutable_cache", "cache_hits"), cacheMisses: g("immutable_cache", "cache_misses"),
+        rssKb: r.daemonMem?.rssKb ?? null, hwmKb: r.daemonMem?.hwmKb ?? null,
         lookup: g("kernel_opcodes", "lookup"), lookupMissing: g("kernel_opcodes", "lookup_missing"), getattr: g("kernel_opcodes", "getattr"),
         readdir: g("kernel_opcodes", "readdir"), read: g("kernel_opcodes", "read"), served: g("kernel_opcodes", "served"), servedNs: g("kernel_opcodes", "served_ns"),
         ownerJobs: g("owner", "jobs"), ownerWaitNs: g("owner", "lock_wait_ns_general"), ownerHoldNs: g("owner", "hold_ns_general"),

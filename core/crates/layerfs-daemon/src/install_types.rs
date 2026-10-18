@@ -21,7 +21,7 @@ impl Default for StoreSettings {
     fn default() -> Self {
         Self {
             workspace_capacity: 16,
-            cache_bytes: 8 * 1024 * 1024,
+            cache_bytes: 64 * 1024 * 1024,
             reservations: ReservationBlocks::default(),
         }
     }
