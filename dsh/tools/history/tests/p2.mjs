@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { aggregate, buildBaseline, evaluate, probeSeries } from "../gates.mjs";
+import { aggregate, buildBaseline, evaluate, probeSeries, thinClass } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
 import { parseReport } from "../frozen.mjs";
@@ -403,7 +403,7 @@ test("baselines by daemon: one per re-baseline run, beside the pilot's, never mi
   assert.throws(() => writeBaseline({ metricsDir: run, ranges: [2, 3, 4, 5], out: main, run: "r" }), /no attempt of range 5/);
   const { file, baseline } = writeBaseline({ metricsDir: run, ranges: [2, 3, 4], out: main, run: "p1-rebase" });
   assert.equal(file, join(main, "baseline-71001f65bbbb.json"));
-  assert.deepEqual([baseline.ranges, baseline.ops["fs.read\u00001–4 KiB"], Object.keys(baseline.ops).length], [[2, 3, 4], { p50: 3, p95: 6, n: 0 }, 2]);
+  assert.deepEqual([baseline.ranges, baseline.ops["fs.read\u00001–4 KiB"], Object.keys(baseline.ops).length], [[2, 3, 4], { p50: 3, p95: 6, n: 0, perRange: [0, 0, 0] }, 2]);
   const all = loadBaselines(main, { daemon: A });
   assert.deepEqual([...all.keys()], [A, B]);
   assert.throws(() => writeBaseline({ metricsDir: run, ranges: [2, 3, 4], out: main, run: "again" }), /already has a baseline/);
@@ -607,11 +607,18 @@ test("F-023: the one-file diff_commits probe is chain-bounded: the recorded nine
 
 test("F-024: baseline classes carry n; a thin class is not judged; merge and Commit outcomes are their own classes", () => {
   const b = buildBaseline([2, 3, 4].map((range) => ({ range, binary: { daemon: "d" }, ops: [{ op: "branch.merge", sizeClass: "17–64 entries · UpToDate", n: range === 2 ? 1 : 0, p50: 3.51, p95: 3.51 }, { op: "fs.read", sizeClass: "≤8 KiB", n: 20, p50: 4, p95: 6 }].filter((r) => r.n) })));
-  assert.deepEqual([b.ops["branch.merge\u000017–64 entries · UpToDate"].n, b.ops["fs.read\u0000≤8 KiB"].n], [1, 60]);
+  assert.deepEqual([b.ops["branch.merge\u000017–64 entries · UpToDate"].perRange, b.ops["fs.read\u0000≤8 KiB"].n], [[1, 0, 0], 60]);
   const m = { range: 10, binary: { daemon: "d" }, checks: {}, ops: [{ op: "branch.merge", sizeClass: "17–64 entries · UpToDate", n: 3, p50: 227, p95: 300 }, { op: "fs.read", sizeClass: "≤8 KiB", n: 30, p50: 4.4, p95: 6.6 }] };
   const speed = evaluate(m, [], b).checks.find((c) => c.name === "Speed");
   assert.equal(speed.result, "watch");
-  assert.match(speed.value, /not judged: branch\.merge 17–64 entries · UpToDate: baseline class has 1 call \(minimum 3\)/);
+  assert.match(speed.value, /not judged: branch\.merge 17–64 entries · UpToDate: baseline class has 1\/0\/0 calls \(minimum 5 per range\)/);
+  // lead rule: per range, every op and class; 3/3/8 is thin though it sums to 14, 5/5/5 is a reference
+  const w = (counts) => buildBaseline(counts.map((n, i) => ({ range: 2 + i, binary: { daemon: "d" }, ops: [{ op: "fs.write", sizeClass: "≤512 KiB", n, p50: 10, p95: 12 }] })));
+  const sp = (bl) => evaluate({ range: 10, binary: { daemon: "d" }, checks: {}, ops: [{ op: "fs.write", sizeClass: "≤512 KiB", n: 9, p50: 30, p95: 36 }] }, [], bl).checks.find((c) => c.name === "Speed");
+  assert.match(sp(w([3, 3, 8])).value, /not judged: fs\.write ≤512 KiB: baseline class has 3\/3\/8 calls/);
+  assert.equal(sp(w([3, 3, 8])).result, "watch");
+  assert.match(sp(w([5, 5, 5])).value, /^fs\.write ≤512 KiB: 3× baseline/);
+  assert.equal(thinClass({ n: 4 }), true, "a baseline without per-range counts falls back to its total");
   // outcome classes from the calls
   const calls = [{ method: "branch.merge", ms: 3, size: { kind: "entries", n: 20 }, outcome: outcomeOf("UpToDate") }, { method: "branch.merge", ms: 200, size: { kind: "entries", n: 20 }, outcome: outcomeOf("Merged", true) }];
   assert.deepEqual(aggregate(calls).map((r) => r.sizeClass), ["17–64 entries · Merged (new Commit)", "17–64 entries · UpToDate"]);

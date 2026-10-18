@@ -23,7 +23,7 @@
 // format), with `gh issue comment 352 --body-file <it>`.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { buildBaseline, evaluate, exponent, MINIMUM_POINTS, sameBinary } from "./gates.mjs";
+import { BASELINE_MIN_N, buildBaseline, evaluate, exponent, MINIMUM_POINTS, sameBinary, thinClass } from "./gates.mjs";
 import { categoryOf, derivedOverview, renderOverview, renderStats } from "./stats.mjs";
 import { FINDINGS, loadIssues, renderFormat } from "./format.mjs";
 import { change, loadFindings, REBUILD_KINDS } from "./findings.mjs";
@@ -210,9 +210,10 @@ export function writeBaseline({ metricsDir, ranges, out, run, phase = null, note
 
 /** A baseline with n per class (F-024), summed from the latest attempt of each of its ranges in `attempts`; marked derived. */
 export function withBaselineN(b, attempts) {
-  const n = {};
-  for (const k of b.ranges) for (const r of attempts.get(k)?.at(-1)?.ops ?? []) n[`${r.op}\u0000${r.sizeClass}`] = (n[`${r.op}\u0000${r.sizeClass}`] ?? 0) + (r.n ?? 0);
-  return { ...b, ops: Object.fromEntries(Object.entries(b.ops).map(([k, v]) => [k, { ...v, n: n[k] ?? 0 }])), derived: { ...(b.derived ?? {}), n: "F-024: summed from the stored ranges' ops (latest attempt each)" } };
+  const per = {};
+  b.ranges.forEach((k, i) => { for (const r of attempts.get(k)?.at(-1)?.ops ?? []) (per[`${r.op}\u0000${r.sizeClass}`] ??= b.ranges.map(() => 0))[i] += r.n ?? 0; });
+  const of = (k) => per[k] ?? b.ranges.map(() => 0);
+  return { ...b, ops: Object.fromEntries(Object.entries(b.ops).map(([k, v]) => [k, { ...v, n: of(k).reduce((x, y) => x + y, 0), perRange: of(k) }])), derived: { ...(b.derived ?? {}), n: "F-024: n and perRange from the stored ranges' ops (latest attempt each)" } };
 }
 
 /** The latency table of an attempt that recorded its calls (REPORT_OVERVIEW.md, SPEC §3c): classes, ×baseline, slopes, SQL work, FUSE. */
@@ -574,10 +575,10 @@ async function main() {
     const dir = opt("--metrics") ?? join(process.env.HOME, "lfs-history", "metrics");
     for (const f of readdirSync(dir).filter((f) => /^baseline(-[0-9a-f]{12}(-[0-9a-f]{12}-p\d)?)?\.json$/.test(f))) {
       const file = join(dir, f), b = JSON.parse(readFileSync(file, "utf8"));
-      if (b.derived?.n) { console.log(`${f}: has n`); continue; }
+      if (b.derived?.n && Object.values(b.ops).every((v) => v.perRange)) { console.log(`${f}: has n`); continue; }
       const out = withBaselineN(b, loadAttempts(b.source ?? dir));
       writeFileSync(file, JSON.stringify(out, null, 1));
-      console.log(`${f}: ${Object.entries(out.ops).map(([k, v]) => `${k.replace("\u0000", " ")} ${v.n}`).filter((x) => / [0-2]$/.test(x)).join("; ") || "every class ≥ 3"}`);
+      console.log(`${f}: ${Object.entries(out.ops).filter(([, v]) => thinClass(v)).map(([k, v]) => `${k.replace("\u0000", " ")} ${v.perRange.join("/")}`).join("; ") || `every class ≥ ${BASELINE_MIN_N} per range`}`);
     }
     return;
   }

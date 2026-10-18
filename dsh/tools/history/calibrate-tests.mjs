@@ -31,7 +31,7 @@ const here = dirname(fileURLToPath(import.meta.url));
  */
 export const INSTALL = "pnpm install --offline --frozen-lockfile --store-dir /pnpm-store --cache-dir /pnpm-store/.cache --ignore-scripts";
 /** Fills the store and the metadata cache for the checkout's lockfile; the one step with the network. */
-export const FETCH = "pnpm fetch --store-dir /pnpm-store --cache-dir /pnpm-store/.cache";
+export const FETCH = "pnpm fetch --store-dir /pnpm-store --cache-dir /pnpm-store/.cache --ignore-scripts";
 /** Why a checkpoint has no offline install, or null: only pnpm projects have one (range 0 is yarn's). */
 export function noInstall(tree) {
   return existsSync(join(tree, "pnpm-lock.yaml")) ? null : "no pnpm-lock.yaml (not a pnpm project at this commit): no offline install";

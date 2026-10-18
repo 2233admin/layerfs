@@ -99,14 +99,21 @@ export function aggregate(calls) {
 }
 
 /**
- * F-024: the fewest calls a baseline class needs, over its ranges, to be a
- * reference. Chosen from the P2 baseline ranges (rb-p2-58a60046, 51 classes):
- * 3 keeps every per-range operation (publish 4, store stats 3) and drops the
- * one- and two-call classes (merge 17–64 entries 2, apply and stat ≤512 KiB 1)
- * whose p50 is one sample, e.g. one UpToDate merge at 3.51 ms. Below it Speed
- * is "not judged" (watch, F8), never a ratio.
+ * F-024, lead decision 2026-10-18: the fewest calls a baseline class needs in
+ * each of the baseline's ranges to be a reference. A class with fewer than 5
+ * calls in any baseline range (absent = 0) is never used for a ratio: Speed
+ * for it reads "not judged: baseline class has n calls" (watch, F8). One rule
+ * for every op and class, no exceptions; e.g. fs.write ≤512 KiB (3/3/8) and
+ * branch.merge 17–64 entries (1) are not judged. Per range, not summed: the
+ * lead's 3/3/8 example is thin although it sums to 14. A baseline without
+ * per-range counts falls back to its total n. This does not hide F-025 (merge
+ * queueing): merge-affected fs.* classes are judged as they come out, and
+ * merges are never filtered out of them.
  */
-export const BASELINE_MIN_N = 3;
+export const BASELINE_MIN_N = 5;
+
+/** F-024: a baseline class too thin to be a reference (BASELINE_MIN_N). */
+export const thinClass = (b) => (b.perRange ? Math.min(...b.perRange) : b.n ?? Infinity) < BASELINE_MIN_N;
 
 /** The pilot baseline: per op and class the median p50/p95 of ranges 0-4, per probe its median. */
 export function buildBaseline(metrics) {
@@ -114,9 +121,10 @@ export function buildBaseline(metrics) {
   for (const m of metrics) {
     for (const r of m.ops || []) {
       const k = `${r.op}\u0000${r.sizeClass}`;
-      (ops.get(k) || ops.set(k, { p50: [], p95: [], n: 0 }).get(k)).p50.push(r.p50);
+      (ops.get(k) || ops.set(k, { p50: [], p95: [], n: 0, perRange: metrics.map(() => 0) }).get(k)).p50.push(r.p50);
       ops.get(k).p95.push(r.p95);
       ops.get(k).n += r.n ?? 0;
+      ops.get(k).perRange[metrics.indexOf(m)] += r.n ?? 0;
     }
     for (const [name, p] of Object.entries(m.probes || {})) (probes.get(name) || probes.set(name, []).get(name)).push(p.ms);
   }
@@ -125,7 +133,7 @@ export function buildBaseline(metrics) {
   return {
     daemon: metrics[0]?.binary?.daemon ?? null,
     ranges: metrics.map((m) => m.range),
-    ops: Object.fromEntries([...ops].map(([k, v]) => [k, { p50: quantile(v.p50, 0.5), p95: quantile(v.p95, 0.5), n: v.n }])),
+    ops: Object.fromEntries([...ops].map(([k, v]) => [k, { p50: quantile(v.p50, 0.5), p95: quantile(v.p95, 0.5), n: v.n, perRange: v.perRange }])),
     probes: Object.fromEntries([...probes].map(([k, v]) => [k, quantile(v, 0.5)])),
   };
 }
@@ -304,11 +312,11 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
       if (!b) continue;
       const ratio = +Math.max(r.p50 / b.p50, r.p95 / b.p95).toFixed(2);
       // F-024: a baseline class of fewer than BASELINE_MIN_N calls is not a reference
-      if (b.n != null && b.n < BASELINE_MIN_N) { if (!thin || ratio > thin.ratio) thin = { ...r, ratio, bn: b.n }; continue; }
+      if (thinClass(b)) { if (!thin || ratio > thin.ratio) thin = { ...r, ratio, bn: b.perRange ? b.perRange.join("/") : b.n }; continue; }
       if (!worstRow || ratio > worstRow.ratio) worstRow = { ...r, ratio };
     }
     if (thin && (!worstRow || thin.ratio > worstRow.ratio) && thin.ratio > t.speed.watch) {
-      add("Speed", `not judged: ${thin.op} ${thin.sizeClass}: baseline class has ${thin.bn} call${thin.bn === 1 ? "" : "s"} (minimum ${BASELINE_MIN_N}); ${thin.ratio}× it`, `≤ ${t.speed.watch}×`, "watch");
+      add("Speed", `not judged: ${thin.op} ${thin.sizeClass}: baseline class has ${thin.bn} call${thin.bn === 1 ? "" : "s"} (minimum ${BASELINE_MIN_N} per range); ${thin.ratio}× it`, `≤ ${t.speed.watch}×`, "watch");
     } else if (worstRow) {
       const series = history.map((x) => {
         const o = (x.ops || []).find((r) => r.op === worstRow.op && r.sizeClass === worstRow.sizeClass);

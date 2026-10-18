@@ -563,15 +563,22 @@ for a ~5% storage gain. Report raw deltas for both.
 
 ## 5. Gates per range
 
-> **Baseline classes (F-024, 2026-10-18).** Each baseline class records n,
-> its calls over the baseline ranges. A class of fewer than 3 calls is not a
-> reference: Speed reads "not judged: baseline class has n calls" (watch),
-> never a ratio. 3 keeps every per-range operation (publish, store stats) and
-> drops one- and two-call classes whose p50 is one sample. `branch.merge` and
+> **Baseline classes (F-024, lead decision 2026-10-18).** Each baseline class
+> records n and its calls per baseline range (`perRange`). A class with fewer
+> than 5 calls in any baseline range (absent = 0) is never used for a ratio:
+> Speed for it reads "not judged: baseline class has a/b/c calls" (watch, F8).
+> One rule for every op and class, no exceptions: fs.write ≤512 KiB (3/3/8)
+> and branch.merge 17–64 entries are not judged, and neither are the
+> once-per-range operations (publish, store stats). Per range, not summed: the
+> lead's 3/3/8 example sums to 14. In the stored baselines this leaves 23 of
+> 51 classes (P2) and 27 of 44 (P1) not judged. `branch.merge` and
 > `sandbox.commit` are classed by outcome as well as size (UpToDate, Merged,
-> Merged with a new Commit, Committed): an UpToDate call does none of the
-> work. Baselines written before carry n derived from their stored ranges;
-> their merge classes have no outcome and match only attempts recorded before.
+> Merged with a new Commit, Committed) when the trace has it: a classification
+> of the input, not an exception. The rule does not hide F-025 (in-lane merge
+> queueing, open until fixed): fs.* classes affected by merges are judged as
+> they come out, and merges are never filtered out of them. Baselines written
+> before carry n and perRange derived from their stored ranges; their merge
+> classes have no outcome and match only attempts recorded before.
 
 > **Checkpoint diff input (F-019, 2026-10-18).** The checkpoint diff_commits
 > cost is normalised by its changed entries plus their changed ancestor
