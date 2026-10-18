@@ -253,6 +253,13 @@
   Untraced it is +5 ms (46.3 → 51.6, about 0.35 ms per mount), so this is
   low-priority cleanup at the end of the fixer's queue, not a performance
   problem.
+  **Fixed** (`3e632716a`, addon `2e0c53df`, daemon unchanged). A call that
+  names a mount takes it from the process's table, checks its record with
+  one `stat`, and makes no daemon call. Close, unmount and the process calls
+  still refresh in full. One sample per arm, old against new (p50):
+  - 16 concurrent traced calls across 16 mounts: 845.9 → 56.0 ms;
+  - sequential exec at 16 mounts: 109 → 19 ms.
+  [fixes/013-a1-f029-sandbox-call-discovery.md](fixes/013-a1-f029-sandbox-call-discovery.md).
 - **F-030 · `daemon[].fuse.served` on traced exec lines is cumulative
   (tooling, liaison, 2026-10-18).** It rose 35 → 248 across calls, including
   `true` calls that make no requests. Readers must take differences per
