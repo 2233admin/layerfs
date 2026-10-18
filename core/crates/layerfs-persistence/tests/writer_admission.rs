@@ -54,7 +54,7 @@ impl PackReadPlan for HeldPlan {
                 status: e.to_string(),
             })?;
         self.release
-            .recv_timeout(Duration::from_secs(3))
+            .recv_timeout(Duration::from_secs(10))
             .map_err(|e| PersistenceError::Refused {
                 status: e.to_string(),
             })?;
@@ -142,7 +142,7 @@ impl Held {
         listener.set_nonblocking(true).unwrap();
         // The pinned Linux proof image supplies Python; its socket deadline releases
         // this independently opened real kernel owner if the controller fails.
-        let body = "import os,socket,fcntl\nf=os.open(os.path.dirname(os.environ['LAYERFS_ADMISSION_LOCK_CHILD']) or '.',os.O_RDONLY|os.O_DIRECTORY)\nfcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)\ns=socket.socket(socket.AF_UNIX)\ns.settimeout(3)\ns.connect(os.environ['LAYERFS_ADMISSION_LOCK_SOCKET'])\ns.sendall(b'L')\ntry:\n assert s.recv(1)==b'R'\nfinally:\n fcntl.flock(f,fcntl.LOCK_UN)\n os.close(f)\n";
+        let body = "import os,socket,fcntl\nf=os.open(os.path.dirname(os.environ['LAYERFS_ADMISSION_LOCK_CHILD']) or '.',os.O_RDONLY|os.O_DIRECTORY)\nfcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)\ns=socket.socket(socket.AF_UNIX)\ns.settimeout(10)\ns.connect(os.environ['LAYERFS_ADMISSION_LOCK_SOCKET'])\ns.sendall(b'L')\ntry:\n assert s.recv(1)==b'R'\nfinally:\n fcntl.flock(f,fcntl.LOCK_UN)\n os.close(f)\n";
         let mut child = Command::new("python3")
             .args(["-c", body])
             .env("LAYERFS_ADMISSION_LOCK_CHILD", path)
@@ -295,4 +295,106 @@ fn two_opened_handles_admit_eight_distinct_reservations_without_conflict() {
     // Neither open changed the required SQLite busy handler/profile.
     assert_eq!(first.profile().busy_timeout, 0);
     assert_eq!(second.profile().busy_timeout, 0);
+}
+
+/// Past the retired 2 s admission window (#352 F-040).
+const LONG_HOLD: Duration = Duration::from_millis(2500);
+
+/// Holds this Store's one connection turn through a public read until released.
+fn hold_turn(
+    handles: &Handles,
+) -> (
+    std::thread::JoinHandle<Result<(), PersistenceError>>,
+    mpsc::Sender<()>,
+) {
+    let storage = Storage::new(handles.storage.clone()).unwrap();
+    let object = FinalizedObject::new(
+        ObjectRole::FileState,
+        layerfs_content::object::codec::encode_bytes_object(&vec![48; 32000]).unwrap(),
+    )
+    .unwrap();
+    let save = storage.begin_save().unwrap();
+    save.accept(object.clone()).unwrap();
+    save.finish().unwrap();
+    let mut locations = Vec::new();
+    handles
+        .storage
+        .locate(&[object.id()], &mut locations)
+        .unwrap();
+    let id = locations[0].pack.pack_id;
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let provider = handles.storage.clone();
+    let holder = std::thread::spawn(move || {
+        provider
+            .read_pack_selection(
+                id,
+                &mut HeldPlan {
+                    entered: entered_tx,
+                    release: release_rx,
+                },
+            )
+            .map(|_| ())
+    });
+    entered_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    (holder, release_tx)
+}
+
+#[test]
+fn queued_writers_outlive_the_old_window_and_all_succeed() {
+    let temp = support::Temp::new("writer-admission-long");
+    let handles = create(&temp.join("store.sqlite"));
+    let (holder, release) = hold_turn(&handles);
+    let (ready_tx, ready_rx) = mpsc::channel();
+    let writers = (0..4)
+        .map(|_| {
+            let provider = handles.storage.clone();
+            let ready = ready_tx.clone();
+            std::thread::spawn(move || {
+                ready.send(()).unwrap();
+                provider.reserve(reserve())
+            })
+        })
+        .collect::<Vec<_>>();
+    for _ in 0..4 {
+        ready_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    }
+    std::thread::sleep(LONG_HOLD);
+    release.send(()).unwrap();
+    assert!(holder.join().unwrap().is_ok());
+    let results = writers
+        .into_iter()
+        .map(|writer| writer.join().unwrap())
+        .collect::<Vec<_>>();
+    assert!(
+        results.iter().all(Result::is_ok),
+        "a queued writer failed instead of waiting its turn: {results:?}"
+    );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn a_cross_process_waiter_outlives_the_old_window_and_succeeds() {
+    let temp = support::Temp::new("wl");
+    let path = temp.join("store.sqlite");
+    let original = create(&path);
+    let handles = open(&path);
+    let held = Held::start(&path, &temp.join("s"));
+    let (result_tx, result_rx) = mpsc::channel();
+    let writer = {
+        let provider = handles.storage.clone();
+        std::thread::spawn(move || result_tx.send(provider.reserve(reserve())).unwrap())
+    };
+    std::thread::sleep(LONG_HOLD);
+    let premature = result_rx.try_recv().ok();
+    held.release();
+    let outcome = premature
+        .clone()
+        .unwrap_or_else(|| result_rx.recv_timeout(Duration::from_secs(3)).unwrap());
+    writer.join().unwrap();
+    assert!(
+        premature.is_none() && outcome.is_ok(),
+        "a writer queued behind another process failed: {premature:?} {outcome:?}"
+    );
+    drop(original);
 }
