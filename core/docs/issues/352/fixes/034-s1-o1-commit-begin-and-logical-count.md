@@ -320,6 +320,42 @@ test passes.
   `exact_reuse_still_acquires_and_compares_canonical_bytes`: the retired
   policy itself.
 
+**Result, pnpm-first** (s677 O1-a → s693 A-1, daemon `7f51b68b`, addon
+`af7042ef`):
+
+| Measure | s677 | s693 | Change |
+| --- | ---: | ---: | ---: |
+| Writer blob reads | 18,798 / 211 MB | 1,287 / 5.0 MB | −17,511 / −206 MB |
+| Pack read selections | 6,266 | 429 | −5,837 |
+| Payload reads | 4,365 / 146 MB | 1 / 12 KB | −4,364 / −146 MB |
+| Writer statements | 66,173 | 59,592 | −6,581 |
+| Locate statements | 9,759 | 9,079 | −680 |
+| Commit (daemon) | 11.68 s | 12.31 s | **not attributable**: s693 ran at load 36.3 against 10.1, and its writer statement time was 2.30 s against 0.84 s for fewer statements |
+
+Host load 36.3 at s693's start. By rule it is not rerun, so the timing
+gain is shown by counts only: the 50,183 read-backs (1,543 ms in the
+counters-only build, s689) are gone.
+
+**Checks:** the storage and persistence test binaries (60) pass, each under
+a 100 s alarm. The seven Linux daemon targets pass on `abc3eb772` (35
+tests, own container each, 115 s timeout, load 13.9–15.3). The first test
+build was killed by the linker running out of memory (signal 9, `-j 6`, at
+load 36); it was rebuilt at `-j 2`. That was a build failure, not a test
+result.
+
+## A-2 · membership locate split (s691, diagnostic only)
+
+- Membership locate is 869 ms. Of that, SQL `tx.query` (the IN-list SELECT
+  on `object_location` joining `pack`) is 758 ms (87%).
+  `LocatorCache::make_room` is 45 ms, the row loop 21 ms, the hit scan
+  15 ms and the decode 10 ms.
+- That is about 13.7 µs per id over 55k missing ids in 154 statements.
+- The likely cause is the pinned 2 MiB SQLite page cache with no mmap.
+  This is inferred: no page-miss counter was taken.
+- A-2a (the eviction search) is skipped; see below. A-2b (a larger page
+  cache) is a profile change and the owner's call. It has one diagnostic
+  sample of its own, outside this record's fixes.
+
 ## Not done (approved skips), with ceilings
 
 - **O1-b · bindings.** 47,526 single-row `INSERT OR IGNORE INTO binding_hint`
