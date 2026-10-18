@@ -280,7 +280,7 @@ impl Rig {
     fn services(&self) -> (Arc<dyn RequestServices>, u64) {
         let request = self.next.get();
         self.next.set(request + 1);
-        (self.bound.request(&Fence::default()).unwrap(), request)
+        (layerfs_daemon::mount_request(&self.bound, &Fence::default()).unwrap(), request)
     }
     fn snapshot(&self) -> Snapshot {
         let work = self.client.diagnostics().unwrap();

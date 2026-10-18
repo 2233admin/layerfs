@@ -1,5 +1,5 @@
 // Per-call trace checks over a stand-in binding; each case is one command:
-//   node sdk/js/test/trace.mjs on|off|failure|dsh-env|start|ids|no-content|service
+//   node sdk/js/test/trace.mjs on|off|failure|dsh-env|start|ids|no-content|store
 // No Docker, Store or daemon is used.
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -11,6 +11,7 @@ const FAKE = fileURLToPath(new URL("./fixture/fake-native.cjs", import.meta.url)
 Object.assign(process.env, {
   LAYERFS_NATIVE: FAKE, LAYERFS_HOME: "/private/trace-home", LAYERFS_DOCKER: "/fake.sock",
   LAYERFS_IMAGE: "fake-image", LAYERFS_VOLUME: "fake-volume", LAYERFS_DAEMON: "/fake/daemon",
+  LAYERFS_STORE_PATH: "/fake/store.sqlite",
 });
 for (const name of ["TRACE", "TRACE_STEP", "TRACE_START"]) {
   delete process.env[`LAYERFS_${name}`];
@@ -105,7 +106,7 @@ try {
     const groups = new Set(lines.map((line) => line.method.replace(/^operator\./, "operator:").split(".")[0]));
     for (const group of ["project", "fs", "branch", "sandbox", "operator:store", "operator:files", "operator:workspace", "operator:inspect", "operator:process"]) assert.ok(groups.has(group), group);
     const write = lines.find((line) => line.method === "fs.write");
-    assert.deepEqual(write.args, { branch: "feature", path: "/big.txt", contentBytes: 10000, message: "Write big", sandbox: "sb_fake" });
+    assert.deepEqual(write.args, { branch: "feature", path: "/big.txt", contentBytes: 10000, message: "Write big" });
     assert.equal(write.commit, "c0ffee");
     assert.deepEqual(write.sizes, { logical: 120, newCanonical: 40, newStored: 30, newMetadata: 8 });
     const apply = lines.find((line) => line.method === "fs.apply");
@@ -158,7 +159,7 @@ try {
     // The client option overrides the environment.
     const other = join(dir, "option.jsonl");
     await new LayerFS("website", { trace: other }).project.list_branches();
-    assert.equal(readFileSync(other, "utf8").trimEnd().split("\n").length, 2);
+    assert.equal(readFileSync(other, "utf8").trimEnd().split("\n").length, 1, "a Store call needs no service Sandbox");
   } else if (selected === "off") {
     // A step label alone traces nothing.
     process.env.LAYERFS_TRACE_STEP = "unused step";
@@ -178,14 +179,14 @@ try {
     process.env.DSH_LAYERFS_TRACE_STEP = "call_7";
     const results = await script(new LayerFS("website"));
     const lines = read(file);
-    assert.equal(lines.length, results.length + 1, "one line per call plus the service Sandbox");
+    assert.equal(lines.length, results.length + 1, "one line per call plus the service Sandbox of the read model");
     assert.ok(lines.every((line) => line.step === "call_7" && line.phase === "end"));
     // The LAYERFS_ names win over their DSH_ twins.
     const own = join(dir, "own.jsonl");
     process.env.LAYERFS_TRACE = own;
     process.env.LAYERFS_TRACE_STEP = "own step";
     await new LayerFS("website").project.list_branches();
-    assert.deepEqual(read(own).map((line) => line.step), ["own step", "own step"]);
+    assert.deepEqual(read(own).map((line) => line.step), ["own step"]);
     assert.equal(read(file).length, lines.length);
     // Deployment settings fall back to their DSH_ twins the same way.
     const saved = {};
@@ -251,40 +252,31 @@ try {
     for (const line of read(file)) {
       for (const field of ["stdout", "stderr", "content", "root", "value"]) assert.ok(!(field in line), `${line.method} ${field}`);
     }
-  } else if (selected === "service") {
-    // A refused service Sandbox is not kept: the caller's next call creates it.
+  } else if (selected === "store") {
+    // Store calls open the client's Store in this process once, and close()
+    // releases it; no service Sandbox is created for them (#352 F-020).
     const native = (await import(FAKE)).default;
-    process.env.LAYERFS_TRACE = file;
-    native.busyServices = 1;
     const client = new LayerFS("website");
-    await assert.rejects(client.project.list_branches(), { code: "Busy" });
-    assert.equal(client.serviceSandbox, null);
     await client.project.list_branches();
-    assert.deepEqual(read(file).map((line) => [line.method, line.code ?? line.kind]), [["sandbox.service", "Busy"], ["sandbox.service", "Ready"], ["project.list_branches", undefined]]);
-    // The service Sandbox resolves its deployment like sandbox.create: the
-    // default Docker socket, and a missing setting refused before the binding.
-    delete process.env.LAYERFS_DOCKER;
-    const before = native.deploys.length;
-    await new LayerFS("website").project.list_branches();
-    assert.equal(native.deploys[before].docker, "/var/run/docker.sock");
-    // Unset, no container prefix; set, it reaches every create, the service's too.
-    assert.equal("containerPrefix" in native.deploys[before], false);
-    process.env.LAYERFS_CONTAINER_PREFIX = "layerfs-issue352-t-";
-    await new LayerFS("website2").project.list_branches();
-    await new LayerFS("website2").sandbox.create("box", "website2", "sha256:" + "a".repeat(64));
-    assert.deepEqual(native.deploys.slice(-2).map((d) => d.containerPrefix), ["layerfs-issue352-t-", "layerfs-issue352-t-"]);
-    delete process.env.LAYERFS_CONTAINER_PREFIX;
+    await client.fs.read("main", "/README.md");
+    assert.deepEqual(native.stores, [["open", "/fake/store.sqlite"]]);
+    assert.deepEqual(native.calls, ["project.list_branches", "fs.read"]);
+    assert.ok(native.args.every((args) => args.storePath === "/fake/store.sqlite" && !("sandbox" in args)));
+    await client.close();
+    assert.deepEqual(native.stores.at(-1), ["close", "/fake/store.sqlite"]);
+    // Without a Store path a Store call is refused before the binding.
+    delete process.env.LAYERFS_STORE_PATH;
+    const calls = native.calls.length;
+    await assert.rejects(new LayerFS("website").fs.read("main", "/README.md"), { code: "InvalidInput", message: /storePath/ });
+    assert.equal(native.calls.length, calls);
     // A client's Store policy goes with its Init only.
+    process.env.LAYERFS_STORE_PATH = "/fake/store.sqlite";
     await new LayerFS("website3", { storePolicy: { wholeFileDepth: 8, chunkDepth: 4 } }).project.init("/src/website");
     assert.deepEqual(native.args.at(-1).policy, { wholeFileDepth: 8, chunkDepth: 4 });
     await new LayerFS("website3").project.init("/src/website");
     assert.equal("policy" in native.args.at(-1), false);
-    delete process.env.LAYERFS_IMAGE;
-    const calls = native.calls.length;
-    await assert.rejects(new LayerFS("website").project.list_branches(), { code: "InvalidInput", message: /deploy\.image/ });
-    assert.equal(native.calls.length, calls);
   } else {
-    console.error("usage: trace.mjs on|off|failure|dsh-env|start|ids|no-content|service");
+    console.error("usage: trace.mjs on|off|failure|dsh-env|start|ids|no-content|store");
     process.exit(2);
   }
   console.log(`PASS trace ${selected}`);

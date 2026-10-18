@@ -39,7 +39,7 @@ use layerfs_bridge::{
     daemon_setup::{DaemonLimits, DaemonSetup},
     duplex,
 };
-use layerfs_history::{BranchId, CommitHistoryRequest, CommitOutcome, CommitRecord, WorkspaceId};
+use layerfs_history::{BranchId, CommitOutcome, CommitRecord, WorkspaceId};
 use model::{assert_same, Flat};
 use mounted::COMMAND;
 use rig::{assert_kernel, bash_in, clock_masked, clocked, host as tree, kernel, passed};
@@ -232,17 +232,11 @@ fn unmount(control: &mut Control, ready: &ReadyMount) {
         "the mount is still in the kernel's table"
     );
 }
-fn history(control: &mut Control, branch: BranchId) -> Vec<CommitRecord> {
-    let page = layerfs_api::internal::commits(
-        control,
-        CommitHistoryRequest {
-            branch,
-            start: None,
-            cursor: None,
-            limit: 4,
-        },
-    )
-    .unwrap();
+fn history(
+    manifest: &layerfs_bridge::provision::StoreManifest,
+    branch: BranchId,
+) -> Vec<CommitRecord> {
+    let page = support::commits(manifest, branch, 4);
     assert!(page.continuation.is_none());
     page.records
 }
@@ -383,7 +377,7 @@ fn r5_1_the_actual_daemon_commits_a_change_by_external_bash_and_a_fresh_mount_is
         ),
         (Activity::Idle, record.root, Some(record.id))
     );
-    assert_eq!(history(&mut control, branch), [record.clone()]);
+    assert_eq!(history(&installed.manifest, branch), [record.clone()]);
     same(
         &expected,
         &tree(mount),
@@ -434,7 +428,7 @@ fn r5_1_the_actual_daemon_commits_a_change_by_external_bash_and_a_fresh_mount_is
         layerfs_api::internal::workspace(&mut control).commit(fresh.token).unwrap(),
         CommitOutcome::UpToDate { head, root } if head == Some(record.id) && root == record.root
     ));
-    assert_eq!(history(&mut control, branch), [record.clone()]);
+    assert_eq!(history(&installed.manifest, branch), [record.clone()]);
     unmount(&mut control, &again);
     drop(guard);
     assert_eq!(

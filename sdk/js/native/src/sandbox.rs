@@ -12,14 +12,14 @@
 //! is retried on the caller's behalf.
 use crate::job::{failed, refused, Outcome};
 use crate::registry::{lock, random, sandbox, text, Mount, SandboxState, SANDBOXES};
-use layerfs_api::internal::{commits, split, workspace};
+use layerfs_api::internal::{split, workspace};
 use layerfs_api::sandbox::values;
 use layerfs_api::{
     OperationFailure, SandboxApi, SandboxCause, SandboxCreate, SandboxFailure, SandboxPhase,
 };
 use layerfs_bridge::control::{CommitControl, SdkRefusal, SdkValue};
 use layerfs_bridge::daemon_setup::{DaemonLimits, DaemonSetup};
-use layerfs_history::{CommitHistoryRequest, WorkspaceId};
+use layerfs_history::WorkspaceId;
 use layerfs_sandbox::backend::docker::{CreatePhase, Docker, SandboxRequest};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -410,15 +410,13 @@ pub(crate) fn mount(args: &SdkValue) -> Outcome {
     let _guard = crate::discovery::guard(&state.directory)?;
     let branch = text(args, "branch")?;
     let id = WorkspaceId::from_authority(random()?).map_err(failed)?;
+    // The Branch is found by name in this process; the daemon binds its id.
+    let branch_id = crate::direct::branch_id(args, branch)?;
     let mounted = {
         let mut control = crate::trace::control(&state.controls)?;
-        workspace(&mut control).mount_branch(&state.project, branch, id)
+        workspace(&mut control).mount(id, branch_id)
     };
-    let mounted = mounted.map_err(|error| match error {
-        layerfs_api::SdkError::Refused(refusal) => refusal,
-        layerfs_api::SdkError::Operation(failure) => operation(failure),
-        layerfs_api::SdkError::Mount(failure) => failed(failure),
-    })?;
+    let mounted = mounted.map_err(failed)?;
     let mut value = values::mounted(&mounted, branch);
     if let SdkValue::Map(fields) = &mut value {
         fields.push(("sandbox".to_owned(), SdkValue::text(state.id.as_str())));
@@ -435,24 +433,15 @@ pub(crate) fn mount(args: &SdkValue) -> Outcome {
 }
 
 /// `sandbox.status(sandbox, path)`: the daemon's Status, which reads no
-/// Store, and the Branch head from one separate newest-first History read.
+/// Store, and the Branch head from one newest-first History read in this
+/// process.
 pub(crate) fn status(args: &SdkValue) -> Outcome {
     let state = sandbox(args)?;
     let token = state.token(text(args, "path")?)?;
     let mut control = crate::trace::control(&state.controls)?;
     let status = workspace(&mut control).status(token).map_err(operation)?;
-    let head = commits(
-        &mut control,
-        CommitHistoryRequest {
-            branch: status.binding.branch.id,
-            start: None,
-            cursor: None,
-            limit: 1,
-        },
-    )
-    .ok()
-    .map(|page| page.records.first().map(|record| record.id));
     drop(control);
+    let head = crate::direct::head(args, status.binding.branch.id).ok();
     let mut value = values::status(&status, head);
     if let SdkValue::Map(fields) = &mut value {
         let branch = lock(&state.mounts)?

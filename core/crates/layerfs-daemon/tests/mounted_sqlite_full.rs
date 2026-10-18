@@ -51,7 +51,7 @@ struct ObserveRequest {
 impl MountServices for ObserveMount {
     fn request(&self, fence: &Fence) -> Result<Arc<dyn RequestServices>, ServiceError> {
         Ok(Arc::new(ObserveRequest {
-            inner: self.bound.request(fence)?,
+            inner: layerfs_daemon::mount_request(&self.bound, fence)?,
             full: self.full.clone(),
             io_full: self.io_full,
         }))

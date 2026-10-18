@@ -95,7 +95,10 @@ impl Task for Job {
             let us = |v: u128| SdkValue::Int(i64::try_from(v).unwrap_or(i64::MAX));
             answer.push((
                 "client".to_owned(),
-                SdkValue::map([("runUs", us(client.run)), ("connectionWaitUs", us(client.waited))]),
+                SdkValue::map([
+                    ("runUs", us(client.run)),
+                    ("connectionWaitUs", us(client.waited)),
+                ]),
             ));
         }
         to_js(&env, &SdkValue::Map(answer))

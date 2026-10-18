@@ -57,9 +57,22 @@ export function deployment(options = {}, needsImage = true) {
   return deploy;
 }
 
-/** One client's deployment selection, including cross-process discovery home. */
+/** One client's deployment selection, including cross-process discovery
+ * home and the Store this process opens. */
 export function invokeClient(client, op, args) {
-  return invoke(op, { ...args, project: client.projectName, home: client.options.home, deploy: client.options.deploy }, client.options);
+  return invoke(op, { ...args, project: client.projectName, home: client.options.home, deploy: client.options.deploy, ...storeArgs(client) }, client.options);
+}
+
+const storeArgs = (client) => (client.options.storePath ? { storePath: client.options.storePath } : {});
+
+/** Opens the client's Store in this process (one more client of it). */
+export async function storeOpen(client) {
+  return outcome(await native().storeOpen({ project: client.projectName, home: client.options.home, ...storeArgs(client) }));
+}
+
+/** Releases the client's Store; the last client of the process closes it. */
+export async function storeClose(client) {
+  return outcome(await native().storeClose({ project: client.projectName, home: client.options.home, ...storeArgs(client) }));
 }
 
 export function page(pageSize = 50, pagePos = 0) {

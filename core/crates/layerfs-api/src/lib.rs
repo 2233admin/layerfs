@@ -1,18 +1,17 @@
-//! Project provisioning and authenticated filesystem facades, with no host data service.
+//! Project provisioning and Sandbox Workspace control. Store calls run in
+//! the caller's process (layerfs-store-service), not through this crate.
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
 mod base;
 #[doc(hidden)]
 pub use base::internal;
-pub mod branch;
-pub mod fs;
 #[doc(hidden)]
 pub mod operator;
 pub mod project;
 pub mod sandbox;
 pub use base::failure::{OperationCause, OperationFailure};
-pub use base::sdk::{call, SdkError, SdkResult};
+pub use base::sdk::{SdkError, SdkResult};
 pub use layerfs_project::{InitCounters, InitCounts, InitStep};
 pub use project::{
     InitError, InitFailure, InitRequest, InstallError, InstallFailure, InstallWork, Installed,

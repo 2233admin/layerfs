@@ -166,7 +166,7 @@ impl Service {
                 drain_wait: config.drain_wait,
             },
             queue,
-            workspace.clone(),
+            Arc::new(crate::service::Mounted(workspace.clone())),
             Identity {
                 root,
                 uid: config.command_uid,

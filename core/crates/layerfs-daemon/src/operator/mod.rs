@@ -1,9 +1,7 @@
-//! Internal operator dispatch, separate from the public SDK method table.
+//! Operator calls about this daemon's Workspaces; operator Store calls run
+//! in the SDK's process (layerfs-store-service).
 mod dispatch;
-mod inspect;
 pub(crate) use dispatch::dispatch;
-pub(crate) use inspect::{snapshot, WorkspaceView};
+pub(crate) use layerfs_store_service::operator::{snapshot, WorkspaceView};
 
-pub(crate) mod files;
-mod store;
 mod workspace;

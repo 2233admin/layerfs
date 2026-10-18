@@ -139,29 +139,6 @@ pub fn parts(
     (&sandbox.runtime, &mut sandbox.control)
 }
 
-/// Original Fork exchange for component proofs with an existing control owner.
-pub fn fork(
-    control: &mut Control,
-    request: layerfs_history::ForkRequest,
-) -> Result<layerfs_history::BranchSnapshot, Box<OperationFailure>> {
-    crate::branch::fork::fork_record(control, request)
-}
-/// Original ancestry exchange for component proofs with an existing control owner.
-pub fn commits(
-    control: &mut Control,
-    request: layerfs_history::CommitHistoryRequest,
-) -> Result<layerfs_history::PageResult<layerfs_history::CommitRecord>, Box<OperationFailure>> {
-    crate::branch::list_commits::commit_page(control, request)
-}
-/// One Branch page on a proof's existing original control owner.
-pub fn branches(
-    control: &mut Control,
-    stack: layerfs_history::LayerStackId,
-    page: layerfs_history::Page,
-) -> Result<layerfs_history::PageResult<layerfs_history::BranchRecord>, Box<OperationFailure>> {
-    crate::project::list_branches::branch_page(control, stack, page)
-}
-
 /// The same ordinary launcher for external host commands and disjoint concurrent proof borrows.
 #[cfg(unix)]
 pub fn exec(

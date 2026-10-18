@@ -1,4 +1,5 @@
 // A stand-in native binding for trace checks: no Docker, Store or daemon.
+// Store calls name the client's storePath; Sandbox calls their Sandbox.
 // Every call resolves like the real binding; a path "/missing" is refused, and
 // so are the next `busyServices` service Sandbox creations (Busy).
 const commit = { id: "c0ffee", logical: 120, newCanonical: 40, newStored: 30, newMetadata: 8 };
@@ -44,5 +45,9 @@ const traced = (op, args) => {
   const plain = answer(op, args);
   return args.observe ? { ...plain, telemetry: telemetry(op) } : plain;
 };
+exports.stores = [];
+// The in-process Store (#352 F-020): opened once per client, never traced.
+exports.storeOpen = async (args) => { exports.stores.push(["open", args.storePath]); return { value: { clients: 1 } }; };
+exports.storeClose = async (args) => { exports.stores.push(["close", args.storePath]); return { value: { clients: 0 } }; };
 exports.call = async (op, args) => traced(op, args);
 exports.operatorCall = async (op, args) => traced(op, args);
