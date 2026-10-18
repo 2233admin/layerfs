@@ -882,6 +882,10 @@ test("closure development checks (owner 2026-10-18): a clean reinstall of the un
   assert.deepEqual(tscStates(stale, "/workspaces/1"), ["packages/a/tsconfig.json built"]);
   assert.deepEqual(tscStates(stale.replaceAll("/workspaces/1", "/w"), "/w"), tscStates(stale, "/workspaces/1"), "the same states natively under /w");
   assert.equal(nothingToBuild(tscStates(stale, "/workspaces/1")), false);
+  // without a terminal tsc writes "6:19:48 AM - Project ..." (dev352-p3e r015); no parsed state is not nothing to build
+  const plain = "6:19:48 AM - Projects in this build: \n    * packages/a/tsconfig.json\n\n6:19:48 AM - Project 'packages/a/tsconfig.json' is up to date because newest input 'packages/a/src/index.ts' is older than output 'packages/a/lib/tsconfig.tsbuildinfo'\n";
+  assert.deepEqual(tscStates(plain, "/workspaces/1"), ["packages/a/tsconfig.json up to date"]);
+  assert.equal(nothingToBuild(tscStates("no tsc lines")), false);
   // playing the rebuild row: its states from the output, in its own one-shot Workspace with its own Commit
   const fake = { label: () => {}, lf: { sandbox: { mount: async () => "/workspaces/1", unmount: async () => {},
     exec: async (sb, ws, c) => ({ exitCode: 0, stdout: c === "pwd" ? "/workspaces/1\n" : c.includes("--verbose") ? stale : "" }),
@@ -1000,6 +1004,7 @@ test("P3 proof: untracked closure output is no extra; a tracked file under it is
   const git = [{ path: "src/a.ts" }, { path: "packages/b/dist/keep.js" }];
   assert.equal(comparePaths(items, git, [".lfs-probe/"]).extra.length, 3, "P2: every untracked path is an extra");
   const p3 = comparePaths(items, git, [".lfs-probe/"], CLOSURE_OUTPUT);
+  assert.deepEqual(comparePaths([{ path: "packages/a/lib/types/index.d.ts" }, { path: "packages/a/src/x.ts" }], [{ path: "packages/a/src/x.ts" }], [], CLOSURE_OUTPUT).extra, [], "dsh's tsc outDir lib/ is closure output (dev352-p3e r015)");
   assert.deepEqual([p3.ok, p3.extra, p3.missing], [true, [], []]);
   assert.equal(comparePaths(items, [...git, { path: "packages/c/dist/gone.js" }], [".lfs-probe/"], CLOSURE_OUTPUT).missing[0], "packages/c/dist/gone.js", "git's tracked output is still required");
 });

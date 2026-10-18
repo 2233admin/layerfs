@@ -68,7 +68,8 @@ export const rebuildCommand = (packages) => `./node_modules/.bin/tsc -b --verbos
 export function tscStates(text, root = "") {
   const out = new Map();
   for (const raw of String(text).split("\n")) {
-    const l = raw.replace(/^\[[^\]]*\]\s*/, "").replaceAll(root ? `'${root}/` : "\0", "'");
+    // tsc's time prefix: "[6:19:48 AM] " on a terminal, "6:19:48 AM - " without one (dev352-p3e r015)
+    const l = raw.replace(/^\[[^\]]*\]\s*/, "").replace(/^\d{1,2}:\d{2}:\d{2}(\s?[AP]M)? - /, "").replaceAll(root ? `'${root}/` : "\0", "'");
     let m = /^Project '([^']+)' is (up to date|out of date)/.exec(l);
     if (m) { if (out.get(m[1]) !== "built") out.set(m[1], m[2]); continue; }
     m = /^Building project '([^']+)'/.exec(l);
@@ -76,8 +77,8 @@ export function tscStates(text, root = "") {
   }
   return [...out].sort(([a], [b]) => a.localeCompare(b)).map(([project, state]) => `${project} ${state}`);
 }
-/** True when a rebuild reports nothing to build. */
-export const nothingToBuild = (states) => states.every((l) => !/ (built|out of date)$/.test(l));
+/** True when a rebuild reports its projects and none to build; no parsed project state is not "nothing to build". */
+export const nothingToBuild = (states) => states.length > 0 && states.every((l) => !/ (built|out of date)$/.test(l));
 
 /**
  * The closure steps of one range, in order: install (first, incremental where
@@ -149,8 +150,13 @@ export async function playClosure(run, k, steps, { sb, branch, expectCall, Misma
   return out;
 }
 
-/** Paths the closure writes that git does not track: node_modules, build output (`dist/`, `*.tsbuildinfo`). The proof leaves them out when extra. */
-export const CLOSURE_OUTPUT = /(^|\/)node_modules(\/|$)|(^|\/)dist\/|\.tsbuildinfo$/;
+/**
+ * Paths the closure writes that git does not track: node_modules and build
+ * output. dsh's tsc outDir is `lib/` (its .gitignore lists `node_modules/`,
+ * `lib/` and `*.tsbuildinfo`; dev352-p3e r015); `dist/` stays for bundles.
+ * The proof leaves them out when extra; a tracked file under them is compared.
+ */
+export const CLOSURE_OUTPUT = /(^|\/)node_modules(\/|$)|(^|\/)(dist|lib)\/|\.tsbuildinfo$/;
 
 /**
  * One range's closure on `branch` before its publish (P3, INSTALLS §3): the
