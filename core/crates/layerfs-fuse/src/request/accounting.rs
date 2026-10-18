@@ -1,5 +1,7 @@
 //! Per-mount opcode and disposal counts; one frame can carry several units.
+use std::cell::RefCell;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 /// Every kernel operation the pinned adapter can receive on Linux.
@@ -92,6 +94,63 @@ impl Opcode {
     ];
 }
 
+/// Steps inside a callback, timed on the receive worker that runs it
+/// (#352 F-032): owner jobs under the Workspace lock and the base reads
+/// between them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(usize)]
+pub enum Phase {
+    /// LOOKUP/GETATTR/OPEN/OPENDIR owner visit job.
+    ReadVisit,
+    /// Base facts read for an undecided read visit.
+    ReadSupply,
+    /// Mutation owner visit job.
+    MutateVisit,
+    /// Base facts read for an undecided mutation visit.
+    MutateSupply,
+    /// The release job after a published mutation's reply.
+    MutateRelease,
+    /// READDIR window job.
+    DirectoryVisit,
+    /// Base listing read to finish a READDIR window.
+    DirectoryFinish,
+    /// FORGET owner job.
+    Forget,
+    /// RELEASEDIR owner job.
+    CloseDirectory,
+}
+pub const PHASES: usize = Phase::CloseDirectory as usize + 1;
+impl Phase {
+    pub const NAMES: [&'static str; PHASES] = [
+        "read_visit",
+        "read_supply",
+        "mutate_visit",
+        "mutate_supply",
+        "mutate_release",
+        "directory_visit",
+        "directory_finish",
+        "forget",
+        "close_directory",
+    ];
+}
+
+thread_local! {
+    /// The accounting of the callback this receive worker is running.
+    static CURRENT: RefCell<Option<Arc<Accounting>>> = const { RefCell::new(None) };
+}
+
+/// Charges the time since `started` to `phase` of the running callback's
+/// mount; nothing when no callback is running on this thread.
+pub(crate) fn charge(phase: Phase, started: Instant) {
+    let elapsed = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+    CURRENT.with(|current| {
+        if let Some(accounting) = current.borrow().as_ref() {
+            accounting.phase_counts[phase as usize].fetch_add(1, Ordering::Relaxed);
+            accounting.phase_nanos[phase as usize].fetch_add(elapsed, Ordering::Relaxed);
+        }
+    });
+}
+
 /// The single terminal disposition of one received unit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(usize)]
@@ -118,6 +177,8 @@ pub struct Accounting {
     lookup_missing: AtomicU64,
     served_ns: AtomicU64,
     nanos: [AtomicU64; OPCODES],
+    phase_counts: [AtomicU64; PHASES],
+    phase_nanos: [AtomicU64; PHASES],
 }
 /// Monotonic counters copied without a lock; fields are individually exact.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -149,6 +210,9 @@ pub struct OpcodeWork {
     /// callback, from entry to return (the reply is sent inside it). FORGET
     /// charges every unit, so its time divides by `forget_units`.
     pub nanos: [u64; OPCODES],
+    /// Count and nanoseconds of each [`Phase`] inside the callbacks.
+    pub phase_counts: [u64; PHASES],
+    pub phase_nanos: [u64; PHASES],
 }
 impl OpcodeWork {
     pub fn count(&self, opcode: Opcode) -> u64 {
@@ -170,20 +234,26 @@ impl Default for Accounting {
             lookup_missing: AtomicU64::new(0),
             served_ns: AtomicU64::new(0),
             nanos: std::array::from_fn(|_| AtomicU64::new(0)),
+            phase_counts: std::array::from_fn(|_| AtomicU64::new(0)),
+            phase_nanos: std::array::from_fn(|_| AtomicU64::new(0)),
         }
     }
 }
 
-/// Charges the wall time from its creation to its drop to one opcode.
-pub struct Timed<'a> {
-    accounting: &'a Accounting,
+/// Charges the wall time from its creation to its drop to one opcode, and
+/// makes its accounting the current one for [`charge`] meanwhile.
+pub struct Timed {
+    accounting: Arc<Accounting>,
     opcode: Opcode,
     started: Instant,
+    previous: Option<Arc<Accounting>>,
 }
-impl Drop for Timed<'_> {
+impl Drop for Timed {
     fn drop(&mut self) {
         let elapsed = u64::try_from(self.started.elapsed().as_nanos()).unwrap_or(u64::MAX);
         self.accounting.nanos[self.opcode as usize].fetch_add(elapsed, Ordering::Relaxed);
+        let previous = self.previous.take();
+        CURRENT.with(|current| *current.borrow_mut() = previous);
     }
 }
 impl Accounting {
@@ -191,11 +261,13 @@ impl Accounting {
         self.opcodes[opcode as usize].fetch_add(1, Ordering::Relaxed);
     }
     /// Times one callback of `opcode` until the returned guard drops.
-    pub fn timed(&self, opcode: Opcode) -> Timed<'_> {
+    pub fn timed(self: &Arc<Self>, opcode: Opcode) -> Timed {
+        let previous = CURRENT.with(|current| current.borrow_mut().replace(self.clone()));
         Timed {
-            accounting: self,
+            accounting: self.clone(),
             opcode,
             started: Instant::now(),
+            previous,
         }
     }
     pub(super) fn disposed(&self, disposal: Disposal) {
@@ -239,6 +311,12 @@ impl Accounting {
             lookup_missing: self.lookup_missing.load(Ordering::Relaxed),
             served_ns: self.served_ns.load(Ordering::Relaxed),
             nanos: std::array::from_fn(|index| self.nanos[index].load(Ordering::Relaxed)),
+            phase_counts: std::array::from_fn(|index| {
+                self.phase_counts[index].load(Ordering::Relaxed)
+            }),
+            phase_nanos: std::array::from_fn(|index| {
+                self.phase_nanos[index].load(Ordering::Relaxed)
+            }),
         }
     }
 }

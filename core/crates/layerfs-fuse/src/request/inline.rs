@@ -66,7 +66,10 @@ impl KernelFilesystem {
                     let serial =
                         serial.map_err(|error| io::Error::from_raw_os_error(error.code()))?;
                     let services = services.request(&fence)?;
-                    drop(services.forget(mount, serial, count).await?);
+                    let started = std::time::Instant::now();
+                    let forgotten = services.forget(mount, serial, count).await;
+                    crate::request::charge(crate::request::Phase::Forget, started);
+                    drop(forgotten?);
                     Ok::<_, crate::ports::ServiceError>(())
                 }
                 .await;

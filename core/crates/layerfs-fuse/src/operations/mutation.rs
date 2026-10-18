@@ -247,7 +247,10 @@ impl Custody {
                 fresh,
                 facts: facts.clone(),
             };
-            self.receipt = Some(self.services.mutate_visit(visit).await?);
+            let started = std::time::Instant::now();
+            let receipt = self.services.mutate_visit(visit).await;
+            crate::request::charge(crate::request::Phase::MutateVisit, started);
+            self.receipt = Some(receipt?);
             let original = self.receipt.as_ref().unwrap().get().clone();
             let needs = match &original.result {
                 Ok(JobOutcome::Applied { publication, inode }) => {
@@ -285,6 +288,7 @@ impl Custody {
             };
             self.receipt = None;
             // Provider reads never run on the loop that received the request.
+            let started = std::time::Instant::now();
             let base = self.services.base().await?;
             let path = match &self.request.input {
                 MutationInput::Named(operation) => operation.destination_path(),
@@ -292,6 +296,7 @@ impl Custody {
             };
             let result = Arc::make_mut(&mut facts).supply(&base, needs, path);
             drop(base); // Return the actual reader before another SQL wait.
+            crate::request::charge(crate::request::Phase::MutateSupply, started);
             if let Err(error) = result {
                 return Err(self.services.failed_base_read(error.into()));
             }
@@ -299,7 +304,10 @@ impl Custody {
     }
     async fn release(&mut self) -> Result<(), ServiceError> {
         if let Some(publication) = self.publication {
-            drop(self.services.reply_attempted(publication).await?);
+            let started = std::time::Instant::now();
+            let released = self.services.reply_attempted(publication).await;
+            crate::request::charge(crate::request::Phase::MutateRelease, started);
+            drop(released?);
             self.publication = None;
         }
         Ok(())

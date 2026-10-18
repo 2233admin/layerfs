@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 #[test]
 fn a_timed_callback_charges_only_its_opcode() {
-    let accounting = Accounting::default();
+    let accounting = std::sync::Arc::new(Accounting::default());
     assert_eq!(accounting.observe().nanos, [0; OPCODES]);
     let started = Instant::now();
     {

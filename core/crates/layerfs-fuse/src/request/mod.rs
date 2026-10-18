@@ -9,6 +9,7 @@ mod reply;
 mod state;
 mod terminal;
 
-pub use accounting::{Accounting, Disposal, Opcode, OpcodeWork, Timed, OPCODES};
+pub(crate) use accounting::charge;
+pub use accounting::{Accounting, Disposal, Opcode, OpcodeWork, Phase, Timed, OPCODES, PHASES};
 pub use failure::{KernelInput, RequestFailure};
 pub use state::KernelFilesystem;
