@@ -37,6 +37,14 @@ cumulative observation records at a traced `sandbox.status` before and after
 the arm, subtracted. SDK calls, Commits and merges carry their own traced
 telemetry.
 
+*warm-daemon* (added 2026-10-18, `cost.mjs case <id> --daemon warm`; fix
+record 031): Workspace W1 mounts, runs the case's non-steady steps once and
+unmounts discarded, then a fresh W2 on the same Branch and daemon runs them
+once and is measured. Its own arm: it never credits or replaces *cold*.
+`--daemon fresh` runs *cold* and *steady* on a daemon that has served no
+Workspace (no native setup mount before them); both read the daemon's
+VmRSS/VmHWM after each step.
+
 **Caches (declared).** Daemon shared immutable cache: **64 KiB** (the SDK
 starts every daemon with `cache_bytes: 65536`, `sdk/js/native/src/sandbox.rs:61`;
 recorded in each sample's Mount operation record). SDK in-process Store cache:
