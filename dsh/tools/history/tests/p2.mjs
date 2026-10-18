@@ -298,6 +298,61 @@ test("Scaling: a legacy per-page diff_commits series is not judged (F-013), neve
   assert.equal(row.result, "watch");
 });
 
+test("shared pool (P3, lead 2026-10-18): aN in pool[(N-1) mod 4]; sharing per Sandbox from the trace", async () => {
+  const { poolOf, poolSize } = await import("../agents.mjs");
+  const { poolSharing, PHASES } = await import("../steps.mjs");
+  assert.equal(poolSize(PHASES.p3, 9), 4);
+  assert.equal(poolSize(PHASES.p2, 9), 9, "P2 keeps one Sandbox per agent");
+  assert.deepEqual([1, 4, 5, 9].map((n) => poolOf(n, 4)), [0, 3, 0, 0]);
+  assert.deepEqual([1, 9].map((n) => poolOf(n, 9)), [0, 8]);
+  const at = (ms) => new Date(Date.UTC(2026, 9, 18, 0, 0, 0, ms)).toISOString();
+  const lines = [
+    { method: "sandbox.mount", args: { sandbox: "p15-1" }, path: "/workspaces/1", start: at(0), ms: 10, ok: true },
+    { method: "sandbox.mount", args: { sandbox: "p15-1" }, path: "/workspaces/2", start: at(5), ms: 10, ok: true },
+    { method: "sandbox.unmount", args: { sandbox: "p15-1", path: "/workspaces/1" }, start: at(30), ms: 5 },
+    { method: "sandbox.mount", args: { sandbox: "p15-1" }, path: "/workspaces/3", start: at(40), ms: 10, ok: true },
+    { method: "sandbox.unmount", args: { sandbox: "p15-1", path: "/workspaces/2" }, start: at(42), ms: 5 },
+    { method: "sandbox.unmount", args: { sandbox: "p15-1", path: "/workspaces/3" }, start: at(60), ms: 5 },
+    { method: "sandbox.mount", args: { sandbox: "p15-2" }, path: "/workspaces/1", start: at(0), ms: 10, ok: true },
+    { method: "sandbox.unmount", args: { sandbox: "p15-2", path: "/workspaces/1" }, start: at(20), ms: 5 },
+  ];
+  assert.deepEqual(poolSharing(lines), { "p15-1": { workspaces: 2, calls: 2, mounts: 3 }, "p15-2": { workspaces: 1, calls: 1, mounts: 1 } });
+});
+
+test("per-call scratch (lead 2026-10-18): distinct folders; removed on success and after a failed exec", async () => {
+  const { execAll, scratchDir } = await import("../lib.mjs");
+  assert.notEqual(scratchDir(), scratchDir());
+  const dir = mkdtempSync(join(tmpdir(), "lfs352-scratch-")), ws = join(dir, "ws");
+  mkdirSync(ws);
+  const fake = (failAt) => {
+    let n = 0;
+    const run = { tally: { calls: 0 }, rec: {}, execs: [], lf: { sandbox: { exec: async (_sb, _ws, cmd) => {
+      run.execs.push(cmd);
+      if (++n === failAt) return { exitCode: 1, stderr: "injected" };
+      try { execFileSync("sh", ["-c", cmd], { cwd: ws }); return { exitCode: 0 }; } catch (e) { return { exitCode: e.status ?? 1, stderr: String(e.stderr) }; }
+    } } } };
+    return run;
+  };
+  const files = [{ path: "a.txt", mode: "100644", bytes: Buffer.from("a\n") }];
+  const ok = join(dir, "ok"), okRun = fake(0);
+  const okCmds = sandboxCommands(files, ok);
+  await execAll(okRun, "sb", "ws", okCmds, "s1", 1);
+  assert.equal(readFileSync(join(ws, "a.txt"), "utf8"), "a\n");
+  assert.equal(existsSync(ok), false, "the script removes its scratch on success");
+  assert.equal(okRun.execs.length, okCmds.length, "no cleanup exec on success");
+  // the chunk command (second exec) fails: the scratch folder exists, and one cleanup exec removes it
+  const bad = join(dir, "bad"), badRun = fake(2);
+  await assert.rejects(execAll(badRun, "sb", "ws", sandboxCommands(files, bad), "s2", 1), /s2 exec exited 1: injected/);
+  assert.equal(existsSync(bad), false, "a failed call removes its own scratch");
+  assert.deepEqual(badRun.execs.at(-1), `rm -rf ${bad}`);
+  // a failing cleanup is reported with the original failure
+  const worse = fake(2);
+  const exec = worse.lf.sandbox.exec;
+  worse.lf.sandbox.exec = async (sb, w, cmd) => (cmd.startsWith("rm -rf ") && !cmd.includes("&&") ? { exitCode: 7 } : exec(sb, w, cmd));
+  await assert.rejects(execAll(worse, "sb", "ws", sandboxCommands(files, join(dir, "worse")), "s3", 1), /s3 exec exited 1: injected; scratch cleanup exited 7/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test("time-only trips (owner 2026-10-18): identical counters read watch; a repeat at the next range escalates; counter trips unchanged", () => {
   const mk = (range, depth, ms, statements = 16) => ({ range, binary: { daemon: "d" }, depth: { after: depth }, checks: {}, probes: { fork: { ms, counters: { statements, vm_steps: 271 } } } });
   const row = (xs, name = "Scaling") => evaluate(xs.at(-1), xs.slice(0, -1)).checks.find((c) => c.name === name);

@@ -313,6 +313,16 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   §2 (4–8 Sandboxes, each holding many Workspaces). Ranges 5–14 keep their
   recorded shape: 10–11 Sandboxes and daemons, one per agent. The earlier rule
   follows.
+  - **P3 rule, per-call Sandbox scratch (lead, 2026-10-18):** nothing outside
+    a Workspace in a shared Sandbox is shared between calls. Each file-placing
+    call stages its bytes in its own `/tmp/lfs352-<pid>-<seq>`. Its script
+    removes the folder on success. A failed exec gets one cleanup exec that
+    removes it, so long-lived Sandboxes don't accumulate folders. This
+    replaces the common `/tmp/lfs352`, which a concurrent step in the same
+    Sandbox removed (dev352-p3a, r015.s0023: tooling only, not a product
+    issue). pnpm's private `/tmp` layer (`/tmp/pnpm-store`, `/tmp/pnpm-cache`)
+    is per Sandbox while closure installs run one at a time. If concurrent
+    installs ever share a Sandbox, it gets the same per-call treatment.
 - **One Sandbox per agent** (at least 4), created once by the lead, kept
   across ranges until a seal. Two concurrent unmounts of different Workspaces
   in one Sandbox failed "Workspace absent" on daemon `511dceed` (dev run,

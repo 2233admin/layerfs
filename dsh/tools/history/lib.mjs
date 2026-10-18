@@ -245,18 +245,39 @@ export function countMutation(work, via, f) {
   else { if (f.previous) m.modified++; else m.added++; m.bytes += f.size ?? 0; }
 }
 
-/** The exec commands that put `files` (writes with blob ids, decoys with bytes, removals) in a Workspace. */
+/**
+ * The exec commands that put `files` (writes with blob ids, decoys with bytes, removals) in a Workspace.
+ * Each call has its own scratch folder in the Sandbox's /tmp: from P3 several agents share one Sandbox
+ * (shared pool), so a common /tmp/lfs352 was removed under a concurrent step (dev352-p3a, r015.s0023).
+ */
+let scratchSeq = 0;
+export const scratchDir = () => `/tmp/lfs352-${process.pid}-${++scratchSeq}`;
 export async function placeCommands(run, files) {
   const bytes = await Promise.all(files.map((f) => (f.op === "rm" || sameAsTree(f) ? null : f.bytes ?? run.blobs().get(f.blob))));
-  return sandboxCommands(placeEntries(files, bytes));
+  return sandboxCommands(placeEntries(files, bytes), scratchDir());
 }
 
-/** Runs exec commands in a Workspace; each must exit 0. */
+/**
+ * Runs exec commands in a Workspace; each must exit 0. When one fails (exit or error) and the commands
+ * carry a scratch folder (sandboxCommands), one cleanup exec removes it, so a long-lived shared Sandbox
+ * does not accumulate /tmp/lfs352-* folders (lead, 2026-10-18). The original failure is rethrown;
+ * a failed cleanup is appended to its message.
+ */
 export async function execAll(run, sb, ws, commands, label, files = 0) {
-  for (const command of commands) {
-    run.rec.next = { kind: "files", n: files };
-    const r = await expectCall(run, `${label} exec`, () => run.lf.sandbox.exec(sb, ws, command));
-    if (r.exitCode !== 0) throw new Mismatch(`${label} exec exited ${r.exitCode}: ${String(r.stderr ?? "").slice(0, 300)}`);
+  try {
+    for (const command of commands) {
+      run.rec.next = { kind: "files", n: files };
+      const r = await expectCall(run, `${label} exec`, () => run.lf.sandbox.exec(sb, ws, command));
+      if (r.exitCode !== 0) throw new Mismatch(`${label} exec exited ${r.exitCode}: ${String(r.stderr ?? "").slice(0, 300)}`);
+    }
+  } catch (error) {
+    if (commands.scratch) {
+      try {
+        const r = await expectCall(run, `${label} scratch cleanup`, () => run.lf.sandbox.exec(sb, ws, `rm -rf ${commands.scratch}`));
+        if (r.exitCode !== 0) error.message += `; scratch cleanup exited ${r.exitCode}`;
+      } catch (c) { error.message += `; scratch cleanup failed: ${c.code ?? ""} ${c.message}`; }
+    }
+    throw error;
   }
 }
 

@@ -26,16 +26,27 @@
 // stays across ranges until a seal.
 import { lsTree } from "./git.mjs";
 import {
-  BLOB_IDS, countMutation, execAll, expectCall, Mismatch, placeCommands, reads, setup, writeOp,
+  BLOB_IDS, countMutation, execAll, expectCall, Mismatch, placeCommands, PNPM_STORE, reads, setup, writeOp,
 } from "./lib.mjs";
-import { abs, consolidationSteps, decoyBytes, p2Plan, pad, quote, route, sandboxExpect, STEP_KINDS, Tree } from "./steps.mjs";
+import { sandboxVolumes } from "./closure.mjs";
+import { abs, consolidationSteps, decoyBytes, p2Plan, pad, PHASES, quote, route, sandboxExpect, STEP_KINDS, Tree } from "./steps.mjs";
 
 /** The lead creates the pool (one Sandbox per agent, at least 4), one Sandbox at a time, recording each in the ledger. */
+/** How many Sandboxes a range's pool holds: the phase's shared pool, else one per agent (at least 4). */
+export const poolSize = (phase, agents) => phase.sharedPool ?? Math.max(4, agents);
+/** The pool index of agent aN: (N-1) mod the pool size (one per agent when the pool has one per agent). */
+export const poolOf = (n, size) => (n - 1) % size;
+
 export async function pool(run, k, agents = 4) {
   run.pool ??= [];
-  for (let i = run.pool.length; i < Math.max(4, agents); i++) {
+  const phase = PHASES[run.manifest.phase] ?? {};
+  // P3 on: a shared pool of 4 (agents share Sandboxes, poolOf); before it, one Sandbox per agent
+  const size = poolSize(phase, agents);
+  // closure phases: every pool Sandbox has the read-only pnpm store (INSTALLS §3.1), since setup() hands out pool[0]
+  const extra = phase.closure ? [sandboxVolumes(run.manifest.env.LAYERFS_PNPM_STORE ?? PNPM_STORE)] : [];
+  for (let i = run.pool.length; i < size; i++) {
     const id = `p${k}-${i + 1}`;
-    run.pool.push(await run.lf.sandbox.create(id, run.manifest.project, run.manifest.env.LAYERFS_IMAGE));
+    run.pool.push(await run.lf.sandbox.create(id, run.manifest.project, run.manifest.env.LAYERFS_IMAGE, ...extra));
     run.note({ kind: "container", name: `${run.manifest.env.LAYERFS_CONTAINER_PREFIX}${id}`, id: run.container(id), sandbox: id });
   }
   run.sandbox = run.pool[0];
@@ -173,7 +184,7 @@ export async function playAgents(run, k, ctx) {
   const views = new Map();
   for (const agent of ctx.p2.agents.keys()) {
     const n = Number(agent.slice(1));
-    views.set(agent, await run.agent(agent, run.pool[n - 1]));
+    views.set(agent, await run.agent(agent, run.pool[poolOf(n, run.pool.length)]));
   }
   ctx.steps = new Map([...ctx.p2.agents.keys()].map((a) => [a, 0]));
   const task = async (agent) => {

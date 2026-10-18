@@ -26,7 +26,8 @@ export const PHASES = {
   p1: { lanes: 1, agents: 1, fsOnly: true, conflicts: false, tests: false, snapshot: "every", probes: true, order: 1 },
   p2: { lanes: "plan", agents: "plan", fsOnly: false, conflicts: true, tests: false, snapshot: "due", probes: true, order: 2 },
   // P3 (INSTALLS.md): P2 plus the closure on main before its publish: a real pnpm install, tsc -b, the unit tests
-  p3: { lanes: "plan", agents: "plan", fsOnly: false, conflicts: true, tests: true, closure: true, snapshot: "due", probes: true, order: 3 },
+  // sharedPool (lead 2026-10-18, SCRIPTS.md "Superseded from P3"): 4 Sandboxes shared by every agent, aN in pool[(N-1) mod 4]
+  p3: { lanes: "plan", agents: "plan", fsOnly: false, conflicts: true, tests: true, closure: true, snapshot: "due", probes: true, order: 3, sharedPool: 4 },
 };
 
 /** A run may move only to the phase after its own (run.mjs phase). */
@@ -268,6 +269,7 @@ export function sandboxCommands(files, scratch = "/tmp/lfs352") {
   script.push(`rm -rf ${scratch}`);
   commands.push(script.join("\n"));
   for (const c of commands) if (Buffer.byteLength(c) > 60_000) throw new Error(`a Sandbox command of ${Buffer.byteLength(c)} bytes is over one request`);
+  commands.scratch = scratch; // execAll removes it when a command fails; the script removes it on success
   return commands;
 }
 
@@ -377,6 +379,36 @@ export function sqlCounters(line) {
  *   never scaled.
  * Returns null when the lines hold no complete sequence.
  */
+/**
+ * Sharing of each Sandbox in a range (the P3 shared pool): per Sandbox, the
+ * most Workspaces mounted at once (from a mount's start to its unmount's end)
+ * and the most mount or unmount calls in flight at once. From the trace's end
+ * lines (start time and ms).
+ */
+export function poolSharing(lines) {
+  const t = (l) => Date.parse(l.start), out = {};
+  const by = new Map();
+  for (const l of lines) {
+    if (!/^sandbox\.(mount|unmount)$/.test(l.method) || !l.args?.sandbox || !l.start) continue;
+    (by.get(l.args.sandbox) || by.set(l.args.sandbox, []).get(l.args.sandbox)).push(l);
+  }
+  const peak = (events) => { let n = 0, max = 0; for (const [, d] of events.sort((a, b) => a[0] - b[0] || a[1] - b[1])) { n += d; max = Math.max(max, n); } return max; };
+  for (const [sb, ls] of by) {
+    const open = new Map(), ws = [];
+    for (const l of [...ls].sort((a, b) => t(a) - t(b))) {
+      if (l.method === "sandbox.mount" && l.ok !== false && l.path) open.set(l.path, t(l));
+      if (l.method === "sandbox.unmount" && open.has(l.args.path)) { ws.push([open.get(l.args.path), t(l) + (l.ms ?? 0)]); open.delete(l.args.path); }
+    }
+    for (const [, from] of open) ws.push([from, Infinity]);
+    out[sb] = {
+      workspaces: peak(ws.flatMap(([a, b]) => [[a, 1], [b, -1]])),
+      calls: peak(ls.flatMap((l) => [[t(l), 1], [t(l) + (l.ms ?? 0), -1]])),
+      mounts: ls.filter((l) => l.method === "sandbox.mount").length,
+    };
+  }
+  return out;
+}
+
 /** A trace line's FUSE requests, from its last daemon record that has counts: cumulative for its Workspace since the mount. */
 export const fuseOps = (line) => {
   const f = [...(line.daemon ?? [])].reverse().find((d) => d.fuse)?.fuse;
