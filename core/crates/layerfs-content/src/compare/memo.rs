@@ -5,8 +5,11 @@
 //! so a lookup costs one more read per level, and the levels grow with the tree.
 //! The memo serves a page the comparison already read, so the shared upper
 //! pages are read once and a lookup's own work is its leaf. The memo holds at
-//! most [`MEMO_PAGES`] objects and empties wholesale when full: it is a bound,
-//! not a store, and a re-read after a reset is still correct.
+//! most [`MEMO_PAGES`] objects. When full it evicts the objects used least
+//! recently (#352 014.a1: emptying wholesale made a comparison that touches
+//! more than [`MEMO_PAGES`] objects re-read every upper page after each reset).
+//! The upper pages serve every descent, so they stay. It is a bound, not a
+//! store, and a re-read after an eviction is still correct.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -22,7 +25,10 @@ pub const MEMO_PAGES: usize = 256;
 /// A provider that serves repeated demands from memory.
 pub struct Memo<'a> {
     inner: &'a dyn AuthenticatedObjects,
-    pages: RefCell<HashMap<ObjectId, Vec<u8>>>,
+    /// Each object with the demand that used it last.
+    pages: RefCell<HashMap<ObjectId, (Vec<u8>, u64)>>,
+    /// Demands served so far, the recency clock.
+    clock: RefCell<u64>,
 }
 
 impl<'a> Memo<'a> {
@@ -31,6 +37,7 @@ impl<'a> Memo<'a> {
         Self {
             inner,
             pages: RefCell::new(HashMap::new()),
+            clock: RefCell::new(0),
         }
     }
 
@@ -59,25 +66,39 @@ impl<'a> Memo<'a> {
             }
             fetched = misses.into_iter().zip(values).collect();
         }
-        let out = {
-            let pages = self.pages.borrow();
-            ids.iter()
-                .map(|id| {
-                    fetched.get(id).or_else(|| pages.get(id)).cloned().ok_or(
-                        ContentError::BatchCardinality {
-                            requested: ids.len(),
-                            returned: 0,
-                        },
-                    )
-                })
-                .collect::<ContentResult<Vec<_>>>()?
+        let now = {
+            let mut clock = self.clock.borrow_mut();
+            *clock += 1;
+            *clock
         };
         let mut pages = self.pages.borrow_mut();
-        if pages.len() + fetched.len() > MEMO_PAGES {
-            pages.clear();
-        }
+        let out = ids
+            .iter()
+            .map(|id| match fetched.get(id) {
+                Some(bytes) => Ok(bytes.clone()),
+                None => pages
+                    .get_mut(id)
+                    .map(|(bytes, used)| {
+                        *used = now;
+                        bytes.clone()
+                    })
+                    .ok_or(ContentError::BatchCardinality {
+                        requested: ids.len(),
+                        returned: 0,
+                    }),
+            })
+            .collect::<ContentResult<Vec<_>>>()?;
         if fetched.len() <= MEMO_PAGES {
-            pages.extend(fetched);
+            let excess = (pages.len() + fetched.len()).saturating_sub(MEMO_PAGES);
+            if excess > 0 {
+                let mut by_age: Vec<(u64, ObjectId)> =
+                    pages.iter().map(|(id, (_, used))| (*used, *id)).collect();
+                by_age.sort_unstable();
+                for (_, id) in by_age.into_iter().take(excess) {
+                    pages.remove(&id);
+                }
+            }
+            pages.extend(fetched.into_iter().map(|(id, bytes)| (id, (bytes, now))));
         }
         Ok(out)
     }
