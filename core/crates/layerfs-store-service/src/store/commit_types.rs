@@ -124,7 +124,8 @@ pub struct CommitSuccess {
     pub merge: Option<MergeReport>,
     pub saved: WriteOutcome,
     pub storage: Diagnostics,
-    pub capture: Capture,
+    /// `None` when an unchanged Workspace answered UpToDate without one.
+    pub capture: Option<Capture>,
     /// The product constructor's receipt; None under a caller's constructor.
     pub namespace: Option<CapturedConstruction>,
     /// The Workspace's own captured root and the different root installed

@@ -110,6 +110,42 @@ impl BoundWorkspace {
             retained.binding = Some(snapshot.clone());
             let local = self.local_root(&snapshot)?;
             let original_base = self.workspace.base().map_err(CommitError::Workspace)?;
+            // Nothing above the installed floor and the head where the
+            // Workspace bound it: UpToDate with no capture, Save, lane or
+            // install (#352 c04 records why the answer stays exact).
+            let state = phase(timing, "uptodate.state", || {
+                self.job(|job_client: &crate::OwnerClient, job_route| job_client.state(job_route))
+                    .map_err(CommitError::Owner)
+            })?;
+            if state.dirty_inodes == 0
+                && state.dirty_directory_entries == 0
+                && state.captured.is_none()
+                && state.consolidating.is_none()
+                && state.base_root == local.to_bytes()
+                && self
+                    .pending_conflicts()
+                    .map_err(CommitError::Workspace)?
+                    .is_none()
+            {
+                let current = phase(timing, "uptodate.head", || {
+                    self.store
+                        .history
+                        .branch_snapshot(snapshot.branch.id)
+                        .map_err(CommitError::History)?
+                        .ok_or(CommitError::Context("bound Branch is absent"))
+                })?;
+                if current.branch.head_commit == snapshot.branch.head_commit
+                    && current.branch.base_layer == snapshot.branch.base_layer
+                {
+                    retained.published = Some(CommitOutcome::UpToDate {
+                        head: current.branch.head_commit,
+                        root: current.effective_root,
+                    });
+                    retained.saved = Some(Default::default());
+                    retained.storage = Some(Default::default());
+                    return Ok(());
+                }
+            }
             retained.phase = CommitPhase::Capture;
             let capture = phase(timing, "capture", || {
                 self.job(|job_client: &crate::OwnerClient, job_route| job_client.capture(job_route))
@@ -411,7 +447,7 @@ impl BoundWorkspace {
             merge,
             saved: retained.saved.expect("known Save"),
             storage: retained.storage.expect("producer observations"),
-            capture: retained.capture.expect("known capture"),
+            capture: retained.capture,
             namespace: None,
             replaced,
         })
