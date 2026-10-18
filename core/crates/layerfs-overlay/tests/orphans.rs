@@ -488,10 +488,10 @@ fn inode_reads_probe_the_orphan_domain_only_while_an_orphan_exists() {
     let (orphan, attempts) = read(source, 7);
     let orphan = orphan.expect("the orphan keeps its metadata");
     assert_eq!((orphan.nlink, orphan.size, attempts), (0, 4, 1));
-    // While it exists every inode read of this engine probes first, in
-    // every namespace: a miss costs the probe and the seek.
-    assert_eq!(read(source, 9), (None, 2));
-    assert_eq!(read(source, 8).1, 2);
+    // While it exists, a read of any other serial asks the orphan map in
+    // memory and costs the seek alone (#359 F-B2).
+    assert_eq!(read(source, 9), (None, 1));
+    assert_eq!(read(source, 8).1, 1);
 
     // A descriptor write lands in the orphan domain and is read back from it.
     let publication = db
@@ -517,7 +517,7 @@ fn inode_reads_probe_the_orphan_domain_only_while_an_orphan_exists() {
     db.release_file_read(window).unwrap();
 
     // A second orphan keeps the probe on when the first is reclaimed after
-    // its last owner.
+    // its last owner; other serials still cost the seek alone.
     let mut also = File::new(&db, source, 10, Vec::new());
     also.write(0, b"also");
     let held = db.open_file(source, 2, &also.inode(4), true).unwrap();
@@ -525,7 +525,8 @@ fn inode_reads_probe_the_orphan_domain_only_while_an_orphan_exists() {
     db.close_file(open).unwrap();
     maintain(&db);
     assert_eq!(db.resources().unwrap().open.orphan_files, 1);
-    assert_eq!(read(source, 9), (None, 2));
+    assert_eq!(read(source, 10).1, 1);
+    assert_eq!(read(source, 9), (None, 1));
     // The engine's last orphan is reclaimed: the probe stops in every
     // namespace, one seek per inode.
     db.close_file(held).unwrap();
@@ -688,7 +689,7 @@ fn a_failed_release_keeps_exact_custody_until_terminal_file_disposal() {
         .expect("the page quota is reached by a queue row");
 
     // Inode-family statements of one read of a serial that has no row: the
-    // seek, and before it the orphan-domain probe while an orphan exists.
+    // seek alone, also while an orphan exists (#359 F-B2).
     let probes = |db: &Overlay| {
         let before = db.diagnostics();
         assert_eq!(db.source_inode(source, 9).unwrap(), None);
@@ -710,7 +711,7 @@ fn a_failed_release_keeps_exact_custody_until_terminal_file_disposal() {
             all.open,
         )
     };
-    assert_eq!(probes(&db), 2);
+    assert_eq!(probes(&db), 1);
     assert!(view(&db) == file.expect);
     let before = observed(&db);
     assert_eq!(
@@ -733,7 +734,7 @@ fn a_failed_release_keeps_exact_custody_until_terminal_file_disposal() {
     assert_eq!(db.maintenance_pending(), pending);
     db.check_file(open, true).unwrap();
     assert_eq!(db.retained_file(1).unwrap(), Some(open));
-    assert_eq!(probes(&db), 2);
+    assert_eq!(probes(&db), 1);
     assert!(view(&db) == file.expect);
     let sealed = db
         .read_captured(reader, ORPHAN, 0, 131072)
