@@ -623,3 +623,6 @@ Workspace's first Commit to open one.
 Store's first Commit opens a producer handle (`opens = round == 1`). The
 receipt and writer-port counts are still compared for exact equality; no
 assertion is weakened. It passes on Linux in 0.31 s. Deleted tests: none.
+`issue359-impl` makes the same change independently (`8ef8dfbfa`); this
+branch takes that commit's text of the file verbatim, so the integration
+meets no conflict there.
