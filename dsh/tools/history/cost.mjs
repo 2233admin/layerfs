@@ -40,7 +40,9 @@ import { STORE_MOUNT } from "./closure.mjs";
 const ROOT = join(HISTORY, "runs", "issue359");
 const SOURCE_RUN = join(HISTORY, "runs", "dev352-p3p");
 const GOLDEN = "layerfs-issue359-dev"; // byte copy of layerfs-issue352-dev352-p3p (range 18 clean)
-const PREPARED = "layerfs-issue359-prep"; // GOLDEN + the setup branches below
+// GOLDEN + the setup branches below; COST_PREPARED names another prepared golden (#359, owner 2026-10-19:
+// the Root-form layerfs-issue359-prep is retired for new samples; each manifest records `from`)
+const PREPARED = process.env.COST_PREPARED ?? "layerfs-issue359-prep";
 const NATIVE = "layerfs-issue359-native"; // the head tree as native files
 const PNPM = "layerfs-issue352-pnpm-store"; // read-only, as INSTALLS §3.1
 const IMAGE_TAG = "layerfs-352-runtime:node24";
@@ -313,6 +315,30 @@ async function inner(args) {
 const nativeExists = () => { try { docker(["volume", "inspect", NATIVE]); return true; } catch { return false; } };
 
 const RSS = "for p in /proc/[0-9]*; do [ \"$(cat $p/comm 2>/dev/null)\" = layerfs-daemon ] && grep -E '^(VmRSS|VmHWM)' $p/status; done";
+// #359 daemon memory after unmount: status, smaps_rollup, fd targets by folder, FUSE mounts and anonymous
+// mappings (glibc arenas show as anonymous mappings; the allocator has no external statistics).
+const PROBE = [
+  "for p in /proc/[0-9]*; do [ \"$(cat $p/comm 2>/dev/null)\" = layerfs-daemon ] || continue",
+  "grep -E '^(VmRSS|VmHWM|RssAnon|RssFile|Threads):' $p/status; grep -E '^(Rss|Pss_Anon|Pss_File|Anonymous|Swap):' $p/smaps_rollup",
+  "echo \"Fds: $(ls $p/fd | wc -l)\"; echo \"FuseMounts: $(grep -c ' - fuse' $p/mountinfo)\"; echo \"AnonMaps: $(awk 'NF==5' $p/maps | wc -l)\"",
+  "for f in $p/fd/*; do readlink $f; done | sed -E 's#^(/[^/]+/[^/]+/.*)/[^/]*$#\\1/#; s#:\\[[0-9]+\\]#:#' | sort | uniq -c | sed 's/^ */Fd /'; done",
+].join("; ");
+const probeOf = (text) => {
+  const v = {}, fds = {};
+  for (const l of String(text).split("\n")) {
+    const m = /^(\w+):\s+(\d+)/.exec(l); if (m) { v[m[1]] = Number(m[2]); continue; }
+    const f = /^Fd (\d+) (.*)$/.exec(l); if (f) fds[f[2]] = Number(f[1]);
+  }
+  return { ...v, fds };
+};
+/** Runs PROBE in Sandbox `sb`'s container (no Workspace needed, so it can run after unmount). */
+async function daemonProbe(home, sb) {
+  const { api, demux } = await import(join(REPO, "dsh/tools/history/runner/docker-shim.mjs"));
+  const id = readFileSync(join(home, "_sandboxes", sb, "container"), "utf8").trim();
+  const e = await api("POST", `/containers/${id}/exec`, { AttachStdout: true, AttachStderr: true, Tty: false, Cmd: ["sh", "-c", PROBE] });
+  const r = await api("POST", `/exec/${e.body.Id}/start`, { Detach: false, Tty: false }, { raw: true });
+  return { at: new Date().toISOString(), ...probeOf(demux(r.body).stdout.toString("utf8")) };
+}
 const rssOf = (r) => Object.fromEntries([...String(r.stdout ?? "").matchAll(/^(VmRSS|VmHWM):\s+(\d+) kB/gm)].map((m) => [m[1] === "VmRSS" ? "rssKb" : "hwmKb", Number(m[2])]));
 
 async function playCase(c, id, { lf, label, mount, unmount, status, exec, fork, record, sb, part, daemon }) {
@@ -477,6 +503,13 @@ async function hostSerial([what, ...args]) {
     writeFileSync(join(out, "serial.json"), JSON.stringify(st, null, 1));
     return runInner(`${st.volume}-c${pos}`, st.volume, st.home, st.binary, ["serial", "case", id, "--pos", String(pos)], out);
   }
+  if (what === "repeat") {
+    const id = args[0], n = opt(args, "--n"), pos = st.cases.length + 1;
+    if (!CASES[id] || CASES[id].kind || CASES[id].commit || CASES[id].commitAfter || !(Number(n) > 0)) throw new Error(`serial repeat ${id} --n <count>: exec cases without a Commit only`);
+    st.cases.push({ id, pos, repeat: Number(n), load: (await import("node:os")).loadavg(), at: new Date().toISOString() });
+    writeFileSync(join(out, "serial.json"), JSON.stringify(st, null, 1));
+    return runInner(`${st.volume}-c${pos}`, st.volume, st.home, st.binary, ["serial", "repeat", id, "--n", n, "--pos", String(pos)], out);
+  }
   if (what === "close") {
     const code = await runInner(`${st.volume}-close`, st.volume, st.home, st.binary, ["serial", "close"], out);
     const traces = ["open", ...st.cases.map((c) => `${c.pos}`)].map((t) => join(out, `trace-${t}.jsonl`)).filter(existsSync);
@@ -489,15 +522,16 @@ async function hostSerial([what, ...args]) {
     ledger({ seq: st.seq, case: "serial", label: st.label, event: "end", exit: code, volume: st.volume, removed: true, out, order: st.cases.map((c) => c.id), verdict: summary?.verdict ?? "INCOMPLETE" });
     return code;
   }
-  throw new Error(`serial ${what}: open | case | close`);
+  throw new Error(`serial ${what}: open | case | repeat | close`);
 }
 
 async function innerSerial(args, out) {
   const what = args[0], home = process.env.LAYERFS_HOME, pos = opt(args, "--pos");
   const { LayerFS } = await import(join(REPO, "sdk/js/src/index.js"));
-  const lf = new LayerFS("dsh", { trace: join(out, `trace-${what === "case" ? pos : what}.jsonl`) });
+  const at = what === "case" || what === "repeat" ? pos : what;
+  const lf = new LayerFS("dsh", { trace: join(out, `trace-${at}.jsonl`) });
   const label = (step) => { lf.options.traceStep = step; };
-  const arms = [], record = (a) => { arms.push(a); writeFileSync(join(out, `arms-${what === "case" ? pos : what}.json`), JSON.stringify(arms, null, 1)); };
+  const arms = [], record = (a) => { arms.push(a); writeFileSync(join(out, `arms-${at}.json`), JSON.stringify(arms, null, 1)); };
   let sb = existsSync(join(out, "sandbox")) ? readFileSync(join(out, "sandbox"), "utf8").trim() : null, ws = null;
   try {
     if (what === "open") {
@@ -517,6 +551,22 @@ async function innerSerial(args, out) {
         record({ arm: "serial", case: id, pos: Number(pos), step, ...parse(r), daemonMem: m });
       }
       label("lfs.unmount"); await lf.sandbox.unmount(sb, ws, true); ws = null;
+      label("lfs.after-unmount"); await lf.sandbox.status(sb);
+      record({ arm: "serial", case: id, pos: Number(pos), afterUnmount: await daemonProbe(home, sb) });
+    } else if (what === "repeat") {
+      // one case n times, each in a fresh Workspace on this daemon, the probe after each unmount
+      const id = args[1], c = CASES[id], n = Number(opt(args, "--n"));
+      record({ arm: "repeat", case: id, pos: Number(pos), i: 0, afterUnmount: await daemonProbe(home, sb) });
+      for (let i = 1; i <= n; i++) {
+        label(`r${i}.fork`); const branch = `cost-${id}-p${pos}-r${i}`; await lf.branch.fork(branch, c.ref);
+        label(`r${i}.mount`); ws = await lf.sandbox.mount(sb, branch);
+        const steps = (c.steps ?? (c.arms ?? ["cold", "steady"]).map((arm) => [arm, c.cmd()])).filter(([s]) => s !== "steady" && !s.endsWith("-steady"));
+        const runs = [];
+        for (const [step, cmd] of steps) { label(`r${i}.${step}.exec`); runs.push({ step, ...parse(await lf.sandbox.exec(sb, ws, timed(".", cmd, c.cmp))) }); }
+        label(`r${i}.unmount`); await lf.sandbox.unmount(sb, ws, true); ws = null;
+        label(`r${i}.after-unmount`); await lf.sandbox.status(sb);
+        record({ arm: "repeat", case: id, pos: Number(pos), i, runs: runs.map(({ head, ...r }) => r), afterUnmount: await daemonProbe(home, sb) });
+      }
     } else if (what === "close") {
       await saveLog(out, home, sb);
       label("teardown.close"); await lf.sandbox.close(sb);
@@ -540,6 +590,12 @@ export function summarizeSerial(out, st) {
     const byStep = (s) => lines.filter((l) => String(l.step ?? "").replace(/#\d+$/, "") === s);
     const arms = existsSync(join(out, `arms-${c.pos}.json`)) ? JSON.parse(readFileSync(join(out, `arms-${c.pos}.json`), "utf8")) : [{ error: "no arms" }];
     for (const a of arms) {
+      if (a.afterUnmount) {
+        // the daemon's own record of the status taken right after the unmount
+        const g = byStep(a.arm === "repeat" ? `r${a.i}.after-unmount` : "lfs.after-unmount")[0], gs = g && byTrace.get(g.id)?.sections;
+        rows.push({ ...a, cache: gs?.immutable_cache ?? null, readers: gs?.store_readers ?? null, kernelMount: gs?.kernel_mount ?? null });
+        continue;
+      }
       if (!a.step) { rows.push({ case: c.id, pos: c.pos, ...a }); continue; }
       const [b, f] = [byStep(`lfs.${a.step}.before`)[0], byStep(`lfs.${a.step}.after`)[0]];
       const gb = b && byTrace.get(b.id), ga = f && byTrace.get(f.id);
@@ -547,7 +603,7 @@ export function summarizeSerial(out, st) {
       rows.push({ ...a, execMs: byStep(`lfs.${a.step}.exec`)[0]?.ms ?? null, mountMs: byStep("lfs.mount")[0]?.ms ?? null, cacheAfter: ga?.sections?.immutable_cache ?? null, counters });
     }
   }
-  const failed = rows.some((r) => r.error || (r.exit != null && r.exit !== 0));
+  const failed = rows.some((r) => r.error || (r.exit != null && r.exit !== 0) || (r.runs ?? []).some((x) => x.error || x.exit !== 0));
   return { out, order: st.cases.map((c) => c.id), cases: st.cases, rows, verdict: failed ? "FAILED" : rows.some((r) => r.step && !r.counters) ? "INCOMPLETE" : "COMPLETE" };
 }
 
