@@ -3,7 +3,7 @@
 //! bounds found only around a match. A call scans each content once.
 use super::window::{self, after_last_newline, newlines, Line, Open};
 use layerfs_bridge::control::SdkRefusal;
-use layerfs_content::{compare::EntryFacts, AuthenticatedObjects, ObjectId};
+use layerfs_content::{compare::EntryFacts, file::FileView, AuthenticatedObjects, ObjectId};
 use std::collections::HashMap;
 
 /// Every line holding `pattern`, in order, until `visit` stops. A line is its
@@ -13,6 +13,7 @@ use std::collections::HashMap;
 pub fn matches(
     reader: &dyn AuthenticatedObjects,
     entry: &EntryFacts,
+    view: Option<FileView>,
     prefix: usize,
     pattern: &str,
     mut visit: impl FnMut(u64, Line) -> Result<bool, SdkRefusal>,
@@ -21,7 +22,7 @@ pub fn matches(
     // The open line's last bytes, for a match that crosses into the next part.
     let keep = pattern.len() - 1;
     let (mut open, mut matched, mut tail, mut stopped) = (Open::new(), false, String::new(), false);
-    window::texts(reader, entry, |text| {
+    window::texts(reader, entry, view, |text| {
         let bytes = text.as_bytes();
         if never {
             open.number += newlines(bytes);
@@ -114,12 +115,18 @@ pub struct Reuse {
 }
 
 impl Reuse {
+    /// True when a scan of the content `id` is kept.
+    pub fn kept(&self, id: &ObjectId) -> bool {
+        self.found.contains_key(id)
+    }
+
     /// [`matches`] for `entry`, from a kept result when its content was
     /// scanned before in this call.
     pub fn matches(
         &mut self,
         reader: &dyn AuthenticatedObjects,
         entry: &EntryFacts,
+        view: Option<FileView>,
         prefix: usize,
         pattern: &str,
         mut visit: impl FnMut(u64, Line) -> Result<bool, SdkRefusal>,
@@ -138,7 +145,7 @@ impl Reuse {
             };
         }
         let (mut lines, mut cost, mut complete) = (Vec::new(), ENTRY, true);
-        let result = matches(reader, entry, prefix, pattern, |n, line| {
+        let result = matches(reader, entry, view, prefix, pattern, |n, line| {
             cost += line.text.len() + ENTRY;
             if self.spent + cost <= KEPT {
                 lines.push((n, line.clone()));

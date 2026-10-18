@@ -2,7 +2,9 @@
 //! blocks, checked as before, and a buffer-wide line scanner splits it.
 use super::args;
 use layerfs_bridge::control::SdkRefusal;
-use layerfs_content::{compare::EntryFacts, object::inode_leaf::InodeKind, AuthenticatedObjects};
+use layerfs_content::{
+    compare::EntryFacts, file::FileView, object::inode_leaf::InodeKind, AuthenticatedObjects,
+};
 
 pub use super::walk::{walk, Walker};
 
@@ -98,9 +100,12 @@ fn skip(bytes: &[u8], count: u64) -> Result<usize, u64> {
 /// A chunked file is read in one pass, so each chunk is decoded once and
 /// the mapping walked once; its text is handed on in parts of about
 /// [`BLOCK`] bytes as the pass delivers it, and stopping ends the pass.
+///
+/// `view` is the file's root when the caller read it already, as a batch.
 pub(super) fn texts(
     reader: &dyn AuthenticatedObjects,
     entry: &EntryFacts,
+    view: Option<FileView>,
     mut visit: impl FnMut(&str) -> Result<bool, SdkRefusal>,
 ) -> Result<(), SdkRefusal> {
     if entry.value.kind != InodeKind::RegularFile {
@@ -115,14 +120,17 @@ pub(super) fn texts(
         ));
     }
     // The root is read and classified once.
-    let view = crate::telemetry::timed("sdk.lines", |timing| {
-        layerfs_content::file::FileView::open(
-            reader,
-            entry.value.content_root,
-            timing.child("content.read"),
-        )
-    })
-    .map_err(args::content)?;
+    let view = match view {
+        Some(view) => view,
+        None => crate::telemetry::timed("sdk.lines", |timing| {
+            FileView::open(
+                reader,
+                entry.value.content_root,
+                timing.child("content.read"),
+            )
+        })
+        .map_err(args::content)?,
+    };
     let size = view.logical_len();
     // A whole-file payload is already in memory: one part, nothing copied.
     if let Some(payload) = view.whole_file_bytes().map_err(args::content)? {
@@ -273,7 +281,7 @@ pub fn lines(
     mut visit: impl FnMut(u64, Line) -> Result<bool, SdkRefusal>,
 ) -> Result<(), SdkRefusal> {
     let (mut open, mut stopped) = (Open::new(), false);
-    texts(reader, entry, |text| {
+    texts(reader, entry, None, |text| {
         let bytes = text.as_bytes();
         let mut at = 0;
         while at < bytes.len() {

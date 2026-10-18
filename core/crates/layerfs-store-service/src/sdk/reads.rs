@@ -1,7 +1,7 @@
 //! Positional SDK reads with numeric paging and bounded streaming text windows.
 use super::{
     args::{self, invalid, text, Answer},
-    cached::Cached,
+    cached::{self, Cached},
     files::path as checked,
     search,
     snapshot::{self, answer, existing, header, kind_name, size},
@@ -10,7 +10,7 @@ use super::{
 use crate::store::Store;
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use layerfs_content::{
-    compare::memo::Memo,
+    compare::{memo::Memo, EntryFacts},
     filesystem::{
         directory::read::{list_after, DirectoryReadWork},
         sorted::DirectoryRoot,
@@ -180,40 +180,39 @@ pub fn grep(store: &Arc<Store>, args: &SdkValue) -> Answer {
     }
     let path = optional_path(args)?;
     let (limit, pos) = args::paging(args)?;
-    let (mut items, mut found, mut spent, mut more, mut skipped) =
-        (Vec::new(), 0u64, 0, false, 0i64);
+    let mut page = Page {
+        pattern,
+        limit,
+        pos,
+        items: Vec::new(),
+        found: 0,
+        spent: 0,
+        more: false,
+        skipped: 0,
+    };
     let mut reuse = search::Reuse::default();
-    // The walk and the file scans share one call's read caches.
+    // The walk and the file scans share one call's read caches; files are
+    // scanned in walk order, a window of them at a time.
     let cached = Cached::new(&reader)?;
+    let mut window = Vec::new();
     walk::walk_within(&cached, &snap, &path, None, |file, entry| {
-        if entry.value.kind != InodeKind::RegularFile {
-            return Ok(true);
+        if entry.value.kind == InodeKind::RegularFile {
+            window.push((file.to_owned(), entry));
         }
-        let scan = reuse.matches(&cached, &entry, 1024, pattern, |n, line| {
-            if found < pos {
-                found += 1;
-                return Ok(true);
-            }
-            let cost = file.len() + line.text.len() + 160;
-            if items.len() == limit || spent + cost > REPLY_BUDGET {
-                more = true;
-                return Ok(false);
-            }
-            spent += cost;
-            items.push(SdkValue::map([
-                ("path", SdkValue::text(file)),
-                ("line", SdkValue::Int(n as i64)),
-                ("text", SdkValue::text(line.text)),
-                ("lineTruncated", SdkValue::Bool(line.truncated)),
-            ]));
-            Ok(true)
-        });
-        match scan {
-            Err(e) if e.code == "Binary" => skipped += 1,
-            other => other?,
+        if window.len() == cached::ROOTS {
+            page.scan(&cached, &mut reuse, &mut window)?;
         }
-        Ok(!more)
+        Ok(!page.more)
     })?;
+    if !page.more {
+        page.scan(&cached, &mut reuse, &mut window)?;
+    }
+    let Page {
+        items,
+        more,
+        skipped,
+        ..
+    } = page;
     let next = args::next_page(pos, items.len(), more);
     let mut fields = header(&snap, &path);
     fields.extend([
@@ -223,6 +222,74 @@ pub fn grep(store: &Arc<Store>, args: &SdkValue) -> Answer {
         ("nextPagePos", next),
     ]);
     answer(fields)
+}
+
+/// One grep page's results so far.
+struct Page<'p> {
+    pattern: &'p str,
+    limit: usize,
+    pos: u64,
+    items: Vec<SdkValue>,
+    found: u64,
+    spent: usize,
+    more: bool,
+    skipped: i64,
+}
+
+impl Page<'_> {
+    /// Scans `window`'s files in order until the page is full, their roots
+    /// read together; contents already scanned in this call are not read.
+    fn scan(
+        &mut self,
+        cached: &Cached,
+        reuse: &mut search::Reuse,
+        window: &mut Vec<(String, EntryFacts)>,
+    ) -> Result<(), SdkRefusal> {
+        let mut ids: Vec<_> = window
+            .iter()
+            .map(|(_, entry)| entry.value.content_root)
+            .filter(|id| !reuse.kept(id))
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        let mut views = cached.roots(&ids)?;
+        let pattern = self.pattern;
+        for (file, entry) in window.drain(..) {
+            if self.more {
+                continue;
+            }
+            let view = views.remove(&entry.value.content_root);
+            let scan = reuse.matches(cached, &entry, view, 1024, pattern, |n, line| {
+                Ok(self.line(&file, n, line))
+            });
+            match scan {
+                Err(e) if e.code == "Binary" => self.skipped += 1,
+                other => other?,
+            }
+        }
+        Ok(())
+    }
+
+    /// Takes one matching line; false when the page is full.
+    fn line(&mut self, file: &str, n: u64, line: window::Line) -> bool {
+        if self.found < self.pos {
+            self.found += 1;
+            return true;
+        }
+        let cost = file.len() + line.text.len() + 160;
+        if self.items.len() == self.limit || self.spent + cost > REPLY_BUDGET {
+            self.more = true;
+            return false;
+        }
+        self.spent += cost;
+        self.items.push(SdkValue::map([
+            ("path", SdkValue::text(file)),
+            ("line", SdkValue::Int(n as i64)),
+            ("text", SdkValue::text(line.text)),
+            ("lineTruncated", SdkValue::Bool(line.truncated)),
+        ]));
+        true
+    }
 }
 
 pub fn glob(store: &Arc<Store>, args: &SdkValue) -> Answer {
