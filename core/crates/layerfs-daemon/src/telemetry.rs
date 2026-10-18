@@ -47,8 +47,8 @@ pub(crate) fn value(
     SdkValue::Map(fields)
 }
 
-/// The Workspace's kernel opcode counts, frame dispositions and largest
-/// request sizes since attach.
+/// The Workspace's kernel opcode counts, frame dispositions, largest request
+/// sizes and per-opcode callback nanoseconds (`ns`) since attach.
 #[cfg(target_os = "linux")]
 pub(crate) fn fuse(w: &layerfs_fuse::request::OpcodeWork) -> SdkValue {
     use layerfs_fuse::request::Opcode;
@@ -64,15 +64,24 @@ pub(crate) fn fuse(w: &layerfs_fuse::request::OpcodeWork) -> SdkValue {
         ("lookup_missing", w.lookup_missing),
         ("served_ns", w.served_ns),
     ];
-    SdkValue::Map(
-        Opcode::NAMES
-            .iter()
-            .copied()
-            .zip(w.opcodes)
-            .chain(extra)
-            .map(|(name, value)| (name.to_owned(), SdkValue::Int(value as i64)))
-            .collect(),
-    )
+    let int = |(name, value): (&str, u64)| (name.to_owned(), SdkValue::Int(value as i64));
+    // Callback wall time per opcode (#352 F-032), only for opcodes that ran.
+    let nanos = Opcode::NAMES
+        .iter()
+        .copied()
+        .zip(w.nanos)
+        .filter(|(_, value)| *value > 0)
+        .map(int)
+        .collect();
+    let mut fields: Vec<_> = Opcode::NAMES
+        .iter()
+        .copied()
+        .zip(w.opcodes)
+        .chain(extra)
+        .map(int)
+        .collect();
+    fields.push(("ns".to_owned(), SdkValue::Map(nanos)));
+    SdkValue::Map(fields)
 }
 
 /// Telemetry that did not fit the reply frame beside the reply.
