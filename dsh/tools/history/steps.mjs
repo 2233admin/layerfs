@@ -369,12 +369,20 @@ export function sqlCounters(line) {
  * - `oneshot_mount_unmount`: the mount's and the unmount's traced ms, and
  *   their SQL counters. Judged and scaled as the old probe was.
  * - `oneshot_exec`: the exec's LayerFS share, the daemon's traced spans for
- *   the exec (its bookkeeping), as `ms`. The FUSE requests served during the
- *   exec are counted from the exec's own daemon record; their time is not
- *   traced, so a point with any is `untimed` (not judged). The exec's wall
- *   time is `wallMs`, reported and never scaled.
+ *   the exec (its bookkeeping), as `ms`. A line's FUSE counts are cumulative
+ *   for its Workspace since the mount (p2-main-d: never decreasing over 335
+ *   repeat execs), so the exec's own requests are its count less the mount's
+ *   (none on a fresh mount). Their time is not traced, so a point with any is
+ *   `untimed` (not judged). The exec's wall time is `wallMs`, reported and
+ *   never scaled.
  * Returns null when the lines hold no complete sequence.
  */
+/** A trace line's FUSE requests, from its last daemon record that has counts: cumulative for its Workspace since the mount. */
+export const fuseOps = (line) => {
+  const f = [...(line.daemon ?? [])].reverse().find((d) => d.fuse)?.fuse;
+  return f ? FUSE_OPCODES.reduce((n, k) => n + (f[k] ?? 0), 0) : 0;
+};
+
 export function oneshotSplit(lines) {
   const by = (m) => lines.find((l) => l.method === m);
   const mount = by("sandbox.mount"), exec = by("sandbox.exec"), unmount = by("sandbox.unmount");
@@ -383,7 +391,7 @@ export function oneshotSplit(lines) {
   // a daemon that traced no spans for the exec (before 6d467539) gives no share: null, never a 0 point
   const timed = (exec.daemon ?? []).some((d) => (d.timing ?? []).length);
   const span = (exec.daemon ?? []).reduce((n, d) => n + (d.timing ?? []).reduce((x, t) => x + (t.ms ?? 0), 0), 0);
-  const fuse = (exec.daemon ?? []).reduce((n, d) => n + FUSE_OPCODES.reduce((x, k) => x + (d.fuse?.[k] ?? 0), 0), 0);
+  const fuse = Math.max(0, fuseOps(exec) - fuseOps(mount));
   return {
     oneshot_mount_unmount: { ms: +(mount.ms + unmount.ms).toFixed(3), counters: add(sqlCounters(mount), sqlCounters(unmount)) },
     oneshot_exec: { ms: timed ? +span.toFixed(3) : null, wallMs: exec.ms ?? null, fuseRequests: fuse, ...(fuse ? { untimed: true } : {}), counters: sqlCounters(exec) },

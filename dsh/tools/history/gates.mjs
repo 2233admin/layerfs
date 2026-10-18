@@ -438,6 +438,8 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
     : f.e == null ? { value: `not judged: ${f.name}: no ${f.against ?? "depth"} exponent (points without ${f.against ?? "depth"} or value)`, result: "watch" }
     : { value: `${f.name}: ${f.against ?? "depth"} exponent ${f.e}${seeded.length ? ` (${seeded.length} seeded probe point${seeded.length > 1 ? "s" : ""})` : ""}`, result: f.result });
   const sv = fit(scale, "probes"), cv = fit(counter, "counters");
+  // a probe left unjudged for a reason of its own says so even when another probe is the one shown
+  for (const f of probeFits.filter((x) => x.note && /^oneshot_exec\b/.test(x.name))) if (!sv.value.includes(f.name)) sv.value += `; also not judged: ${f.name}: ${f.note}`;
   add("Scaling", sv.value, `< ${t.depthExponent.watch}`, sv.result);
   add("Counters", cv.value, `< ${t.counterExponent.watch}`, cv.result);
   const cw = contendedWork(m, history, t);

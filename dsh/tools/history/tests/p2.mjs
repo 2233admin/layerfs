@@ -724,8 +724,16 @@ test("one-shot probe split (lead, after 013.a1): mount + unmount judged as befor
   assert.equal(noSpans.oneshot_exec.ms, null, "a daemon that traced no exec spans gives no point, never 0");
   const busy = oneshotSplit([lines[0], { ...lines[1], daemon: [{ ...lines[1].daemon[0], fuse: { getattr: 3, lookup: 1 } }] }, lines[2]]);
   assert.deepEqual([busy.oneshot_exec.fuseRequests, busy.oneshot_exec.untimed], [4, true]);
+  // counts are cumulative per Workspace since the mount: the exec's own are its count less the mount's
+  const since = oneshotSplit([{ ...lines[0], daemon: [{ fuse: { getattr: 35, served: 35 } }] }, { ...lines[1], daemon: [{ ...lines[1].daemon[0], fuse: { getattr: 35, served: 35 } }] }, lines[2]]);
+  assert.deepEqual([since.oneshot_exec.fuseRequests, since.oneshot_exec.untimed], [0, undefined], "35 before the exec are not the exec's");
   const m = { range: 5, depth: { after: 10 }, probes: { oneshot_exec: busy.oneshot_exec } };
   assert.match(probeSeries("oneshot_exec", m, [m]).note, /4 FUSE request\(s\) during the exec, whose time is not traced/);
+  // the unjudged exec says why in the Scaling row even when another probe is shown
+  const { evaluate } = await import("../gates.mjs");
+  const pts = [3, 4, 5].map((r) => ({ range: r, depth: { after: r * 10 }, binary: { daemon: "d" }, probes: { stat: { ms: r * r, input: { bytes: 1 } }, oneshot_exec: busy.oneshot_exec } }));
+  const scaling = evaluate(pts[2], pts.slice(0, 2), null).checks.find((c) => c.name === "Scaling");
+  assert.match(scaling.value, /also not judged: oneshot_exec: 4 FUSE request/, scaling.value);
   // a new name: the old series never shares a fit with the new ones
   const old = { range: 4, depth: { after: 8 }, probes: { oneshot_mount_exec: { ms: 50 } } };
   const now = { range: 5, depth: { after: 10 }, probes: { oneshot_mount_unmount: s.oneshot_mount_unmount } };
