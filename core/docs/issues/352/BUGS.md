@@ -360,3 +360,15 @@
   whether it works, as a fact about the model (not a gate); (4) the merge
   rule for `node_modules` state changed on two sides (watch-out S4) is still
   open. F-034 no longer blocks measured P3.
+- **F-035 · fs read calls scan one byte at a time and re-walk pages (product,
+  lead's `grep_tree` diagnosis plus liaison code read, 2026-10-18).** One
+  whole-tree `fs.grep` (49.7k paths, 427 MB) takes ~9.3 s, ~46 MB/s:
+  `window::lines` reads 16 KiB windows and runs a per-byte loop (pattern state
+  machine, line count, prefix copy); `fs.read` shares the loop; paging in
+  `grep`, `glob` and `list` re-walks from the start (O(R²/k)); `fs.glob` walks
+  the whole tree whatever the pattern. **Owner decision:** optimize the calls
+  first; the proposed `fs.grep` exclude-patterns option is dropped. Generic
+  only (no special-cased paths), results byte-identical to today.
+  [fixes/015-pre-f035-fs-read-calls.md](fixes/015-pre-f035-fs-read-calls.md),
+  GitHub #354, worked in its own worktree on `issue354-fs-read-calls`. Until it
+  lands `grep_tree` stays the whole-tree series.
