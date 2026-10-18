@@ -15,13 +15,15 @@
 | 006 | `361bb09e` (line p2-main) | a1 | 13.0 | 122.8 | 738 | 439 | 17 | 3 | 1 | 1,198 | 7,800 | 521 | 4,648 | 4 | 8 | 3 / 3 | 186 | 8,740,689 | 2,999,386 | 24,871,468 |
 | 007 | `c25119ac` (line p2-main-b) | a2 | 20.8 | 143.5 | 748 | 402 | 19 | 3 | 1 | 1,173 | 8,973 | 537 | 5,185 | 4 | 8 | 3 / 3 | 166 | 8,104,236 | 3,407,039 | 28,278,507 |
 | 008 | `c25119ac` (line p2-main-b) | a1 | 20.5 | 164.1 | 962 | 520 | 18 | 3 | 1 | 1,504 | 10,477 | 742 | 5,927 | 4 | 8 | 3 / 3 | 200 | 10,347,922 | 4,607,567 | 32,886,074 |
-| 009 | `c25119ac` (line p2-main-b) | a1 | 18.5 | 182.6 | 622 | 407 | 19 | 3 | 1 | 1,052 | 11,529 | 457 | 6,384 | 4 | 8 | 4 / 4 | 177 | 6,390,440 | 2,719,026 | 35,605,100 |
+| 009 | `58a60046` (line p2-main-c) | a2 | 19.9 | 184.0 | 622 | 408 | 19 | 3 | 1 | 1,053 | 11,530 | 457 | 6,384 | 4 | 8 | 4 / 4 | 177 | 6,390,440 | 2,706,114 | 35,592,188 |
+| 010 | `58a60046` (line p2-main-c) | a1 | 16.7 | 200.7 | 618 | 346 | 18 | 3 | 1 | 986 | 12,516 | 438 | 6,822 | 4 | 8 | 3 / 3 | 144 | 7,096,191 | 2,852,801 | 38,444,989 |
+| 011 | `58a60046` (line p2-main-c) | a1 | 34.5 | 235.2 | 1,273 | 598 | 21 | 3 | 1 | 1,896 | 14,412 | 960 | 7,782 | 5 | 10 | 2 / 2 | 257 | 16,832,352 | 6,697,172 | 45,142,161 |
 
 ## Cumulative
 
 | Ranges | Time s | fs | sandbox | branch | project | operator | Calls | Commits | Branches | Agents (sum per range) | Conflicts hit / planned | Steps | Bytes written (since the Overview) | New stored |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 10 | 182.6 | 8,645 | 2,712 | 147 | 15 | 10 | 11,529 | 6,384 | 30 | 45 | 16 / 16 | 1,512 | 42,722,525 ‡ | 35,605,100 |
+| 12 | 235.2 | 10,536 | 3,657 | 186 | 21 | 12 | 14,412 | 7,782 | 39 | 63 | 21 / 21 | 1,913 | 66,651,068 ‡ | 45,142,161 |
 
 ## Conflicts per range
 
@@ -37,31 +39,33 @@
 | 007 | 1 / 1 | 1 / 1 | 1 / 1 | 0 / 0 | 0 |
 | 008 | 1 / 1 | 1 / 1 | 1 / 1 | 0 / 0 | 0 |
 | 009 | 1 / 1 | 1 / 1 | 1 / 1 | 1 / 1 | 0 |
+| 010 | 1 / 1 | 1 / 1 | 1 / 1 | 0 / 0 | 0 |
+| 011 | 1 / 1 | 0 / 0 | 1 / 1 | 0 / 0 | 0 |
 
 ## SDK calls per method (running total)
 
 | Method | Category | Calls | Bytes in | Bytes out |
 | --- | --- | --- | --- | --- |
-| branch.diff_commits | branch | 48 | 0 ‡ | 340,174 ‡ |
-| branch.fork | branch | 68 | 0 ‡ | 0 ‡ |
-| branch.list_commits | project | 15 | 0 | 66,694 |
-| branch.merge | branch | 20 | 0 | 0 |
-| branch.publish | branch | 11 | 0 ‡ | 0 ‡ |
-| fs.apply | fs | 438 | 1,765,572 ‡ | 0 ‡ |
-| fs.diff_files | fs | 398 | 0 ‡ | 1,719,045 ‡ |
-| fs.glob | fs | 407 | 0 ‡ | 133,487 ‡ |
-| fs.grep | fs | 419 | 0 ‡ | 750,077 ‡ |
-| fs.list | fs | 403 | 0 ‡ | 234,767 ‡ |
-| fs.read | fs | 411 | 0 ‡ | 817,596 ‡ |
-| fs.rm | fs | 512 | 0 ‡ | 0 ‡ |
-| fs.stat | fs | 391 | 0 ‡ | 45,718 ‡ |
-| fs.write | fs | 5,266 | 35,913,484 ‡ | 0 ‡ |
-| operator.store.stats | operator | 10 | 0 ‡ | 0 ‡ |
-| sandbox.commit | sandbox | 493 | 0 ‡ | 0 ‡ |
+| branch.diff_commits | branch | 54 | 0 ‡ | 481,231 ‡ |
+| branch.fork | branch | 90 | 0 ‡ | 0 ‡ |
+| branch.list_commits | project | 21 | 0 | 94,149 |
+| branch.merge | branch | 29 | 0 | 0 |
+| branch.publish | branch | 13 | 0 ‡ | 0 ‡ |
+| fs.apply | fs | 577 | 2,924,253 ‡ | 0 ‡ |
+| fs.diff_files | fs | 484 | 0 ‡ | 2,468,758 ‡ |
+| fs.glob | fs | 505 | 0 ‡ | 193,901 ‡ |
+| fs.grep | fs | 507 | 0 ‡ | 1,036,917 ‡ |
+| fs.list | fs | 503 | 0 ‡ | 367,426 ‡ |
+| fs.read | fs | 506 | 0 ‡ | 1,192,847 ‡ |
+| fs.rm | fs | 565 | 0 ‡ | 0 ‡ |
+| fs.stat | fs | 485 | 0 ‡ | 66,651 ‡ |
+| fs.write | fs | 6,404 | 56,007,521 ‡ | 0 ‡ |
+| operator.store.stats | operator | 12 | 0 ‡ | 0 ‡ |
+| sandbox.commit | sandbox | 679 | 0 ‡ | 0 ‡ |
 | sandbox.create | sandbox | 5 | — | — |
-| sandbox.exec | sandbox | 1,163 | 5,043,469 ‡ | 445,962 ‡ |
-| sandbox.mount | sandbox | 521 | 0 ‡ | 0 ‡ |
-| sandbox.service | sandbox | 9 | 0 ‡ | 0 ‡ |
-| sandbox.unmount | sandbox | 521 | 0 ‡ | 0 ‡ |
+| sandbox.exec | sandbox | 1,534 | 7,719,294 ‡ | 648,788 ‡ |
+| sandbox.mount | sandbox | 714 | 0 ‡ | 0 ‡ |
+| sandbox.service | sandbox | 11 | 0 ‡ | 0 ‡ |
+| sandbox.unmount | sandbox | 714 | 0 ‡ | 0 ‡ |
 
 — no byte data: every range of the row is derived (†). ‡ bytes of the measured ranges only; the derived ranges' bytes are unknown.
