@@ -119,10 +119,9 @@ impl Docker {
                     error_body: None,
                 })
             })?;
-            let mut response = self.exchange(
+            let mut response = self.exchange_kept(
                 "POST",
                 &format!("/v1.54/containers/{container}/exec"),
-                false,
                 |w| request.encode(w),
             )?;
             if response.status != 201 {
@@ -147,7 +146,13 @@ impl Docker {
                 json.finish()?;
                 observed.ok_or(RuntimeError::Protocol("missing Exec ID"))
             })();
-            parsed.map_err(|cause| response.fail(cause, observed))
+            match parsed {
+                Ok(exec) => {
+                    response.release();
+                    Ok(exec)
+                }
+                Err(cause) => Err(response.fail(cause, observed)),
+            }
         })();
         match result {
             Ok(exec) => Ok(ExecCreated {

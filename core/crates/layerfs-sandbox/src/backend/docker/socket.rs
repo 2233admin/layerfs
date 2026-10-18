@@ -55,6 +55,12 @@ impl Socket {
             Err(error) => Err(error.into()),
         }
     }
+    /// Whether an idle kept connection is still quiet: nothing to read, no
+    /// hangup or error. A zero-wait poll; it sends nothing.
+    pub fn quiet(&self) -> bool {
+        let mut fds = [PollFd::new(self.stream.as_fd(), PollFlags::POLLIN)];
+        matches!(poll(&mut fds, PollTimeout::ZERO), Ok(0))
+    }
     pub fn try_clone(&self) -> io::Result<Self> {
         Ok(Self {
             stream: self.stream.try_clone()?,

@@ -6,11 +6,15 @@ use super::{
 };
 use crate::{ErrorDiagnostic, ExecId, RuntimeError, WireFailure};
 use std::{
+    fmt,
     io::{self, BufReader, Read, Write},
     net::Shutdown,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+/// How long an idle kept Engine connection may wait for its next request.
+const KEPT_IDLE: Duration = Duration::from_secs(30);
 /// Concrete local Docker Engine endpoint. Control waits never apply to command streams.
 #[derive(Clone, Debug)]
 pub struct Docker {
@@ -20,6 +24,31 @@ pub struct Docker {
     /// The name the next container this client creates gets; None lets the
     /// Engine choose one.
     pub(super) container_name: Option<String>,
+    /// One idle keep-alive connection, shared by this client's clones, for
+    /// Exec create and inspect (#352): each takes it, or connects when it is
+    /// absent, stale or in use, and returns it after reading its whole body.
+    pub(super) kept: Kept,
+}
+#[derive(Clone, Default)]
+pub(super) struct Kept(Arc<Mutex<Option<(Socket, Instant)>>>);
+impl fmt::Debug for Kept {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Kept")
+    }
+}
+impl Kept {
+    /// The idle connection when it is recent and quiet; a stale one is closed.
+    fn take(&self) -> Option<Socket> {
+        let (socket, since) = self.0.lock().ok()?.take()?;
+        (since.elapsed() < KEPT_IDLE && socket.quiet()).then_some(socket)
+    }
+    fn put(&self, socket: Socket) {
+        if let Ok(mut slot) = self.0.lock() {
+            if slot.is_none() {
+                *slot = Some((socket, Instant::now()));
+            }
+        }
+    }
 }
 pub(super) struct Response {
     pub status: u16,
@@ -28,6 +57,9 @@ pub(super) struct Response {
     pub sent: u64,
     header_bytes: u64,
     pub multiplexed: bool,
+    /// Where the connection goes back once the body is read, when the
+    /// request asked for keep-alive and the Engine did not refuse it.
+    kept: Option<Kept>,
 }
 impl Docker {
     /// Selects an explicit local endpoint and blocking metadata I/O wait.
@@ -42,6 +74,7 @@ impl Docker {
             control_wait,
             deadline: None,
             container_name: None,
+            kept: Kept::default(),
         })
     }
     /// Names the containers this client creates `name`: an ASCII letter or
@@ -73,6 +106,21 @@ impl Docker {
             encode(w)
         })
     }
+    /// One metadata exchange on the kept keep-alive connection (Exec create
+    /// and inspect). One attempt: a kept connection is used only while idle
+    /// and quiet, and a failure on it is the request's failure, never resent.
+    pub(super) fn exchange_kept(
+        &self,
+        method: &str,
+        path: &str,
+        mut encode: impl FnMut(&mut dyn Write) -> io::Result<()>,
+    ) -> Result<Response, Box<WireFailure>> {
+        let mut count = Count(0);
+        encode(&mut count).map_err(|e| failure(false, 0, None, e.into(), None))?;
+        self.send(method, path, Mode::Keep, "application/json", count.0, |w| {
+            encode(w)
+        })
+    }
     /// Streams one known-length body once; no pre-read or file-sized allocation.
     pub(super) fn exchange_body(
         &self,
@@ -83,13 +131,42 @@ impl Docker {
         length: u64,
         encode: impl FnOnce(&mut dyn Write) -> io::Result<()>,
     ) -> Result<Response, Box<WireFailure>> {
-        let mut stream = Socket::connect(&self.socket, self.control_wait, self.deadline)
-            .map_err(|e| failure(false, 0, None, e.into(), None))?;
+        let mode = if upgrade { Mode::Upgrade } else { Mode::Close };
+        self.send(method, path, mode, media, length, encode)
+    }
+    fn send(
+        &self,
+        method: &str,
+        path: &str,
+        mode: Mode,
+        media: &str,
+        length: u64,
+        encode: impl FnOnce(&mut dyn Write) -> io::Result<()>,
+    ) -> Result<Response, Box<WireFailure>> {
+        let upgrade = matches!(mode, Mode::Upgrade);
+        let reused = match mode {
+            Mode::Keep => self.kept.take(),
+            _ => None,
+        };
+        let mut stream = match reused {
+            Some(mut socket) => {
+                socket.wait = Some(self.control_wait);
+                socket.deadline = self.deadline;
+                socket
+            }
+            None => Socket::connect(&self.socket, self.control_wait, self.deadline)
+                .map_err(|e| failure(false, 0, None, e.into(), None))?,
+        };
         let mut sent = 0u64;
         let mut attempted = false;
         let mut observed_status = None;
         let mut pending_request = crate::PendingRequest::default();
-        let head=format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: {media}\r\nContent-Length: {length}\r\n{}",if upgrade {"Connection: Upgrade\r\nUpgrade: tcp\r\n\r\n"} else {"Connection: close\r\n\r\n"});
+        let connection = match mode {
+            Mode::Upgrade => "Connection: Upgrade\r\nUpgrade: tcp\r\n\r\n",
+            Mode::Close => "Connection: close\r\n\r\n",
+            Mode::Keep => "\r\n",
+        };
+        let head = format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: {media}\r\nContent-Length: {length}\r\n{connection}");
         let header_bytes = head.len() as u64;
         let result = (|| {
             {
@@ -125,23 +202,25 @@ impl Docker {
             }
             let read = stream.try_clone()?;
             let mut reader = BufReader::with_capacity(8192, read);
-            let (status, mode, multiplexed) = headers(&mut reader, upgrade, &mut observed_status)?;
+            let (status, framing, multiplexed, closes) =
+                headers(&mut reader, upgrade, &mut observed_status)?;
             if upgrade && status == 101 {
                 stream.wait = None;
                 stream.deadline = None;
                 reader.get_mut().wait = None;
                 reader.get_mut().deadline = None;
             }
-            Ok::<_, RuntimeError>((reader, status, mode, multiplexed))
+            Ok::<_, RuntimeError>((reader, status, framing, multiplexed, closes))
         })();
         match result {
-            Ok((reader, status, mode, multiplexed)) => Ok(Response {
+            Ok((reader, status, framing, multiplexed, closes)) => Ok(Response {
                 status,
-                body: Body::new(reader, mode),
+                body: Body::new(reader, framing),
                 writer: stream,
                 sent,
                 multiplexed,
                 header_bytes,
+                kept: (matches!(mode, Mode::Keep) && !closes).then(|| self.kept.clone()),
             }),
             Err(cause) => {
                 let fence_error = stream.stream.shutdown(Shutdown::Both).err();
@@ -154,7 +233,24 @@ impl Docker {
         }
     }
 }
+/// The connection header a request sends.
+#[derive(Clone, Copy)]
+enum Mode {
+    Close,
+    Upgrade,
+    Keep,
+}
 impl Response {
+    /// Returns a kept connection for the next Exec create or inspect, once
+    /// this response's body was read to its framed end with no byte beyond it.
+    /// Otherwise the connection closes here.
+    pub fn release(self) {
+        let Some(kept) = self.kept else { return };
+        if self.body.ended() && self.body.inner().buffer().is_empty() {
+            drop(self.body.into_inner());
+            kept.put(self.writer);
+        }
+    }
     pub fn failed_fence(&self, error: io::Error) -> Box<WireFailure> {
         let mut original = failure(
             true,
@@ -331,7 +427,7 @@ fn headers(
     reader: &mut impl Read,
     upgrade: bool,
     observed: &mut Option<u16>,
-) -> Result<(u16, Framing, bool), RuntimeError> {
+) -> Result<(u16, Framing, bool, bool), RuntimeError> {
     let start = line(reader, 8192)?;
     let mut pieces = start.splitn(3, |b| *b == b' ');
     if pieces.next() != Some(b"HTTP/1.1".as_slice()) {
@@ -357,6 +453,7 @@ fn headers(
     let mut length = None;
     let mut chunked = false;
     let mut connection = None;
+    let mut closes = false;
     let mut protocol = None;
     let mut media = None;
     let mut total = start.len() + 2;
@@ -395,6 +492,7 @@ fn headers(
                 return Err(RuntimeError::Protocol("duplicate stream media type"));
             }
         } else if name.eq_ignore_ascii_case(b"connection") {
+            closes = value.eq_ignore_ascii_case(b"close");
             if connection
                 .replace(value.eq_ignore_ascii_case(b"upgrade"))
                 .is_some()
@@ -422,13 +520,13 @@ fn headers(
         {
             return Err(RuntimeError::Protocol("Engine upgrade framing"));
         }
-        return Ok((status, Framing::Hijacked, true));
+        return Ok((status, Framing::Hijacked, true, true));
     }
     if status == 204 {
         if chunked || length.is_some_and(|n| n != 0) {
             return Err(RuntimeError::Protocol("HTTP no-body framing"));
         }
-        return Ok((status, Framing::Fixed(0), false));
+        return Ok((status, Framing::Fixed(0), false, closes));
     }
     if status < 200 {
         return Err(RuntimeError::Protocol(
@@ -445,6 +543,7 @@ fn headers(
             Framing::Close
         },
         media == Some(true),
+        closes,
     ))
 }
 
