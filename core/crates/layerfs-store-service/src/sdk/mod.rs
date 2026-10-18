@@ -11,7 +11,9 @@ pub mod compare;
 pub mod files;
 pub mod plans;
 pub mod reads;
+pub mod search;
 pub mod snapshot;
+pub mod walk;
 pub mod window;
 
 pub use args::hex;

@@ -2,8 +2,9 @@
 use super::{
     args::{self, invalid, text, Answer},
     files::path as checked,
+    search,
     snapshot::{self, answer, existing, header, kind_name, size},
-    window,
+    walk, window,
 };
 use crate::store::Store;
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
@@ -44,10 +45,7 @@ pub fn read(store: &Arc<Store>, args: &SdkValue) -> Answer {
     let end = end.min(start.saturating_add(window::LINES as u64 - 1));
     let (mut content, mut next, mut clipped) = (String::new(), None, false);
     let mut last = None;
-    window::lines(&reader, &entry, REPLY_BUDGET, None, |n, line| {
-        if n < start {
-            return Ok(true);
-        }
+    window::lines(&reader, &entry, REPLY_BUDGET, start, |n, line| {
         if n > requested_end {
             return Ok(false);
         }
@@ -178,14 +176,12 @@ pub fn grep(store: &Arc<Store>, args: &SdkValue) -> Answer {
     let (limit, pos) = args::paging(args)?;
     let (mut items, mut found, mut spent, mut more, mut skipped) =
         (Vec::new(), 0u64, 0, false, 0i64);
+    let mut reuse = search::Reuse::default();
     window::walk(&reader, &snap, &path, |file, entry| {
         if entry.value.kind != InodeKind::RegularFile {
             return Ok(true);
         }
-        let scan = window::lines(&reader, &entry, 1024, Some(pattern), |n, line| {
-            if !line.matched {
-                return Ok(true);
-            }
+        let scan = reuse.matches(&reader, &entry, 1024, pattern, |n, line| {
             if found < pos {
                 found += 1;
                 return Ok(true);
@@ -223,11 +219,13 @@ pub fn grep(store: &Arc<Store>, args: &SdkValue) -> Answer {
 
 pub fn glob(store: &Arc<Store>, args: &SdkValue) -> Answer {
     let (_, reader, snap) = snapshot::open(store, args)?;
-    let rule = Rule::glob(text(args, "pattern")?);
+    let pattern = text(args, "pattern")?;
+    let rule = Rule::glob(pattern);
     let path = optional_path(args)?;
     let (limit, pos) = args::paging(args)?;
     let (mut items, mut found, mut spent, mut more) = (Vec::new(), 0u64, 0, false);
-    window::walk(&reader, &snap, &path, |file, _| {
+    // Only the folders the pattern's literal leading folders allow.
+    walk::walk_within(&reader, &snap, &path, walk::leading(pattern), |file, _| {
         if !rule.matches_path(file) {
             return Ok(true);
         }

@@ -46,7 +46,7 @@ struct Text {
 }
 fn text(reader: &StorePorts, file: EntryFacts) -> Result<Text> {
     let (mut lines, mut prefix, mut bytes, mut complete) = (0, Vec::new(), 0, true);
-    window::lines(reader, &file, window::BYTES, None, |_, line| {
+    window::lines(reader, &file, window::BYTES, 1, |_, line| {
         lines += 1;
         if complete
             && !line.truncated
@@ -119,7 +119,7 @@ pub fn blame(store: &Arc<Store>, args: &SdkValue) -> Answer {
     }
     let from = line_arg(args, "fromLine", 1)?;
     let (mut tracks, mut spent, mut next_line) = (Vec::new(), 0, None);
-    window::lines(&reader, &tip, window::BYTES, None, |n, line| {
+    window::lines(&reader, &tip, window::BYTES, 1, |n, line| {
         if n < from {
             return Ok(true);
         }
@@ -187,7 +187,7 @@ pub fn blame(store: &Arc<Store>, args: &SdkValue) -> Answer {
                 let (prefix, suffix) = equal_edges(&reader, current, older)?;
                 let size = snapshot::size(&reader, &current)?;
                 let (mut offset, mut ranges) = (0u64, Vec::new());
-                window::lines(&reader, &current, 0, None, |n, line| {
+                window::lines(&reader, &current, 0, 1, |n, line| {
                     let start = offset;
                     offset += line.bytes;
                     if tracks.iter().any(|t| t.owner.is_none() && t.number == n) {
