@@ -32,7 +32,7 @@ removed (F-017). An exec needs only its own mount's directory.
   - **Known path, record present:** used directly. The record is one local
     `stat`.
   - **Known path, record gone:** another process unmounted it. One full
-    refresh (lead review, `REVIEWSHA`), which replaces the table, then the
+    refresh (lead review, `a1af3eb84`), which replaces the table, then the
     lookup: whatever is mounted there now, else `NotMounted`. The daemon
     never reuses a namespace or its directory
     (`layerfs-daemon/src/control/serving.rs:31`), so today that path stays
