@@ -261,6 +261,20 @@ impl Candidates {
         self.needs_load = true;
     }
 
+    /// Reads the persisted table unless the slots already reflect it.
+    ///
+    /// Called at the ring's first use in a Save, not when the Save begins
+    /// (#352 record 034, S1-b): a Save whose whole-file objects all find their
+    /// declared base, or that stores none, never reads the table. The ring
+    /// such a Save would have loaded proposes no object this Save holds, so
+    /// skipping it changes no selection.
+    pub fn ensure_loaded(&mut self, connection: &dyn Source) -> StorageResult<()> {
+        if self.needs_load {
+            self.reload(connection)?;
+        }
+        Ok(())
+    }
+
     /// Re-reads the persisted table into this index.
     pub fn reload(&mut self, connection: &dyn Source) -> StorageResult<()> {
         self.clear();

@@ -383,6 +383,7 @@ pub fn select(
         if lane == PackLane::WholeFile {
             let raw = raw_payload(canonical, role)?;
             let sig = prehashed.unwrap_or_else(|| signature(raw));
+            input.candidates.ensure_loaded(input.connection)?;
             input.candidates.insert(id, sig);
         }
         input.counters.note_depth(role, 0);
@@ -405,6 +406,7 @@ pub fn select(
             Some(id) => Some(id),
             None => {
                 let sig = prehashed.unwrap_or_else(|| signature(raw));
+                input.candidates.ensure_loaded(input.connection)?;
                 let found = input.candidates.find(id, &sig);
                 match found {
                     Some(id) => match probe(input, id, role, depth_cap)? {
@@ -420,6 +422,7 @@ pub fn select(
         input.counters.no_candidate = input.counters.no_candidate.saturating_add(1);
         if lane == PackLane::WholeFile {
             let sig = prehashed.unwrap_or_else(|| signature(raw));
+            input.candidates.ensure_loaded(input.connection)?;
             input.candidates.insert(id, sig);
         }
         input.counters.note_depth(role, 0);
@@ -446,6 +449,7 @@ pub fn select(
         input.counters.work_exceeded = input.counters.work_exceeded.saturating_add(1);
         if lane == PackLane::WholeFile {
             let sig = prehashed.unwrap_or_else(|| signature(raw));
+            input.candidates.ensure_loaded(input.connection)?;
             input.candidates.insert(id, sig);
         }
         input.counters.note_depth(role, 0);
@@ -493,6 +497,7 @@ pub fn select(
     } else {
         input.counters.full_losses = input.counters.full_losses.saturating_add(1);
         if lane == PackLane::WholeFile {
+            input.candidates.ensure_loaded(input.connection)?;
             input.candidates.insert(id, signature(raw));
         }
         input.counters.note_depth(role, 0);
