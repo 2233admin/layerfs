@@ -61,6 +61,8 @@ pub(crate) fn fuse(w: &layerfs_fuse::request::OpcodeWork) -> SdkValue {
         ("store_units", w.store_units),
         ("largest_read", w.largest_read),
         ("largest_write", w.largest_write),
+        ("lookup_missing", w.lookup_missing),
+        ("served_ns", w.served_ns),
     ];
     SdkValue::Map(
         Opcode::NAMES

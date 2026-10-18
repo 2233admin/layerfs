@@ -1,5 +1,5 @@
 //! Pinned fuser consumes replies once; send/delivery outcomes are unavailable.
-use super::terminal;
+use super::{accounting::Accounting, terminal};
 use crate::{
     attributes::{refusal, Identity},
     operations::{KernelData, KernelRead, ReadDataInput},
@@ -10,7 +10,7 @@ use fuser::{
     Errno, FileHandle, FopenFlags, Generation, ReplyAttr, ReplyData, ReplyEntry, ReplyOpen,
 };
 use layerfs_overlay::KernelMount;
-use layerfs_workspace::KernelReadOperation;
+use layerfs_workspace::{KernelReadOperation, Refusal};
 use std::{sync::Arc, time::Duration};
 /// Entry and attribute lifetime of every reply. It bounds how long the kernel
 /// may answer without asking; it is never what makes an answer correct.
@@ -53,6 +53,7 @@ impl ReadReply {
         handle: Option<u64>,
         operation: KernelReadOperation,
         identity: Identity,
+        accounting: Arc<Accounting>,
     ) -> RequestDisposition {
         let (reply, input) = match self {
             Self::Data(reply, offset, length) => (reply, ReadDataInput::File { offset, length }),
@@ -61,6 +62,7 @@ impl ReadReply {
                 return reply
                     .attributes(
                         services, fence, mount, request, protected, handle, operation, identity,
+                        accounting,
                     )
                     .await
             }
@@ -93,6 +95,7 @@ impl ReadReply {
         handle: Option<u64>,
         operation: KernelReadOperation,
         identity: Identity,
+        accounting: Arc<Accounting>,
     ) -> RequestDisposition {
         let answer =
             match KernelRead::prepare(services, mount, request, protected, handle, operation).await
@@ -106,6 +109,10 @@ impl ReadReply {
         let value = match answer.value() {
             Ok(value) => value,
             Err(reason) => {
+                // Only LOOKUP carries the entry reply; Missing answers ENOENT.
+                if matches!(self, Self::Entry(_)) && reason == Refusal::Missing {
+                    accounting.lookup_missing();
+                }
                 self.error(refusal(reason));
                 return dispose(answer).await;
             }

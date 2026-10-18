@@ -10,7 +10,10 @@ use crate::{
 };
 use fuser::{Errno, INodeNo};
 use layerfs_workspace::KernelReadOperation;
-use std::sync::{Arc, OnceLock};
+use std::{
+    sync::{Arc, OnceLock},
+    time::Instant,
+};
 
 pub struct KernelFilesystem {
     pub(super) queue: MountRequests,
@@ -86,7 +89,11 @@ impl KernelFilesystem {
     pub(super) fn serve(&self, permit: RequestOwner, future: RequestFuture) {
         // Counted before the first step, which may reply on this thread.
         self.accounting.disposed(Disposal::Served);
+        // The owner polls the future to completion here; a pending request
+        // parks this worker, and that wait is part of the served time.
+        let started = Instant::now();
         let _ = permit.serve(future);
+        self.accounting.served_ns(started.elapsed());
     }
     /// A received unit decided on the loop before any request runs.
     pub(super) fn serial<R>(
@@ -155,6 +162,7 @@ impl KernelFilesystem {
         let fence = self.fence.clone();
         let mount = self.queue.identity();
         let identity = self.identity;
+        let accounting = self.accounting.clone();
         self.serve(
             permit,
             Box::pin(async move {
@@ -179,6 +187,7 @@ impl KernelFilesystem {
                 reply
                     .serve(
                         services, fence, mount, request, protected, handle, operation, identity,
+                        accounting,
                     )
                     .await
             }),

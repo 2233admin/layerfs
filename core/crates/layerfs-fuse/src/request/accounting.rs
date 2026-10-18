@@ -114,6 +114,8 @@ pub struct Accounting {
     store_units: AtomicU64,
     largest_read: AtomicU64,
     largest_write: AtomicU64,
+    lookup_missing: AtomicU64,
+    served_ns: AtomicU64,
 }
 /// Monotonic counters copied without a lock; fields are individually exact.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -133,6 +135,14 @@ pub struct OpcodeWork {
     /// maxima beside the negotiated ones. Zero until the first such frame.
     pub largest_read: u64,
     pub largest_write: u64,
+    /// LOOKUP requests whose decided reply was ENOENT, included in the lookup
+    /// opcode count above.
+    pub lookup_missing: u64,
+    /// Wall nanoseconds request workers spent inside `RequestOwner::serve`,
+    /// summed over every served unit. A pending future parks that worker, so
+    /// waits for service jobs are included; the request still runs to
+    /// completion on the worker that received it.
+    pub served_ns: u64,
 }
 impl OpcodeWork {
     pub fn count(&self, opcode: Opcode) -> u64 {
@@ -151,6 +161,8 @@ impl Default for Accounting {
             store_units: AtomicU64::new(0),
             largest_read: AtomicU64::new(0),
             largest_write: AtomicU64::new(0),
+            lookup_missing: AtomicU64::new(0),
+            served_ns: AtomicU64::new(0),
         }
     }
 }
@@ -175,6 +187,15 @@ impl Accounting {
         self.largest_write
             .fetch_max(length as u64, Ordering::Relaxed);
     }
+    pub(super) fn lookup_missing(&self) {
+        self.lookup_missing.fetch_add(1, Ordering::Relaxed);
+    }
+    pub(super) fn served_ns(&self, elapsed: std::time::Duration) {
+        self.served_ns.fetch_add(
+            u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX),
+            Ordering::Relaxed,
+        );
+    }
     pub fn observe(&self) -> OpcodeWork {
         let disposal = |value: Disposal| self.disposals[value as usize].load(Ordering::Relaxed);
         OpcodeWork {
@@ -187,6 +208,8 @@ impl Accounting {
             store_units: self.store_units.load(Ordering::Relaxed),
             largest_read: self.largest_read.load(Ordering::Relaxed),
             largest_write: self.largest_write.load(Ordering::Relaxed),
+            lookup_missing: self.lookup_missing.load(Ordering::Relaxed),
+            served_ns: self.served_ns.load(Ordering::Relaxed),
         }
     }
 }
