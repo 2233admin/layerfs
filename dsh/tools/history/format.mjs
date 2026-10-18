@@ -7,7 +7,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { exponent, reinstallGate, sameBinary } from "./gates.mjs";
+import { exponent, opsOf, reinstallGate, sameBinary, uncontended } from "./gates.mjs";
 import { change, REBUILD_KINDS } from "./findings.mjs";
 import { activityTables, categoryOf, checkOverview, checkTimeLine, timeLine } from "./stats.mjs";
 
@@ -165,7 +165,9 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
   `**Added by source:** content ${bytes(s.newPacks)} · metadata ${bytes(s.newMetadata)}${v ? ` · tracked ${bytes(m.dsh?.changedBytes)} changed in git` : ""}`, "");
   // 4. Speed
   const k = m.key?.ops ?? {}, cell = (op) => (k[op] ? `${ms(k[op].p50)} / ${ms(k[op].p95)}` : "—");
-  const ratio = (op) => { const r = (m.ops ?? []).filter((x) => x.op === op).sort((a, b2) => b2.n - a.n)[0]; const bl = baseline && (baseline.daemon ?? null) === (m.binary?.daemon ?? null) && r ? baseline.ops[`${op}\u0000${r.sizeClass}`] : null; return bl ? ` (${num(r.p50 / bl.p50)}×)` : ""; };
+  // SPEC §5: the ratio is the uncontended series' (rows recorded before the split: all of them)
+  const judged = (() => { const ops = opsOf(m, baseline); return ops.some((r) => r.series) ? uncontended(ops) : ops; })();
+  const ratio = (op) => { const r = judged.filter((x) => x.op === op).sort((a, b2) => b2.n - a.n)[0]; const bl = baseline && (baseline.daemon ?? null) === (m.binary?.daemon ?? null) && r ? baseline.ops[`${op}\u0000${r.sizeClass}`] : null; return bl ? ` (${num(r.p50 / bl.p50)}×)` : ""; };
   const fits = probeFits(m, history);
   const h = m.health ?? {};
   out.push("## 4. Speed", "", `Daemon \`${id12(m.binary?.daemon)}\` · p50 / p95 · ratio to baseline (dominant size class) in brackets`, "",

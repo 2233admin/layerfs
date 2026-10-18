@@ -48,7 +48,7 @@
 // `play --from M+1` continues; a stopped range leaves the run dirty, to be
 // recovered by `fork` from a snapshot (SPEC §6).
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { blobSizes, diffTrees, lsTree } from "./git.mjs";
 import { due, manifestPath, rebuild } from "./snapshot.mjs";
@@ -412,6 +412,9 @@ async function playRange(run, k, mode) {
     reinstall: null,
   };
   m.ops = aggregate(t.calls);
+  m.opsTrace = aggregate(t.callsTrace);
+  // the call records beside the trace, so a later re-derivation keeps the size classes (SPEC §5)
+  if (traceFile) writeFileSync(traceFile.replace(/\.jsonl$/, ".calls.jsonl"), run.sink.log.map((e) => JSON.stringify({ seq: e.seq, method: e.method, size: e.size ?? null, kind: e.kind ?? null, ...(e.newCommit ? { newCommit: true } : {}) })).join("\n") + "\n");
   // every call by method (SPEC §3b), and the checkpoint diff's cost per entry it lists (SPEC §4)
   m.calls = callTable(t.all, run.sink.log);
   const diff = checkpointDiff(t.all, run.sink.log, `r${pad(k)}.verify`, proof?.changedDirs ?? null);

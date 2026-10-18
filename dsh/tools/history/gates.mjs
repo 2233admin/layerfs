@@ -75,7 +75,7 @@ const quantile = (xs, p) => { const s = [...xs].sort((a, b) => a - b); return s.
 export function aggregate(calls) {
   const groups = new Map();
   for (const c of calls) {
-    const key = `${c.method}\u0000${sizeClass(c.size?.kind, c.size?.n)}${c.outcome ? ` · ${c.outcome}` : ""}`;
+    const key = `${c.method}\u0000${sizeClass(c.size?.kind, c.size?.n)}${c.outcome ? ` · ${c.outcome}` : ""}${c.contention ? ` · ${c.contention}` : ""}`;
     (groups.get(key) || groups.set(key, []).get(key)).push(c);
   }
   return [...groups].map(([key, cs]) => {
@@ -86,7 +86,7 @@ export function aggregate(calls) {
     const phaseTotals = {};
     for (const c of slow) for (const [k, v] of Object.entries(c.phases)) phaseTotals[k] = (phaseTotals[k] || 0) + v;
     const slowPhase = Object.entries(phaseTotals).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-    const row = { op, sizeClass: cls, n: cs.length, p50: quantile(ms, 0.5), p95, p99: quantile(ms, 0.99), max: Math.max(...ms), slowPhase };
+    const row = { op, sizeClass: cls, ...(cs[0].contention ? { series: cs[0].contention } : {}), n: cs.length, p50: quantile(ms, 0.5), p95, p99: quantile(ms, 0.99), max: Math.max(...ms), slowPhase };
     // per call: the SQL work's p50, an exec's FUSE opcodes' p50, and ms per unit of its own input
     const withSql = cs.filter((c) => c.sql);
     if (withSql.length) row.sql = Object.fromEntries(["statements", "vm_steps", "fullscan_steps"].map((k) => [k, quantile(withSql.map((c) => c.sql[k] ?? 0), 0.5)]));
@@ -129,6 +129,49 @@ export function reinstallGate(r, t = THRESHOLDS) {
   if (!r.changedPackages) return { value: `no changed packages: ${r.storedNewBytes} new stored bytes`, result: band(r.storedNewBytes, REINSTALL_ABSOLUTE) };
   const g = +(r.storedNewBytes / r.rawChangedBytes).toFixed(3);
   return { value: `${g}× the raw bytes of ${r.changedPackages} changed package${r.changedPackages === 1 ? "" : "s"}`, result: band(g, t.reinstallGrowth) };
+}
+
+/**
+ * Uncontended vs contended (SPEC §5, owner direction 2026-10-18). Every op
+ * and class has two series (aggregate's ` · uncontended` / ` · contended`
+ * suffix, from the trace's start and ms: steps.mjs markContention). Speed
+ * judges the uncontended rows against the baseline's uncontended rows. A
+ * baseline re-derived from stored traces (`derivation: "trace"`, classes from
+ * the trace alone) is compared with the attempt's rows classed the same way
+ * (`opsTrace`). Rows without a series (recorded before the split) are
+ * judged as before only against a baseline that predates it too.
+ */
+export const opsOf = (x, baseline) => (baseline?.derivation === "trace" ? x.opsTrace : x.ops) ?? [];
+export const uncontended = (ops) => ops.filter((r) => r.series === "uncontended" || / · uncontended$/.test(r.sizeClass));
+export const contended = (ops) => ops.filter((r) => r.series === "contended" || / · contended$/.test(r.sizeClass));
+
+/**
+ * The contended series is watched for growth of the contended work itself,
+ * never its wall time (queueing that the no-delay replay creates): per
+ * contended op and class, the SQL VM steps p50 against the tree's files over
+ * this attempt and its same-binary history (e.g. merge cost against tree
+ * size), banded like Counters. A point needs BASELINE_MIN_N calls in its
+ * range, and the tree must have grown CONTENDED_SPAN× over the points: a fit
+ * over ~10% of growth is noise (range 11 of p2-main-c fitted 5.55 over three
+ * ranges of 7% growth). The worst fit is reported. Lane hold per
+ * Commit is not in the trace yet; the merge's own work stands for it.
+ */
+export const CONTENDED_SPAN = 1.5;
+export function contendedWork(m, history, t = THRESHOLDS) {
+  const ser = (x) => (x.ops?.some((r) => r.series) ? x.ops : x.opsTrace) ?? [];
+  const rows = contended(ser(m));
+  if (!rows.length) return { value: "not applicable: no contended calls in this range", result: "pass" };
+  let worst = null, short = 0;
+  for (const r of rows) {
+    const pts = [...history, m].map((x) => [x.inputs?.tree?.files, contended(ser(x)).find((o) => o.op === r.op && o.sizeClass === r.sizeClass && o.n >= BASELINE_MIN_N)?.sql?.vm_steps]).filter(([a, b]) => a > 0 && b > 0);
+    if (pts.length < MINIMUM_POINTS) continue;
+    const xs = pts.map(([x]) => x);
+    if (Math.max(...xs) < CONTENDED_SPAN * Math.min(...xs)) { short++; continue; }
+    const e = exponent(pts);
+    if (e != null && (!worst || e > worst.e)) worst = { op: r.op, sizeClass: r.sizeClass, e, n: pts.length };
+  }
+  if (!worst) return { value: `not judged: no contended class has ${MINIMUM_POINTS} ranges of ${BASELINE_MIN_N}+ calls${short ? ` over a tree that grew ${CONTENDED_SPAN}× (${short} class${short > 1 ? "es" : ""} too narrow)` : ""}`, result: "watch" };
+  return { value: `${worst.op} ${worst.sizeClass}: SQL VM steps against tree files, exponent ${worst.e} over ${worst.n} ranges`, result: band(worst.e, t.counterExponent) };
 }
 
 /** F-024: a baseline class too thin to be a reference (BASELINE_MIN_N). */
@@ -326,7 +369,10 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
     add("Speed", `baseline measured with daemon ${(baseline.daemon ?? "unknown").slice(0, 12)}; ${insufficient(0)}`, `≤ ${t.speed.watch}×`, "watch");
   } else if (baseline) {
     let worstRow = null, thin = null;
-    for (const r of m.ops || []) {
+    // SPEC §5: Speed judges the uncontended series only, against the baseline's own
+    // (rows recorded before the split, against a baseline that predates it too, are judged as before)
+    const judged = (x) => { const ops = opsOf(x, baseline); return ops.some((r) => r.series) ? uncontended(ops) : baseline.derivation ? [] : ops; };
+    for (const r of judged(m)) {
       const b = baseline.ops[`${r.op}\u0000${r.sizeClass}`];
       if (!b) continue;
       const ratio = +Math.max(r.p50 / b.p50, r.p95 / b.p95).toFixed(2);
@@ -338,7 +384,7 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
       add("Speed", `not judged: ${thin.op} ${thin.sizeClass}: baseline class has ${thin.bn} call${thin.bn === 1 ? "" : "s"} (minimum ${BASELINE_MIN_N} per range); ${thin.ratio}× it`, `≤ ${t.speed.watch}×`, "watch");
     } else if (worstRow) {
       const series = history.map((x) => {
-        const o = (x.ops || []).find((r) => r.op === worstRow.op && r.sizeClass === worstRow.sizeClass);
+        const o = judged(x).find((r) => r.op === worstRow.op && r.sizeClass === worstRow.sizeClass);
         const b = baseline.ops[`${worstRow.op}\u0000${worstRow.sizeClass}`];
         return o ? Math.max(o.p50 / b.p50, o.p95 / b.p95) : null;
       }).concat(worstRow.ratio);
@@ -392,6 +438,8 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   const sv = fit(scale, "probes"), cv = fit(counter, "counters");
   add("Scaling", sv.value, `< ${t.depthExponent.watch}`, sv.result);
   add("Counters", cv.value, `< ${t.counterExponent.watch}`, cv.result);
+  const cw = contendedWork(m, history, t);
+  add("Contended work", cw.value, `< ${t.counterExponent.watch} (SQL work against tree size)`, cw.result);
   const s = m.storage || {};
   if (s.directoryShare == null) unjudged("Directory share", "no new bytes measured", `< ${t.directoryShare.watch}`);
   else add("Directory share", s.directoryShare, `< ${t.directoryShare.watch}`, band(s.directoryShare, t.directoryShare));

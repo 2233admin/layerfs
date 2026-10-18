@@ -147,7 +147,7 @@ test("trace parsing: SQL counters summed over writer and readers, call sizes and
     daemon: [{ sql: { writer: { statements: 2, vm_steps: 10, returned_rows: 1 }, readers: { statements: 1, fullscan_steps: 4 } }, timing: [{ name: "commit", ms: 2, children: [{ name: "save", ms: 1 }] }] }],
   };
   assert.deepEqual(sqlCounters(line), { statements: 3, vm_steps: 10, fullscan_steps: 4, sorts: 0, returned_rows: 1 });
-  assert.deepEqual(callOf(line), { method: "fs.write", ms: 3, ok: true, size: { kind: "bytes", n: 100 }, phases: { commit: 2, "commit.save": 1 } });
+  assert.deepEqual(callOf(line), { method: "fs.write", ms: 3, ok: true, size: { kind: "bytes", n: 100 }, phases: { commit: 2, "commit.save": 1 }, sql: { statements: 3, vm_steps: 10, fullscan_steps: 4 } }, "a trace-only call keeps its SQL work (SPEC §5)");
   assert.equal(traceLines(`${JSON.stringify({ phase: "start" })}\n${JSON.stringify(line)}\n`).length, 1);
 });
 

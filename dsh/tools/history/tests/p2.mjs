@@ -25,7 +25,7 @@ import { checkRunner, loadBudget, wallProjection } from "../run.mjs";
 import { runnerArgs, runOf } from "../runner.mjs";
 import { demux, parseRun } from "../runner/docker-shim.mjs";
 import {
-  attributeFuse, callOf, diskGuard, diskModel, changedDirs, outcomeOf, checkpointDiff, consolidationSteps, withDirs, decoyBytes, nextPhase, p2Plan, route, sandboxCommands, STEP_KINDS, Tree,
+  attributeFuse, callOf, diskGuard, markContention, diskModel, changedDirs, outcomeOf, checkpointDiff, consolidationSteps, withDirs, decoyBytes, nextPhase, p2Plan, route, sandboxCommands, STEP_KINDS, Tree,
 } from "../steps.mjs";
 import {
   buildOverview, callTable, categoryOf, withoutProbeSetupCommits, categoryRows, CATEGORIES, checkOverview, derivedOverview, renderOverview, renderStats, stageSplit, tenths, timeLine,
@@ -757,6 +757,38 @@ test("study §8 measurements: storage by the step's Commit; role bytes need the 
   assert.equal(m.metadataPerPath.needs, ROLE_COUNTER);
   assert.deepEqual(m.build, { stored: 300, perPackage: { "packages/a": 15, "packages/b": 7 }, content: 200, metadata: 100 });
   assert.match(buildListCommand(["packages/a"]), /^find 'packages\/a' -path '\*\/node_modules' -prune -o/);
+});
+
+test("uncontended vs contended (SPEC §5): overlap with a Commit or merge classes a call; Speed judges the uncontended series; contended work growth trips", () => {
+  const at = (ms) => new Date(Date.UTC(2026, 9, 18, 0, 0, 0, ms)).toISOString();
+  const lines = markContention([
+    { method: "sandbox.commit", start: at(0), ms: 100 },
+    { method: "fs.read", start: at(50), ms: 10 },           // inside the Commit
+    { method: "fs.read", start: at(200), ms: 10 },          // alone
+    { method: "fs.write", start: at(300), ms: 20, commit: "c1" },
+    { method: "fs.stat", start: at(310), ms: 5 },           // inside an fs Commit
+    { method: "branch.merge", start: at(400), ms: 50 },
+    { method: "fs.list", start: at(440), ms: 30 },          // overlaps the merge's end by 10 ms
+    { method: "fs.list", start: at(449), ms: 30 },          // within the 1 ms start resolution of its end: no overlap
+  ]);
+  assert.deepEqual(lines.map((l) => l.contention), ["uncontended", "contended", "uncontended", "uncontended", "contended", "uncontended", "contended", "uncontended"]);
+  const rows = aggregate(lines.map((l) => callOf(l)));
+  assert.ok(rows.some((r) => r.op === "fs.read" && r.sizeClass === "— · contended" && r.series === "contended"));
+  assert.ok(rows.some((r) => r.op === "branch.merge" && r.n === 1), "merges stay in the series");
+  // a contended-only slowdown never trips Speed
+  const ops = (contendedMs) => [{ op: "fs.read", sizeClass: "≤8 KiB · uncontended", series: "uncontended", n: 20, p50: 4, p95: 6 }, { op: "fs.read", sizeClass: "≤8 KiB · contended", series: "contended", n: 20, p50: contendedMs, p95: contendedMs * 2 }];
+  const b = buildBaseline([2, 3, 4].map((range) => ({ range, binary: { daemon: "d" }, ops: ops(5) })));
+  const speed = evaluate({ range: 10, binary: { daemon: "d" }, checks: {}, ops: ops(500) }, [], b).checks.find((c) => c.name === "Speed");
+  assert.equal(speed.result, "pass", speed.value);
+  assert.match(speed.value, /· uncontended: 1× baseline/);
+  // merge cost rising with tree size in the contended series trips; flat work does not
+  const mk = (i, steps) => ({ range: 5 + i, binary: { daemon: "d" }, checks: {}, inputs: { tree: { files: 1000 * (i + 1) } },
+    ops: [{ op: "branch.merge", sizeClass: ">64 entries · Merged · contended", series: "contended", n: 5, p50: 9000, p95: 9000, sql: { vm_steps: steps(i) } }] });
+  const cw = (steps) => { const xs = [0, 1, 2, 3].map((i) => mk(i, steps)); return evaluate(xs.at(-1), xs.slice(0, -1)).checks.find((c) => c.name === "Contended work"); };
+  assert.equal(cw((i) => 5000 * (i + 1)).result, "optimize");
+  assert.equal(cw(() => 5000).result, "pass");
+  const narrow = [0, 1, 2].map((i) => ({ ...mk(i, (j) => 5000 * (j + 1)), inputs: { tree: { files: 1000 + 30 * i } } }));
+  assert.match(evaluate(narrow.at(-1), narrow.slice(0, -1)).checks.find((c) => c.name === "Contended work").value, /too narrow/, "a fit over a few percent of growth is not judged");
 });
 
 // the runner stays last: a test registered after it never runs

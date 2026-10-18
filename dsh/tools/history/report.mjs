@@ -23,12 +23,13 @@
 // format), with `gh issue comment 352 --body-file <it>`.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { BASELINE_MIN_N, buildBaseline, evaluate, exponent, MINIMUM_POINTS, reinstallGate, sameBinary, thinClass } from "./gates.mjs";
+import { aggregate, BASELINE_MIN_N, buildBaseline, evaluate, exponent, MINIMUM_POINTS, reinstallGate, sameBinary, thinClass } from "./gates.mjs";
 import { categoryOf, derivedOverview, renderOverview, renderStats } from "./stats.mjs";
 import { FINDINGS, loadIssues, renderFormat } from "./format.mjs";
 import { change, loadFindings, REBUILD_KINDS } from "./findings.mjs";
 import { changedDirs, withDirs } from "./steps.mjs";
 import { diffTrees } from "./git.mjs";
+import { HISTORY as HISTORY_DIR, readTrace } from "./lib.mjs";
 import { legacyGates, parseReport, storedGate, storeGate } from "./frozen.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
@@ -221,7 +222,9 @@ export function latencyRows(m, history = [], baseline = null) {
   const own = history.filter(sameBinary(m));
   const series = (r, x) => [...own, m].map((h) => [x(h), (h.ops || []).find((o) => o.op === r.op && o.sizeClass === r.sizeClass)?.p50]);
   const comparable = baseline && (baseline.daemon ?? null) === (m.binary?.daemon ?? null);
-  return (m.ops || []).map((r) => {
+  // SPEC §5: both series, each class suffixed · uncontended / · contended; against a baseline
+  // re-derived from traces, the rows classed the same way (opsTrace)
+  return (baseline?.derivation === "trace" && m.opsTrace ? m.opsTrace : m.ops || []).map((r) => {
     const b = comparable ? baseline.ops[`${r.op}\u0000${r.sizeClass}`] : null;
     const depth = exponent(series(r, (h) => h.depth?.after)), tree = exponent(series(r, (h) => h.inputs?.tree?.files));
     return [r.op, r.sizeClass, r.n, r.p50, r.p95, r.p99, r.max, b ? `${(r.p50 / b.p50).toFixed(2)}×` : "no baseline", b ? `${(r.p95 / b.p95).toFixed(2)}×` : "no baseline",
@@ -444,9 +447,45 @@ export function withDirsFromGit(m, { repo, planDir }) {
  * nothing: no stored gate, report, comment or baseline.
  * @returns {{ range, attempt, run, daemon, stored, verdict, worst: { name, result, value } }[]}
  */
+/** A stored attempt's trace, if its run kept it: <history>/runs/<run>/trace/range-NNN.aK.jsonl. */
+const traceOf = (m, history = HISTORY_DIR) => join(history, "runs", String(m.run), "trace", `range-${pad(m.range)}.a${m.attempt}.jsonl`);
+
+/**
+ * SPEC §5 (uncontended vs contended): an attempt recorded before the split
+ * gets `opsTrace`, its calls classed from its stored trace alone (overlap and
+ * outcome from the trace; sizes the trace carries). Without the trace it is
+ * returned unchanged, and Speed against a re-derived baseline is not judged.
+ */
+export function withTraceOps(m, history = HISTORY_DIR) {
+  if (m.opsTrace) return m;
+  const file = traceOf(m, history);
+  return existsSync(file) ? { ...m, opsTrace: aggregate(readTrace(file).callsTrace) } : m;
+}
+
+/**
+ * Re-derives a baseline into both series from its runs' stored traces (SPEC
+ * §5): per range its latest attempt's trace, classed from the trace alone,
+ * through buildBaseline (n and perRange per class). The file keeps its
+ * daemon, probes, phase and addon; the earlier classes stay as `previousOps`
+ * and earlier reports keep their recorded verdicts (F2). Null when a range
+ * has no stored trace.
+ */
+export function rederiveBaseline(b, run, history = HISTORY_DIR) {
+  const dir = join(history, "runs", run, "trace");
+  const per = [];
+  for (const k of b.ranges) {
+    const tries = existsSync(dir) ? readdirSync(dir).map((f) => new RegExp(`^range-${pad(k)}\\.a(\\d+)\\.jsonl$`).exec(f)).filter(Boolean).map((x) => Number(x[1])) : [];
+    if (!tries.length) return null;
+    const file = join(dir, `range-${pad(k)}.a${Math.max(...tries)}.jsonl`);
+    per.push({ range: k, binary: { daemon: b.daemon }, ops: aggregate(readTrace(file).callsTrace) });
+  }
+  const fresh = buildBaseline(per);
+  return { ...b, ops: fresh.ops, previousOps: b.previousOps ?? b.ops, derivation: "trace", derived: { ...(b.derived ?? {}), series: `SPEC §5: uncontended/contended classes re-derived from ${run}'s stored traces (classes from the trace alone)` } };
+}
+
 export function regate({ metricsDir, oracleDir, baselinesDir = metricsDir, repo = null, planDir = null }) {
   const attempts = loadAttempts(metricsDir);
-  const last = [...attempts.values()].map((ys) => ys.at(-1)).map((m) => withInputs(m, oracleDir))
+  const last = [...attempts.values()].map((ys) => ys.at(-1)).map((m) => withTraceOps(withInputs(m, oracleDir)))
     .map((m) => (repo && planDir ? withDirsFromGit(m, { repo, planDir }) : m));
   const pilotFile = join(baselinesDir, "baseline.json");
   const pilot = existsSync(pilotFile) ? JSON.parse(readFileSync(pilotFile, "utf8")) : null;
@@ -579,6 +618,21 @@ async function main() {
       const out = withBaselineN(b, loadAttempts(b.source ?? dir));
       writeFileSync(file, JSON.stringify(out, null, 1));
       console.log(`${f}: ${Object.entries(out.ops).filter(([, v]) => thinClass(v)).map(([k, v]) => `${k.replace("\u0000", " ")} ${v.perRange.join("/")}`).join("; ") || `every class ≥ ${BASELINE_MIN_N} per range`}`);
+    }
+    return;
+  }
+  if (args[0] === "baseline-series") {
+    // SPEC §5: re-derive every stored baseline into both series from its run's traces
+    const dir = opt("--metrics") ?? join(HISTORY_DIR, "metrics");
+    for (const f of readdirSync(dir).filter((x) => /^baseline.*\.json$/.test(x))) {
+      const file = join(dir, f), b = JSON.parse(readFileSync(file, "utf8"));
+      if (b.derivation === "trace") { console.log(`${f}: already re-derived`); continue; }
+      const run = b.run ?? opt("--pilot-run");
+      const out = run && rederiveBaseline(b, run);
+      if (!out) { console.log(`${f}: not re-derived (no run or no stored trace${run ? ` in ${run}` : "; give --pilot-run"})`); continue; }
+      writeFileSync(file, JSON.stringify(out, null, 1));
+      const series = (x) => Object.keys(out.ops).filter((k) => k.endsWith(` · ${x}`)).length;
+      console.log(`${f}: from ${run}: ${series("uncontended")} uncontended, ${series("contended")} contended classes`);
     }
     return;
   }

@@ -396,6 +396,34 @@ export const OUTCOME_CLASSES = new Set(["branch.merge", "sandbox.commit"]);
 /** A call's outcome class: its reply kind, a merge that made a Commit marked. */
 export const outcomeOf = (kind, newCommit) => (kind ? `${kind}${newCommit ? " (new Commit)" : ""}` : "unknown");
 
+/**
+ * Uncontended vs contended (SPEC §5, owner direction 2026-10-18): Commit or
+ * merge work is a call that merges, commits a Workspace, publishes, or
+ * publishes a Commit (an fs mutation's `commit`).
+ */
+export const commitWork = (l) => ["branch.merge", "sandbox.commit", "branch.publish"].includes(l.method) || l.commit != null;
+/**
+ * Classifies every trace line by overlap in time, from its start and ms: a
+ * call that another Commit or merge overlaps by more than the start's 1 ms
+ * resolution (a trace start is whole milliseconds, so back-to-back calls of
+ * one agent can seem to touch) is contended, any other uncontended. A classification of the input
+ * for every operation alike; no call is removed. Lines without a start stay
+ * unclassified.
+ */
+const RESOLUTION = 1;
+export function markContention(lines) {
+  const span = (l) => { const s = Date.parse(l.start); return [s, s + (l.ms ?? 0)]; };
+  const work = lines.filter((l) => l.start && commitWork(l)).map((l) => [l, ...span(l)]).sort((a, b) => a[1] - b[1]);
+  for (const l of lines) {
+    if (!l.start) continue;
+    const [s, e] = span(l);
+    let hit = false;
+    for (const [w, ws, we] of work) { if (ws >= e - RESOLUTION) break; if (w !== l && Math.min(e, we) - Math.max(s, ws) > RESOLUTION) { hit = true; break; } }
+    l.contention = hit ? "contended" : "uncontended";
+  }
+  return lines;
+}
+
 export function callOf(line, entry = null) {
   const a = line.args ?? {};
   const size = entry ? entry.size : a.contentBytes != null ? { kind: "bytes", n: a.contentBytes } : a.changes != null ? { kind: "files", n: a.changes } : a.changeBytes != null ? { kind: "bytes", n: a.changeBytes } : null;
@@ -404,10 +432,12 @@ export function callOf(line, entry = null) {
     phases[root.name] = (phases[root.name] || 0) + root.ms;
     for (const child of root.children ?? []) phases[`${root.name}.${child.name}`] = (phases[`${root.name}.${child.name}`] || 0) + child.ms;
   }
-  const sql = entry ? (({ statements, vm_steps, fullscan_steps }) => ({ statements, vm_steps, fullscan_steps }))(sqlCounters(line)) : null;
+  // SQL work is the call's own (its trace line), so a call classed from the trace alone keeps it too (SPEC §5)
+  const sql = (({ statements, vm_steps, fullscan_steps }) => ({ statements, vm_steps, fullscan_steps }))(sqlCounters(line));
   return { method: line.method, ms: line.ms, ok: line.ok, ...(size ? { size } : {}), ...(Object.keys(phases).length ? { phases } : {}),
-    ...(sql && (line.daemon ?? []).some((d) => d.sql) ? { sql } : {}), ...(line.fuse != null ? { fuse: line.fuse } : {}),
-    ...(OUTCOME_CLASSES.has(line.method) ? { outcome: outcomeOf(entry?.kind ?? line.kind, entry?.newCommit) } : {}) };
+    ...((line.daemon ?? []).some((d) => d.sql) ? { sql } : {}), ...(line.fuse != null ? { fuse: line.fuse } : {}),
+    ...(OUTCOME_CLASSES.has(line.method) ? { outcome: outcomeOf(entry?.kind ?? line.kind, entry?.newCommit) } : {}),
+    ...(line.contention ? { contention: line.contention } : {}) };
 }
 
 /**

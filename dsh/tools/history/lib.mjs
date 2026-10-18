@@ -22,7 +22,7 @@ import { compareResults, parseVitestJson, vitestCommand } from "./unit-tests.mjs
 import { INSTALL } from "./calibrate-tests.mjs";
 import {
   abs, attributeFuse, callOf, changedDirs, compareIds, comparePaths, idBatches, pad, parseTreePage, PHASES, phaseOps, PROBE_DIR, quote,
-  deltaWork, route, sandboxCommands, sandboxExpect, sqlCounters, traceLines, Tree, TREE_IDS, TREE_PAGE,
+  deltaWork, markContention, route, sandboxCommands, sandboxExpect, sqlCounters, traceLines, Tree, TREE_IDS, TREE_PAGE,
 } from "./steps.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -571,9 +571,12 @@ export function readTrace(file, log = null) {
   // a label is "<step>#<seq>" (record()): the step, and the call record it joins
   for (const l of lines) { const m = /^(.*)#(\d+)$/.exec(String(l.step ?? "")); if (m) { l.step = m[1]; l.seq = Number(m[2]); } }
   attributeFuse(lines);
+  markContention(lines);
   const bySeq = new Map((log ?? []).map((e) => [e.seq, e]));
   const isProbe = (l) => /^probe(-setup)?:/.test(String(l.step ?? ""));
   const calls = lines.filter((l) => !isProbe(l)).map((l) => callOf(l, bySeq.get(l.seq)?.method === l.method ? bySeq.get(l.seq) : null));
+  // the same calls classed from the trace alone (no call records): how stored traces are re-derived (SPEC §5)
+  const callsTrace = lines.filter((l) => !isProbe(l)).map((l) => callOf(l));
   const probe = {};
   for (const l of lines.filter(isProbe)) {
     if (l.step.startsWith("probe-setup:")) continue;
@@ -585,7 +588,7 @@ export function readTrace(file, log = null) {
   // construction work of the replay's own Saves (probes left out): files built, unchanged, symlinks
   const construction = {};
   for (const l of lines.filter((x) => !isProbe(x))) for (const d of l.daemon ?? []) for (const [key, n] of Object.entries(d.construction ?? {})) construction[key] = (construction[key] ?? 0) + n;
-  return { calls, probe, delta, construction, lines: lines.length, all: lines };
+  return { calls, callsTrace, probe, delta, construction, lines: lines.length, all: lines };
 }
 
 export { PHASES, phaseOps, Tree };

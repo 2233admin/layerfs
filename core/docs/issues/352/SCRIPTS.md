@@ -377,6 +377,23 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   endpoint is `127.0.0.1:<published port>` (endpoint.rs), which a container
   on Docker Desktop cannot reach, on the bridge or with `--network host`; the
   dev range on F-020's binaries stopped at Sandbox create (ConnectionRefused).
+- **Uncontended vs contended** (SPEC §5, owner direction 2026-10-18; builder
+  as built). `steps.mjs markContention` classes every trace line from its
+  start and ms: contended when another Commit or merge (a merge, a Workspace
+  Commit, a publish, an fs call that published a Commit) overlaps it by more
+  than the start's 1 ms resolution. `aggregate` suffixes each class
+  ` · uncontended` / ` · contended` (`series`). Speed judges the uncontended
+  rows only. The new check **Contended work** fits each contended class's
+  SQL VM steps p50 against tree files, banded like Counters, and never uses
+  wall time. A point needs 5 calls in its range, and the tree must have grown
+  1.5× over the points. Existing baselines were re-derived from their runs'
+  stored traces (`report.mjs baseline-series`, `derivation: "trace"`,
+  earlier classes kept as `previousOps`). Those classes come from the trace
+  alone, since the call records were not kept, so reads have no size class.
+  An attempt is compared with them through `opsTrace`, classed the same way;
+  `regate` derives it from the attempt's trace. Measured ranges now record
+  `opsTrace` and keep their call records beside the trace
+  (`range-NNN.aK.calls.jsonl`). Earlier reports keep their verdicts (F2).
 - **Phase-matched speed baselines** (lead decision 2026-10-18). From P2 on,
   the speed baseline is the pilot's ranges 2–4 replayed with the current
   phase's player on the current binaries: `run.mjs rebaseline --phase p2
