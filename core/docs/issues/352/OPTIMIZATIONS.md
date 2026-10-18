@@ -56,3 +56,18 @@
   Old packs keep 11.6% of the Store as reserved bytes. Speed within 1.1×
   except p95 watches on fs.read, fs.list and sandbox.mount (1.14–1.15, flat
   counters, load ~13). [fixes/014-f027-item1-sized-pack-directories.md](fixes/014-f027-item1-sized-pack-directories.md).
+  **Item 3 done** (`7ac7343c7`, daemon `3dad6f79`, addon `43c96012`, on
+  branch `claude/issue360-item3-branch-deltas-72ecad`):
+  - Change: an `InodeBranch` is stored as a COPY/INSERT program against its
+    predecessor, under the metadata cap of 8 and the chain budgets; a refused
+    base stores whole. Old Stores read unchanged (compat range 14 ok).
+  - Synthetic P3, 100 `fs.write` Commits on a 53k-entry tree: InodeBranch
+    2,894 → 338 B per Commit (−88%), pack bytes −80%, Store growth −20%.
+    Decoded views are identical.
+  - Lookup bound holds (one chain per branch level).
+  - Speed, cache state enforced: 0.85–1.04× on FUSE operations, Commit and
+    merge; SDK `fs.read` cold 1.25× (single sample). Statements +5–30% on
+    cold reads and writes.
+  - Accepted under AGENTS §3.9. The lead's p95 condition is not established
+    from one sample per case, and the r011 storage gate was not run.
+  - Record: [fixes/030-f027-item3-inode-branch-deltas.md](fixes/030-f027-item3-inode-branch-deltas.md).
