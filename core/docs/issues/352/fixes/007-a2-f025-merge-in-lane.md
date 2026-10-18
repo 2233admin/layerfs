@@ -14,7 +14,7 @@
 | Kind | 1 forward-only (REBUILD.md) for fixes 1–4: code paths only, Store format unchanged. Fix 4's optional `content_signature(stamp)` index is **not** proposed (it would change the stored schema definition) |
 | Old Stores | open unchanged |
 | Old data | still read as before |
-| Compatibility test | fix 0: **passed**. A fresh fork of `p2-main-c`'s range-11 snapshot (written by `58a60046`) passes `compat.mjs` range 11 on daemon `bd6fbeee`: 1,057 files, 296 ids, paths ok. Fixes 1–4: *pending* |
+| Compatibility test | fix 0: **passed**. A fresh fork of `p2-main-c`'s range-11 snapshot (written by `58a60046`) passes `compat.mjs` range 11 on daemon `bd6fbeee`: 1,057 files, 296 ids, paths ok. Fix 1: **passed**. A fresh fork (`f009-compat-fix1`) of `p2-main-e`'s range-13 snapshot passes `compat.mjs` range 13 on daemon `dbf906df` (addon `59f7f8dd`): 1,167 files, 240 ids, paths 240/240, nothing missing, extra or changed, 3,401 ms. Fixes 2–4: *pending* |
 | Binaries | daemon `58a60046…` (and the evidence from `c25119ac…`) → fix 0: `bd6fbeee08156326895e16c1e0a688854f004231d55e0c359ea7ec8af256972a`, kept in `core/target/issue352/daemon-bd6fbeee/` (addon unchanged, `799e3ca6`). Fix 1: daemon `dbf906df…`, addon `59f7f8dd…` (below). Fixes 2–4: *pending* |
 | Commits | fix 0: the commit that adds its section below, on branch `dsh-352-f025-fix0`. Fixes 1–4: *pending* |
 | Regression tests | fix 0: `core/crates/layerfs-daemon/tests/sdk_timing_coverage.rs` (moved to `layerfs-store-service` by F-020). Fix 1: `layerfs-store-service/tests/sdk_merge_paths.rs` (bound) and `history_diff_oracle.rs` (naming equals the walk). Others *pending*, listed under Proof |
@@ -271,9 +271,22 @@ it takes LayerFS heads (`NoSuchBranch`, nothing played). The second, with
   - Linux addon `59f7f8dd9e0214bf9d4257e20c868eb0a6c482cb02047386d0f43d35130f51e8`
     (`sdk-linux-59f7f8dd/`).
   Both are built from `3dff9c5cb`, warm on the `layerfs-issue352-cargo-target`
-  volume (32 s and 17 s). `compat.mjs`, the recorded-merge replay and the
-  old vs new table wait for "lane idle". Overlap, declared: the two builds ran
+  volume (32 s and 17 s). The recorded-merge replay and the old vs new
+  table wait for the range-14 rerun on binaries built from the merge commit. Overlap, declared: the two builds ran
   03:22:31–03:23:57Z, as ranges 13–14 began.
+- **Proof 3, compatibility: passed.** Run on the host quiet, one sample:
+  `run.mjs fork --run f009-compat-fix1 --from-run p2-main-e --range 13 --label
+  diag` with daemon `dbf906df` and addon `59f7f8dd`, then `compat.mjs <run>
+  <daemon dbf906df> 13 120639ac…89528 122563b3…38845` in the runner-like
+  container. Result `ok: true` in 3,401 ms: paths 240 git = 240 LayerFS, no
+  missing, extra or metadata-only; 240 ids checked, none missing or changed;
+  whole tree 1,167 files, none missing, extra, changed or with a mode change.
+  Receipt `core/target/f009/compat-fix1.txt`. The diag volume is removed after
+  the record lands.
+- **Still pending:** the recorded-merge replay and the old vs new table
+  (columns: merge statements, merge ms, lane hold, Commit p50/p95 for the same
+  range-14 calls, `58a60046`/`bd6fbeee` against the merge-commit build). They
+  run after the coordinator's range-14 rerun, before P3.
 
 ### Fix 2 · Narrow the publication lane
 
