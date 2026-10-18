@@ -41,7 +41,7 @@ pub struct PoolReader {
     values: BTreeMap<u32, [u8; INODE_VALUE_BYTES]>,
     chain_encoded: u64,
     chain_canonical: u64,
-    counters: PoolReadCounters,
+    pub(super) counters: PoolReadCounters,
 }
 
 impl PoolReader {
@@ -287,7 +287,7 @@ impl PoolReader {
         pooled_base(&record)
     }
 
-    fn record(
+    pub(super) fn record(
         &mut self,
         connection: &dyn Source,
         workspace: &mut DecompressionWorkspace,

@@ -53,6 +53,8 @@ pub struct DeltaCounters {
     pub whole_file_depths: DepthHistogram,
     /// Chunk objects stored, by chain depth (FULL is 0).
     pub chunk_depths: DepthHistogram,
+    /// Inode-table branch selection, apart from the payload counts above.
+    pub branch: super::branch::BranchCounters,
 }
 
 /// Stored objects by dependency-chain depth: slot `d` counts depth `d`, and the
@@ -79,6 +81,7 @@ impl DeltaCounters {
         }
         add_depths(&mut self.whole_file_depths, &other.whole_file_depths);
         add_depths(&mut self.chunk_depths, &other.chunk_depths);
+        self.branch.accumulate(&other.branch);
     }
 
     /// Counts one stored payload object of `role` at chain `depth`.
@@ -344,13 +347,18 @@ pub fn select(
     ) {
         // Tree roles are ordinary framed bytes: they are stored whole inside their
         // group and never choose a payload delta base. The advisory predecessor an
-        // unchanged subtree carries stays a physical placement hint, not a
-        // representation this route may act on.
+        // unchanged subtree carries stays a physical placement hint, except for an
+        // inode-table branch, which may take a COPY/INSERT program against it
+        // (#360 item 3, `branch`); that program never competes with payload
+        // deltas, whose counts above it does not touch.
         let started = Instant::now();
         let record = encode_full(canonical, role, input.capacities, encode, input.profile);
         SaveProfile::charge(&mut input.profile.full_ns, started);
         let record = record?;
         note_stored(input.profile, &record);
+        if role == ObjectRole::InodeBranch {
+            return super::branch::select(input, canonical, advisory, record);
+        }
         return Ok(record);
     }
     if role == ObjectRole::InodeLeaf {

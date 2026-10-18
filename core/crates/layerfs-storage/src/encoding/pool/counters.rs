@@ -27,6 +27,12 @@ pub struct PoolReadCounters {
     pub pack_fetches: u64,
     /// Complete source body/scan bytes charged to acquisitions, not device I/O.
     pub pack_bytes: u64,
+    /// Canonical inode-table branches reconstructed: one chain each (#360 item 3).
+    pub branch_requests: u64,
+    /// Branch dependency edges those chains followed.
+    pub branch_chain_edges: u64,
+    /// Branch delta programs applied.
+    pub branch_delta_applies: u64,
 }
 
 impl PoolReadCounters {
@@ -45,6 +51,9 @@ impl PoolReadCounters {
             value_rows: 0,
             pack_fetches: 0,
             pack_bytes: 0,
+            branch_requests: 0,
+            branch_chain_edges: 0,
+            branch_delta_applies: 0,
         }
     }
 
@@ -80,6 +89,13 @@ impl PoolReadCounters {
             value_rows: self.value_rows.saturating_sub(before.value_rows),
             pack_fetches: self.pack_fetches.saturating_sub(before.pack_fetches),
             pack_bytes: self.pack_bytes.saturating_sub(before.pack_bytes),
+            branch_requests: self.branch_requests.saturating_sub(before.branch_requests),
+            branch_chain_edges: self
+                .branch_chain_edges
+                .saturating_sub(before.branch_chain_edges),
+            branch_delta_applies: self
+                .branch_delta_applies
+                .saturating_sub(before.branch_delta_applies),
         }
     }
 
@@ -107,5 +123,12 @@ impl PoolReadCounters {
         self.value_rows = self.value_rows.saturating_add(other.value_rows);
         self.pack_fetches = self.pack_fetches.saturating_add(other.pack_fetches);
         self.pack_bytes = self.pack_bytes.saturating_add(other.pack_bytes);
+        self.branch_requests = self.branch_requests.saturating_add(other.branch_requests);
+        self.branch_chain_edges = self
+            .branch_chain_edges
+            .saturating_add(other.branch_chain_edges);
+        self.branch_delta_applies = self
+            .branch_delta_applies
+            .saturating_add(other.branch_delta_applies);
     }
 }
