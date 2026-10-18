@@ -170,6 +170,12 @@ For measurements, read the [agent measurement workflow](docs/general/agent-measu
 [benchmark rules](docs/general/benchmark_rules.md),
 [report template](benchmark_agent_report.md) and owning harness/family contract.
 Core routing is [core/benchmark/fs-bench-pro/AGENTS.md](core/benchmark/fs-bench-pro/AGENTS.md).
+**fs-bench-pro is frozen and left broken (owner, 2026-10-18).** Do not edit,
+build, run or repair it, and leave it out of workspace builds and checks. Its
+call sites broken by #352 F-020 (`ProjectApi` fork and commits,
+`ForkRequest`, a `SandboxCreate` without `connect_host`; listed in the F-020
+fix record) stay broken; a product change never adapts it. Only an
+explicit owner instruction reopens it.
 Root [benchmark/AGENTS.md](benchmark/AGENTS.md) and its
 [Quickstart](benchmark/fs-bench-pro/QUICKSTART.md) are historical: that harness
 built the retired reference and is not runnable at HEAD.
@@ -239,6 +245,15 @@ remain binding; moving them out of this file does not weaken them.
   retired; do not restore it or an equivalent wrapper. Verify the changed scope
   with [core checks](core/AGENTS.md#checks-and-completion), report checks/gaps,
   and never claim CI green or that an empty guard scan proves implementation.
+- **Migrations and refactors delete tests rather than nurse them (owner,
+  2026-10-18).** When code is moved, replaced or refactored, a test that is
+  tricky to adapt (it drives a removed route, internal type or retired model,
+  or needs scaffolding the new design does not have) is deleted, not patched.
+  Keep or move a test only when it still checks surviving behaviour cheaply;
+  where a deleted test guarded a fix or contract that still holds, cover that
+  behaviour with a test on the new code. List deleted tests in the commit
+  message and the fix record. Never weaken a surviving test's assertion to
+  make it pass.
 - **No test command runs longer than 2 minutes.** Give every test invocation an
   explicit wall timeout of at most 120 s and stop it when it expires; never
   leave one running, background it to wait it out, or wrap it in a repeat loop.

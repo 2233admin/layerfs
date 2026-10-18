@@ -471,6 +471,13 @@ Every test invocation obeys the repository's
 explicit timeout of at most 120 s, per package when the whole suite cannot fit,
 and treat reaching the ceiling as a hang to diagnose, not a run to wait for.
 
+Migrations and refactors follow the root
+[delete-rather-than-nurse rule](../AGENTS.md#4-code-build-and-docs): delete a
+test that is tricky to adapt, keep or move only cheap tests of surviving
+behaviour, and re-cover any still-valid fix or contract on the new code.
+`core/benchmark/fs-bench-pro` is frozen and left broken (owner, 2026-10-18):
+do not build, run, check or repair it.
+
 For docs-only changes, check links/anchors, status/claim accuracy and whitespace;
 report why Rust/runtime checks are inapplicable. For tooling/harness changes run
 the owning scoped tests. At final implementation identity run required covering

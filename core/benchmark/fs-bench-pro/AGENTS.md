@@ -2,6 +2,13 @@
 
 > **Status:** Current general guide.
 > Updated 2026-10-10 for the fs-bench-pro first iteration.
+>
+> **Frozen and left broken (owner, 2026-10-18).** Do not edit, build, run or
+> repair this harness. Since #352 F-020 its `runtime` no longer compiles
+> (`ProjectApi` fork and commits, `ForkRequest`, `SandboxCreate` without
+> `connect_host`); that break is accepted and its call sites are listed in the
+> F-020 fix record (`core/docs/issues/352/fixes/007-a1-f020-direct-store-access.md`). Everything below is
+> historical until the owner explicitly reopens it.
 
 Read [root instructions](../../../AGENTS.md), [core instructions](../../AGENTS.md),
 [implementation spec](../../docs/benchmark/fs-bench-pro/implementation-spec.md),
