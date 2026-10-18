@@ -189,7 +189,8 @@ export function nextAttempt(metrics, k) {
   return 1 + Math.max(0, ...readdirSync(metrics).map((f) => Number(re.exec(f)?.[1] ?? 0)));
 }
 
-function create({ id, phase, label, policy, image, daemon, addon = ADDON, source }) {
+function create({ id, phase, label, policy, image, daemon, addon = ADDON, route = "daemon", source }) {
+  if (!["daemon", "direct"].includes(route)) throw new Error(`route ${route}: daemon or direct`);
   if (!RUN_ID.test(id)) throw new Error(`run id ${id}: lowercase letters, digits and -`);
   if (!PHASES[phase]) throw new Error(`phase ${phase} has no player yet (built: ${Object.keys(PHASES).join(", ")})`);
   const dir = join(HISTORY, "runs", id);
@@ -204,12 +205,12 @@ function create({ id, phase, label, policy, image, daemon, addon = ADDON, source
   return { dir, volume, env, manifest: {
     run: id, phase, label, policyName: policy, policy: POLICIES[policy], project: "dsh", volume, env,
     repo: join(HISTORY, "dsh.git"), plan: join(HISTORY, "plan"), oracle: join(HISTORY, "oracle"),
-    outputs: outputs(label, dir), created: new Date().toISOString(), source,
+    outputs: outputs(label, dir), created: new Date().toISOString(), source, route,
   } };
 }
 
 async function cmdNew(o) {
-  const { dir, volume, env, manifest } = create({ id: o.run, phase: o.phase ?? "p1", label: o.label ?? "measured", policy: o.policy ?? "default", image: o.image ?? IMAGE, daemon: resolve(o.daemon ?? DAEMON), addon: resolve(o.addon ?? ADDON) });
+  const { dir, volume, env, manifest } = create({ id: o.run, phase: o.phase ?? "p1", label: o.label ?? "measured", policy: o.policy ?? "default", image: o.image ?? IMAGE, daemon: resolve(o.daemon ?? DAEMON), addon: resolve(o.addon ?? ADDON), route: o.route ?? "daemon" });
   const summary = JSON.parse(readFileSync(join(manifest.plan, "plan.json"), "utf8"));
   if (summary.version !== PLAN_VERSION) throw new Error(`the plan is v${summary.version}; regenerate it as v${PLAN_VERSION}`);
   manifest.binary = binaries(env);
@@ -233,6 +234,21 @@ async function cmdNew(o) {
   run.save();
   console.log(JSON.stringify({ run: o.run, dir, volume, layer: init.layer, initMs: run.state.initMs, binary: manifest.binary, outputs: manifest.outputs }, null, 1));
 }
+
+/**
+ * The route guard (DIRECT_STORE_IMPL.md step 4): the process's route
+ * (LAYERFS_ROUTE, default daemon) must be the run's recorded route for a
+ * measured range, and `direct` is refused until F-020 lands. Null when allowed.
+ */
+export function checkRoute(manifest, env, measured) {
+  const want = manifest.route ?? "daemon", have = env.LAYERFS_ROUTE ?? "daemon";
+  if (have === "direct" || want === "direct") return "the direct Store route is not available until F-020 lands";
+  if (measured && have !== want) return `route ${have} is not the run's recorded route ${want}`;
+  return null;
+}
+
+/** Where the runner ran (recorded in every metrics file beside the binaries): its image id when in the runner container. */
+export const runnerFacts = (env) => ({ container: env.LAYERFS_RUNNER ?? null, image: env.LAYERFS_RUNNER_IMAGE ?? null, platform: process.platform, arch: process.arch, node: process.version });
 
 /** The binary-vs-manifest check: the run's daemon, addon and image are still the ones it was made with. */
 function checkBinaries(run) {
@@ -285,6 +301,8 @@ async function playRange(run, k, mode) {
   // prepare: binaries, disk, calibration
   const binaryProblem = checkBinaries(run);
   if (binaryProblem) { console.error(`range ${k} refused: ${binaryProblem}`); return EXIT.guard; }
+  const routeProblem = checkRoute(run.manifest, process.env, measured);
+  if (routeProblem) { console.error(`range ${k} refused: ${routeProblem}`); return EXIT.guard; }
   const free = freeBytes(run);
   const growth = Math.max(0, ...run.state.growth);
   const guard = diskGuard({ storeBytes: run.state.storeBytes ?? 0, growthBytes: growth, installPeak: phase.tests ? 3 * 2 ** 30 : 0, ...free, rangesLeft: 202 - k });
@@ -299,7 +317,8 @@ async function playRange(run, k, mode) {
   if (traceFile) mkdirSync(join(run.dir, "trace"), { recursive: true });
   run.traceTo(traceFile, `r${pad(k)}`);
   const m = { range: k, attempt, run: run.manifest.run, phase: run.manifest.phase, label: run.manifest.label, mode, started: new Date().toISOString(),
-    binary: run.manifest.binary, plan: { version: run.manifest.planVersion, checkpoint: plan.checkpoint }, policy: run.manifest.policyName };
+    binary: run.manifest.binary, plan: { version: run.manifest.planVersion, checkpoint: plan.checkpoint }, policy: run.manifest.policyName,
+    route: run.manifest.route ?? "daemon", runner: runnerFacts(process.env) };
   const before = measured ? await run.op.store.stats() : null;
   const { ops, reconcile, left } = p2 ? { ops: [], reconcile: [], left: {} } : phaseOps(plan, run.manifest.phase);
   let branch = `r${pad(k)}-lane`;
@@ -565,7 +584,7 @@ async function cmdFork(o) {
   const k = Number(o.range);
   const manifest = JSON.parse(readFileSync(manifestPath(source.manifest.outputs.snapshots, k, source.manifest.run), "utf8"));
   if (!manifest.state) throw new Error(`snapshot ${k} carries no runner state`);
-  const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), addon: resolve(o.addon ?? source.manifest.env.LAYERFS_NATIVE ?? ADDON), source: { run: source.manifest.run, range: k } });
+  const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), addon: resolve(o.addon ?? source.manifest.env.LAYERFS_NATIVE ?? ADDON), route: o.route ?? source.manifest.route ?? "daemon", source: { run: source.manifest.run, range: k } });
   runManifest.binary = binaries(env);
   runManifest.planVersion = source.manifest.planVersion;
   mkdirSync(dir, { recursive: true });

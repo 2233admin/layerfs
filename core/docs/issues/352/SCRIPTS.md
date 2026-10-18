@@ -356,6 +356,21 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   setup (forks, fixture writes, the stats that size its input) runs untimed
   under `probe-setup:<name>`; only the probed call is timed and counted under
   `probe:<name>`. `report.mjs regate --metrics <dir>` is the gates' dry run.
+- **The runner container** (DIRECT_STORE_IMPL.md step 4, builder
+  2026-10-18): `node dsh/tools/history/runner.mjs [--route daemon|direct] --
+  <run.mjs arguments>` runs `run.mjs` in `layerfs-issue352-runner` from
+  `layerfs-352-runtime:node24`, with the checkout and `~/lfs-history` mounted
+  at their host paths and the Docker socket mounted. The image has no Docker
+  CLI and the runner downloads nothing: `docker` inside is
+  `runner/docker-shim.mjs` over the Engine API (the subcommands the tools use;
+  anything else is refused). A run played there needs the Linux addon
+  (`core/target/issue352/sdk-linux-4fef3921/layerfs.node`, built from the
+  current core/sdk source in the pinned build image) pinned with `--addon` on
+  `new`/`fork`. The route is explicit: `--route` on `new`/`fork` records it in
+  the manifest (default `daemon`), `LAYERFS_ROUTE` names the process's; a
+  measured range refuses a mismatch, and `direct` is refused until F-020
+  lands. Every metrics file records `route` and `runner` (container, image id,
+  platform, Node) beside `binary` (daemon, addon, Sandbox image).
 - **Phase-matched speed baselines** (lead decision 2026-10-18). From P2 on,
   the speed baseline is the pilot's ranges 2–4 replayed with the current
   phase's player on the current binaries: `run.mjs rebaseline --phase p2
