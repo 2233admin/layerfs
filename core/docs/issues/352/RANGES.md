@@ -16,3 +16,4 @@
 | 009 | 61 | 6,385 | **watch** | Speed | 2.6 MiB | [range-009](ranges/range-009.md) |
 | 010 | 61 | 6,823 | **watch** | Speed | 2.7 MiB | [range-010](ranges/range-010.md) |
 | 011 | 87 | 7,783 | **watch** | Speed | 6.3 MiB | [range-011](ranges/range-011.md) |
+| 012 | 50 | 8,519 | **watch** | Speed | 4.8 MiB | [range-012](ranges/range-012.md) |
