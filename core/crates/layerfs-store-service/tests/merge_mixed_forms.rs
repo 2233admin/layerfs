@@ -15,6 +15,12 @@
 //! Both merge orientations must equal, by decoded view, `r`'s tree with
 //! `l`'s real changes applied: a form-only difference is neither a conflict
 //! nor a change, and loses no change of the other side.
+//!
+//! The delta-form side (#360 item 3): the fixture's table is one leaf, so a
+//! second case widens it to 400 files, then changes both sides in small
+//! Commits, so each side's inode-table branches are stored as deltas against
+//! the wide table's. Merges over delta-form branches equal the decoded
+//! expectation the same way.
 #[path = "support/installed_store.rs"]
 #[allow(dead_code)]
 mod installed;
@@ -121,6 +127,30 @@ fn view(fixture: &Fixture, root: &str) -> BTreeMap<String, String> {
         (path.to_owned(), rest.to_owned())
     })
     .collect()
+}
+
+/// Inode-branch deltas applied while every inode of the tree at `root` is
+/// read through one fresh Store reader.
+fn branch_delta_applies(fixture: &Fixture, root: &str) -> u64 {
+    let config = PersistenceConfig::sqlite(&fixture.host.config.path)
+        .with_sqlite_profile(SqlitePersistenceProfile::Disposable);
+    let handles = Handles::open_read_only(config, installed::BINDING, installed::CURSOR).unwrap();
+    let storage = Storage::new(handles.storage).unwrap();
+    let reader = storage.reader().unwrap();
+    let root = FilesystemRootId(ObjectId::from_bytes(&unhex(root)).unwrap());
+    let tree = TreeTable::open(&reader, root).unwrap();
+    let mut stack = vec![("/".to_owned(), tree.root_serial())];
+    while let Some((path, serial)) = stack.pop() {
+        let value = tree.value(&reader, serial).unwrap().expect("bound serial");
+        if value.kind == InodeKind::Directory {
+            list_directory(&reader, value.content_root, |name, child| {
+                stack.push((join(&path, name), child));
+                Ok(true)
+            })
+            .unwrap();
+        }
+    }
+    reader.pooled_read_counters().branch_delta_applies
 }
 
 fn read(fixture: &Fixture, branch: &str, path: &str) -> String {
@@ -242,6 +272,88 @@ fn inline_changes_merge_against_a_root_form_tree() {
             merged_view["/h/two"].ends_with(" link=/h/one"),
             "{name}: {merged_view:?}"
         );
+    }
+    fixture.cleanup();
+}
+
+/// Files the wide table adds: several inode leaves under one root branch.
+const WIDE: usize = 400;
+
+fn wide(index: usize) -> String {
+    format!("/w/f{index:03}.txt")
+}
+
+#[test]
+fn changes_merge_over_delta_form_inode_branches() {
+    let fixture = Fixture::open(installed::Fixture::cloned(
+        "merge-delta-forms",
+        Path::new(FIXTURE),
+        ENTRIES,
+    ));
+    fixture.call(
+        "branch.fork",
+        vec![("name", text("w")), ("from", text("main"))],
+    );
+    fixture.apply(
+        "w",
+        std::iter::once(support::operation("mkdir", "/w"))
+            .chain((0..WIDE).map(|index| write(&wide(index), format!("w {index}\n"))))
+            .collect(),
+    );
+    for side in ["dl", "dr"] {
+        fixture.call(
+            "branch.fork",
+            vec![("name", text(side)), ("from", text("w"))],
+        );
+    }
+    // `dl`: a real mode change and an edit, in two Commits. `dr`: an edit at
+    // the other end of the table and one in the middle, in two Commits.
+    fixture.chmods("dl", &[(wide(1).as_str(), 0o600)], 80);
+    fixture.apply("dl", vec![write(&wide(2), "2, dl\n")]);
+    fixture.apply("dr", vec![write(&wide(WIDE - 1), "last, dr\n")]);
+    fixture.apply("dr", vec![write(&wide(WIDE / 2), "middle, dr\n")]);
+    let (w, dl, dr) = (
+        branch_root(&fixture, "w"),
+        branch_root(&fixture, "dl"),
+        branch_root(&fixture, "dr"),
+    );
+    // The premise: both sides' branches are delta-stored.
+    for (side, root) in [("dl", &dl), ("dr", &dr)] {
+        assert!(
+            branch_delta_applies(&fixture, root) >= 1,
+            "{side} holds delta branches"
+        );
+    }
+    let (w_view, dl_view, dr_view) = (view(&fixture, &w), view(&fixture, &dl), view(&fixture, &dr));
+    let dl_changed: Vec<&str> = dl_view
+        .iter()
+        .filter(|(path, rest)| w_view.get(*path) != Some(*rest))
+        .map(|(path, _)| path.as_str())
+        .collect();
+    assert_eq!(
+        dl_changed,
+        [wide(1).as_str(), wide(2).as_str()],
+        "{dl_view:?}"
+    );
+    let mut expected = dr_view.clone();
+    for path in &dl_changed {
+        expected.insert(path.to_string(), dl_view[*path].clone());
+    }
+    for (name, branch, with) in [("dm-lr", "dl", "dr"), ("dm-rl", "dr", "dl")] {
+        let merged = fixture
+            .try_call(
+                "branch.merge",
+                vec![
+                    ("branch", text(branch)),
+                    ("with", text(with)),
+                    ("name", text(name)),
+                ],
+            )
+            .unwrap_or_else(|refusal| panic!("{name} conflicted: {refusal:?}"));
+        let root = merged.get_text("root").unwrap().to_owned();
+        assert_eq!(view(&fixture, &root), expected, "{name}");
+        assert_eq!(read(&fixture, name, &wide(2)), "2, dl\n");
+        assert_eq!(read(&fixture, name, &wide(WIDE - 1)), "last, dr\n");
     }
     fixture.cleanup();
 }
