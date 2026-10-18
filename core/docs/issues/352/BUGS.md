@@ -427,3 +427,6 @@
     the written-path list; `root_changes`' `truncated` flag is dropped, and
     `layerfs-daemon/src/control/operations.rs:39-44` reports `false`. Fix: the
     flag is carried through, or the list is returned paged with no cap.
+  - **F-037, F-038 and F-041 are grouped in GitHub #355 (merge at scale) with
+    watch-out S2 risk 1, deferred by the owner as DEFER.md D-6.** F-039 and
+    F-040 stay unassigned.
