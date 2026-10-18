@@ -16,7 +16,7 @@ Areas changed: `packages/core` 52% · `packages/cli` 30% · `scripts` 11% · oth
 
 | Latest version | Store on disk | Space amplification | Added this range | Commits | Time |
 | --- | --- | --- | --- | --- | --- |
-| **2.61 GiB** (+5.9 MiB) | **1.82 GiB** (+33.0 MiB) | **0.70×** (prev 0.70×) | **26.4 MiB** | **988** (total 60,346) | **39.6 s** (total 37.9 min) |
+| **2.61 GiB** (+5.9 MiB) | **1.82 GiB** (+33.0 MiB) | **0.70×** · tracked 3.88× (prev 0.70×) | **26.4 MiB** | **988** (total 60,346) | **39.6 s** (total 37.9 min) |
 
 **Checks:** 16 pass
 **Moved most:** ▲ metadata added +8% · ▼ merge p95 −4% · ▲ grep over the tree +3% (tree +2%)
@@ -40,7 +40,7 @@ Areas changed: `packages/cli` 41% · `packages/core` 33% · `docs/rfc` 18% · ot
 
 | Latest version | Store on disk | Space amplification | Added this range | Commits | Time |
 | --- | --- | --- | --- | --- | --- |
-| **2.62 GiB** (+7.4 MiB) | **1.86 GiB** (+41.2 MiB) | **0.71×** (prev 0.70×) | **30.8 MiB** | **1,042** (total 61,388) | **41.8 s** (total 38.6 min) |
+| **2.62 GiB** (+7.4 MiB) | **1.86 GiB** (+41.2 MiB) | **0.71×** · tracked 3.91× (prev 0.70×) | **30.8 MiB** | **1,042** (total 61,388) | **41.8 s** (total 38.6 min) |
 
 **Checks:** 14 pass · 2 watch: metadata share 0.54 · `list_largest` rising slightly (depth exponent 0.17)
 **Moved most:** ▼ one-shot Commit p95 −58% (the fix) · ▲ grep over the tree +6% (tree +6%) · ▲ metadata added +22%
@@ -112,22 +112,55 @@ Areas changed: `packages/cli` 41% · `packages/core` 33% · `docs/rfc` 18% · ot
 
 ## 3. Storage
 
+*(Storage format of 2026-10-18, REPORT_FORMAT.md §3 and §9. Simulated numbers;
+range 057 is a snapshot range, so every part is exact.)*
+
+**3a. Overview**
+
 | | Previous (r056) | Now | Change |
 | --- | --- | --- | --- |
-| Latest version (tracked / `node_modules` / build) | 2.61 GiB (0.13 / 2.44 / 0.04) | 2.62 GiB (0.13 / 2.45 / 0.04) | +7.4 MiB |
+| Latest version (tracked / `node_modules` / build) | 2.61 GiB (133.0 MiB / 2.44 GiB / 41.0 MiB) | 2.62 GiB (133.1 MiB / 2.45 GiB / 41.0 MiB) | +7.4 MiB |
 | Files / directories / symlinks | 96,432 / 9,804 / 1,407 | 96,534 / 9,826 / 1,407 | +102 / +22 / 0 |
 | Largest file / largest directory | 4.1 MiB / 2,310 entries | 4.1 MiB / 2,318 entries | |
 | **Store on disk** (allocated) | 1.82 GiB | 1.86 GiB | +41.2 MiB |
-| **Space amplification** | 0.70× | 0.71× | +0.01 |
-| Content amplification | 0.42× | 0.42× | |
-| Compression | 2.06× | 2.06× | this range 1.98× |
-| Metadata share | 0.33 | 0.33 | this range 0.30 |
-| **Stored per byte changed** | | **2.4 bytes** | 0.9× the median range |
+| **Space amplification** (total · tracked · `node_modules` · build) | 0.70× · 3.88× · 0.335× · 1.70× | **0.71× · 3.91× · 0.335× · 1.71×** | +0.01 · +0.03 · 0 · +0.01 |
+| **Head cost** / **history cost** | 0.32× / 0.38× (r055 snapshot) | **0.32× / 0.39×** | 0 / +0.01 |
+| **Stored per byte changed** (content / metadata / shared) | | **2.5 bytes** (1.4 / 0.6 / 0.5) | 0.9× the median range |
+| **Stored per Commit** | 29.8 KiB | **30.3 KiB** | +0.5 KiB |
+| Metadata share | 0.22 | 0.22 | this range 0.24 |
 | History: Commits / Layers / Branches | 60,346 / 172 / 229 | 61,388 / 175 / 233 | +1,042 / +3 / +4 |
 | Projection at range 202 / disk budget | | 6.4 GiB / 41% | |
 | Snapshot | | r057 attempt 1 (before the fix), 38.1 MiB new blocks | |
 
-**What's inside**
+**3b. Where the bytes are** (change = allocated growth, so it includes waste; Added this range in 3c is the bytes written: content 17.0 + metadata 7.5 + shared rows 6.3 = 30.8 MiB)
+
+| Part | Bytes | × latest version | Change this range |
+| --- | --- | --- | --- |
+| Content | 1,010.0 MiB | 0.376× | +17.0 MiB |
+| Metadata | 420.0 MiB | 0.157× | +7.5 MiB |
+| Index rows | 230.0 MiB | 0.086× | +3.9 MiB |
+| Waste | 225.0 MiB | 0.084× | +12.6 MiB ⚠ |
+| Other | 19.6 MiB | 0.007× | +0.2 MiB |
+| **Total = Store on disk** | **1,904.6 MiB** | **0.710× = space amplification** | **+41.2 MiB** |
+
+Waste grew faster than data this range (31% of the growth): free pages left
+by the attempt-1 checkpoint. Watch, appendix D.
+
+**3c. By source**
+
+| Source | Latest version | Stored (content + metadata) | Amplification | Head cost | Added this range | Changed this range | Stored per byte changed |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Tracked | 133.1 MiB | 520.0 MiB (260.0 + 260.0) | **3.91×** | 0.62× | 14.0 MiB | 5.9 MiB (git) | 2.37 |
+| `node_modules` | 2.45 GiB | 840.0 MiB (700.0 + 140.0) | 0.335× | 0.30× | 7.4 MiB | 4.4 MiB (41 packages) | 1.68 |
+| Build output | 41.0 MiB | 70.0 MiB (50.0 + 20.0) | 1.71× | 0.55× | 3.1 MiB | 2.0 MiB | 1.55 |
+| Shared (index rows + waste + other) | — | 474.6 MiB | — (not divided) | — | 6.3 MiB | — | — |
+| **Total** | **2.62 GiB** | **1,904.6 MiB** | **0.71×** | **0.32×** | **30.8 MiB** | 12.3 MiB | 2.5 |
+
+Tracked files cost 3.91× their head, while `node_modules` costs 0.335×, so the
+total of 0.71× is mostly `node_modules`. Against git, the tracked history is
+1.9× git's packed size (appendix D).
+
+**3d. What's inside**
 
 | Object | Total | Added | Avg size | Reused (dedupe hits) | As delta |
 | --- | --- | --- | --- | --- | --- |
@@ -139,8 +172,7 @@ Areas changed: `packages/cli` 41% · `packages/core` 33% · `docs/rfc` 18% · ot
 | Symlinks | 1,407 | 0 | — | — | — |
 | **Total** | **446,920** | **+5,557** | | | **59%** |
 
-Delta: 3% at depth cap · 32% of refused bases stopped by budget · `node_modules` reinstall: 41 packages changed, +6.2 MiB stored (1.4× changed packages, gate ≤ 2×)
-**Added by source:** tracked 18.9 · `node_modules` 6.2 · build 2.8 · metadata 9.1 · history 1.4 MiB
+Delta: 3% at depth cap · 32% of refused bases stopped by budget · `node_modules` reinstall: 41 packages changed, +6.2 MiB content stored (1.4× changed packages, gate ≤ 2×)
 
 ## 4. Speed
 

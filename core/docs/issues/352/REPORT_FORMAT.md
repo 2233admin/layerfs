@@ -8,6 +8,11 @@
 > [ranges/EXAMPLE.md](ranges/EXAMPLE.md). Reports committed before this format
 > stay as they are (F2); the format starts with the next range played, and
 > STATS.md backfills earlier ranges from their metrics.
+>
+> **Storage update, owner direction 2026-10-18:** §3 Storage, the names (§4),
+> sources (§6), checks (§7) and the storage formulas (§9) were revised so the
+> head-based ratio is always shown split into its parts and per source. It
+> applies from the next report generated; committed reports stay (F2).
 
 ## 1. Shape
 
@@ -32,6 +37,7 @@ Nothing is dropped; detail moves to the appendix.
 dsh `<first>`..`<last>` · **N commits** (M mainline, S side) · <first date> → <last date>
 Areas changed: <top 3 areas by changed bytes, with share> · other
 | Latest version | Store on disk | Space amplification | Added this range | Commits | Time |
+   (Space amplification cell: total, then `tracked <x>×` whenever `node_modules` or build bytes exist, then prev)
 **Checks:** n pass · n watch: <names and values> · n optimize/stop: <names>
 **Moved most:** <top 3 movers vs previous range and baseline, ▲/▼ with %>
 **Budget:** <k of 202 ranges> · projected total <h> (budget <h>) · disk <%> of budget at range 202
@@ -57,18 +63,49 @@ builds, test runs. Then four tables, exactly as in REPORT_OVERVIEW.md §2:
 
 ### 3. Storage
 
-Previous vs now vs change: latest version (tracked / `node_modules` / build) ·
-files, directories, symlinks · largest file and directory · **Store on disk
-(allocated)** · **space amplification** · content amplification · compression ·
-metadata share · **stored per byte changed** (with × median) · history totals
+Four tables, in this order. Every ratio is against the **latest version** (raw
+head bytes), as the owner set; §9 has the formulas.
+
+**3a. Overview** (previous · now · change): latest version (tracked /
+`node_modules` / build) · files, directories, symlinks · largest file and
+directory · **Store on disk (allocated)** · **space amplification**, total and
+per source · **head cost** and **history cost** (at snapshots; `— (not at a
+snapshot)` otherwise) · **stored per byte changed**, split content / metadata /
+shared (with × median) · **stored per Commit** · metadata share · history totals
 (Commits, Layers, Branches) · projection at range 202 against the disk budget ·
 snapshot taken.
 
-**What's inside:** per object role (whole files, large files, chunks,
+**3b. Where the bytes are** (parts that add up to Store on disk):
+
+| Part | Bytes | × latest version | Change this range |
+| --- | --- | --- | --- |
+| Content | | | |
+| Metadata | | | |
+| Index rows | | | |
+| Waste | | | |
+| Other | | | |
+| **Total = Store on disk** | | **= space amplification** | |
+
+Exact at snapshots (from the sealed file). At other ranges the parts come from
+the live file plus WAL, marked `live`.
+
+**3c. By source:**
+
+| Source | Latest version | Stored (content + metadata) | Amplification | Head cost | Added this range | Changed this range | Stored per byte changed |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Tracked | | | | | | | |
+| `node_modules` | | | | | | | |
+| Build output | | | | | | | |
+| Shared (index rows + waste + other) | — | | — (not divided) | — | | — | — |
+| **Total** | | | **= space amplification** | | | | |
+
+A source with no bytes shows `0` and `—` for its ratios. Any comparison with git
+uses the Tracked row only (appendix D), since git stores no `node_modules`.
+
+**3d. What's inside:** per object role (whole files, large files, chunks,
 directories, inodes and attributes, symlinks): total, added, average size,
 reused (dedupe hits), share stored as delta. One line for delta depth (at cap,
-stopped by budget) and the `node_modules` reinstall gate; one line for added
-bytes by source (tracked, `node_modules`, build, metadata, history).
+stopped by budget) and the `node_modules` reinstall gate.
 
 ### 4. Speed
 
@@ -110,12 +147,17 @@ files, WAL before seal.
 | --- | --- |
 | Latest version | Raw bytes of every file at the checkpoint as LayerFS sees it (tracked + `node_modules` + build), uncompressed |
 | Store on disk | Allocated bytes of the sealed Store file |
-| **Space amplification** | Store on disk ÷ latest version |
-| Content amplification | Stored content bytes ÷ latest version |
-| Compression | Canonical ÷ stored |
-| Metadata share | Metadata bytes ÷ Store on disk (this range: ÷ added) |
-| Stored per byte changed | Added this range ÷ bytes git changed in the range |
-| Added this range | New stored bytes: content + metadata + history |
+| **Space amplification** | Store on disk ÷ latest version; the sum of the five parts (§9) |
+| Content · Metadata · Index rows · Waste · Other | The five parts of Store on disk (§9), each also shown ÷ latest version |
+| Amplification (per source) | Stored content + metadata attributed to the source ÷ the source's latest version |
+| Shared | Index rows + waste + other: real cost, never divided among sources |
+| Head cost | Stored bytes needed to read the latest version alone ÷ latest version (snapshots) |
+| History cost | Space amplification − head cost |
+| Metadata share | Metadata ÷ Store on disk (this range: ÷ added) |
+| Stored per byte changed | Added this range ÷ bytes changed in the range, split content / metadata / shared |
+| Stored per Commit | Added this range ÷ LayerFS Commits in the range |
+| Added this range | New stored bytes written this range (trace counters): content + metadata + shared rows, split by source. Not the allocated growth, which also moves with WAL and free pages |
+| Compression | (appendix only) canonical ÷ stored; counts every version, so it is not a disk measure |
 | Reused | Objects the range touched that were already stored |
 | Sum of Commit trees | (appendix only) the old "logical"; never shown as raw size |
 
@@ -139,6 +181,10 @@ paths.
 | Allocated bytes | the sealed file's allocation on disk |
 | Previous values | the previous range's metrics file, never recomputed |
 | Before / after | `finding-NNN.aK.json` (findings.mjs) |
+| The five parts (3b) | `inspect.mjs stats` on the sealed file at snapshots (pack body bytes by domain, used and unused bytes per table and index, free pages, file allocation); the live file plus WAL otherwise |
+| Content and metadata by source (3c) | attributed when written: each saved object carries the source of the path it was constructed for (§9); cumulative = the previous metrics' value + this range's, never recomputed |
+| Head cost (3a, 3c) | at snapshots: a walk of the objects reachable from the head root, plus the delta bases needed to read them, in the sealed file |
+| Bytes changed per source | tracked: git's changed bytes in the range; `node_modules`: the install's changed bytes against the previous install (oracle); build: the build output's changed bytes from the tree listing |
 
 ## 7. Checks added to `report.mjs check`
 
@@ -146,9 +192,16 @@ All of REPORT_OVERVIEW.md §3, plus: the headline has every field; sections 1–
 the appendix exist in order; §5 is the one-line "none" form or has every finding
 part (1–6) or "Diagnosis pending"; every open finding touching the range is
 listed; with-vs-without columns name different binaries; space amplification
-equals Store on disk ÷ latest version within rounding.
+equals Store on disk ÷ latest version within rounding. Storage: the five parts
+sum to Store on disk exactly (bytes) and to space amplification within rounding;
+3c's stored column plus Shared sums to Store on disk; per-source latest versions
+sum to the total; history cost = space amplification − head cost; Shared is never
+divided; any git comparison names the Tracked row.
 
 ## 8. As built (builder, 2026-10-18)
+
+> Written before §9; the builder updates this section when §3's storage
+> tables are built.
 
 `dsh/tools/history/format.mjs` renders this format and holds §7's checks
 (`checkFormat`, run by `report.mjs check` under F1); `run.mjs` records the
@@ -182,3 +235,54 @@ measurements. Where a number cannot come from the named source yet:
   open now that were opened (first committed, `git log -S`) by the latest
   attempt's `started` time in its metrics; one opened later, or not yet
   committed, is not required in an earlier report.
+
+## 9. Storage formulas (owner direction 2026-10-18)
+
+All ratios divide by the latest version, the raw bytes of the head (per source
+for per-source ratios).
+
+```
+Space amplification = Store on disk ÷ latest version
+                    = (Content + Metadata + Index rows + Waste + Other) ÷ latest version
+
+Content    = stored body bytes of payload-domain packs (file data: whole files,
+             chunks, deltas, every version)
+Metadata   = stored body bytes of metadata-domain packs (directories, inodes,
+             attributes, file states, extent trees)
+Index rows = used bytes of every row table and index other than pack bodies:
+             object_location, commit, commit_identity, inode_value, binding_hint,
+             content_signature, branch*, layers*, history_meta, …
+Waste      = unused bytes inside allocated pages + free pages + pack row overhead
+             (pack table used bytes − pack body bytes) + file allocation beyond
+             page_count × page_size
+Other      = Store on disk − the four above (schema and anything unlisted); a
+             large Other is a tooling defect to fix, not a part to explain away
+
+Amplification(source) = (Content(source) + Metadata(source)) ÷ latest version(source)
+   source ∈ { tracked, node_modules, build }
+   an object belongs to the source of the path it was constructed for:
+   under a node_modules/ folder → node_modules; a build output path → build;
+   anything else (including every ancestor directory) → tracked
+Shared = Index rows + Waste + Other   (shown, never divided among sources)
+
+Head cost(source)   = stored bytes of objects reachable from the head root under
+                      that source, plus delta bases needed to read them,
+                      ÷ latest version(source)                    (at snapshots)
+History cost        = Space amplification − Head cost
+
+Stored per byte changed = Added this range ÷ bytes changed this range
+   (per source; split content / metadata / shared)
+Stored per Commit       = Added this range ÷ LayerFS Commits this range
+```
+
+Why: the head-based ratio rises with history even when storage is perfect, and
+`node_modules` (P3 on, ~224 MB raw at range 4) would pull the total below 1×
+and hide the tracked files' overhead. The parts say what is data and what is
+overhead; the per-source rows keep tracked overhead visible; head cost separates
+the floor from history; the per-change figures expose waste without the drift.
+
+Range 011 in this shape (sealed snapshot): Store on disk 32.8 MiB on a 7.7 MiB
+latest version (tracked only) = **4.25× = content 1.10 + metadata 1.35 + index
+rows 1.07 + waste 0.69 + other 0.04**; stored per byte changed 1.78 (content
+0.78, metadata 1.00); stored per Commit 6.8 KiB.
+
