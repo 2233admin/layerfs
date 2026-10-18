@@ -1,6 +1,7 @@
 //! Positional SDK reads with numeric paging and bounded streaming text windows.
 use super::{
     args::{self, invalid, text, Answer},
+    cached::Cached,
     files::path as checked,
     search,
     snapshot::{self, answer, existing, header, kind_name, size},
@@ -35,7 +36,10 @@ pub fn line_arg(args: &SdkValue, name: &str, default: u64) -> Result<u64, SdkRef
 pub fn read(store: &Arc<Store>, args: &SdkValue) -> Answer {
     let (_, reader, snap) = snapshot::open(store, args)?;
     let path = checked(text(args, "path")?)?;
-    let entry = existing(&reader, &snap, &path)?;
+    // The lookup's pages are memoized over the call's caches; the file's
+    // own objects are read through the caches only.
+    let cached = Cached::new(&reader)?;
+    let entry = existing(&Memo::new(&cached), &snap, &path)?;
     let start = line_arg(args, "startLine", 1)?;
     let end = line_arg(args, "endLine", 9_007_199_254_740_991)?;
     if end < start {
@@ -45,7 +49,7 @@ pub fn read(store: &Arc<Store>, args: &SdkValue) -> Answer {
     let end = end.min(start.saturating_add(window::LINES as u64 - 1));
     let (mut content, mut next, mut clipped) = (String::new(), None, false);
     let mut last = None;
-    window::lines(&reader, &entry, REPLY_BUDGET, start, |n, line| {
+    window::lines(&cached, &entry, REPLY_BUDGET, start, |n, line| {
         if n > requested_end {
             return Ok(false);
         }
@@ -81,7 +85,8 @@ pub fn read(store: &Arc<Store>, args: &SdkValue) -> Answer {
 pub fn stat(store: &Arc<Store>, args: &SdkValue) -> Answer {
     let (_, reader, snap) = snapshot::open(store, args)?;
     let path = checked(text(args, "path")?)?;
-    let entry = existing(&reader, &snap, &path)?;
+    let cached = Cached::new(&reader)?;
+    let entry = existing(&Memo::new(&cached), &snap, &path)?;
     let mut fields = header(&snap, &path);
     fields.extend([
         ("type", SdkValue::text(kind_name(entry.value.kind))),
@@ -94,7 +99,11 @@ pub fn stat(store: &Arc<Store>, args: &SdkValue) -> Answer {
 pub fn list(store: &Arc<Store>, args: &SdkValue) -> Answer {
     let (_, reader, snap) = snapshot::open(store, args)?;
     let path = optional_path(args)?;
-    let dir = existing(&reader, &snap, &path)?;
+    let cached = Cached::new(&reader)?;
+    // One memo for the call (#352 011.a1): the entries' inode lookups share
+    // the inode table's upper pages, read once, so an entry costs its leaf.
+    let memo = Memo::new(&cached);
+    let dir = existing(&memo, &snap, &path)?;
     if dir.value.kind != InodeKind::Directory {
         return Err(args::refuse(
             "NotDirectory",
@@ -103,9 +112,6 @@ pub fn list(store: &Arc<Store>, args: &SdkValue) -> Answer {
         ));
     }
     let (limit, pos) = args::paging(args)?;
-    // One memo for the call (#352 011.a1): the entries' inode lookups share
-    // the inode table's upper pages, read once, so an entry costs its leaf.
-    let memo = Memo::new(reader.as_ref());
     let (mut after, mut skipped, mut items, mut spent, mut more) =
         (None, 0u64, Vec::new(), 0, false);
     'pages: loop {
@@ -177,11 +183,13 @@ pub fn grep(store: &Arc<Store>, args: &SdkValue) -> Answer {
     let (mut items, mut found, mut spent, mut more, mut skipped) =
         (Vec::new(), 0u64, 0, false, 0i64);
     let mut reuse = search::Reuse::default();
-    window::walk(&reader, &snap, &path, |file, entry| {
+    // The walk and the file scans share one call's read caches.
+    let cached = Cached::new(&reader)?;
+    walk::walk_within(&cached, &snap, &path, None, |file, entry| {
         if entry.value.kind != InodeKind::RegularFile {
             return Ok(true);
         }
-        let scan = reuse.matches(&reader, &entry, 1024, pattern, |n, line| {
+        let scan = reuse.matches(&cached, &entry, 1024, pattern, |n, line| {
             if found < pos {
                 found += 1;
                 return Ok(true);
@@ -225,7 +233,9 @@ pub fn glob(store: &Arc<Store>, args: &SdkValue) -> Answer {
     let (limit, pos) = args::paging(args)?;
     let (mut items, mut found, mut spent, mut more) = (Vec::new(), 0u64, 0, false);
     // Only the folders the pattern's literal leading folders allow.
-    walk::walk_within(&reader, &snap, &path, walk::leading(pattern), |file, _| {
+    let cached = Cached::new(&reader)?;
+    let within = walk::leading(pattern);
+    walk::walk_within(&cached, &snap, &path, within, |file, _| {
         if !rule.matches_path(file) {
             return Ok(true);
         }

@@ -1,9 +1,8 @@
 //! Bounded text scanning at immutable roots: a file's text arrives in whole
 //! blocks, checked as before, and a buffer-wide line scanner splits it.
 use super::args;
-use crate::store::StorePorts;
 use layerfs_bridge::control::SdkRefusal;
-use layerfs_content::{compare::EntryFacts, object::inode_leaf::InodeKind};
+use layerfs_content::{compare::EntryFacts, object::inode_leaf::InodeKind, AuthenticatedObjects};
 
 pub use super::walk::{walk, Walker};
 
@@ -100,7 +99,7 @@ fn skip(bytes: &[u8], count: u64) -> Result<usize, u64> {
 /// the mapping walked once; its text is handed on in parts of about
 /// [`BLOCK`] bytes as the pass delivers it, and stopping ends the pass.
 pub(super) fn texts(
-    reader: &StorePorts,
+    reader: &dyn AuthenticatedObjects,
     entry: &EntryFacts,
     mut visit: impl FnMut(&str) -> Result<bool, SdkRefusal>,
 ) -> Result<(), SdkRefusal> {
@@ -267,7 +266,7 @@ fn checked(bytes: &[u8], from: u64, size: u64, last: bool) -> (&str, bool) {
 /// Scans with bounded buffers, including huge lines: every line from line
 /// `from` on, in order, until `visit` stops. Earlier lines are only counted.
 pub fn lines(
-    reader: &StorePorts,
+    reader: &dyn AuthenticatedObjects,
     entry: &EntryFacts,
     prefix: usize,
     from: u64,

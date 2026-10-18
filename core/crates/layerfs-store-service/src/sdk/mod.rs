@@ -7,6 +7,7 @@ pub mod body;
 pub use body::Bodies;
 pub mod blame;
 pub mod branch;
+pub mod cached;
 pub mod compare;
 pub mod files;
 pub mod plans;

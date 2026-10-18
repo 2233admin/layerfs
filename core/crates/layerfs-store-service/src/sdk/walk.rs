@@ -11,6 +11,7 @@ use layerfs_content::{
         sorted::DirectoryRoot,
     },
     object::inode_leaf::{InodeKind, InodeValue},
+    AuthenticatedObjects,
 };
 
 /// Names and inode demands acquired together, bounded independently of the tree.
@@ -87,14 +88,15 @@ impl<'a> Walker<'a> {
     /// entries are the full walk's, less those no path starting with
     /// `within` can be, in the same order. A walk from above `within` starts
     /// at `within` itself: the folders on the way are shorter than it.
+    /// Lookups, directory pages and inode values are read through `pages`.
     pub fn within(
-        reader: &'a StorePorts,
+        pages: &'a dyn AuthenticatedObjects,
         snap: &'a snapshot::Snap,
         path: &str,
         within: Option<String>,
     ) -> Result<Self, SdkRefusal> {
-        let memo = Memo::new(reader);
-        let entry = snapshot::existing(reader, snap, path)?;
+        let memo = Memo::new(pages);
+        let entry = snapshot::existing(&memo, snap, path)?;
         let (mut stack, mut top) = (Vec::new(), None);
         if entry.value.kind != InodeKind::Directory {
             top = Some((path.to_owned(), entry));
@@ -106,7 +108,7 @@ impl<'a> Walker<'a> {
                     let deeper = format!("/{}", folders.trim_end_matches('/'));
                     let start = if deeper.len() > path.len() {
                         // A name the lookup refuses cannot be walked into.
-                        snapshot::entry(reader, &snap.tree, &deeper)
+                        snapshot::find(&memo, &snap.tree, &deeper)
                             .ok()
                             .flatten()
                             .filter(|entry| entry.value.kind == InodeKind::Directory)
@@ -192,13 +194,13 @@ pub fn walk(
 
 /// [`walk`] through a [`Walker::within`].
 pub fn walk_within(
-    reader: &StorePorts,
+    pages: &dyn AuthenticatedObjects,
     snap: &snapshot::Snap,
     path: &str,
     within: Option<String>,
     mut visit: impl FnMut(&str, EntryFacts) -> Result<bool, SdkRefusal>,
 ) -> Result<(), SdkRefusal> {
-    let mut walker = Walker::within(reader, snap, path, within)?;
+    let mut walker = Walker::within(pages, snap, path, within)?;
     while let Some((path, entry)) = walker.next()? {
         if !visit(&path, entry)? {
             break;

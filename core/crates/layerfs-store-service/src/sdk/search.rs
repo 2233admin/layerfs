@@ -2,9 +2,8 @@
 //! a whole text part, with line numbers counted across the gaps and line
 //! bounds found only around a match. A call scans each content once.
 use super::window::{self, after_last_newline, newlines, Line, Open};
-use crate::store::StorePorts;
 use layerfs_bridge::control::SdkRefusal;
-use layerfs_content::{compare::EntryFacts, ObjectId};
+use layerfs_content::{compare::EntryFacts, AuthenticatedObjects, ObjectId};
 use std::collections::HashMap;
 
 /// Every line holding `pattern`, in order, until `visit` stops. A line is its
@@ -12,7 +11,7 @@ use std::collections::HashMap;
 /// nothing. Fails `Binary` as [`window::lines`] does, after the lines before
 /// the failing window.
 pub fn matches(
-    reader: &StorePorts,
+    reader: &dyn AuthenticatedObjects,
     entry: &EntryFacts,
     prefix: usize,
     pattern: &str,
@@ -119,7 +118,7 @@ impl Reuse {
     /// scanned before in this call.
     pub fn matches(
         &mut self,
-        reader: &StorePorts,
+        reader: &dyn AuthenticatedObjects,
         entry: &EntryFacts,
         prefix: usize,
         pattern: &str,

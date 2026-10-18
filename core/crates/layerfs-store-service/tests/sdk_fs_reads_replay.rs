@@ -11,6 +11,7 @@
 //!           binaries' dumps must be equal (page tokens are left out)
 //!   paging  statements of one grep, glob and list page at page 1 and 100
 //!   time    one whole-tree grep
+//!   calls   one call kind per process: statements, object ids, pack work, time
 use layerfs_bridge::control::{Answer, Reply, SdkCall, SdkValue};
 use layerfs_bridge::provision::StoreManifest;
 use layerfs_content::object::inode_leaf::InodeKind;
@@ -903,4 +904,146 @@ fn reuse() {
                 + before.1.range_acquired_bytes),
         after.1.pack_hits - before.1.pack_hits,
     );
+}
+
+/// One call kind per process (`LFS354_CALL`): its statements, object ids
+/// demanded at the Store, storage counters and time. `read` is one fs.read
+/// call per regular file, for the first `LFS354_READS` files in walk order,
+/// and `stat` the same with fs.stat (the fixed part: snapshot, lookup, size);
+/// the others are one call over `/` (grep for a pattern that is never
+/// present, glob `**`, list `/`), each at `LFS354_PAGE` items.
+#[test]
+fn calls() {
+    if std::env::var("LFS354_MODE").as_deref() != Ok("calls") {
+        return;
+    }
+    let Some(p) = probe() else { return };
+    let kind = std::env::var("LFS354_CALL").expect("LFS354_CALL");
+    let page = std::env::var("LFS354_PAGE").map_or(1000, |v| v.parse().unwrap());
+    let mut files = Vec::new();
+    if kind == "read" || kind == "stat" {
+        let limit = std::env::var("LFS354_READS").map_or(usize::MAX, |v| v.parse().unwrap());
+        let (_, reader, snap) = snapshot::open(&p.service.store, &p.args()).unwrap();
+        window::walk(&reader, &snap, "/", |path, entry| {
+            if entry.value.kind == InodeKind::RegularFile {
+                files.push(path.to_owned());
+            }
+            Ok(files.len() < limit)
+        })
+        .unwrap();
+    }
+    let (s0, d0, o0) = (
+        p.statements(),
+        storage(&p),
+        p.service.store.work().object_ids,
+    );
+    let t = Instant::now();
+    let mut calls = 0;
+    let paged = |method: &str, extra: Vec<(&str, SdkValue)>| {
+        let mut fields = vec![
+            ("path", SdkValue::text("/")),
+            ("pageSize", SdkValue::Int(page)),
+            ("pagePos", SdkValue::Int(0)),
+        ];
+        fields.extend(extra);
+        p.call(method, fields).unwrap();
+    };
+    match kind.as_str() {
+        "grep" => paged("fs.grep", vec![("pattern", SdkValue::text(NEVER))]),
+        "glob" => paged("fs.glob", vec![("pattern", SdkValue::text("**"))]),
+        "list" => paged("fs.list", vec![]),
+        "read" | "stat" => {
+            for path in &files {
+                // A refusal (Binary) is an answer too.
+                let _ = p.call(&format!("fs.{kind}"), vec![("path", SdkValue::text(path))]);
+                calls += 1;
+            }
+        }
+        other => panic!("unknown LFS354_CALL {other}"),
+    }
+    let elapsed = t.elapsed();
+    let (s1, d1, o1) = (
+        p.statements(),
+        storage(&p),
+        p.service.store.work().object_ids,
+    );
+    let objects = o1 - o0;
+    println!(
+        "calls {kind} calls={calls} time={elapsed:?} statements={} object_ids={objects} \
+         statements_per_object={:.2} locates={} pack_selections={} pack_bytes={} pack_hits={} pack_misses={}",
+        s1 - s0,
+        (s1 - s0) as f64 / objects.max(1) as f64,
+        d1.locate - d0.locate,
+        d1.read_pack_selections - d0.read_pack_selections,
+        d1.pack_read_bytes - d0.pack_read_bytes,
+        d1.pack_hits - d0.pack_hits,
+        d1.pack_misses - d0.pack_misses,
+    );
+}
+
+/// The fixed part of one fs.read, step by step, summed over the first
+/// `LFS354_READS` regular files: snapshot open (project, root, tree table),
+/// path lookup and size. Statements, object ids, pack bytes and time per step.
+#[test]
+fn fixed() {
+    if std::env::var("LFS354_MODE").as_deref() != Ok("fixed") {
+        return;
+    }
+    let Some(p) = probe() else { return };
+    let limit = std::env::var("LFS354_READS").map_or(usize::MAX, |v| v.parse().unwrap());
+    let mut files = Vec::new();
+    {
+        let (_, reader, snap) = snapshot::open(&p.service.store, &p.args()).unwrap();
+        window::walk(&reader, &snap, "/", |path, entry| {
+            if entry.value.kind == InodeKind::RegularFile {
+                files.push(path.to_owned());
+            }
+            Ok(files.len() < limit)
+        })
+        .unwrap();
+    }
+    // Per step: statements, object ids, pack selections, pack bytes, ns.
+    let mut steps = [[0u64; 5]; 3];
+    let mark = |p: &Probe| {
+        let d = storage(p);
+        (
+            p.statements(),
+            p.service.store.work().object_ids,
+            d.read_pack_selections,
+            d.pack_read_bytes,
+            Instant::now(),
+        )
+    };
+    let add = |row: &mut [u64; 5],
+               a: &(u64, u64, u64, u64, Instant),
+               b: &(u64, u64, u64, u64, Instant)| {
+        row[0] += b.0 - a.0;
+        row[1] += b.1 - a.1;
+        row[2] += b.2 - a.2;
+        row[3] += b.3 - a.3;
+        row[4] += (b.4 - a.4).as_nanos() as u64;
+    };
+    for path in &files {
+        let m0 = mark(&p);
+        let (_, reader, snap) = snapshot::open(&p.service.store, &p.args()).unwrap();
+        let m1 = mark(&p);
+        let entry = snapshot::existing(reader.as_ref(), &snap, path).unwrap();
+        let m2 = mark(&p);
+        snapshot::size(&reader, &entry).unwrap();
+        let m3 = mark(&p);
+        add(&mut steps[0], &m0, &m1);
+        add(&mut steps[1], &m1, &m2);
+        add(&mut steps[2], &m2, &m3);
+    }
+    for (name, row) in ["open", "lookup", "size"].iter().zip(steps) {
+        println!(
+            "fixed {name} files={} statements={} object_ids={} pack_selections={} pack_bytes={} time={:?}",
+            files.len(),
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            Duration::from_nanos(row[4])
+        );
+    }
 }
