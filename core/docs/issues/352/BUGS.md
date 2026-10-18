@@ -226,3 +226,21 @@
   mode equal the lane's tree is not sent, rewritten or chmodded. `sandboxExpect`
   is unchanged. Whether mtime alone is a change stays with the owner;
   [fixes/012-pre-f028-apply-identical-files.md](fixes/012-pre-f028-apply-identical-files.md).
+- **F-029 · every SDK call on a Sandbox refreshes discovery for all its
+  mounts (product, liaison during 013.a1, 2026-10-18).** `registry::sandbox()`
+  calls `discovery::refresh()` (`sdk/js/native/src/discovery.rs:411`), which
+  reads the Sandbox's record folder and sends one daemon `workspace.status`
+  per mounted Workspace before every call, exec included. Traced exec p50 is
+  49.6 / 57.0 / 70.9 / 107.0 ms at 1 / 4 / 8 / 16 mounts in one Sandbox
+  (untraced 46.3 → 51.6). It was not 013.a1's cause (the probe Sandbox has one
+  mount), but it grows when agents share a Sandbox. Candidate fix: exec takes
+  its mount's directory from the in-memory mount table, or refreshes only the
+  named mount. Owner: the fixer, after F-027, together with Engine connection
+  reuse. Exec launch itself, a fresh Docker exec per call (three Engine
+  exchanges with `Connection: close`, then dockerd → containerd → runc), is
+  the Sandbox's cost. A long-lived launcher is the owner's call.
+- **F-030 · `daemon[].fuse.served` on traced exec lines is cumulative
+  (tooling, liaison, 2026-10-18).** It rose 35 → 248 across calls, including
+  `true` calls that make no requests. Readers must take differences per
+  Workspace. Owner: the builder checks the `oneshot_exec` probe split
+  (08de4f038) before range 13's rerun.
