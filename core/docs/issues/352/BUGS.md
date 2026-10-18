@@ -304,10 +304,16 @@
   (D0). Not folded into F-027.
   **Owner decision 2026-10-18:** fixed before measured range 15 (moved ahead
   of measured P3; per-op timing first).
-  **GitHub #356 (owner, 2026-10-18):** target a delete of a committed entry
-  costing about what a create costs (tens of µs, not 0.7 ms), `rm -rf` of the
-  dev tree within a small multiple of native, flat per-entry cost against
-  directory size; generic, exact POSIX semantics.
+  **GitHub #356 (owner, 2026-10-18):** generic, exact POSIX semantics.
+  D0 per-op timing: 16,460 ms against 323 ms native (51×); lookup 4.06 s,
+  unlink 2.25 s, getattr 1.68 s, forget 1.41 s; ~4.3 s outside callbacks.
+  With `default_permissions` the kernel sends one parent GETATTR per delete;
+  READDIRPLUS can remove the per-entry LOOKUP; ~3 requests per entry at
+  ~19 µs per round trip floor at ~2.6 s. **Owner decision (revised target):**
+  keep `default_permissions` (no permission checks moved into the daemon);
+  `rm -rf` of this tree in about 3 s, down from 16.5 s, with the same
+  per-entry cost in small and large folders; no slower than creating the
+  same tree; about 10× native instead of 51×.
 - **F-033 · `MAXIMUM_LINEAGE_ROWS` (4,096) refuses history walks with
   `Capacity` (product, liaison research, owner decision 2026-10-18).** The
   constant (`layerfs-history/src/contract/records.rs:24`) bounds three walks,
