@@ -16,6 +16,7 @@ use layerfs_workspace::{Operation, Outcome, Position, Time};
 use std::path::Path;
 
 /// One change [`Fixture::workspace_commit`] applies at a path.
+#[allow(dead_code)] // each test crate uses some of the variants
 pub enum Change<'a> {
     /// chmod to the mode.
     Mode(&'a str, u32),

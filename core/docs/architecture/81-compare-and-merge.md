@@ -94,8 +94,12 @@ text) go through `construct_bytes` into the same consumer first.
    | one side deleted a file | the kept text inside a deletion marker block (`modify/delete`, `delete/modify`) |
    | anything else | ours if present, else theirs (`type`) |
 
-   Metadata merges by value: a change only one side made is kept. When both
-   sides changed a directory's metadata, theirs is kept.
+   Metadata merges by value, mode and mtime separately (#352 F-051): a field
+   only one side changed takes that side's value, so a chmod survives an edit
+   of the same file on the other side. A field both sides changed takes the
+   decided entry's (theirs for a directory). Modes changed differently on
+   both sides of a file are a `mode` conflict; the decided entry's mode is
+   kept.
 4. **Structure.** Moves follow the serial, so an edit inside a directory the
    other side moved lands at the new path.
 

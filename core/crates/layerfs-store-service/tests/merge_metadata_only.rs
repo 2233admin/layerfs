@@ -29,6 +29,7 @@ use layerfs_bridge::control::SdkValue;
 use layerfs_content::compare::tree::{join, list_directory, TreeTable};
 use layerfs_content::filesystem::FilesystemRootId;
 use layerfs_content::inode_leaf::InodeKind;
+use layerfs_content::merge::ConflictKind;
 use layerfs_content::object::ObjectId;
 use layerfs_history::CommitOutcome;
 use layerfs_persistence::{Handles, PersistenceConfig, SqlitePersistenceProfile};
@@ -216,6 +217,10 @@ fn check(
     }
 }
 
+/// A Commit route: its label, Workspace id, Workspace changes and the head
+/// move made before the Commit.
+type Route<'a> = (&'a str, u8, Vec<Change<'a>>, &'a dyn Fn(&str));
+
 fn run(fixture: &Fixture, case: &Case) {
     let (chmod, edit) = (format!("{}-c", case.name), format!("{}-e", case.name));
     fork(fixture, &chmod, case.base);
@@ -239,9 +244,10 @@ fn run(fixture: &Fixture, case: &Case) {
 
     // A Workspace Commit that merges with a moved head, both orientations:
     // the Workspace chmods while the head takes the edit, and the reverse.
-    let routes: [(&str, Vec<Change>, &dyn Fn(&str)); 2] = [
+    let routes: [Route; 2] = [
         (
             "commit-c",
+            83,
             vec![Change::Mode(&case.path, 0o600)],
             &|branch| {
                 fixture.apply(branch, vec![write(edited, EDITED)]);
@@ -249,16 +255,17 @@ fn run(fixture: &Fixture, case: &Case) {
         ),
         (
             "commit-e",
+            89,
             vec![Change::Write(edited, EDITED.as_bytes())],
             &|branch| {
                 fixture.chmods(branch, &[(case.path.as_str(), 0o600)], 82);
             },
         ),
     ];
-    for (label, changes, before) in routes {
+    for (label, id, changes, before) in routes {
         let branch = format!("{}-{label}", case.name);
         fork(fixture, &branch, case.base);
-        let committed = fixture.workspace_commit(&branch, &changes, 83, || before(&branch));
+        let committed = fixture.workspace_commit(&branch, &changes, id, || before(&branch));
         let report = committed
             .merge
             .as_ref()
@@ -388,6 +395,7 @@ fn chmods_to_different_modes_on_both_sides_conflict() {
             .expect_err("different modes on both sides conflict");
         assert!(refusal.contains("Conflict"), "{refusal}");
         assert!(refusal.contains("/f/rmode.txt"), "{refusal}");
+        assert!(refusal.contains(r#"("kind", Text("mode"))"#), "{refusal}");
     }
     fork(&fixture, "bw", "main");
     let committed =
@@ -399,7 +407,7 @@ fn chmods_to_different_modes_on_both_sides_conflict() {
         report
             .conflicts
             .iter()
-            .any(|conflict| conflict.path == "/f/rmode.txt"),
+            .any(|conflict| conflict.path == "/f/rmode.txt" && conflict.kind == ConflictKind::Mode),
         "{:?}",
         report.conflicts
     );
