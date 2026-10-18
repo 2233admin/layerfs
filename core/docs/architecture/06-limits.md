@@ -511,9 +511,14 @@ chain. Disk and memory as admitted are the only bounds.
 
 ### C1 — merge (#355, 2026-10-18)
 
-A merge has no count limit. The in-memory build budget (65,536 topology
-entries) and `MAXIMUM_MERGE_PATHS` (262,144 decided paths), which refused a
-merge past them with `BoundedCapacityExceeded`, are deleted. The merge's
+A merge has no count limit. `MAXIMUM_MERGE_PATHS` (262,144 decided paths),
+which refused a merge past it with `BoundedCapacityExceeded`, is deleted. The
+in-memory build budget (65,536 topology entries) no longer applies to a merge:
+since #355 the merge result is built on the backed route
+(`update_filesystem_streamed_backed` with the plan's spill records,
+`merge/build.rs`), which uses the indexed reducer, and the resident caps
+(`ordering_bytes/1024` topology entries, `ordering_bytes/16` touched serials)
+are checked only when no backing holds the state (`validate.rs`, `update.rs`). The merge's
 working state lives in the global Store's merge scratch rows
 ([81-compare-and-merge](81-compare-and-merge.md)). Since M1 the merge walks
 changed serials, not candidate paths:
@@ -541,7 +546,7 @@ not declared product contracts.
 | --- | ---: | --- |
 | Commits since the base Layer, Layers between sides, first-parent depth | none; the 4,096-row cap is deleted (#353, C5 above) | `MAXIMUM_LINEAGE_ROWS` (F-033), not in source |
 | paths one merge may decide | none; the 262,144 cap is deleted (#355, C1 above) | `MAXIMUM_MERGE_PATHS`, not in source |
-| merge result topology (resident route) | 65,536 entries per container, as audited; C1 above records the merge's in-memory build budget as deleted by #355, while `merge/rows.rs` still passes `FilesystemResources::default()`: unreconciled, see [audit](../issues/352/LIMITS_AUDIT.md) | `FilesystemResources::default`, `validate/backed.rs` |
+| merge result topology | none on the merge route since #355: the build is backed (C1 above); the 65,536-entry resident cap applies only to an unbacked build. `merge/rows.rs`'s `FilesystemResources::default()` only supplies figures the backed route does not check (audit A3) | `validate.rs` `resident_limit`, only when `!state.backed()` |
 | Commit message | 4,096 B, no control character but LF and TAB | `MAXIMUM_MESSAGE_BYTES`, `CommitAttribution::check` |
 | directory moved under a parent | at most 256 levels deep | `kernel_mutation::ANCESTRY_STEPS` |
 | LWW rule include files | 16; later includes are ignored | `lww::MAXIMUM_RULE_FILES` |
