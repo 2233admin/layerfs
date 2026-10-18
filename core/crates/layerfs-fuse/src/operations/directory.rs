@@ -175,7 +175,7 @@ impl DirectoryStream {
             .services
             .directory_visit(self.mount, self.serial, self.handle, self.offset, after)
             .await;
-        crate::request::charge(crate::request::Phase::DirectoryVisit, started);
+        crate::phase::charge(crate::phase::Phase::DirectoryVisit, started);
         let reply = reply?;
         // The request's own copy: the job and its receipt are gone before any
         // provider wait and before the publishing visit.
@@ -224,7 +224,7 @@ impl DirectoryStream {
             };
             let batch = window.finish(base.as_ref());
             drop(base); // Return the actual reader before another SQL job.
-            crate::request::charge(crate::request::Phase::DirectoryFinish, started);
+            crate::phase::charge(crate::phase::Phase::DirectoryFinish, started);
             let batch = match batch {
                 Ok(batch) => batch,
                 Err(error) => return Err(self.services.failed_base_read(error.into())),

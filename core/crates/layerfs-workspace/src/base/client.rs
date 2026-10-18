@@ -122,6 +122,47 @@ impl CanonicalClient {
             .ok_or(crate::WorkspaceError::MissingLengthProvider)?
             .file_length(id)
     }
+    /// Whether the length of `id` is remembered, without a demand.
+    pub(crate) fn remembers_length(&self, id: ObjectId) -> bool {
+        self.state()
+            .is_ok_and(|mut state| state.cache.length(id).is_some())
+    }
+    /// Remembers the lengths of those `ids` not remembered yet, asked of the
+    /// provider in one demand (#356 F-032). A memory-only client, or one
+    /// without a length provider, asks nothing.
+    pub(crate) fn provide_lengths(&self, ids: &[ObjectId]) -> crate::WorkspaceResult<()> {
+        let Some(provider) = self.lengths.as_ref().filter(|_| !self.resident) else {
+            return Ok(());
+        };
+        let wanted: Vec<ObjectId> = {
+            let mut state = self.state()?;
+            let mut wanted: Vec<ObjectId> = ids
+                .iter()
+                .copied()
+                .filter(|id| state.cache.length(*id).is_none())
+                .collect();
+            wanted.sort_unstable();
+            wanted.dedup();
+            wanted
+        };
+        if wanted.is_empty() {
+            return Ok(());
+        }
+        let values = provider.file_lengths(&wanted)?;
+        if values.len() != wanted.len() {
+            return Err(ContentError::BatchCardinality {
+                requested: wanted.len(),
+                returned: values.len(),
+            }
+            .into());
+        }
+        let mut state = self.state()?;
+        for (id, length) in wanted.into_iter().zip(values) {
+            let evictions = state.cache.remember_length(id, length).unwrap_or(0);
+            state.work.evictions = state.work.evictions.saturating_add(evictions);
+        }
+        Ok(())
+    }
     /// Bounded cumulative acquisition counters and logical cache charge.
     pub fn diagnostics(&self) -> ContentResult<ClientWork> {
         self.cache.diagnostics()

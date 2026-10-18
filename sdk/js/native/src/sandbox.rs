@@ -58,7 +58,11 @@ fn setup(private: [u8; 32], peer: [u8; 32]) -> DaemonSetup {
         limits: DaemonLimits {
             connections: DAEMON_CONNECTIONS,
             handshake_ms: 2000,
-            cache_bytes: 65536,
+            // The daemon's shared immutable-object cache: a fixed bound, the
+            // daemon's own default. 64 KiB held too few directory and inode
+            // pages for lookups in a large directory to stay resident
+            // (#356 F-032).
+            cache_bytes: 8 * 1024 * 1024,
             namespaces: 16,
             pager_kib: 1024,
             serial_low_water: 256,

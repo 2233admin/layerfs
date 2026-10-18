@@ -2,7 +2,7 @@
 use crate::{CanonicalClient, WorkspaceResult};
 use layerfs_content::filesystem::attributes::PortableMetadata;
 use layerfs_content::filesystem::directory::read::{list_after, lookup_counted, DirectoryReadWork};
-use layerfs_content::filesystem::inode::{lookup, InodeReadWork, InodeTable};
+use layerfs_content::filesystem::inode::{lookup, lookup_many, InodeReadWork, InodeTable};
 use layerfs_content::filesystem::{
     DirectoryListing, DirectoryRoot, FilesystemRead, FilesystemRoot, FilesystemRootId, InodeScope,
     PathName, Resolved, SymlinkTarget,
@@ -11,6 +11,12 @@ use layerfs_content::object::inode_leaf::{InodeKind, InodeValue};
 use layerfs_content::{AuthenticatedObjects, ContentError, ContentResult, FileView};
 use layerfs_telemetry::timer::Timing;
 use std::{io::Write, sync::Arc};
+
+/// Directory entries after a looked-up file whose lengths one demand
+/// remembers with its own (#356 F-032).
+pub(crate) const SIBLING_LENGTHS: usize = 128;
+/// Encoded listing bytes of that window. One row is at most 265 bytes.
+const SIBLING_BYTES: usize = 64 * 1024;
 
 /// Immutable binding whose identity remains valid across later local installs.
 #[derive(Clone)]
@@ -104,6 +110,40 @@ impl BaseView {
             &mut DirectoryReadWork::default(),
         )?;
         self.inode(found.ok_or(ContentError::PathNotFound)?.1)
+    }
+    /// Remembers, with one length demand, the lengths of the regular file
+    /// `first` and of the regular files listed after `name` in the base
+    /// directory `parent`, at most [`SIBLING_LENGTHS`] of them (#356 F-032).
+    /// A tree walk looks names up in listing order, so their stats then come
+    /// from memory instead of one Store demand per file. Bounded by the
+    /// window and by the cache's own allowance; nothing is held otherwise.
+    pub(crate) fn provide_sibling_lengths(
+        &self,
+        parent: u64,
+        name: &PathName,
+        first: layerfs_content::ObjectId,
+    ) -> WorkspaceResult<()> {
+        let directory = self.inode(parent)?.value;
+        let page = list_after(
+            self.client.as_ref(),
+            DirectoryRoot(directory.content_root),
+            Some(name),
+            SIBLING_LENGTHS,
+            SIBLING_BYTES,
+            &mut DirectoryReadWork::default(),
+        )?;
+        let serials: Vec<u64> = page.entries.iter().map(|(_, serial)| *serial).collect();
+        let mut roots = vec![first];
+        let work = &mut InodeReadWork::default();
+        for value in lookup_many(self.client.as_ref(), self.table(), &serials, work)?
+            .into_iter()
+            .flatten()
+        {
+            if value.kind == InodeKind::RegularFile {
+                roots.push(value.content_root);
+            }
+        }
+        self.client.provide_lengths(&roots)
     }
     /// A serial the table does not hold is a logical absence.
     pub fn inode(&self, serial: u64) -> ContentResult<Resolved> {

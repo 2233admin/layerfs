@@ -185,7 +185,7 @@ impl Custody {
                     facts.clone(),
                 )
                 .await;
-            crate::request::charge(crate::request::Phase::ReadVisit, started);
+            crate::phase::charge(crate::phase::Phase::ReadVisit, started);
             let receipt = receipt?;
             let original = receipt.get().clone();
             let needs = match (&original.result, &original.decision) {
@@ -216,7 +216,7 @@ impl Custody {
             let base = self.services.base().await?;
             let result = Arc::make_mut(&mut facts).supply(&base, needs, None);
             drop(base); // Return the actual reader before another SQL wait.
-            crate::request::charge(crate::request::Phase::ReadSupply, started);
+            crate::phase::charge(crate::phase::Phase::ReadSupply, started);
             if let Err(error) = result {
                 return Err(self.services.failed_base_read(error.into()));
             }

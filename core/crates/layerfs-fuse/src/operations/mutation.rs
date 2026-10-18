@@ -249,7 +249,7 @@ impl Custody {
             };
             let started = std::time::Instant::now();
             let receipt = self.services.mutate_visit(visit).await;
-            crate::request::charge(crate::request::Phase::MutateVisit, started);
+            crate::phase::charge(crate::phase::Phase::MutateVisit, started);
             self.receipt = Some(receipt?);
             let original = self.receipt.as_ref().unwrap().get().clone();
             let needs = match &original.result {
@@ -296,7 +296,7 @@ impl Custody {
             };
             let result = Arc::make_mut(&mut facts).supply(&base, needs, path);
             drop(base); // Return the actual reader before another SQL wait.
-            crate::request::charge(crate::request::Phase::MutateSupply, started);
+            crate::phase::charge(crate::phase::Phase::MutateSupply, started);
             if let Err(error) = result {
                 return Err(self.services.failed_base_read(error.into()));
             }
@@ -306,7 +306,7 @@ impl Custody {
         if let Some(publication) = self.publication {
             let started = std::time::Instant::now();
             let released = self.services.reply_attempted(publication).await;
-            crate::request::charge(crate::request::Phase::MutateRelease, started);
+            crate::phase::charge(crate::phase::Phase::MutateRelease, started);
             drop(released?);
             self.publication = None;
         }

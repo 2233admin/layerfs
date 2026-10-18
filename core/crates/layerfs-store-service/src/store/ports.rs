@@ -188,6 +188,18 @@ impl FileLengths for StorePorts {
         }
         Ok(values[0])
     }
+    fn file_lengths(&self, ids: &[ObjectId]) -> WorkspaceResult<Vec<u64>> {
+        let values = StorePorts::file_lengths(self, ids)
+            .map_err(|e| WorkspaceError::Service(Box::new(e)))?;
+        if values.len() != ids.len() {
+            return Err(ContentError::BatchCardinality {
+                requested: ids.len(),
+                returned: values.len(),
+            }
+            .into());
+        }
+        Ok(values)
+    }
 }
 impl InodeSerials for StorePorts {
     fn reserve(&self, count: u64) -> WorkspaceResult<(u64, u64)> {
