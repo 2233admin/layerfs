@@ -2,7 +2,7 @@
 
 > **Status:** current rule, 2026-10-19, for ranges from P3 on. It applies the
 > owner-approved option (c) of [F031_DESIGN.md](F031_DESIGN.md). The design's
-> revision 3 questions Q1–Q6 are open, so the lane guard and the `/.lww`
+> revision 3 questions Q1–Q7 are open, so the lane guard and the `/.lww`
 > exclusion below wait for the owner's answers. The range cycles it extends
 > are [SPEC §2, "The two nested cycles"](SPEC.md#the-two-nested-cycles).
 
@@ -92,6 +92,42 @@ How the counts are made:
 The lane share is steady at 82–174 execs. The lead's share follows dsh's
 merges: ranges 19–20 are mostly merges with a first parent other than the
 previous commit written, so most of their commits need a `read-tree`.
+
+### Git commits against LayerFS Commits
+
+Git never runs per LayerFS Commit. A lane git exec runs once per plan
+step that changes tracked files, after the step lands:
+- **An fs step** is one agent's batch of `fs.write` and `fs.rm` calls for
+  its part of one dsh commit. Each call is its own LayerFS Commit. The step
+  gets one git exec, with all its paths in one `git add`.
+- **An `apply` step** is one one-shot Workspace and one Commit, followed by
+  one git exec when it changed tracked files.
+- **`check` steps** answer UpToDate and get no git exec.
+
+Ranges 0–14 (P1–P2) ran without `.git`, so no range has played git yet.
+Every figure below comes from the plans.
+
+| Range | dsh commits replayed | dsh merges | Plan steps | fs calls (each a LayerFS Commit) | Sandbox Commit steps | Lane git commits | Lead git commits |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 15 | 67 | 124 | 177 | 1,400 | 103 | 122 | 191 |
+| 16 | 88 | 100 | 257 | 1,029 | 139 | 174 | 188 |
+| 17 | 60 | 62 | 151 | 466 | 71 | 104 | 122 |
+| 18 | 67 | 83 | 183 | 910 | 98 | 133 | 150 |
+| 19 | 81 | 279 | 184 | 368 | 86 | 124 | 360 |
+| 20 | 60 | 275 | 125 | 280 | 63 | 82 | 335 |
+
+Range 14, played without git, for scale: 79 dsh commits, 1,112 fs
+Commits, 1,163 LayerFS Commits in all ([range-014](ranges/range-014.md)).
+
+Why the git counts differ:
+- **Lane git commits exceed the dsh commits replayed** (about 1.4–2×). The
+  frozen plan splits a dsh commit over about 2 lanes (up to 4), so it
+  becomes one step, and one lane git commit, per lane that holds part of it.
+- **Lead git commits** are every dsh commit in the range, merges included:
+  the replayed commits plus dsh's merges. Without the merges, HEAD would not
+  be dsh's checkpoint.
+
+One git commit per dsh commit, with no lane commits, is F031_DESIGN Q7.
 
 ### Sizes
 

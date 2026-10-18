@@ -86,6 +86,26 @@ recommendation is declined).
   and are not comparable. **Recommendation: (a) and (b)**, labelled dev
   diagnostics, one sample each, no reruns.
 
+- **Q7 · One git commit per dsh commit, instead of one per lane step.**
+  As built (option (c)), every lane step that changes tracked files runs a
+  git exec and a lane commit. The frozen plan splits a dsh commit over
+  about 2 lanes (up to 4), so a range of 60–88 replayed dsh commits gets
+  82–174 lane commits. Each is a git exec, an extra one-shot Workspace and
+  a Commit, plus a full lane index rewrite. The alternative:
+  - lanes make no git commits. At most, each lane runs one real
+    `git add -A` of its changes at lane end (3–4 per range), so real git
+    still hashes Workspace bytes over FUSE;
+  - the lead writes exactly one git commit per dsh commit, as it does
+    today: the replayed commits, plus dsh's merges, which HEAD needs to
+    reach the checkpoint (62–279 per range).
+
+  It removes 82–174 extra Workspaces and Commits per range and the
+  17–31 MB of raw lane index rewrites (GIT_RULE.md, Expected load). The
+  proof is unchanged. The lane guard (A4) then allows only loose objects
+  and the lane-end index. Lanes would no longer commit their own changes,
+  which option (c) asked for. **Recommendation: adopt it**, since git
+  commits then equal dsh's commits.
+
 Two items outside F-031 still gate measured range 15 and are not decided
 here: the owner's P3 wall budget (about 254 s projected per range without
 `.git`, RESULTS 2026-10-18) and F-034.
