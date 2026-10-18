@@ -5,6 +5,7 @@ use super::{
         add, change, context, key, number, Facts, Shared, Totals, CONTEXT, FRESH, HEADER, VALUE,
     },
 };
+use crate::construction::outcome::nanos;
 use crate::{OverlayCapturedNamespace, OverlayOperationRecords, WorkspaceResult};
 use layerfs_content::{
     filesystem::{FilesystemRead, PathName},
@@ -13,6 +14,7 @@ use layerfs_content::{
 };
 use layerfs_overlay::{DirectoryEntry, Inode, InodeKind, PAGE_ROWS};
 use layerfs_telemetry::timer::{Active, TimingScope};
+use std::time::Instant;
 
 /// The changes of one guarded job: at most PAGE_ROWS of them, flushed strictly
 /// ordered by kind and then serial, and always before the next captured page
@@ -212,6 +214,7 @@ pub(crate) fn values<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Si
     loop {
         shared.borrow().ready()?;
         add(&mut shared.borrow_mut().work.inode_pages, 1);
+        let started = Instant::now();
         let rows = page(shared, provider.captured_inode_page(facts.reader, after))?;
         let last = rows.len() < PAGE_ROWS;
         let mut demanded = Vec::with_capacity(rows.len());
@@ -230,6 +233,7 @@ pub(crate) fn values<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Si
             add(&mut shared.borrow_mut().work.base_lookups, 1);
             base.lookup_inodes(&demanded)?
         };
+        add(&mut shared.borrow_mut().work.inode_page_ns, nanos(started));
         let mut bases = demanded.iter().copied().zip(records);
         for inode in &rows {
             add(&mut shared.borrow_mut().work.inode_rows, 1);

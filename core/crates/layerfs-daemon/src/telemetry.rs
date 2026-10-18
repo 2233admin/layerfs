@@ -169,7 +169,7 @@ pub(crate) const STORAGE_FIELDS: [&str; 42] = [
 ];
 
 /// The Commit captured namespace work, in observation section 15 order.
-pub(crate) const NAMESPACE_FIELDS: [&str; 35] = [
+pub(crate) const NAMESPACE_FIELDS: [&str; 47] = [
     "inode_rows",
     "entry_rows",
     "inode_pages",
@@ -205,4 +205,16 @@ pub(crate) const NAMESPACE_FIELDS: [&str; 35] = [
     "normalize_ns",
     "values_ns",
     "update_ns",
+    "inode_page_ns",
+    "file_ns",
+    "file_bind_ns",
+    "file_source_ns",
+    "values_emit_ns",
+    "values_record_ns",
+    "update_record_ns",
+    "update_capture_ns",
+    "update_emit_ns",
+    "backing_calls",
+    "backing_keys",
+    "backing_ns",
 ];

@@ -380,8 +380,9 @@ fn storage<W: Write>(
     Ok(())
 }
 /// Captured namespace work, in section 15 order. Fields are only appended:
-/// a record of 31 values predates window_jobs and the three phase times.
-pub(crate) fn namespace_values(w: &layerfs_workspace::CapturedNamespaceWork) -> [u64; 35] {
+/// a record of 31 values predates window_jobs and the three phase times, one
+/// of 35 the values and update splits.
+pub(crate) fn namespace_values(w: &layerfs_workspace::CapturedNamespaceWork) -> [u64; 47] {
     [
         w.inode_rows,
         w.entry_rows,
@@ -418,6 +419,18 @@ pub(crate) fn namespace_values(w: &layerfs_workspace::CapturedNamespaceWork) -> 
         w.normalize_ns,
         w.values_ns,
         w.update_ns,
+        w.inode_page_ns,
+        w.file_ns,
+        w.file_bind_ns,
+        w.file_source_ns,
+        w.values_emit_ns,
+        w.values_record_ns,
+        w.update_record_ns,
+        w.update_capture_ns,
+        w.update_emit_ns,
+        w.backing_calls,
+        w.backing_keys,
+        w.backing_ns,
     ]
 }
 /// Storage diagnostics, in section 16 and 29 order.

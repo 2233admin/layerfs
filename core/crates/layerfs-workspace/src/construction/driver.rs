@@ -2,7 +2,9 @@
 use super::namespace::{
     begin, names, seal, values, Backing, Builder, Cursor, Facts, Shared, State,
 };
-use super::outcome::{CapturedNamespaceAttempt, CapturedNamespaceCustody, CapturedNamespaceWork};
+use super::outcome::{
+    nanos, CapturedNamespaceAttempt, CapturedNamespaceCustody, CapturedNamespaceWork,
+};
 use crate::Route;
 use crate::{
     BaseView, IndexedConstructionRecords, OverlayCapturedNamespace, OverlayOperationRecords,
@@ -14,7 +16,7 @@ use layerfs_content::{
         FilesystemRootId, StreamedFilesystemInput,
     },
     AuthenticatedObjects, ConstructionCapacities, ConstructionPolicy, ContentError, ContentResult,
-    FilesystemResult, FinalizedConsumer, ObjectId,
+    FilesystemResult, FinalizedConsumer, FinalizedObject, ObjectId,
 };
 use layerfs_overlay::{CapturedReader, IndexedOperationRecordScope, OperationOwner, OverlayError};
 use layerfs_telemetry::timer::{Active, Timing, TimingScope};
@@ -26,10 +28,23 @@ fn elapsed<P: OverlayOperationRecords + ?Sized>(
     started: Instant,
     counter: impl FnOnce(&mut CapturedNamespaceWork) -> &mut u64,
 ) {
-    let ns = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+    let ns = nanos(started);
     let mut owner = shared.borrow_mut();
     let counter = counter(&mut owner.work);
     *counter = counter.saturating_add(ns);
+}
+/// The caller's consumer, with the time it takes to accept each object.
+struct Timed<'c> {
+    consumer: &'c mut dyn FinalizedConsumer,
+    ns: u64,
+}
+impl FinalizedConsumer for Timed<'_> {
+    fn accept(&mut self, object: FinalizedObject) -> ContentResult<()> {
+        let started = Instant::now();
+        let accepted = self.consumer.accept(object);
+        self.ns = self.ns.saturating_add(nanos(started));
+        accepted
+    }
 }
 
 /// One complete canonical filesystem root from one exact captured reader.
@@ -79,6 +94,7 @@ impl<'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Capture
                 failure: None,
                 file: None,
                 work: CapturedNamespaceWork::default(),
+                record_ns: 0,
             }),
             route: workspace.route(),
             base: workspace.base(),
@@ -218,8 +234,16 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Attempt<'_,
             objects: self.objects,
         };
         let started = Instant::now();
-        let totals = values(&builder, consumer, timing, headers)?;
+        let mut timed = Timed { consumer, ns: 0 };
+        let recorded = shared.borrow().record_ns;
+        let totals = values(&builder, &mut timed, timing, headers);
         elapsed(shared, started, |work| &mut work.values_ns);
+        {
+            let mut owner = shared.borrow_mut();
+            owner.work.values_emit_ns = timed.ns;
+            owner.work.values_record_ns = owner.record_ns.saturating_sub(recorded);
+        }
+        let totals = totals?;
         // Seal: the context now binds the reader identity and declared totals.
         let sealed = seal(shared, facts, totals, initial)?;
         // Update: Content's canonical algorithm over the sealed rows. No Store
@@ -232,12 +256,19 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Attempt<'_,
             resources: FilesystemResources::default(),
             rows: &rows,
         };
-        let mut output = FilesystemObjects::new_with_accepted(self.objects, consumer, self.objects);
+        let mut timed = Timed { consumer, ns: 0 };
+        let mut output =
+            FilesystemObjects::new_with_accepted(self.objects, &mut timed, self.objects);
+        let recorded = shared.borrow().record_ns;
         let started = Instant::now();
         let result = timing.child("update").run(|_| {
             update_filesystem_streamed_backed(&mut output, &input, &mut Backing(shared), None)
         });
         elapsed(shared, started, |work| &mut work.update_ns);
+        let mut owner = shared.borrow_mut();
+        owner.work.update_emit_ns = timed.ns;
+        owner.work.update_record_ns = owner.record_ns.saturating_sub(recorded);
+        drop(owner);
         result
     }
 }

@@ -1,6 +1,6 @@
 //! The sealed streamed row source: record windows, captured names and points.
 use super::records::{add, key, read_number, serial, verify, Shared, Totals, FRESH, HEADER, VALUE};
-use crate::construction::outcome::CapturedNamespaceWork;
+use crate::construction::outcome::{nanos, CapturedNamespaceWork};
 use crate::{OverlayCapturedNamespace, OverlayOperationRecords};
 use layerfs_content::{
     filesystem::{
@@ -11,7 +11,7 @@ use layerfs_content::{
     ContentError, ContentResult,
 };
 use layerfs_overlay::{CapturedReader, DirectoryEntry, PAGE_ROWS};
-use std::cell::RefCell;
+use std::{cell::RefCell, time::Instant};
 
 /// Windows of sealed answers each Cursor holds per record kind. A window is
 /// at most PAGE_ROWS rows of one key-ordered range and answers every serial
@@ -111,6 +111,13 @@ impl<'s, 'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Cur
     fn count(&self, counter: impl FnOnce(&mut CapturedNamespaceWork) -> &mut u64) {
         add(counter(&mut self.shared.borrow_mut().work), 1);
     }
+    /// Charges one captured name read's time to the update.
+    fn charge(&self, started: Instant) {
+        add(
+            &mut self.shared.borrow_mut().work.update_capture_ns,
+            nanos(started),
+        );
+    }
     fn fail(&self, original: ContentError) -> ContentError {
         self.shared.borrow_mut().content(original)
     }
@@ -187,10 +194,12 @@ impl<'s, 'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Cur
     fn names(&self, parent: u64, after: Option<Vec<u8>>) -> ContentResult<Vec<DirectoryEntry>> {
         self.shared.borrow().ready()?;
         self.count(|work| &mut work.change_pages);
+        let started = Instant::now();
         let page = self
             .provider
-            .captured_directory_entries(self.reader, parent, after)
-            .map_err(|original| self.shared.borrow_mut().original(original))?;
+            .captured_directory_entries(self.reader, parent, after);
+        self.charge(started);
+        let page = page.map_err(|original| self.shared.borrow_mut().original(original))?;
         if page.len() > PAGE_ROWS {
             return Err(self.fail(ContentError::InvalidRecord("captured namespace page shape")));
         }
@@ -387,10 +396,12 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> StreamedRow
         if self.header(parent)?.is_none() {
             return Ok(DirectoryChangeLookup::Unchanged);
         }
+        let started = Instant::now();
         let row = self
             .provider
-            .captured_directory_entry(self.reader, parent, name.as_bytes())
-            .map_err(|original| self.shared.borrow_mut().original(original))?;
+            .captured_directory_entry(self.reader, parent, name.as_bytes());
+        self.charge(started);
+        let row = row.map_err(|original| self.shared.borrow_mut().original(original))?;
         match row {
             None => Ok(DirectoryChangeLookup::Unchanged),
             Some(row) if row.parent != parent || row.name != name.as_bytes() => {

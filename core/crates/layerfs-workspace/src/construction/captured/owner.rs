@@ -4,6 +4,7 @@ use super::{
     source::{Backing, Complete, Input},
     state::{Shared, State},
 };
+use crate::construction::outcome::nanos;
 use crate::{
     BaseView, ConstructionBackingCustody, IndexedConstructionRecords, OverlayCapturedRuns,
     OverlayOperationRecords, Workspace, WorkspaceError,
@@ -16,7 +17,7 @@ use layerfs_content::{
 };
 use layerfs_overlay::{CapturedReader, IndexedOperationRecordScope, InodeKind, OverlayError};
 use layerfs_telemetry::timer::TimingScope;
-use std::fmt;
+use std::{fmt, time::Instant};
 
 /// Actual adapter visits only; not whole-operation I/O, copies or residency.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -47,6 +48,10 @@ pub struct CapturedFileWork {
     pub edge_read_bytes: u64,
     /// Bytes whose unchanged base mapping survived authenticated edge trimming.
     pub edge_retained_bytes: u64,
+    /// Nanoseconds binding the file (captured inode and base file lookups)
+    /// and reading its runs (payload and committed bytes). Observations only.
+    pub bind_ns: u64,
+    pub source_ns: u64,
 }
 /// Exact retained reader, record scope and first-original errors for caller fences.
 /// This value and its Drop perform no reader/operation release or retry.
@@ -246,6 +251,16 @@ impl<'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> CapturedFile
         construct_runs(policy, capacities, &mut runs, consumer, scope).map(|result| result.file)
     }
     fn bind(
+        &mut self,
+        workspace: &Workspace,
+        records_scope: IndexedOperationRecordScope,
+    ) -> Result<Facts, WorkspaceError> {
+        let started = Instant::now();
+        let facts = self.bound(workspace, records_scope);
+        self.shared.borrow_mut().work.bind_ns = nanos(started);
+        facts
+    }
+    fn bound(
         &mut self,
         workspace: &Workspace,
         records_scope: IndexedOperationRecordScope,

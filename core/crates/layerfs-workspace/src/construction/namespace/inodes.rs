@@ -1,5 +1,6 @@
 //! One captured inode row to one typed value: file root, symlink target, metadata.
 use super::records::{add, key, read_number, Facts, Shared, HEADER};
+use crate::construction::outcome::nanos;
 use crate::{
     BaseView, CapturedFileEdits, OverlayCapturedNamespace, OverlayOperationRecords, Workspace,
 };
@@ -18,6 +19,7 @@ use layerfs_content::{
 };
 use layerfs_overlay::{IndexedOperationRecordScope, Inode, InodeKind};
 use layerfs_telemetry::timer::{Active, TimingScope};
+use std::time::Instant;
 
 /// Exact inputs of every value this attempt builds. Canonical bytes come only
 /// from Content's constructors; this adapter selects their inputs.
@@ -164,6 +166,7 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
         timing: &TimingScope<'_, Active>,
     ) -> ContentResult<ObjectId> {
         self.shared.borrow().ready()?;
+        let started = Instant::now();
         let scope = IndexedOperationRecordScope {
             owner: self.facts.operation,
             file_scope: serial,
@@ -193,6 +196,15 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
             };
             prepared.construct(self.policy, self.capacities, consumer, timing.child("file"))
         };
+        {
+            let mut owner = self.shared.borrow_mut();
+            add(&mut owner.work.file_ns, nanos(started));
+            add(&mut owner.work.file_bind_ns, attempt.custody.work.bind_ns);
+            add(
+                &mut owner.work.file_source_ns,
+                attempt.custody.work.source_ns,
+            );
+        }
         match attempt.result {
             Ok(file) => {
                 let mut owner = self.shared.borrow_mut();

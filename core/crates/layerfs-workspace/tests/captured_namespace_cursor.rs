@@ -433,6 +433,14 @@ fn work_follows_the_change_and_not_the_installed_base() {
         work.metadata_built += work.metadata_patched;
         work.metadata_patched = 0;
         (work.normalize_ns, work.values_ns, work.update_ns) = (0, 0, 0);
+        (work.inode_page_ns, work.file_ns, work.file_bind_ns) = (0, 0, 0);
+        (
+            work.file_source_ns,
+            work.values_emit_ns,
+            work.values_record_ns,
+        ) = (0, 0, 0);
+        (work.update_record_ns, work.update_capture_ns) = (0, 0);
+        (work.update_emit_ns, work.backing_ns) = (0, 0);
         work
     };
     assert_eq!(
