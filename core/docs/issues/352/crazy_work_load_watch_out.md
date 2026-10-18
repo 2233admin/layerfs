@@ -42,6 +42,17 @@ clean reinstall 44.7 s, of which ~31.6 s is `rm -rf node_modules` (F-032).
   (`layerfs-persistence/src/history/layerstack.rs:389`, `commit.rs:68`) and
   merge walk those Commits; past 4,096 the call fails `Capacity`. In the
   replay each range publishes one Layer, so the limit is per range.
+- The same constant bounds three walks [V]: Commits since a Branch's base
+  Layer (`ancestry.rs:70, :220`); Layers between two sides
+  (`ancestry.rs:105, :125`, `layerstack.rs:389`), which does grow with
+  history: a Branch forked more than 4,096 publishes ago cannot merge; and a
+  Commit's first-parent depth (`commit.rs:68`), used by fork-from-Commit
+  (`branch.rs:185`) and Commit start checks. v0.1.7 kept it deliberately
+  (validation H02: "explicit >4,096 membership Capacity regression",
+  `docs/roadmap/0.1/0.1.7/evidence/issue210-remediation-20260921/validation.md:84`).
+  It is not listed in the declared limits
+  ([06-limits](../../architecture/06-limits.md)): an undeclared history limit,
+  not a resource limit.
 - Publish statements track the range's Commits almost exactly [E]: r011 960
   Commits / 977 statements, r013 866 / 883, r014 1,163 / 2,346 (two walks).
 - Forecast with F-031's extra Commit per dsh commit: r98 ~6,251, r112 ~4,589,
