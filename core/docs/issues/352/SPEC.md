@@ -899,6 +899,12 @@ it (§3). Each finding also goes to `BUGS.md` or `OPTIMIZATIONS.md` with:
 - the fix commit;
 - the old-vs-new probe table on the same milestone snapshots.
 
+A finding closed without a code change (2026-10-18, first 013.a1) has fix
+kind `none` and a summary of why it is not a product finding. It records no
+commit, regression test, REBUILD.md fields, improvement rows, design or cost.
+It carries an evidence table instead: measure, value, binary, snapshot and
+cache. Its ledger row shows `—` for the commit.
+
 ## 7. Checkpoints, snapshots and disk
 
 ### Store rules

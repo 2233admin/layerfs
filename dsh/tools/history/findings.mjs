@@ -12,6 +12,10 @@
 //            justification?: { kind1, kind2, cost, snapshot } },   kind 3: REBUILD.md §3 points 1-4
 //     improvement: [ { measure, before, after, unit?, oldBinary, newBinary, snapshot, cache } ],
 //                                                    old vs new binary, same snapshots (SPEC §3 F4)
+//   A finding closed without a code change has fix { kind: "none", summary } (why it is not a
+//   product finding): no commit, regression test or REBUILD.md fields, and no improvement rows;
+//   instead its evidence table, and no design or cost:
+//     evidence: [ { measure, value, unit?, binary, snapshot, cache } ]
 //     recovery,                                      SPEC §6 recovery
 //     records: [ { title, path: "fixes/NNN-aK-<slug>.md" } ],   one per cause (F5)
 //     ledger: [ { file: "OPTIMIZATIONS.md" | "BUGS.md", entry } ],   its BUGS / OPTIMIZATIONS line
@@ -25,8 +29,17 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const STEPS = ["D0", "D1", "D2", "D3", "D4", "D5", "D6"];
+/** A finding closed without a code change (fix.kind): it carries evidence instead of a fix and its improvement. */
+export const NO_CHANGE = "none";
+export const closedWithoutChange = (f) => f?.fix?.kind === NO_CHANGE;
+/** The evidence table of a finding closed without a code change. */
+export const EVIDENCE_COLUMNS = ["Measure", "Value", "Binary", "Snapshot / checkpoint", "Cache"];
 /** REBUILD.md §2: 1 forward-only, 2 additive migration, 3 incompatible. */
 export const REBUILD_KINDS = { 1: "1 forward-only", 2: "2 additive migration", 3: "3 incompatible" };
+/** How a fix kind reads in reports: the REBUILD.md kinds, "none" (no code change), or an older kind as written. */
+export const kindText = (kind) => REBUILD_KINDS[kind] ?? (kind === "none" ? "none: no code change" : kind);
+/** One evidence row in the report's table (EVIDENCE_COLUMNS). */
+export const evidenceRow = (r) => [r.measure, `${r.value}${r.unit ? ` ${r.unit}` : ""}`, `\`${r.binary}\``, r.snapshot, r.cache];
 /** The kinds of SPEC §6 before REBUILD.md, kept only by findings recorded before it (PRE_REBUILD). */
 export const FIX_KINDS = ["code path", "data", "format"];
 /** Findings recorded before REBUILD.md (2026-10-18); never extended. Their records stay as written (F2). */
@@ -63,17 +76,28 @@ export function checkFinding(f, { full = false } = {}) {
   need(f.trigger?.check, "trigger.check"); need(f.trigger?.value, "trigger.value");
   if (!STEPS.includes(f.diagnosis?.step)) p.push(`diagnosis.step is one of ${STEPS.join(", ")}`);
   need(f.diagnosis?.summary, "diagnosis.summary");
-  need(f.fix?.summary, "fix.summary"); need(f.fix?.commit, "fix.commit");
+  need(f.fix?.summary, "fix.summary");
   const id = `${String(f.range).padStart(3, "0")}.a${f.attempt}`;
-  if (PRE_REBUILD.has(id) && FIX_KINDS.includes(f.fix?.kind)) { /* recorded before REBUILD.md */ }
-  else for (const x of checkRebuild({ ...f.fix, recovery: f.recovery })) p.push(`fix.${x}`);
-  if (!Array.isArray(f.improvement) || !f.improvement.length) p.push("improvement has at least one old-vs-new row");
-  for (const r of f.improvement ?? []) {
-    if (r.measure == null || r.before == null || r.after == null) p.push("an improvement row needs measure, before and after");
-    for (const k of ["oldBinary", "newBinary", "snapshot", "cache"]) if (r[k] == null || r[k] === "") p.push(`improvement "${r.measure}" needs ${k}`);
+  if (closedWithoutChange(f)) {
+    // no code change: no commit, test, REBUILD.md fields or improvement; the evidence table instead
+    if (!Array.isArray(f.evidence) || !f.evidence.length) p.push("evidence has at least one row (a finding closed without a code change)");
+    for (const r of f.evidence ?? []) {
+      if (r.measure == null || r.value == null || r.value === "") p.push("an evidence row needs measure and value");
+      for (const k of ["binary", "snapshot", "cache"]) if (r[k] == null || r[k] === "") p.push(`evidence "${r.measure}" needs ${k}`);
+    }
+    if (f.improvement?.length) p.push("improvement rows need a code change; a finding without one has evidence");
+  } else {
+    need(f.fix?.commit, "fix.commit");
+    if (PRE_REBUILD.has(id) && FIX_KINDS.includes(f.fix?.kind)) { /* recorded before REBUILD.md */ }
+    else for (const x of checkRebuild({ ...f.fix, recovery: f.recovery })) p.push(`fix.${x}`);
+    if (!Array.isArray(f.improvement) || !f.improvement.length) p.push("improvement has at least one old-vs-new row");
+    for (const r of f.improvement ?? []) {
+      if (r.measure == null || r.before == null || r.after == null) p.push("an improvement row needs measure, before and after");
+      for (const k of ["oldBinary", "newBinary", "snapshot", "cache"]) if (r[k] == null || r[k] === "") p.push(`improvement "${r.measure}" needs ${k}`);
+    }
   }
   need(f.recovery, "recovery");
-  if (full) { need(f.design?.old, "design.old"); need(f.design?.new, "design.new"); need(f.cost, "cost"); }
+  if (full && !closedWithoutChange(f)) { need(f.design?.old, "design.old"); need(f.design?.new, "design.new"); need(f.cost, "cost"); }
   const prefix = `fixes/${String(f.range).padStart(3, "0")}-a${f.attempt}-`;
   if (!Array.isArray(f.records) || !f.records.length) p.push("records lists the fixes/ record of each cause");
   for (const r of f.records ?? []) if (!r?.title || !/^fixes\/\d{3}-a\d+-[a-z0-9-]+\.md$/.test(r?.path ?? "") || !r.path.startsWith(prefix)) p.push(`record ${JSON.stringify(r)} is { title, path: "${prefix}<slug>.md" }`);

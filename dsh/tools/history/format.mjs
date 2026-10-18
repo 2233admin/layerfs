@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { exponent, opsOf, reinstallGate, sameBinary, uncontended } from "./gates.mjs";
 import { storageProblems } from "./storage.mjs";
-import { change, REBUILD_KINDS } from "./findings.mjs";
+import { change, closedWithoutChange, EVIDENCE_COLUMNS, evidenceRow, kindText, REBUILD_KINDS } from "./findings.mjs";
 import { activityTables, categoryOf, checkOverview, checkTimeLine, timeLine } from "./stats.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
@@ -251,7 +251,8 @@ function storageInternals(f, range, m) {
  * the fix and the records; "Diagnosis pending" until the finding exists.
  */
 export function renderFindingFormat(range, a, gate, f, rerun) {
-  const head = `### Finding ${pad(range)}.a${a.attempt} · ${gate.verdict}${f ? " → fixed" : ""}${f ? ` · ${f.diagnosis.summary.split(/[.;]/)[0]}` : ""}`;
+  const none = closedWithoutChange(f);
+  const head = `### Finding ${pad(range)}.a${a.attempt} · ${gate.verdict}${f ? (none ? " → closed without a code change" : " → fixed") : ""}${f ? ` · ${f.diagnosis.summary.split(/[.;]/)[0]}` : ""}`;
   const trip = gate.checks?.filter((x) => x.result === "optimize" || x.result === "stop") ?? [];
   const lines = [head, "", `**1. Trigger** (attempt ${a.attempt}, daemon \`${id12(a.binary?.daemon)}\`)`, "",
     table(["Check", "Value", "Threshold"], (f ? [{ name: f.trigger.check, value: f.trigger.value, threshold: f.trigger.threshold }] : trip).map((x) => [x.name, x.value, x.threshold])), ""];
@@ -259,14 +260,15 @@ export function renderFindingFormat(range, a, gate, f, rerun) {
   const d = f.diagnosis;
   lines.push("**2. Fix context**", "", table(["", ""], [
     ["Playbook step", d.step], ["Cause", d.cause ?? d.summary], ["Old design", f.design?.old], ["New design", f.design?.new],
-    ["Kind", REBUILD_KINDS[f.fix.kind] ?? f.fix.kind], ...(REBUILD_KINDS[f.fix.kind] ? [["Old Stores", f.fix.oldStores], ["Old data", f.fix.oldData],
+    ["Kind", none ? `${kindText(f.fix.kind)} · ${f.fix.summary}` : kindText(f.fix.kind)], ...(REBUILD_KINDS[f.fix.kind] ? [["Old Stores", f.fix.oldStores], ["Old data", f.fix.oldData],
       f.fix.kind < 3 ? ["Compatibility test", f.fix.compat] : ["Rebuild justification", Object.values(f.fix.justification ?? {}).join(" · ")]] : []),
-    ["Commits", `${String(f.fix.commit).split(/,\s*/).map((x) => `\`${x}\``).join(", ")}${f.fix.test ? ` · regression tests ${f.fix.test}` : ""}`], ["Recovery", f.recovery],
-  ]), "", "**3. Before / after** (same snapshots, one sample each)", "",
-  table(["Measure", "Before", "After", "Change", "Old binary", "New binary", "Snapshot / checkpoint", "Cache"], f.improvement.map((r) => [r.measure, `${r.before}${r.unit ? ` ${r.unit}` : ""}`, `${r.after}${r.unit ? ` ${r.unit}` : ""}`, change(r.before, r.after), `\`${r.oldBinary}\``, `\`${r.newBinary}\``, r.snapshot, r.cache])), "",
+    ...(none ? [] : [["Commits", `${String(f.fix.commit).split(/,\s*/).map((x) => `\`${x}\``).join(", ")}${f.fix.test ? ` · regression tests ${f.fix.test}` : ""}`]]), ["Recovery", f.recovery],
+  ]), "", none ? "**3. Evidence** (no code change; one sample each unless the row says otherwise)" : "**3. Before / after** (same snapshots, one sample each)", "",
+  none ? table(EVIDENCE_COLUMNS, f.evidence.map(evidenceRow))
+    : table(["Measure", "Before", "After", "Change", "Old binary", "New binary", "Snapshot / checkpoint", "Cache"], f.improvement.map((r) => [r.measure, `${r.before}${r.unit ? ` ${r.unit}` : ""}`, `${r.after}${r.unit ? ` ${r.unit}` : ""}`, change(r.before, r.after), `\`${r.oldBinary}\``, `\`${r.newBinary}\``, r.snapshot, r.cache])), "",
   d.exponent ? `Counter \`${d.counter}\` depth exponent ${d.exponent.before} → ${d.exponent.after}.` : "", "",
   "**4. With vs without the optimization, this range**", "", withWithout(a, rerun), "",
-  `**5. Cost of the fix:** ${f.cost ?? "not recorded"}`, "",
+  none ? "**5. Cost of the fix:** none: no code change." : `**5. Cost of the fix:** ${f.cost ?? "not recorded"}`, "",
   `**6. Records:** ${[...(f.records ?? []).map((r) => `[${r.path.replace(/^fixes\//, "fixes/")}](../${r.path})`), ...(f.ledger ?? []).map((l) => `[${l.file}](../${l.file}) (${l.entry})`)].join(" · ")} · finding \`~/lfs-history/metrics/finding-${pad(range)}.a${a.attempt}.json\``);
   return lines.join("\n");
 }

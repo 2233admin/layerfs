@@ -19,7 +19,7 @@
 //                      (legacy attempts predate the rule and are reported as such)
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { checkFinding, checkRecord, loadFindings } from "./findings.mjs";
+import { checkFinding, checkRecord, closedWithoutChange, EVIDENCE_COLUMNS, loadFindings } from "./findings.mjs";
 import { atHead, cells, legacyGates, parseReport, tableAfter } from "./frozen.mjs";
 import { FINDING_COLUMNS, LEAD_END, LEAD_START, NOTE_START } from "./report.mjs";
 import { checkOverview } from "./stats.mjs";
@@ -61,13 +61,15 @@ export function blockTables(block) {
  * table, when present, is Measure plus one column per attempt, each labelled
  * with its binary (a backticked id), every cell filled.
  */
-export function findingTableProblems(block) {
+export function findingTableProblems(block, { none = false } = {}) {
   const p = [], tables = blockTables(block);
-  const ba = tables.find((t) => JSON.stringify(t.header) === JSON.stringify(FINDING_COLUMNS));
-  if (!ba) return [`the before/after columns are not ${FINDING_COLUMNS.join(" · ")}`];
+  // a finding closed without a code change shows its evidence table instead of a before/after one
+  const cols = none ? EVIDENCE_COLUMNS : FINDING_COLUMNS;
+  const ba = tables.find((t) => JSON.stringify(t.header) === JSON.stringify(cols));
+  if (!ba) return [`the ${none ? "evidence" : "before/after"} columns are not ${cols.join(" · ")}`];
   for (const c of ba.rows) {
-    if (c.length !== FINDING_COLUMNS.length || c.some((x) => !x)) p.push(`row "${c[0]}" does not fill every column`);
-    else if (!/exponent|ratio|share/.test(c[0]) && [c[1], c[2]].some((x) => /^[−\-]?[\d,.]+$/.test(x))) p.push(`row "${c[0]}" has a number without its unit`);
+    if (c.length !== cols.length || c.some((x) => !x)) p.push(`row "${c[0]}" does not fill every column`);
+    else if (!/exponent|ratio|share/.test(c[0]) && (none ? [c[1]] : [c[1], c[2]]).some((x) => /^[−\-]?[\d,.]+$/.test(x))) p.push(`row "${c[0]}" has a number without its unit`);
   }
   const at = block.indexOf("With vs without");
   const ww = at < 0 ? null : blockTables(block.slice(at))[0];
@@ -156,7 +158,7 @@ export function checkReport({ range, metricsDir, docs }) {
       if (!block.includes("Diagnosis pending") || !block.includes(`finding-${id}.json`)) fail("F3", `Finding ${id}: no finding record, and the block does not say Diagnosis pending with its file`);
       return;
     }
-    for (const p of checkFinding(f, { full: binding })) fail(/improvement/.test(p) ? "F4" : /record|ledger/.test(p) ? "F5" : "F3", `finding-${id}.json: ${p}`);
+    for (const p of checkFinding(f, { full: binding })) fail(/improvement|evidence/.test(p) ? "F4" : /record|ledger/.test(p) ? "F5" : "F3", `finding-${id}.json: ${p}`);
     // F5 and REBUILD.md §4: each fixes/ record the finding names states its kind fields
     for (const r of f.records ?? []) {
       const file = join(docs, r.path);
@@ -167,10 +169,10 @@ export function checkReport({ range, metricsDir, docs }) {
     if (!block.includes(f.trigger.check)) fail("F3", `Finding ${id} does not show its trigger`);
     if (comment != null) {
       if (!comment.includes(f.trigger.check)) fail("F3", `comment-${pad(range)}.md lacks finding ${id}'s trigger`);
-      for (const r of f.improvement) if (!comment.includes(r.measure)) fail("F3", `comment-${pad(range)}.md lacks the measure "${r.measure}" of finding ${id}`);
+      for (const r of (closedWithoutChange(f) ? f.evidence : f.improvement) ?? []) if (!comment.includes(r.measure)) fail("F3", `comment-${pad(range)}.md lacks the measure "${r.measure}" of finding ${id}`);
     }
     // F4: each table of the block by its own shape (F-020): the before/after table, and the with-vs-without one
-    for (const p of findingTableProblems(block)) fail("F4", `Finding ${id}: ${p}`);
+    for (const p of findingTableProblems(block, { none: closedWithoutChange(f) })) fail("F4", `Finding ${id}: ${p}`);
     // F5: its records and ledger linked
     for (const r of f.records ?? []) if (!block.includes(`](../${r.path})`)) fail("F5", `Finding ${id} does not link ${r.path}`);
     for (const l of f.ledger ?? []) if (!block.includes(`](../${l.file})`)) fail("F5", `Finding ${id} does not link ${l.file}`);

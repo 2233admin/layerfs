@@ -13,7 +13,9 @@ import { chooseRun, compareResults, packageOf, parseVitestJson, selectTests, vit
 import { dockerArgs, FETCH, INSTALL, nextSlice, noInstall, parseProbe } from "../calibrate-tests.mjs";
 import { evaluate } from "../gates.mjs";
 import { change, checkFinding, checkRebuild, checkRecord, checkRecords, loadFindings } from "../findings.mjs";
-import { renderOptimization } from "../report.mjs";
+import { renderFinding, renderOptimization } from "../report.mjs";
+import { renderFindingFormat } from "../format.mjs";
+import { findingTableProblems } from "../reportcheck.mjs";
 
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
@@ -280,6 +282,28 @@ test("a finding record is checked, loaded by range and attempt, and its change i
   assert.equal(checkFinding({ ...finding(), fix: { ...finding().fix, kind: "code path" } }).join(), "fix.kind is 1, 2 or 3 (REBUILD.md §2)", "only PRE_REBUILD findings keep the SPEC §6 kind");
   assert.deepEqual(checkFinding({ ...finding(), range: 2, records: [{ title: "x", path: "fixes/002-a1-x.md" }], fix: { ...finding().fix, kind: "format", oldStores: null, compat: null } }), []);
   assert.deepEqual([change(140, 33), change(100, 120), change(5, 5), change(0, 3)], ["−76%", "+20%", "±0%", "—"]);
+});
+
+test("a finding closed without a code change (kind none): evidence table, no commit or regression test", () => {
+  const none = { ...finding(), range: 13, records: [{ title: "x", path: "fixes/013-a1-x.md" }],
+    fix: { kind: "none", summary: "not a product finding: the Sandbox's command launch" }, improvement: undefined,
+    evidence: [{ measure: "exec true 10x median, range 13", value: 40.99, unit: "ms", binary: "daemon 6d467539", snapshot: "fork of range 13", cache: "fresh daemon" }] };
+  assert.deepEqual(checkFinding(none), []);
+  assert.deepEqual(checkFinding(none, { full: true }), [], "no design or cost without a code change");
+  const missing = checkFinding({ ...none, evidence: [] }).join("; ");
+  assert.ok(missing.includes("evidence has at least one row") && !missing.includes("fix.commit") && !missing.includes("compatibility") && !missing.includes("improvement has"), missing);
+  assert.ok(checkFinding({ ...none, evidence: [{ measure: "m", value: 1 }] }).join().includes('evidence "m" needs binary'));
+  assert.ok(checkFinding({ ...none, improvement: [{ measure: "m", before: 1, after: 2, oldBinary: "a", newBinary: "b", snapshot: "s", cache: "c" }] }).join().includes("improvement rows need a code change"));
+  assert.ok(checkFinding({ ...finding(), fix: { ...finding().fix, commit: undefined } }).join().includes("fix.commit"), "a code fix still needs its commit");
+  // rendered: the evidence table in place of the before/after one, no Commits row
+  const block = renderFinding(13, 1, none);
+  assert.ok(block.includes("| Measure | Value | Binary | Snapshot / checkpoint | Cache |") && block.includes("| exec true 10x median, range 13 | 40.99 ms |") && block.includes("none: no code change") && !block.includes("commits"), block);
+  const fmt = renderFindingFormat(13, { attempt: 1, binary: { daemon: "6d467539aa" } }, { verdict: "optimize", checks: [] }, none, null);
+  assert.ok(fmt.includes("→ closed without a code change") && fmt.includes("**3. Evidence**") && !fmt.includes("| Commits |") && fmt.includes("none: no code change."), fmt);
+  assert.deepEqual(findingTableProblems(fmt, { none: true }), []);
+  assert.ok(findingTableProblems(fmt)[0].includes("before/after columns"));
+  const comment = renderOptimization({ plan: { range: 13 }, attempts: [{ attempt: 1 }, { attempt: 2 }], gates: [{ verdict: "optimize", checks: [] }, { verdict: "watch", checks: [] }], findings: [none] });
+  assert.ok(comment.includes("**Closed without a code change:**") && comment.includes("| Evidence | Value |") && comment.includes("exec true 10x median"), comment);
 });
 
 test("the comment's optimization part: none, pending, then trigger, diagnosis, fix and improvement", () => {

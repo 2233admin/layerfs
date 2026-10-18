@@ -26,7 +26,7 @@ import { dirname, join } from "node:path";
 import { aggregate, BASELINE_MIN_N, buildBaseline, evaluate, exponent, MINIMUM_POINTS, reinstallGate, sameBinary, thinClass } from "./gates.mjs";
 import { categoryOf, derivedOverview, renderOverview, renderStats } from "./stats.mjs";
 import { FINDINGS, loadIssues, renderFormat } from "./format.mjs";
-import { change, loadFindings, REBUILD_KINDS } from "./findings.mjs";
+import { change, closedWithoutChange, EVIDENCE_COLUMNS, evidenceRow, kindText, loadFindings } from "./findings.mjs";
 import { changedDirs, oneshotSplit, withDirs } from "./steps.mjs";
 import { diffTrees } from "./git.mjs";
 import { HISTORY as HISTORY_DIR, readTrace } from "./lib.mjs";
@@ -116,10 +116,10 @@ export function renderFinding(range, attempt, f) {
   return [head, "", table(["", ""], [
     ["Trigger", `${f.trigger.check} · ${f.trigger.value}${f.trigger.threshold ? ` · threshold ${f.trigger.threshold}` : ""}`],
     ["Diagnosis", `${d.step} · ${d.summary}${d.counter ? ` · counter \`${d.counter}\`` : ""}${d.exponent ? `, exponent ${d.exponent.before} → ${d.exponent.after}` : ""}`],
-    ["Fix", `${f.fix.summary} · ${REBUILD_KINDS[f.fix.kind] ?? f.fix.kind} · commits ${String(f.fix.commit).split(/,\s*/).map((c) => `\`${c}\``).join(", ")}${f.fix.test ? ` · regression tests ${f.fix.test}` : ""}`],
+    ["Fix", closedWithoutChange(f) ? `${f.fix.summary} · ${kindText(f.fix.kind)}` : `${f.fix.summary} · ${kindText(f.fix.kind)} · commits ${String(f.fix.commit).split(/,\s*/).map((c) => `\`${c}\``).join(", ")}${f.fix.test ? ` · regression tests ${f.fix.test}` : ""}`],
     ["Recovery", f.recovery],
     ["Records", [...(f.records ?? []).map((r) => `[${r.title}](../${r.path})`), ...(f.ledger ?? []).map((l) => `[${l.file}](../${l.file}) (${l.entry})`)].join(" · ")],
-  ]), "", table(FINDING_COLUMNS, f.improvement.map(improvementRow))].join("\n");
+  ]), "", closedWithoutChange(f) ? table(EVIDENCE_COLUMNS, f.evidence.map(evidenceRow)) : table(FINDING_COLUMNS, f.improvement.map(improvementRow))].join("\n");
 }
 
 /**
@@ -363,10 +363,11 @@ function findingComment(f, g, title) {
     `#### ${title}`, "",
     `- **Trigger:** ${f.trigger.check}: ${f.trigger.value}${f.trigger.threshold ? ` (threshold ${f.trigger.threshold})` : ""}`,
     `- **Diagnosis:** ${d.step} · ${d.summary}${d.phase ? ` · phase \`${d.phase}\`` : ""}${d.counter ? ` · counter \`${d.counter}\`` : ""}${d.exponent ? ` · depth exponent ${d.exponent.before} → ${d.exponent.after}` : ""}`,
-    `- **Fix:** ${f.fix.summary} · ${REBUILD_KINDS[f.fix.kind] ?? f.fix.kind} · commit \`${String(f.fix.commit).slice(0, 9)}\`${f.fix.test ? ` · regression test \`${f.fix.test}\`` : ""}`,
+    closedWithoutChange(f) ? `- **Closed without a code change:** ${f.fix.summary}`
+      : `- **Fix:** ${f.fix.summary} · ${kindText(f.fix.kind)} · commit \`${String(f.fix.commit).slice(0, 9)}\`${f.fix.test ? ` · regression test \`${f.fix.test}\`` : ""}`,
     `- **Recovery:** ${f.recovery}`,
     `- **Now:** ${now ? `${now.name} ${now.result}: ${now.value}` : "the check no longer applies"}`, "",
-    table(["Improvement", ...FINDING_COLUMNS.slice(1)], f.improvement.map(improvementRow)), "",
+    closedWithoutChange(f) ? table(["Evidence", ...EVIDENCE_COLUMNS.slice(1)], f.evidence.map(evidenceRow)) : table(["Improvement", ...FINDING_COLUMNS.slice(1)], f.improvement.map(improvementRow)), "",
     `Record: ${f.record ?? [...(f.records ?? []).map((r) => r.path), ...(f.ledger ?? []).map((l) => `${l.file} (${l.entry})`)].join(", ")}`,
   ].join("\n");
 }

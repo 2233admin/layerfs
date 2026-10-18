@@ -16,6 +16,7 @@
 | 007.a1 | D6 | F-018, range-8 play on the range-7 fork, daemon `361bb09e` → `c25119ac` (addon `5baa0f5d`): `fs.read` p95 96.1 → 9.7 ms, `fs.stat` 46.6 → 7.1, `fs.grep` 100.1 → 63.6, all reads 90.4 → 24.9. Cost: span 14.8 → 17.1 s, in-lane merges 132 → 193 | this commit | [Reads stop queueing behind the publication lane](fixes/007-a1-f018-reads-behind-publication-lane.md) |
 | 009.a1 | D4 | `oneshot_mount_exec.vm_steps` 0.971 → 0 (`p2-main-b` r7/r9 forks: 1,923/2,331 → 1,140/1,140 VM steps); a mount looked its Branch up by listing every Branch | this commit | [A mount finds its Branch by name](fixes/009-a1-mount-branch-lookup.md) |
 | 011.a1 | D3 | `list_largest.statements` per entry 16.6 → 6.2 (r9) and 24.3 → 7.2 (r11) on `p2-main-c` forks; each listed entry re-read the inode table's upper levels. Residual +16% per entry r9 → r11 is the leaves' chain position (F-016 effect, bounded) | this commit | [A listing looks its entries up together](fixes/011-a1-list-entry-lookups.md) |
+| 013.a1 | D0 | `oneshot_mount_exec` time exponent 2.30, every SQL counter flat: no product change. The growth is the Sandbox's `exec true` launch (33 → 62 ms, zero FUSE requests); fresh-daemon spreads overlap (18–62 vs 24–47 ms). The probe is split (builder `08de4f038`) | — | [oneshot_mount_exec grew in exec launch, not in LayerFS](fixes/013-a1-oneshot-exec-launch.md) |
 
 ## Watch
 
