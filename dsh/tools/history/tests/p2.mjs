@@ -527,3 +527,15 @@ test("phase-matched baselines: chosen by daemon, addon and phase; P2 never falls
   assert.match(g.checks.find((c) => c.name === "Speed").value, /not this attempt's; not judged/);
   rmSync(d, { recursive: true, force: true });
 });
+
+test("glob_tree is fitted per tree file: growth with the tree passes, a per-file rise with depth trips", () => {
+  const mk = (i, perFile) => ({ range: i, binary: { daemon: "d" }, depth: { after: 1000 * (i + 1) }, inputs: { tree: { files: 300 * (i + 1), bytes: 1e5 * (i + 1) } }, checks: {},
+    probes: { glob_tree: { ms: 0.02 * 300 * (i + 1) * perFile(i), counters: { statements: Math.round(300 * (i + 1) * perFile(i)) } } } });
+  const row = (xs, n) => evaluate(xs.at(-1), xs.slice(0, -1)).checks.find((c) => c.name === n);
+  const tree = [0, 1, 2, 3].map((i) => mk(i, () => 1));
+  assert.equal(row(tree, "Counters").result, "pass", row(tree, "Counters").value);
+  assert.match(row(tree, "Scaling").value, /per tree file|pass|exponent/);
+  const depth = [0, 1, 2, 3].map((i) => mk(i, (j) => j + 1));
+  assert.equal(row(depth, "Counters").result, "optimize", row(depth, "Counters").value);
+  assert.match(row(depth, "Counters").value, /glob_tree\.statements per tree file/);
+});

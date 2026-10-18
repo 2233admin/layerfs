@@ -4,7 +4,7 @@
 //   node dsh/tools/history/report.mjs check <NNN> [--metrics <dir>] [--docs <dir>]   (reportcheck.mjs: F1–F8)
 //   node dsh/tools/history/report.mjs regate --metrics <dir>   (dry run: today's gates over recorded metrics; prints only, F2)
 //   node dsh/tools/history/report.mjs records [--docs <dir>]   (every fixes/ record states its REBUILD.md §4 kind fields)
-//   node dsh/tools/history/report.mjs baseline --run <id> --metrics <dir> --ranges 2-4 [--out <dir>]   (one daemon's speed baseline)
+//   node dsh/tools/history/report.mjs baseline --run <id> --metrics <dir> --ranges 2-4 [--out <dir>] [--phase pN --note <why>]   (one daemon's, or daemon+addon+phase's, speed baseline)
 //   node dsh/tools/history/report.mjs stats --metrics <dir> --docs <dir>   (STATS.md alone, e.g. its backfill)
 // A range whose latest attempt recorded the binding format's measurements
 // (REPORT_FORMAT.md) is written in that format (format.mjs); earlier ones keep
@@ -192,13 +192,13 @@ export function baselineFor(baselines, m, pilot = null) {
  * <out>/baseline-<daemon12>.json. Refuses unmeasured attempts, a mix of
  * daemons, a missing range and a daemon that has a baseline (one series per binary, F2).
  */
-export function writeBaseline({ metricsDir, ranges, out, run, phase = null }) {
+export function writeBaseline({ metricsDir, ranges, out, run, phase = null, note = null }) {
   const attempts = loadAttempts(metricsDir);
   const ms = ranges.map((k) => { const m = attempts.get(k)?.at(-1); if (!m) throw new Error(`no attempt of range ${k} in ${metricsDir}`); return m; });
   if (ms.some((m) => m.mode !== "measured")) throw new Error("a baseline takes measured attempts only");
   const sdks = new Set(ms.map((m) => m.binary?.sdk)), phases = new Set(ms.map((m) => m.phase));
   if (phase && (sdks.size > 1 || phases.size > 1 || !phases.has(phase))) throw new Error(`a ${phase} baseline mixes addons (${[...sdks].join(", ")}) or phases (${[...phases].join(", ")})`);
-  const b = { ...buildBaseline(ms), ...(phase ? { sdk: [...sdks][0], phase } : {}), run, source: metricsDir, built: new Date().toISOString() };
+  const b = { ...buildBaseline(ms), ...(phase ? { sdk: [...sdks][0], phase } : {}), run, source: metricsDir, built: new Date().toISOString(), ...(note ? { note } : {}) };
   const pilot = join(out, "baseline.json");
   if (loadBaselines(out, existsSync(pilot) ? JSON.parse(readFileSync(pilot, "utf8")) : null).has(baselineKey(b))) throw new Error(`${baselineKey(b)} already has a baseline in ${out}`);
   const file = join(out, baselineName(b));
@@ -541,7 +541,7 @@ async function main() {
     const [from, to] = String(opt("--ranges") ?? "").split("-").map(Number);
     if (!opt("--metrics") || !opt("--run") || !Number.isInteger(from) || !Number.isInteger(to)) { console.error("usage: report.mjs baseline --run <id> --metrics <its metrics> --ranges 2-4 [--out <main metrics>]"); process.exit(2); }
     const ranges = Array.from({ length: to - from + 1 }, (_, i) => from + i);
-    const r = writeBaseline({ metricsDir: opt("--metrics"), ranges, run: opt("--run"), out: opt("--out") ?? join(process.env.HOME, "lfs-history", "metrics") });
+    const r = writeBaseline({ metricsDir: opt("--metrics"), ranges, run: opt("--run"), out: opt("--out") ?? join(process.env.HOME, "lfs-history", "metrics"), phase: opt("--phase"), note: opt("--note") });
     console.log(JSON.stringify({ file: r.file, daemon: r.baseline.daemon, ranges: r.baseline.ranges, ops: Object.keys(r.baseline.ops).length, probes: Object.keys(r.baseline.probes).length }));
     return;
   }

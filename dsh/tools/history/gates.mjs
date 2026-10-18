@@ -221,8 +221,8 @@ export function exponent(points) {
  * carries the checkpoint tree as `inputs.tree` (run.mjs, from the oracle); an
  * attempt recorded without it is judged as it was, raw.
  */
-export const SCOPED = { grep_tree: (x) => x.inputs?.tree?.bytes, list_largest: (x) => x.probes?.list_largest?.input?.entries };
-const SCOPE_UNIT = { grep_tree: "tree byte", list_largest: "entry of the largest directory" };
+export const SCOPED = { grep_tree: (x) => x.inputs?.tree?.bytes, glob_tree: (x) => x.inputs?.tree?.files, list_largest: (x) => x.probes?.list_largest?.input?.entries };
+const SCOPE_UNIT = { grep_tree: "tree byte", glob_tree: "tree file", list_largest: "entry of the largest directory" };
 /** Probes whose raw counters must stay flat with tree size as well as depth (SPEC §4): the one-file diff. */
 export const TREE_FLAT = new Set(["diff_commits"]);
 const treeFiles = (x) => x.inputs?.tree?.files;
