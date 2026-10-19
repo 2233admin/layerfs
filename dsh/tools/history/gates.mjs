@@ -248,12 +248,16 @@ export function probeSeries(name, m, all) {
 export const CHAIN = new Set(["stat", "read", "list_small", "grep_scoped", "glob_scoped", "diff_files",
   // F-023: probes that rewrite a fixed file or directory each range (diff-one.txt, m/*, c/one.txt), so their
   // own writes and reads walk the same per-path delta chains: bounded by the cap, not monotone
-  "diff_commits", "merge", "oneshot_commit"]);
+  "diff_commits", "merge", "oneshot_commit",
+  // r017.a1 (liaison 2026-10-19): list_largest lists a real directory (/scripts) whose entries are read through
+  // the same per-path metadata delta chains, so it is judged by the same bound, per entry of the directory it
+  // lists (SCOPED): growth past a cap period, or a rise per entry, still trips
+  "list_largest"]);
 /** The bound's bands: counters are deterministic (any rise is a finding), ms carries noise. */
 export const BOUND = { counters: { watch: 1.0, act: 1.05 }, ms: { watch: 1.2, act: 1.5 } };
 
 export function chainBound(name, m, pts, t = BOUND) {
-  const period = m.storage?.delta?.caps?.metadata ?? m.storage?.deltaTotal?.caps?.metadata ?? null;
+  const period = m.storage?.delta?.caps?.metadata ?? m.storage?.deltaTotal?.caps?.metadata ?? null, unit = SCOPED[name] ? ` per ${SCOPE_UNIT[name]}` : "";
   const one = (label, value, th) => {
     const v = pts.map(value).filter((x) => x != null);
     if (period == null) return { name: label, e: null, result: "watch", note: "no metadata delta cap recorded: the chain period is unknown" };
@@ -262,8 +266,9 @@ export function chainBound(name, m, pts, t = BOUND) {
     return { name: label, e: ratio, result: band(ratio, th), text: `max over the latest cap period ${last} vs the first ${first}: ${ratio}× (bound, period ${period})` };
   };
   return {
-    probe: [one(`${name} (chain-bounded)`, (x) => x.probes?.[name]?.ms, t.ms)],
-    counters: Object.keys(m.probes[name].counters || {}).map((k) => one(`${name}.${k} (chain-bounded)`, (x) => x.probes?.[name]?.counters?.[k], t.counters)),
+    // a probe with its own growing input (list_largest) is bounded per unit of it, the fixed-input ones raw
+    probe: [one(`${name}${unit} (chain-bounded)`, (x) => perInput(name, x, x.probes?.[name]?.ms, true), t.ms)],
+    counters: Object.keys(m.probes[name].counters || {}).map((k) => one(`${name}.${k}${unit} (chain-bounded)`, (x) => perInput(name, x, x.probes?.[name]?.counters?.[k], true), t.counters)),
   };
 }
 

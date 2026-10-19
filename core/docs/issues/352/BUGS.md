@@ -152,6 +152,16 @@
   max over the latest cap period against the first (1.0× bounded), not a depth
   exponent; fewer than a period plus one point is not judged. `list_largest`
   is fitted per entry of its directory. gates.mjs header, SPEC §5.
+  **Extended to `list_largest`** (liaison, 2026-10-19, after r017.a1). It lists
+  a real directory (`/scripts`) whose entries are read through the same
+  per-path metadata delta chains. The first exponent fit over 3 same-binary
+  points (r015–r017) read the bounded chain residual as growth:
+  - statements 72 → 92 → 103 and blob reads 153 → 207 → 240, at 45, 50 and 50
+    entries;
+  - Scaling 2.22 and Counters 1.188.
+  The probe is now judged by the same `chainBound` code path, per entry of
+  its directory, with no separate threshold. Growth past a cap period, or a
+  rise per entry at a fixed chain depth, still trips (tests/p2.mjs, r017.a1).
 - **F-017 · fs calls of all agents serialize on one Sandbox control
   connection (product, 007.a1 S1, 2026-10-18).** `registry.rs`
   `control: Mutex<Control>`; reads queue behind Commits (range 7: 1 ms work,

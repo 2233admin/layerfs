@@ -721,8 +721,9 @@ for a ~5% storage gain. Report raw deltas for both.
 > the maximum over the first (counters: any rise over 1.0× is watch, over
 > 1.05× optimize; ms: 1.2× / 1.5×). Fewer than a period plus one point, or no
 > recorded cap, is "not judged" (watch). Cost per decoded link was rejected:
-> it stays flat under unbounded chain growth. `list_largest` is fitted per
-> entry of the directory it lists (its recorded input), `glob_tree` per tree
+> it stays flat under unbounded chain growth. `list_largest` is bounded the
+> same way per entry of the directory it lists (its recorded input; liaison
+> 2026-10-19, after r017.a1), `glob_tree` per tree
 > file like `grep_tree` per tree byte; a growing probe
 > without its own input is "not judged" (`dsh/tools/history/gates.mjs` header).
 

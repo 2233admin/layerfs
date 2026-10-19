@@ -516,9 +516,14 @@ test("F-014: probes fit only same-version, same-input points; growing probes are
   assert.match(row(legacy).value, /stat: input not recorded/);
   // (its counters grow too: a time-only trip with identical counters reads watch, owner 2026-10-18)
   const grows = [1, 2, 3].map((i) => mk(i, 1000 * i, { list_largest: { ...one(3 * i * i, { entries: 10 * i }), counters: { statements: 100 * i } } }));
-  assert.equal(row(grows).result, "optimize", "list_largest is exempt from the same-input rule and fitted per entry");
+  // exempt from the same-input rule (no refusal on 10/20/30 entries); since r017.a1 it is chain-bounded per entry,
+  // so three points are not judged, and growth over a cap period trips (the r017.a1 test)
+  assert.doesNotMatch(row(grows).value, /differs/, "list_largest is exempt from the same-input rule");
+  assert.match(row(grows, "Counters").value, /not judged: list_largest.*chain-bounded/);
   const perEntryFlat = [1, 2, 3].map((i) => mk(i, 1000 * i, { list_largest: { ...one(3 * i, { entries: 10 * i }), counters: { statements: 100 * i } } }));
-  assert.equal(row(perEntryFlat).result, "pass", row(perEntryFlat).value);
+  // a directory growing alone never trips (judged pass once a period is recorded: the r017.a1 test's `wider`)
+  assert.equal(row(perEntryFlat).result, "watch", row(perEntryFlat).value);
+  assert.match(row(perEntryFlat).value, /not judged/);
   assert.deepEqual(probeSeries("list_largest", grows[2], grows).note, undefined);
 });
 
@@ -924,6 +929,29 @@ test("F-023: the one-file diff_commits probe is chain-bounded: the recorded nine
   assert.equal(rec.result, "pass", rec.value);
   assert.equal(counters(stmts.map((v, i) => mk(i, 72 + 12 * i))).result, "optimize");
   assert.equal(counters(stmts.slice(0, 3).map((v, i) => mk(i, v))).result, "watch", "three points: not judged");
+});
+
+test("r017.a1 (liaison 2026-10-19): list_largest is chain-bounded per entry: r015-r017 not judged, a bounded sawtooth passes, growth past a period or a rise per entry trips", () => {
+  const mk = (i, entries, st, reads, ms = 5) => ({ range: 15 + i, binary: { daemon: "d" }, depth: { after: 12851 + 1000 * i }, inputs: { tree: { files: 40000 + 100 * i } }, checks: {}, storage: { delta: { caps: { metadata: 8 } } },
+    probes: { list_largest: { ms, input: { dir: "scripts", entries }, counters: { statements: st, blob_reads: reads } } } });
+  const rows = (xs) => { const g = evaluate(xs.at(-1), xs.slice(0, -1)); return ["Scaling", "Counters"].map((n) => g.checks.find((c) => c.name === n)); };
+  // the recorded points: 72/92/103 statements, 153/207/240 blob reads at 45/50/50 entries (r015.a4, r016.a3, r017.a1)
+  const rec = rows([[45, 72, 153, 4.7], [50, 92, 207, 7.8], [50, 103, 240, 8.1]].map(([e, s, r, ms], i) => mk(i, e, s, r, ms)));
+  for (const r of rec) { assert.equal(r.result, "watch", r.value); assert.match(r.value, /not judged: list_largest.*of 9 points/); }
+  // a bounded sawtooth per entry over 20 ranges (a cap-8 chain that resets), with the directory growing: pass
+  const saw = [1.6, 1.84, 2.06, 2.3, 2.5, 2.7, 2.9, 3.1];
+  const bounded = rows(Array.from({ length: 20 }, (_, i) => { const e = 45 + i; return mk(i, e, saw[i % 8] * e, 2.125 * saw[i % 8] * e); }));
+  for (const r of bounded) assert.equal(r.result, "pass", r.value);
+  assert.match(bounded[1].value, /per entry of the largest directory \(chain-bounded\)/);
+  // growth that goes on past one cap period: +0.2 statements per entry every range, never resetting
+  const grows = rows(Array.from({ length: 12 }, (_, i) => mk(i, 50, Math.round((1.6 + 0.2 * i) * 50), 150 + 20 * i)));
+  assert.equal(grows[1].result, "optimize", grows[1].value);
+  // a rise per entry at a fixed chain depth: the same sawtooth, each period 10% dearer per entry
+  const dearer = rows(Array.from({ length: 20 }, (_, i) => mk(i, 50, Math.round(saw[i % 8] * 50 * (1 + 0.1 * Math.floor(i / 8))), 160)));
+  assert.equal(dearer[1].result, "optimize", dearer[1].value);
+  // the directory growing alone (cost proportional to its entries) is not growth per entry
+  const wider = rows(Array.from({ length: 12 }, (_, i) => mk(i, 45 + 10 * i, 2 * (45 + 10 * i), 4 * (45 + 10 * i))));
+  for (const r of wider) assert.equal(r.result, "pass", r.value);
 });
 
 test("F-024: baseline classes carry n; a thin class is not judged; merge and Commit outcomes are their own classes", () => {
