@@ -182,7 +182,22 @@ async function playStep(a, k, s, ctx) {
  * still pending, so no agent waits forever; agents in a call finish it, then
  * stop. Held Workspaces left by a failure are unmounted (discarded).
  */
-export async function playAgents(run, k, ctx) {
+/**
+ * The plan orders a lanes stage may stop at (`--cut`): every agent plays its steps below the order, and none of a
+ * held sequence (commit-conflict, stale-clean-merge: a Workspace mounted across steps) is cut in two.
+ */
+export function safeCut(plan, cut) {
+  const order = new Map(plan.steps.map((s) => [s.id, s.order]));
+  for (const c of plan.conflicts ?? []) {
+    if (c.kind !== "commit-conflict" && c.kind !== "stale-clean-merge") continue;
+    const os = c.steps.map((id) => order.get(id)).filter((o) => o != null);
+    if (Math.min(...os) < cut && Math.max(...os) >= cut) return `order ${cut} cuts the ${c.kind} on ${c.lane} (orders ${os.join(", ")})`;
+  }
+  return null;
+}
+
+/** Plays every agent's steps; with `cut`, only those below that plan order, and a later call continues after the played ones. */
+export async function playAgents(run, k, ctx, { cut = null } = {}) {
   const done = new Map(), settle = new Map();
   for (const list of ctx.p2.agents.values()) for (const s of list) {
     done.set(s.id, new Promise((resolve, reject) => settle.set(s.id, { resolve, reject })));
@@ -198,10 +213,13 @@ export async function playAgents(run, k, ctx) {
     const n = Number(agent.slice(1));
     views.set(agent, await run.agent(agent, run.pool[poolOf(n, run.pool.length)]));
   }
-  ctx.steps = new Map([...ctx.p2.agents.keys()].map((a) => [a, 0]));
+  // a continued lanes stage (an earlier --cut) keeps each agent's played count; its played steps are settled, not replayed
+  ctx.steps = new Map([...ctx.p2.agents.keys()].map((a) => [a, ctx.steps?.get(a) ?? 0]));
+  for (const [agent, list] of ctx.p2.agents) for (const s of list.slice(0, ctx.steps.get(agent))) settle.get(s.id).resolve();
   const task = async (agent) => {
     const a = views.get(agent);
-    for (const s of ctx.p2.agents.get(agent)) {
+    for (const s of ctx.p2.agents.get(agent).slice(ctx.steps.get(agent))) {
+      if (cut != null && s.order >= cut) return;
       for (const id of s.after) if (done.has(id)) await done.get(id);
       if (failure) return;
       await playStep(a, k, s, ctx);

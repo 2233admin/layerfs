@@ -25,6 +25,7 @@
 //   node dsh/tools/history/run.mjs devcheck --run <dev run> --range k   (devcheck.mjs: dev checks after the publish)
 //   node dsh/tools/history/run.mjs play --run <id> --from k --to k --mode fast|measured --until lanes   then   … --resume
 //     (git and Node on: … --until lead, then … --resume --until lanes, then … --resume)
+//     (a long lanes stage: … --resume --until lanes --cut <plan order> one or more times, each stopping there (agents.mjs safeCut))
 //     (a range in two commands, each under 120 s: halves.mjs; the P3 command shape with git on)
 //   node dsh/tools/history/run.mjs git --run <dev run> --on   (F-031 option (c) from the next range; dev runs only until the dev proof is accepted)
 //   node dsh/tools/history/run.mjs node --run <dev run> --on [--inputs-rule plan|r1] [--store-policy verified|release-age-off]
@@ -76,7 +77,7 @@ import {
 } from "./lib.mjs";
 import { addDelta, checkpointDiff, deltaSummary, deltaWork, diskGuard, diskModel, EXIT, nextPhase, oneshotSplit, p2Plan, pad, poolSharing, PHASES, phaseOps, Tree } from "./steps.mjs";
 import { ctxFromJson, dropHalf, loadHalf, saveHalf } from "./halves.mjs";
-import { consolidateLanes, playAgents, pool, startRange } from "./agents.mjs";
+import { consolidateLanes, playAgents, pool, safeCut, startRange } from "./agents.mjs";
 import { gitFacts } from "./gitplay.mjs";
 import { checkNode, groupsFile, nodeOf } from "./nodelanes.mjs";
 import { fillP3, p3Raw } from "./p3record.mjs";
@@ -382,7 +383,7 @@ export function runnerMemory() {
 const HALFWAY = Symbol("halfway");
 
 /** Plays range k. Returns the exit code the range ends with (0 to go on). */
-async function playRange(run, k, mode, half = null, until = null) {
+async function playRange(run, k, mode, half = null, until = null, cut = null) {
   const phase = PHASES[run.manifest.phase], measured = mode === "measured";
   // Tooling wall time per stage (never operation latency: that is m.ops).
   const plan = run.plan(k), wall = {};
@@ -442,12 +443,16 @@ async function playRange(run, k, mode, half = null, until = null) {
       else ctx = await startRange(run, k, plan, measured);
       // `--until lead` stops after the fork, the seed and the lead's first install (NODE_RULE §2); playMs then sums both parts
       if (until === "lead" && !saved) { lap("startMs", since); stop("lead"); }
-      if (!saved || saved.stage === "lead") {
-        await playAgents(run, k, ctx);
+      if (!saved || saved.stage === "lead" || saved.stage === "part") {
+        // --cut (lanes in parts, each command under 120 s): this part's agents stop at that plan order; playMs sums the parts
+        const playedMs = saved?.stage === "part" ? saved.wall.playMs ?? 0 : 0;
+        await playAgents(run, k, ctx, { cut });
         lap("playMs", since);
-        if (wall.startMs != null) wall.playMs += wall.startMs;
+        wall.playMs += playedMs;
+        if (wall.startMs != null && saved?.stage !== "part") wall.playMs += wall.startMs;
+        if (cut != null) stop("part");
       }
-      if (until === "lanes" && saved?.stage === "lead") stop("lanes");
+      if (until === "lanes" && (saved?.stage === "lead" || saved?.stage === "part")) stop("lanes");
       else if (until === "lanes" && !saved) stop("lanes");
       since = performance.now();
       const beforePublish = phase.closure ? async (cur) => rangeClosure(run, k, plan, cur, { sb: await setup(run), expectCall, Mismatch, oracleDir: run.manifest.oracle, checks: run.manifest.label === "dev", lwwPicked: !!ctx.lww?.picks.some((p) => p.picks > 0), dumpTo: run.manifest.label === "dev" ? (mkdirSync(join(run.dir, "closure"), { recursive: true }), join(run.dir, "closure", `dump-${pad(k)}.json`)) : null }) : null;
@@ -721,6 +726,13 @@ async function cmdPlay(o) {
   // `--resume --until lanes` continues a lead stop to the lanes stop: a range with git and Node on in three commands
   const until = o.until ?? null, half = "resume" in o ? "resume" : until ? "until" : null;
   if (until && !["lead", "lanes"].includes(until)) return usage();
+  // --cut <order> (with --until lanes): the lanes stage stops at that plan order and saves; a later --resume continues it
+  const cut = o.cut == null ? null : Number(o.cut);
+  if (cut != null) {
+    if (until !== "lanes" || !Number.isFinite(cut)) { console.error("--cut <plan order> goes with --until lanes"); return EXIT.usage; }
+    const why = safeCut(run.plan(from), cut);
+    if (why) { console.error(`--cut ${cut}: ${why}`); return EXIT.usage; }
+  }
   if (half && to !== from) { console.error("--until and --resume play one range (--to = --from)"); return EXIT.usage; }
   if (until && PHASES[run.manifest.phase]?.lanes !== "plan") { console.error(`--until ${until} needs a lanes phase (P2 on), not ${run.manifest.phase}`); return EXIT.usage; }
   if (until === "lead" && half === "resume") { console.error("--until lead starts a range; it does not resume one"); return EXIT.usage; }
@@ -728,7 +740,7 @@ async function cmdPlay(o) {
   if (mode === "measured") process.env.LAYERFS_CONSTRUCTION_WORKERS = "1";
   let code = EXIT.done;
   try {
-    for (let k = from; k <= to && code === EXIT.done; k++) code = await playRange(run, k, mode, half, until);
+    for (let k = from; k <= to && code === EXIT.done; k++) code = await playRange(run, k, mode, half, until, cut);
   } catch (error) {
     console.error(error.stack ?? error);
     code = EXIT.error;

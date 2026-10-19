@@ -13,6 +13,7 @@ import {
   addDelta, deltaSummary, deltaWork,
 } from "../steps.mjs";
 import { blobId as blobOf } from "../git.mjs";
+import { safeCut } from "../agents.mjs";
 import { baselineRows, caps, forkPlan, nextAttempt, options, outputs, POLICIES, SWITCHABLE } from "../run.mjs";
 import { PLAN_VERSION } from "../plan.mjs";
 import { deltaLine, stageLine } from "../report.mjs";
@@ -269,6 +270,16 @@ test("a baseline takes pass or watch ranges, and one named storage row at optimi
   assert.equal(baselineRows([[3, at("stop", [["Reinstall growth", "stop"]])]], accept).refused.length, 1, "never a stop");
   assert.equal(baselineRows([[3, r]], { ...accept, row: "Range growth" }).refused.length, 1, "only a listed storage row");
   assert.equal(baselineRows([[3, r]], { ...accept, reason: undefined }).refused.length, 1, "a reason is required");
+});
+
+test("a lanes cut: any plan order outside a held sequence (commit-conflict, stale-clean-merge)", () => {
+  const plan = { steps: [["s1", 1], ["s2", 2], ["s3", 2.5], ["s4", 3], ["s5", 4], ["s6", 5]].map(([id, order]) => ({ id, order })),
+    conflicts: [{ kind: "commit-conflict", lane: "L1", steps: ["s2", "s3", "s4"] }, { kind: "stale-clean-merge", lane: "L2", steps: ["s5", "x", "s6"] }, { kind: "lww", lane: "L1", steps: ["s1", "s6"] }] };
+  assert.equal(safeCut(plan, 2), null);
+  assert.match(safeCut(plan, 2.5), /commit-conflict on L1/);
+  assert.match(safeCut(plan, 3), /commit-conflict/);
+  assert.equal(safeCut(plan, 3.5), null);
+  assert.match(safeCut(plan, 4.5), /stale-clean-merge on L2/);
 });
 
 let failed = 0;
