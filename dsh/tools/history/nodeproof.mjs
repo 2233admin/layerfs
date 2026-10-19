@@ -244,9 +244,19 @@ export const LANE_MERGE_VERSION = 3;
 export const oracleKey = ({ tree, inputs, states, tail, image }) => createHash("sha256").update(JSON.stringify({ v: LISTER_VERSION, chain: CHAIN_VERSION, tree, inputs, states, tail, image,
   laneMerge: states?.some((st) => st.lane) ? LANE_MERGE_VERSION : undefined })).digest("hex").slice(0, 24);
 
-/** The native oracle of one point, cached under `dir` by its key. */
+/**
+ * The pnpm store's generation: its fetch batches in the ledger (fix 048, r021 a1). A fetch changes what an offline
+ * install verifies (lockfile-verified.jsonl), so an oracle cached before it is never reused after it.
+ */
+export function storeGeneration(ledger = join(process.env.LFS_HISTORY ?? join(process.env.HOME, "lfs-history"), "ledger", "ledger.jsonl")) {
+  if (!existsSync(ledger)) return "none";
+  const fetches = readFileSync(ledger, "utf8").split("\n").filter((l) => l.includes('"kind":"pnpm-fetch"'));
+  return fetches.length ? `${fetches.length}@${JSON.parse(fetches.at(-1)).at}` : "none";
+}
+
+/** The native oracle of one point, cached under `dir` by its key (the store's generation in it). */
 export function cachedOracle(dir, args) {
-  const key = oracleKey({ tree: args.states.at(-1).tree, inputs: args.inputs, states: args.states, tail: args.tail, image: args.image });
+  const key = oracleKey({ tree: args.states.at(-1).tree, inputs: args.inputs, states: args.states, tail: args.tail, image: `${args.image}#store ${storeGeneration()}` });
   const file = join(dir, `${key}.json`);
   if (existsSync(file)) return { ...JSON.parse(readFileSync(file, "utf8")), cached: true, key };
   const n = nativeChain(args);
@@ -518,8 +528,9 @@ async function calibrateRepair(run, k, plan, have, file, { repo, base, baseTree,
   try { n = cachedOracle(join(oracleDir(run), "calibration"), { repo, states, tail, inputs: "repair-calibration", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }); } catch (e) { error = String(e.message ?? e).slice(0, 800); }
   const failedTests = n?.vitest?.results ? Object.entries(n.vitest.results).filter(([, r]) => r !== "pass").map(([f]) => f) : [];
   const broken = error ? [`did not run: ${error}`] : [...(n.exit !== 0 ? [`repair install exit ${n.exit}`] : []), ...(build && n.tsc?.exit !== 0 ? [`build exit ${n.tsc?.exit}: ${String(n.tsc?.output ?? "").slice(-300)}`] : []),
-    ...(n.steps.filter((s) => s.exit !== 0).map((s) => `state ${s.i} exit ${s.exit}`)), ...(test && !n.vitest?.results ? ["vitest report did not parse"] : []), ...(failedTests.length ? [`${failedTests.length} calibrated test(s) fail natively: ${failedTests.slice(0, 3).join(", ")}`] : [])];
-  have.repair = { verdict: broken.length ? "broken" : "ok", broken, states: states.length, lanes: [...new Set(lanes.map((l) => l.lane))].length, ran: n?.ran ?? null, exit: n?.exit ?? null, tsc: n?.tsc ? { exit: n.tsc.exit, ms: n.tsc.ms } : null,
+    ...(test && !n.vitest?.results ? ["vitest report did not parse"] : []), ...(failedTests.length ? [`${failedTests.length} calibrated test(s) fail natively: ${failedTests.slice(0, 3).join(", ")}`] : [])];
+  // a lane point's own install or build may fail mid-history (LayerFS runs the same): recorded, not judged
+  have.repair = { verdict: broken.length ? "broken" : "ok", broken, laneExits: n?.steps?.filter((x) => x.exit !== 0).map((x) => `state ${x.i} exit ${x.exit}`) ?? [], states: states.length, lanes: [...new Set(lanes.map((l) => l.lane))].length, ran: n?.ran ?? null, exit: n?.exit ?? null, tsc: n?.tsc ? { exit: n.tsc.exit, ms: n.tsc.ms } : null,
     emitted: n?.emitted ? Object.keys(n.emitted).length : null, tests: n?.vitest?.results ? Object.keys(n.vitest.results).length : 0, installMs: n?.installMs ?? null, chainMs: n?.ms ?? null, key: n?.key ?? null };
   writeFileSync(`${file}.tmp`, JSON.stringify(have, null, 1)); renameSync(`${file}.tmp`, file);
   console.log(JSON.stringify({ range: k, repair: have.repair.verdict, broken, states: states.length, ran: n?.ran ?? null, chainMs: n?.ms ?? null, wallMs: Date.now() - t0 }));

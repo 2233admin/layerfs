@@ -513,6 +513,19 @@ test("fix numbers: the highest record over every listed name", () => {
   assert.equal(highest(["README.md"]), 0);
 });
 
+test("store generation: a fetch batch in the ledger changes it (fix 048)", async () => {
+  const { storeGeneration } = await import("../nodeproof.mjs");
+  const dir = mkdtempSync(join(tmpdir(), "lfs352-gen-")), file = join(dir, "ledger.jsonl");
+  try {
+    assert.equal(storeGeneration(file), "none");
+    writeFileSync(file, `${JSON.stringify({ at: "t1", kind: "pnpm-fetch" })}\n${JSON.stringify({ at: "t2", kind: "folder" })}\n`);
+    const one = storeGeneration(file);
+    writeFileSync(file, `${readFileSync(file, "utf8")}${JSON.stringify({ at: "t3", kind: "pnpm-fetch" })}\n`);
+    assert.notEqual(storeGeneration(file), one);
+    assert.equal(storeGeneration(file), "2@t3");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try { await fn(); console.log(`ok ${name}`); } catch (e) { failed++; console.log(`FAIL ${name}\n${e.stack}`); }
