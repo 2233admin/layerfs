@@ -131,7 +131,7 @@ export function closureSteps({ changed, packages, tsconfigs, milestone, installe
  * or a test that does not give its native pass, is a stop finding
  * (Mismatch); nothing is retried.
  */
-export async function playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, store = STORE_MOUNT, roots = [], binCheck = false }) {
+export async function playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, store = STORE_MOUNT, roots = [], binCheck = false, mergedPaths = [] }) {
   const out = [];
   for (const s of steps) {
     const label = `r${pad(k)}.${s.kind}`;
@@ -142,9 +142,12 @@ export async function playClosure(run, k, steps, { sb, branch, expectCall, Misma
         const has = await run.lf.sandbox.exec(sb, ws, `test -d ${store}/v11 && test -f ${store}/.cache/lockfile-verified.jsonl`);
         if (has.exitCode !== 0) throw new Mismatch(`${label}: the Sandbox has no pnpm store at ${store} (sandbox.create's read-only volume mount, INSTALLS §3.1)`);
       }
+      // NODE_RULE P6: the merged lead's entry at every path a non-root lane's refresh changed, before the repair
+      // touches it; the native oracle takes each from the lane folder that has it (LWW: #352 p3-main-b r015.a2)
+      const merged = s.kind === "repair-install" && mergedPaths.length ? parseMergeHash((await run.lf.sandbox.exec(sb, ws, mergeHashCommand(mergedPaths))).stdout) : null;
       const t0 = Date.now();
       const r = await expectCall(run, `${label} exec`, () => run.lf.sandbox.exec(sb, ws, s.command));
-      const row = { kind: s.kind, exitCode: r.exitCode, ms: Date.now() - t0, ...(s.packages ? { packages: s.packages } : {}) };
+      const row = { kind: s.kind, exitCode: r.exitCode, ms: Date.now() - t0, ...(s.packages ? { packages: s.packages } : {}), ...(merged ? { merged } : {}) };
       run.progress?.(`closure ${s.kind} exit ${r.exitCode} ${row.ms} ms`);
       out.push(row);
       if (s.kind !== "test" && r.exitCode !== 0) throw new Mismatch(`${label} exited ${r.exitCode}: ${String(r.stderr || r.stdout || "").slice(-300)}`);
@@ -258,7 +261,7 @@ export function oracleFiles(oracleDir, { lock, steps, chain = [], checkpoint, po
   };
 }
 
-export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir, checks = false, lwwPicked = false, laneRoots = [], dumpTo = null }) {
+export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir, checks = false, lwwPicked = false, laneRoots = [], mergedPaths = [], dumpTo = null }) {
   const git = (args) => execFileSync("git", ["--git-dir", run.repo, ...args], { encoding: "utf8", maxBuffer: 1 << 28 });
   // the development checks run after the publish, on a fork (devcheck.mjs; SCRIPTS.md, 120 s rule)
   const node = nodeOf(run.manifest);
@@ -280,7 +283,7 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
   // the lane points' too: the merge brings their shims into the lead, and the native repair chain lists their roots
   // as earlier roots (#352 p3-main-b r015.a2 lead.repair: shims written at /workspaces/15 hashed raw here only)
   const roots = [...new Set([...chain.map((e) => e.root), ...(run.state.closureRoots ?? []), ...laneRoots].filter(Boolean))];
-  const rows = await playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, roots, binCheck: checks });
+  const rows = await playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, roots, binCheck: checks, mergedPaths });
   const out = { steps: steps.map((s) => s.kind), rows: rows.map(({ groups, dump, ...r }) => r), oracleKind: files.kind,
     executed: steps.map((s, i) => ({ kind: s.kind, command: s.command, root: rows[i]?.root ?? null })) };
   const done = rows.find((r) => /install/.test(r.kind));
@@ -375,6 +378,24 @@ export function firstDifference(a, b) {
 export const LISTER_VERSION = 5;
 export const ORACLE_ROOT = "/lfs352-native-root";
 export const LISTER = `const fs=require("fs"),c=require("crypto");const full=new Set(process.argv.slice(1));const groups=new Map(),bytes=new Map();const groupOf=(p)=>{const s=p.split("/");const i=s.indexOf("node_modules");let j=i+1;if(s[j]===".pnpm"||(s[j]||"").startsWith("@"))j++;return s.slice(0,Math.min(j+1,s.length)).join("/")};const add=(p,line,n)=>{const g=groupOf(p);bytes.set(g,(bytes.get(g)||0)+n);let e=groups.get(g);if(!e)groups.set(g,e=[]);e.push(line)};const root=process.cwd(),state={"node_modules/.modules.yaml":/("prunedAt": )"[^"\\n]*"/,"node_modules/.pnpm-workspace-state-v1.json":/("lastValidatedTimestamp": )\\d+/},shim=/(^|\\/)node_modules\\/\\.bin\\/[^/]+$/;const stale=JSON.parse(process.env.LFS352_ROOTS||"[]").filter((x)=>x&&x!==root);const sub=(s,r)=>{let o="",i=0,n=0;for(;;){const j=s.indexOf(r,i);if(j<0)break;if(/[A-Za-z0-9_.-]/.test(s[j+r.length]||"")){o+=s.slice(i,j+r.length);i=j+r.length;continue}o+=s.slice(i,j)+"<root>";i=j+r.length;n++}return[o+s.slice(i),n]};const norm={shims:{files:0,root:0}};const blob=(p,n)=>{let b=fs.readFileSync(p);if(p.startsWith("node_modules/.vite/vitest/")&&p.endsWith("/results.json")&&p.split("/").length===5){let j;try{j=JSON.parse(b.toString("utf8"))}catch{j=null}const v=norm.vitest=norm.vitest||{files:0,entries:0,reordered:0,durations:0,unparsed:0};if(j&&Array.isArray(j.results)&&j.results.every((r)=>Array.isArray(r)&&r.length===2&&typeof r[0]==="string"&&r[1]&&typeof r[1]==="object")){const keys=j.results.map((r)=>r[0]);const sorted=[...j.results].sort((x,y)=>(x[0]<y[0]?-1:x[0]>y[0]?1:0));v.files++;v.entries+=sorted.length;if(sorted.some((r,i)=>r[0]!==keys[i]))v.reordered++;for(const r of sorted)if("duration" in r[1]){r[1].duration="<t>";v.durations++}j.results=sorted;b=Buffer.from(JSON.stringify(j))}else v.unparsed++}const t=state[p];if(t||(shim.test(p)&&b.subarray(0,10).toString()==="#!/bin/sh\\n")){let[s,r0]=sub(b.toString("utf8"),root);const st={};for(const x of stale){const[s2,c]=sub(s,x);if(c){st[x]=c;s=s2}}if(Object.keys(st).length){norm.earlierRoots=norm.earlierRoots||{};norm.earlierRoots[p]=st}if(t){if(!t.test(s))throw new Error(p+": no "+t);s=s.replace(t,"$1<t>");norm[p]={root:r0,time:1}}else{norm.shims.files++;norm.shims.root+=r0}b=Buffer.from(s)}const h=c.createHash("sha1");h.update("blob "+b.length+"\\0");h.update(b);return h.digest("hex")};const walk=(d,nm)=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=d==="."?e.name:d+"/"+e.name;if(p===".git"||p===".lfs-probe")continue;const inNm=nm||e.name==="node_modules";const s=fs.lstatSync(p);const m=(s.mode&0o7777).toString(8);if(s.isSymbolicLink()){if(inNm)add(p,"l "+m+" "+fs.readlinkSync(p)+" "+p,s.size)}else if(s.isDirectory()){if(inNm&&e.name!=="node_modules")add(p,"d "+m+" - "+p,0);walk(p,inNm)}else if(inNm)add(p,"f "+m+" "+blob(p,s.size)+" "+p,s.size)}};walk(".",false);for(const g of [...groups.keys()].sort()){const ls=groups.get(g).sort();if(full.size){if(full.has(g))for(const l of ls)process.stdout.write(l+"\\n");continue}process.stdout.write(JSON.stringify({g,n:ls.length,bytes:bytes.get(g)||0,digest:c.createHash("sha256").update(ls.join("\\n")).digest("hex")})+"\\n")}if(!full.size)process.stdout.write("#normalized "+JSON.stringify(norm)+"\\n")`;
+/**
+ * One entry's identity per path, the same on both sides (the repair's merge oracle, nodeproof.mjs repairChain):
+ * `-` absent, `d` a folder, `l <target>` a symlink, `f <x|-> <sha256>` a file. Paths come base64 JSON in argv[1];
+ * stdout is `@@mh <json>`. Raw bytes (native runs each step at the mount root LayerFS ran it at), except the
+ * run times in pnpm's two state files, written `<t>` as the lister writes them.
+ */
+export const MERGE_HASH = `const fs=require("fs"),c=require("crypto");const st={"node_modules/.modules.yaml":/("prunedAt": )"[^"\\n]*"/,"node_modules/.pnpm-workspace-state-v1.json":/("lastValidatedTimestamp": )\\d+/};const body=(f,r)=>{const b=fs.readFileSync(f);return st[r]?Buffer.from(b.toString("utf8").replace(st[r],"$1<t>")):b};const ps=JSON.parse(Buffer.from(process.argv[1],"base64").toString());const o={};for(const p of ps){let s;try{s=fs.lstatSync(p)}catch{o[p]="-";continue}o[p]=s.isSymbolicLink()?"l "+fs.readlinkSync(p):s.isDirectory()?"d":"f "+(s.mode&0o111?"x":"-")+" "+c.createHash("sha256").update(body(p,p)).digest("hex")}process.stdout.write("@@mh "+JSON.stringify(o)+"\\n")`;
+export const mergeHashCommand = (paths) => `node -e ${quote(MERGE_HASH)} ${Buffer.from(JSON.stringify(paths)).toString("base64")}`;
+export const parseMergeHash = (stdout) => { const l = String(stdout).split("\n").find((x) => x.startsWith("@@mh ")); return l ? JSON.parse(l.slice(5)) : null; };
+
+/**
+ * The native merge (nodeproof.mjs nativeChain, a `merge` state): in the lead's folder (cwd), every path of
+ * `want` (path -> MERGE_HASH entry, as LayerFS kept it) set from the first folder whose entry is that one: the
+ * lead's own, else a lane folder's (copied: file with its mode, symlink, folder), `-` removed. A wanted entry no
+ * folder has is listed in `unmatched` and left as it is. stdout: one JSON line of the counts.
+ */
+export const MERGE_APPLY = `const fs=require("fs"),c=require("crypto"),P=require("path");const {want,folders}=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const st={"node_modules/.modules.yaml":/("prunedAt": )"[^"\\n]*"/,"node_modules/.pnpm-workspace-state-v1.json":/("lastValidatedTimestamp": )\\d+/};const body=(f,r)=>{const b=fs.readFileSync(f);return st[r]?Buffer.from(b.toString("utf8").replace(st[r],"$1<t>")):b};const id=(p,r=p)=>{let s;try{s=fs.lstatSync(p)}catch{return "-"}return s.isSymbolicLink()?"l "+fs.readlinkSync(p):s.isDirectory()?"d":"f "+(s.mode&0o111?"x":"-")+" "+c.createHash("sha256").update(body(p,r)).digest("hex")};const o={kept:0,removed:0,copied:{},unmatched:[]};for(const [p,w] of Object.entries(want)){if(id(p)===w){o.kept++;continue}if(w==="-"){fs.rmSync(p,{recursive:true,force:true});o.removed++;continue}const f=folders.find((d)=>id(P.join(d,p),p)===w);if(!f){o.unmatched.push(p);continue}fs.rmSync(p,{recursive:true,force:true});fs.mkdirSync(P.dirname(p),{recursive:true});const src=P.join(f,p),s=fs.lstatSync(src);if(s.isSymbolicLink())fs.symlinkSync(fs.readlinkSync(src),p);else if(s.isDirectory())fs.mkdirSync(p,{recursive:true});else{fs.copyFileSync(src,p);fs.chmodSync(p,s.mode&0o7777)}o.copied[f]=(o.copied[f]??0)+1}process.stdout.write(JSON.stringify(o)+"\\n")`;
+
 /** Lister stdout: its groups, and what version 2 normalized (`#normalized`: per state file root and time substitutions; shims: files and root substitutions). */
 /**
  * Development dump (lead, 2026-10-18, .vite): every file under the given

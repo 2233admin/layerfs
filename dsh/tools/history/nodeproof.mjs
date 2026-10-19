@@ -27,7 +27,8 @@ import { join } from "node:path";
 import { BlobCache, lsTree } from "./git.mjs";
 import { compareInstalled, LISTER_VERSION, listerCommand, normalizeOutput, ORACLE_ROOT, parseLister, rootless, STORE_MOUNT, firstDifference } from "./closure.mjs";
 import { emittedCommand, groupsFile, inputsHash, nodeOf, parseEmitted, pointBuild, testPoints, treeDelta, wholeBuild, changedPackages } from "./nodelanes.mjs";
-import { buildCommand, tscStates } from "./closure.mjs";
+import { buildCommand, MERGE_APPLY, tscStates } from "./closure.mjs";
+const quote = (t) => `'${String(t).replaceAll("'", "'\\''")}'`;
 import { BUILD_GROUPS, vitestMessages } from "./nodeconfig.mjs";
 export { BUILD_GROUPS };
 import { selectTests, vitestCommand } from "./unit-tests.mjs";
@@ -95,31 +96,45 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
   const stage = mkdtempSync(join(tmpdir(), "lfs352-chain-"));
   try {
     const script = [`mkdir ${ORACLE_ROOT} /seq && tar -x -C /seq && cd ${ORACLE_ROOT}`];
-    let prev = null, at = ORACLE_ROOT;
-    const earlier = [], moveTo = (root) => {
-      if (!root || root === at) return;
+    // folders: "main", and a lane's own folder (a state's `fork`), each at the path of its last state's root
+    const at = { main: ORACLE_ROOT }, prev = { main: null }, earlier = [];
+    const moveTo = (folder, root) => {
+      if (!root || root === at[folder]) return script.push(`cd ${at[folder]}`);
       if (!/^\/[\w./-]+$/.test(root) || root.split("/").includes("..")) throw new Error(`native chain: root ${root} is not a plain absolute path`);
-      script.push(`mkdir -p ${root.slice(0, root.lastIndexOf("/")) || "/"} && mv ${at} ${root} && cd ${root}`);
-      earlier.push(at); at = root;
+      script.push(`mkdir -p ${root.slice(0, root.lastIndexOf("/")) || "/"} && mv ${at[folder]} ${root} && cd ${root}`);
+      earlier.push(at[folder]); at[folder] = root;
     };
     states.forEach((st, i) => {
-      moveTo(st.root);
-      if (st.tree !== prev) {
+      if (st.fork) {
+        // a lane's folder: a copy of main as it stands (the lane forked from the lead here)
+        if (at[st.fork]) throw new Error(`native chain: folder ${st.fork} forked twice`);
+        at[st.fork] = `/lfs352-fold-${i}`; prev[st.fork] = prev.main;
+        return script.push(`cp -a ${at.main} ${at[st.fork]}`);
+      }
+      if (st.merge) {
+        // the merged lead: each listed path as LayerFS kept it, from the folder that has that entry (main first)
+        writeFileSync(join(stage, `${i}.merge.json`), JSON.stringify({ want: st.merge, folders: Object.entries(at).filter(([f]) => f !== "main").map(([, p]) => p) }));
+        return script.push(`cd ${at.main} && node -e ${quote(MERGE_APPLY)} /seq/${i}.merge.json | sed 's/^/@@merge /'`);
+      }
+      const folder = st.folder ?? "main";
+      if (!at[folder]) throw new Error(`native chain: folder ${folder} has no fork`);
+      moveTo(folder, st.root);
+      if (st.tree !== prev[folder]) {
         if (!existsSync(join(stage, `${st.tree}.tar`))) writeFileSync(join(stage, `${st.tree}.tar`), execFileSync("git", ["--git-dir", repo, "archive", st.tree], { maxBuffer: 1 << 30 }));
         // -m: the files get the time of the extraction, as a checkout's (and a LayerFS step's) writes do; with the
         // archive's commit times tsc -b and pnpm take changed sources as older than their outputs and skip them
         // (f031-slice-f r015: native "Already up to date" and tsc exit 0 where LayerFS rebuilt and failed)
-        script.push(`tar -x -m -C ${at} -f /seq/${st.tree}.tar`);
-        if (prev) {
-          writeFileSync(join(stage, `${i}.del`), git(repo, ["diff", "--no-renames", "--name-only", "--diff-filter=D", prev, st.tree]));
+        script.push(`tar -x -m -C ${at[folder]} -f /seq/${st.tree}.tar`);
+        if (prev[folder]) {
+          writeFileSync(join(stage, `${i}.del`), git(repo, ["diff", "--no-renames", "--name-only", "--diff-filter=D", prev[folder], st.tree]));
           script.push(`while IFS= read -r f; do rm -f -- "$f"; done < /seq/${i}.del`);
         }
-        prev = st.tree;
+        prev[folder] = st.tree;
       }
       script.push(i < states.length - 1 ? `t=$(date +%s%N); (${st.command}) > /tmp/s${i} 2>&1; e=$?; echo "@@step ${i} $e $(( ($(date +%s%N) - t) / 1000000 ))"`
-        : `t=$(date +%s%N); (${st.command}) > /tmp/o 2>&1; echo "@@exit $? $(( ($(date +%s%N) - t) / 1000000 ))"; sed 's/^/@@out /' /tmp/o; ${listerCommand([], { roots: [...new Set(earlier)] })}`);
+        : `t=$(date +%s%N); (${st.command}) > /tmp/o 2>&1; echo "@@exit $? $(( ($(date +%s%N) - t) / 1000000 ))"; sed 's/^/@@out /' /tmp/o; ${listerCommand([], { roots: [...new Set(earlier)].filter((r) => !r.startsWith("/lfs352-fold-")) })}`);
     });
-    moveTo(tail.root);
+    if (tail.root) moveTo("main", tail.root);
     if (tail.build) script.push(`t=$(date +%s%N); (${tail.build}) > /tmp/b 2>&1; echo "@@tsc $? $(( ($(date +%s%N) - t) / 1000000 ))"; tail -c ${tail.outputBytes ?? 4000} /tmp/b | sed 's/^/@@tscout /'`, `${emittedCommand(tail.packages ?? [])} | sed 's/^/@@emit /'`);
     if (tail.tests?.length) script.push(`t=$(date +%s%N); (${vitestCommand(tail.tests, tail.vitestTimeoutS ?? 100)}) > /tmp/v 2>/dev/null; echo "@@vt $? $(( ($(date +%s%N) - t) / 1000000 ))"; echo "@@vtjson $(base64 -w0 /tmp/v)"`);
     const input = execFileSync("tar", ["-c", "-C", stage, "."], { maxBuffer: 1 << 30 });
@@ -131,13 +146,13 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
     let vitest = null;
     if (vt) {
       const json = Buffer.from(pick("@@vtjson ")[0] ?? "", "base64").toString("utf8");
-      vitest = { exit: vt[0], ms: vt[1], ...vitestReport(json, at) };
+      vitest = { exit: vt[0], ms: vt[1], ...vitestReport(json, at.main) };
     }
     return {
       steps: pick("@@step ").map((l) => { const [i, exit, ms] = l.split(" ").map(Number); return { i, exit, ms }; }),
       exit: Number(String(pick("@@exit ")[0] ?? "NaN").split(" ")[0]), installMs: Number(String(pick("@@exit ")[0] ?? "").split(" ")[1] ?? NaN), output: normalizeOutput(pick("@@out ").join("\n")), ...parseLister(r.stdout),
       tsc: tsc ? { exit: tsc[0], ms: tsc[1], output: pick("@@tscout ").join("\n") } : null,
-      emitted: tail.build ? parseEmitted(pick("@@emit ").join("\n")) : null, vitest, ms: Date.now() - t0, root: at,
+      emitted: tail.build ? parseEmitted(pick("@@emit ").join("\n")) : null, vitest, ms: Date.now() - t0, root: at.main, merge: pick("@@merge ").length ? JSON.parse(pick("@@merge ").join("")) : null,
     };
   } finally { rmSync(stage, { recursive: true, force: true }); }
 }
@@ -254,7 +269,10 @@ export function judgeRepair(closure, nativeBuild, { groups = null } = {}) {
   const inst = closure?.rows?.find((r) => /install/.test(r.kind)), build = closure?.rows?.find((r) => r.kind === "build");
   if (!inst) return null;
   // P1 against the on-top native chain when it ran (Node on); else the closure's own comparison
-  const p1 = groups && nativeBuild?.groups ? judgeP1(nativeBuild, groups, inst.normalized)
+  // the merge oracle (repairChain): a merged entry no native folder has is a stop, whatever P1 then says
+  const unmatched = nativeBuild?.merge?.unmatched ?? [];
+  const p1 = unmatched.length ? res("stop", `${unmatched.length} merged entr${unmatched.length === 1 ? "y" : "ies"} no native lane folder has: ${unmatched.slice(0, 3).join(", ")}`)
+    : groups && nativeBuild?.groups ? judgeP1(nativeBuild, groups, inst.normalized)
     : closure.oracle ? (closure.oracle.ok ? res("pass") : res("stop", "installed tree differs from native")) : res("NOT_RUN", "no oracle comparison");
   const p2 = nativeBuild && inst.output != null && inst.root ? judgeP2(nativeBuild, inst, inst.root) : closure.outputOk == null ? res("NOT_RUN") : closure.outputOk ? res("pass") : res("stop", "pnpm output differs");
   const p4 = build ? judgeP4(nativeBuild, { exitCode: build.exitCode, emitted: build.emitted }) : res("n/a", "no changed package to build");
@@ -264,7 +282,7 @@ export function judgeRepair(closure, nativeBuild, { groups = null } = {}) {
     nativeInstallMs: nativeBuild?.installMs ?? null, nativeTscMs: nativeBuild?.tsc?.ms ?? null,
     proofs: { P1: res("n/a", "folded into P6"), P2: p2, P3: res("n/a", "a repair, not a no-op"),
       P4: res("n/a", "folded into P6"), P5: tests ? (tests.differ.length ? res("stop", `${tests.differ.length} differ`) : res("pass", `${tests.run} files`)) : res("n/a", "no range tests"),
-      P6: res(p6, `P1 ${p1.result}${p1.detail ? ` (${p1.detail})` : ""}, P4 ${p4.result}${p4.detail ? ` (${p4.detail})` : ""}`, { rewritten: inst.rewritten ?? null }) } };
+      P6: res(p6, `P1 ${p1.result}${p1.detail ? ` (${p1.detail})` : ""}, P4 ${p4.result}${p4.detail ? ` (${p4.detail})` : ""}`, { rewritten: inst.rewritten ?? null, ...(nativeBuild?.merge ? { merge: { ...nativeBuild.merge, unmatched: unmatched.length } } : {}) }) } };
 }
 
 /** Each state at the mount path LayerFS ran it at (nativeChain): the lead's chain at the lead's root, and an earlier
@@ -294,7 +312,14 @@ export function repairChain(run, m, k) {
   const rootLane = node.inputsRule === "r1" ? plan.lanes.find((l) => l.areas.includes("/"))?.name ?? null : null;
   const ran = m.node.points.filter((q) => q.lane !== "lead" && q.install?.command && q.treeNative);
   const lanes = ran.flatMap((q) => (rootLane && q.lane !== rootLane ? pointStates(q).slice(1) : pointStates(q)));
-  const states = [...chain0, ...lanes, { tree, command: inst.command ?? installCommand({ policy: node.storePolicy }), ...at(inst.root) }];
+  // LWW (#352 p3-main-b r015.a2): a later non-root refresh's .modules.yaml won the merge over the root lane's. With
+  // the merged entries recorded (closure.mjs mergedPaths), each non-root lane also replays in its own folder,
+  // forked where the lanes forked, and the merge state sets every recorded path from the folder holding it
+  const merge = rootLane && inst.merged ? (() => {
+    const others = [...new Set(ran.filter((q) => q.lane !== rootLane).map((q) => q.lane))];
+    return { forks: others.map((l) => ({ fork: l })), own: ran.filter((q) => q.lane !== rootLane).flatMap((q) => pointStates(q).map((x) => ({ ...x, folder: q.lane }))), state: { merge: inst.merged } };
+  })() : null;
+  const states = [...chain0, ...(merge?.forks ?? []), ...lanes, ...(merge ? [...merge.own, merge.state] : []), { tree, command: inst.command ?? installCommand({ policy: node.storePolicy }), ...at(inst.root) }];
   const buildState = build ? { tree, command: build.command ?? buildCommand(build.packages), ...at(build.root) } : null;
   return { tree, states, buildState, tail: build ? { build: buildState.command, packages: build.packages, ...at(build.root) } : {},
     complete: ran.length === m.node.points.filter((q) => q.lane !== "lead").length };
