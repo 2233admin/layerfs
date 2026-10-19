@@ -166,13 +166,6 @@ impl<'a> Mutation<'a> {
         self.write_at(serial, offset, piece)?;
         Ok(true)
     }
-    /// A write of `length` bytes that were to follow the call. No bytes follow
-    /// a call on the in-process route: the target is prepared as for any
-    /// write, then the write is refused.
-    pub fn streamed(&mut self, path: &str, length: u64) -> Result<()> {
-        self.target(path, length)?;
-        Err(args::invalid("streamed body beyond the declared bytes"))
-    }
     fn truncate(&mut self, serial: u64, size: u64) -> Result<()> {
         self.apply(Operation::SetAttributes {
             serial,

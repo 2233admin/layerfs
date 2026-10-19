@@ -29,9 +29,6 @@ pub fn path(value: &str) -> Result<String, SdkRefusal> {
 pub enum Change<'a> {
     /// Replace the file's bytes, creating it.
     Write { path: String, bytes: &'a [u8] },
-    /// A write whose `length` bytes were to follow the call. No bytes follow a
-    /// call on this route: the target is prepared and the write refused.
-    Streamed { path: String, length: u64 },
     /// Replace the one occurrence of `old` with `new`.
     Edit {
         path: String,
@@ -183,7 +180,6 @@ fn change(
     for (index, change) in changes.iter().enumerate() {
         result = (|| match change.as_ref().map_err(Clone::clone)? {
             Change::Write { path, bytes } => mutation.write(path, bytes),
-            Change::Streamed { path, length } => mutation.streamed(path, *length),
             Change::Edit { path, old, new } => mutation.edit(path, old, new),
             Change::Mkdir { path } => mutation.mkdir(path),
             Change::Rm { path } => mutation.remove(path),

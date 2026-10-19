@@ -82,7 +82,9 @@ pub fn selector<'a>(args: &'a SdkValue, name: &str, branch: &'a str) -> Arg<Sele
     })
 }
 
-/// One change of a file call, from its `op` and that op's fields.
+/// One change of a file call, from its `op` and that op's fields. A write
+/// whose bytes were to follow the call (`streamed`) is refused: no bytes
+/// follow a call on the in-process route.
 pub fn change(change: &SdkValue) -> Arg<Change<'_>> {
     let kind = text(change, "op")?;
     let p = |name| path(change, name);
@@ -100,10 +102,10 @@ pub fn change(change: &SdkValue) -> Arg<Change<'_>> {
                 path: p("path")?,
                 bytes: b,
             },
-            (None, None, Some(SdkValue::Int(n))) if *n > 0 => Change::Streamed {
-                path: p("path")?,
-                length: *n as u64,
-            },
+            (None, None, Some(SdkValue::Int(n))) if *n > 0 => {
+                p("path")?;
+                return Err(invalid("streamed body beyond the declared bytes"));
+            }
             _ => return Err(invalid("write content must be text or bytes")),
         },
         "edit" => Change::Edit {
