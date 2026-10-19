@@ -1005,8 +1005,8 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
   assert.deepEqual([repairBuildStep.command, repairBuildStep.packages], [`${repairClean(files)} && ./node_modules/.bin/tsc -b 'packages/a' 'packages/b' && ./node_modules/.bin/tsdown`, ["packages/a", "packages/b"]]);
   // every package with a tsconfig, none without (the root's tsconfig is no package), and every packages/<group>/<name>
   // folder the checkpoint no longer has, its emptied folder pruned (r019 a2: an orphan's lib/ bundled by tsdown)
-  assert.equal(repairClean(files), `rm -rf 'packages/a/lib' 'packages/b/lib' packages/*/*/lib && find 'packages/a' 'packages/b' packages -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f && ${PRUNE_EMPTY}`);
-  assert.equal(repairClean(new Map([["vendor/v/package.json", {}], ["vendor/v/tsconfig.json", {}]])), "rm -rf 'vendor/v/lib' && find 'vendor/v' -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f", "no packages/ folder, no orphan sweep");
+  assert.equal(repairClean(files), `rm -rf 'packages/a/lib' 'packages/b/lib' packages/*/*/lib && find . -path ./.git -prune -o -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f && ${PRUNE_EMPTY}`);
+  assert.equal(repairClean(new Map([["vendor/v/package.json", {}], ["vendor/v/tsconfig.json", {}]])), "rm -rf 'vendor/v/lib' && find . -path ./.git -prune -o -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f", "no packages/ folder, no orphan sweep");
   assert.equal(closureSteps({ packages, tsconfigs, run: [], changed: ["packages/a/src/x.ts"], installed: true, milestone: false }).find((s) => s.kind === "build").command, buildCommand(["packages/a"]), "only the repair cleans");
   const kinds = (o) => closureSteps({ packages, tsconfigs, run: [], ...o }).map((s) => s.kind);
   assert.deepEqual(kinds({ changed: ["packages/a/src/x.ts"], installed: false, milestone: false }), ["install", "build"]);

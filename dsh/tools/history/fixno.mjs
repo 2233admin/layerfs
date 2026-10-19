@@ -5,7 +5,7 @@
 //   node dsh/tools/history/fixno.mjs [--no-fetch]
 import { execFileSync } from "node:child_process";
 
-const DIR = "core/docs/issues/352/fixes/";
+const DIR = ":(top)core/docs/issues/352/fixes/";
 const git = (...args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 1 << 26 });
 
 /** The highest numbered record in the listed names (pure, for the tests). */

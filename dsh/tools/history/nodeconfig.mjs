@@ -29,7 +29,7 @@ export const parseEmitted = (stdout) => Object.fromEntries(String(stdout).split(
 const bundled = (files, command) => (files.has("tsdown.config.ts") ? `${command} && ./node_modules/.bin/tsdown` : command);
 /**
  * The lead repair's clean before its build (F-059, owner decision 2026-10-20, option A; an owner-approved
- * workload change): lib/ and every *.tsbuildinfo removed in every package with a tsconfig.json, natively the
+ * workload change): lib/ removed in every package with a tsconfig.json and every *.tsbuildinfo in the tree, natively the
  * same (the native repair chain replays the recorded command). A lane that built at an older commit leaves
  * output and a newer tsbuildinfo the merge keeps, and `tsc -b` then takes the package as up to date (r019 a1:
  * tool-bash's `index.d.ts` without `Config`); after the clean the repaired main equals a fresh build.
@@ -43,8 +43,10 @@ export function repairClean(files) {
   // packages/ui/stdio-agent, `MISSING_EXPORT AgentId`); emptied by the clean (the repair install removed their
   // node_modules), the folder is pruned as a fresh checkout never has it
   const orphans = [...files.keys()].some((p) => p.startsWith("packages/"));
-  const q = [...dirs.map(quote), ...(orphans ? ["packages"] : [])].join(" ");
-  return `rm -rf ${dirs.map((d) => quote(`${d}/lib`)).join(" ")}${orphans ? " packages/*/*/lib" : ""} && find ${q} -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f${orphans ? ` && ${PRUNE_EMPTY}` : ""}`;
+  // every *.tsbuildinfo in the tree, not only under the packages: a tsconfig may put it elsewhere (fix 049, r022:
+  // packages/examples/cli-demo's `tsBuildInfoFile` is ../../../.typecheck/cli-demo.tsbuildinfo; kept, it made
+  // `tsc -b` skip cli-demo and tsdown fail on its lib/types/bin.js, natively the same)
+  return `rm -rf ${dirs.map((d) => quote(`${d}/lib`)).join(" ")}${orphans ? " packages/*/*/lib" : ""} && find . -path ./.git -prune -o -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f${orphans ? ` && ${PRUNE_EMPTY}` : ""}`;
 }
 /**
  * The lead repair's build: its clean (repairClean), then dsh's whole build (wholeBuild), since tsdown bundles
