@@ -26,13 +26,13 @@
 | 017 | `44ac6c91` (line p3-main-g) | a2 | 317.2 | 1191.7 | 1,216 | 1,089 | 307 | 9 | 1 | 2,622 | 31,190 | 1,045 | 15,810 | 4 | 8 | 3 / 3 | 142 | 14,804,087 | 25,371,026 | 303,442,174 |
 | 018 | `44ac6c91` (line p3-main-l) | a6 | 357.3 | 1548.9 | 1,830 | 1,343 | 370 | 9 | 1 | 3,553 | 34,743 | 1,631 | 17,441 | 4 | 8 | 3 / 3 | 168 | 26,136,707 | 70,651,381 | 374,093,555 |
 | 019 | `44ac6c91` (line p3-main-n) | a4 | 362.2 | 1911.2 | 1,017 | 1,366 | 370 | 10 | 1 | 2,764 | 37,507 | 959 | 18,400 | 5 | 10 | 4 / 4 | 190 | 14,348,635 | 28,994,698 | 403,088,253 |
-| 020 | `44ac6c91` (line p3-main-n) | a1 | 318.8 | 2229.9 | 998 | 914 | 360 | 9 | 1 | 2,282 | 39,789 | 921 | 19,321 | 4 | 8 | 3 / 3 | 118 | 11,583,003 | 22,584,779 | 425,673,032 |
+| 020 | `44ac6c91` (line p3-main-p) | a2 | 311.9 | 2223.0 | 998 | 907 | 361 | 9 | 1 | 2,276 | 39,783 | 921 | 19,321 | 4 | 8 | 3 / 3 | 118 | 11,169,749 | 22,509,320 | 425,597,573 |
 
 ## Cumulative
 
 | Ranges | Time s | fs | sandbox | branch | project | operator | Calls | Commits | Branches | Agents (sum per range) | Conflicts hit / planned | Steps | Bytes written (since the Overview) | New stored |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 21 | 2229.9 | 24,048 | 13,321 | 2,309 | 90 | 21 | 39,789 | 19,321 | 78 | 136 | 49 / 49 | 3,572 | 246,593,594 ‡ | 425,673,032 |
+| 21 | 2223.0 | 24,048 | 13,314 | 2,310 | 90 | 21 | 39,783 | 19,321 | 78 | 136 | 49 / 49 | 3,572 | 246,180,340 ‡ | 425,597,573 |
 
 ## Conflicts per range
 
@@ -64,10 +64,10 @@
 
 | Method | Category | Calls | Bytes in | Bytes out |
 | --- | --- | --- | --- | --- |
-| branch.diff_branches | branch | 78 | 0 | 4,232,788 |
+| branch.diff_branches | branch | 78 | 0 | 4,232,859 |
 | branch.diff_commits | branch | 1,837 | 0 ‡ | 100,043,121 ‡ |
-| branch.fork | branch | 274 | 0 ‡ | 0 ‡ |
-| branch.list_commits | project | 90 | 0 | 723,959 |
+| branch.fork | branch | 275 | 0 ‡ | 0 ‡ |
+| branch.list_commits | project | 90 | 0 | 723,891 |
 | branch.merge | branch | 96 | 0 | 0 |
 | branch.publish | branch | 24 | 0 ‡ | 0 ‡ |
 | fs.apply | fs | 1,135 | 27,299,041 ‡ | 0 ‡ |
@@ -82,10 +82,10 @@
 | operator.store.stats | operator | 21 | 0 ‡ | 0 ‡ |
 | sandbox.commit | sandbox | 2,357 | 0 ‡ | 0 ‡ |
 | sandbox.create | sandbox | 5 | — | — |
-| sandbox.exec | sandbox | 6,077 | 31,972,070 ‡ | 23,696,405 ‡ |
-| sandbox.mount | sandbox | 2,422 | 0 ‡ | 0 ‡ |
+| sandbox.exec | sandbox | 6,068 | 31,558,816 ‡ | 23,939,746 ‡ |
+| sandbox.mount | sandbox | 2,423 | 0 ‡ | 0 ‡ |
 | sandbox.service | sandbox | 11 | 0 ‡ | 0 ‡ |
 | sandbox.status | sandbox | 27 | 0 | 0 |
-| sandbox.unmount | sandbox | 2,422 | 0 ‡ | 0 ‡ |
+| sandbox.unmount | sandbox | 2,423 | 0 ‡ | 0 ‡ |
 
 — no byte data: every range of the row is derived (†). ‡ bytes of the measured ranges only; the derived ranges' bytes are unknown.
