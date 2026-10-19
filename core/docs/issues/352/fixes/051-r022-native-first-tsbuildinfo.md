@@ -10,6 +10,7 @@
 | Binaries | daemon `44ac6c91` and addon `77597adb` unchanged |
 | Commits | this commit: `nodeconfig.mjs` `repairClean`; test in `tests/p2.mjs` |
 | Recovery | none needed: range 22 a1 played with the fix |
+| Number | written as 049 while range 22 played; renumbered 051 on 2026-10-20 (liaison) because main's F-057 records took 049 and 050 |
 
 ## What went wrong
 

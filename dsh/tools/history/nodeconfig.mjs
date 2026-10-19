@@ -43,7 +43,7 @@ export function repairClean(files) {
   // packages/ui/stdio-agent, `MISSING_EXPORT AgentId`); emptied by the clean (the repair install removed their
   // node_modules), the folder is pruned as a fresh checkout never has it
   const orphans = [...files.keys()].some((p) => p.startsWith("packages/"));
-  // every *.tsbuildinfo in the tree, not only under the packages: a tsconfig may put it elsewhere (fix 049, r022:
+  // every *.tsbuildinfo in the tree, not only under the packages: a tsconfig may put it elsewhere (fix 051, r022:
   // packages/examples/cli-demo's `tsBuildInfoFile` is ../../../.typecheck/cli-demo.tsbuildinfo; kept, it made
   // `tsc -b` skip cli-demo and tsdown fail on its lib/types/bin.js, natively the same)
   return `rm -rf ${dirs.map((d) => quote(`${d}/lib`)).join(" ")}${orphans ? " packages/*/*/lib" : ""} && find . -path ./.git -prune -o -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f${orphans ? ` && ${PRUNE_EMPTY}` : ""}`;
