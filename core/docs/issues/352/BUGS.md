@@ -1020,7 +1020,8 @@
 
   **Status: FIXED (harness and workload, owner decision 2026-10-20, option A).**
   The repair's build first removes `lib/` and every `*.tsbuildinfo` in every
-  `tsconfig.json` package, then runs dsh's whole build; native does the same
+  `tsconfig.json` package and in every `packages/<group>/<name>` folder (orphans
+  pruned), then runs dsh's whole build; native does the same
   ([fix 043](fixes/043-r019-a1-repair-build-clean.md), NODE_RULE §4). This is
   an owner-approved workload change. Range 18 replays as a5 so range 19 starts
   from clean output, then range 19 a2. Option B (a carried point base, a

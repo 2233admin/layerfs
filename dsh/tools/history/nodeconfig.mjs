@@ -30,8 +30,13 @@ export function repairClean(files) {
   const pk = new Set([...files.keys()].filter((p) => p.endsWith("/package.json")).map((p) => p.slice(0, -13)));
   const dirs = [...new Set([...files.keys()].filter((p) => p.endsWith("/tsconfig.json")).map((p) => p.slice(0, -14)))].filter((d) => pk.has(d)).sort();
   if (!dirs.length) return null;
-  const q = dirs.map(quote).join(" ");
-  return `rm -rf ${dirs.map((d) => quote(`${d}/lib`)).join(" ")} && find ${q} -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f`;
+  // also every packages/<group>/<name> folder the checkpoint no longer has: a lane that built at an older commit
+  // leaves its untracked lib/ there, and tsdown bundles every such folder (r019 a2: packages/core/agent-core,
+  // packages/ui/stdio-agent, `MISSING_EXPORT AgentId`); emptied by the clean (the repair install removed their
+  // node_modules), the folder is pruned as a fresh checkout never has it
+  const orphans = [...files.keys()].some((p) => p.startsWith("packages/"));
+  const q = [...dirs.map(quote), ...(orphans ? ["packages"] : [])].join(" ");
+  return `rm -rf ${dirs.map((d) => quote(`${d}/lib`)).join(" ")}${orphans ? " packages/*/*/lib" : ""} && find ${q} -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f${orphans ? ` && ${PRUNE_EMPTY}` : ""}`;
 }
 /**
  * The lead repair's build: its clean (repairClean), then dsh's whole build (wholeBuild), since tsdown bundles

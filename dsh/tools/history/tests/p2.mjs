@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { fetchScript } from "../fetch-store.mjs";
 import { addedBySource, changedGroupBytes, cumulative, liveParts, sealedParts, seedBySource, stepSource, storageFigures, storageProblems } from "../storage.mjs";
 import { CLEAN_REMOVE, installCommand, STORE_MOUNT, parseLister, rootless, verifiedAges, buildBytes, buildListCommand, changedPackages, CLOSURE_OUTPUT, closureSteps, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, nothingToBuild, playClosure, tscStates, buildCommand } from "../closure.mjs";
-import { repairClean } from "../nodeconfig.mjs";
+import { PRUNE_EMPTY, repairClean } from "../nodeconfig.mjs";
 import { aggregate, buildBaseline, reinstallGate, evaluate, probeSeries, thinClass } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, installedText, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
@@ -1002,7 +1002,10 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
   const repairBuildStep = closureSteps({ packages, tsconfigs, run: [], changed: ["packages/a/src/x.ts"], installed: true, milestone: false, repair: true, files }).find((s) => s.kind === "build");
   // then dsh's whole build: tsdown bundles every package from its lib/types (r018 a5: UNRESOLVED_ENTRY after a partial build)
   assert.deepEqual([repairBuildStep.command, repairBuildStep.packages], [`${repairClean(files)} && ./node_modules/.bin/tsc -b 'packages/a' 'packages/b' && ./node_modules/.bin/tsdown`, ["packages/a", "packages/b"]]);
-  assert.equal(repairClean(files), "rm -rf 'packages/a/lib' 'packages/b/lib' && find 'packages/a' 'packages/b' -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f", "every package with a tsconfig, none without; the root's tsconfig is no package");
+  // every package with a tsconfig, none without (the root's tsconfig is no package), and every packages/<group>/<name>
+  // folder the checkpoint no longer has, its emptied folder pruned (r019 a2: an orphan's lib/ bundled by tsdown)
+  assert.equal(repairClean(files), `rm -rf 'packages/a/lib' 'packages/b/lib' packages/*/*/lib && find 'packages/a' 'packages/b' packages -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f && ${PRUNE_EMPTY}`);
+  assert.equal(repairClean(new Map([["vendor/v/package.json", {}], ["vendor/v/tsconfig.json", {}]])), "rm -rf 'vendor/v/lib' && find 'vendor/v' -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f", "no packages/ folder, no orphan sweep");
   assert.equal(closureSteps({ packages, tsconfigs, run: [], changed: ["packages/a/src/x.ts"], installed: true, milestone: false }).find((s) => s.kind === "build").command, buildCommand(["packages/a"]), "only the repair cleans");
   const kinds = (o) => closureSteps({ packages, tsconfigs, run: [], ...o }).map((s) => s.kind);
   assert.deepEqual(kinds({ changed: ["packages/a/src/x.ts"], installed: false, milestone: false }), ["install", "build"]);

@@ -25,13 +25,13 @@
 | 016 | `44ac6c91` (line p3-main-f) | a3 | 317.5 | 874.5 | 2,162 | 1,930 | 321 | 10 | 1 | 4,424 | 28,568 | 1,915 | 14,765 | 5 | 10 | 3 / 3 | 266 | 22,784,352 | 41,681,629 | 278,071,148 |
 | 017 | `44ac6c91` (line p3-main-g) | a2 | 317.2 | 1191.7 | 1,216 | 1,089 | 307 | 9 | 1 | 2,622 | 31,190 | 1,045 | 15,810 | 4 | 8 | 3 / 3 | 142 | 14,804,087 | 25,371,026 | 303,442,174 |
 | 018 | `44ac6c91` (line p3-main-l) | a6 | 357.3 | 1548.9 | 1,830 | 1,343 | 370 | 9 | 1 | 3,553 | 34,743 | 1,631 | 17,441 | 4 | 8 | 3 / 3 | 168 | 26,136,707 | 70,651,381 | 374,093,555 |
-| 019 | `44ac6c91` (line p3-main-j) | a1 | 199.1 | 1748.1 | 956 | 1,313 | 27 | 3 | 1 | 2,300 | 37,043 | 959 | 18,400 | 5 | 10 | 4 / 4 | 189 | 14,316,318 | 27,908,154 | 402,001,709 |
+| 019 | `44ac6c91` (line p3-main-l) | a2 | 205.4 | 1754.3 | 956 | 1,313 | 27 | 3 | 1 | 2,300 | 37,043 | 959 | 18,400 | 5 | 10 | 4 / 4 | 189 | 14,321,246 | 28,100,274 | 402,193,829 |
 
 ## Cumulative
 
 | Ranges | Time s | fs | sandbox | branch | project | operator | Calls | Commits | Branches | Agents (sum per range) | Conflicts hit / planned | Steps | Bytes written (since the Overview) | New stored |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 20 | 1748.1 | 22,989 | 12,354 | 1,606 | 74 | 20 | 37,043 | 18,400 | 74 | 128 | 46 / 46 | 3,453 | 234,978,274 ‡ | 402,001,709 |
+| 20 | 1754.3 | 22,989 | 12,354 | 1,606 | 74 | 20 | 37,043 | 18,400 | 74 | 128 | 46 / 46 | 3,453 | 234,983,202 ‡ | 402,193,829 |
 
 ## Conflicts per range
 
@@ -65,7 +65,7 @@
 | branch.diff_branches | branch | 71 | 0 | 3,851,391 |
 | branch.diff_commits | branch | 1,197 | 0 ‡ | 63,351,137 ‡ |
 | branch.fork | branch | 233 | 0 ‡ | 0 ‡ |
-| branch.list_commits | project | 74 | 0 | 574,851 |
+| branch.list_commits | project | 74 | 0 | 574,854 |
 | branch.merge | branch | 83 | 0 | 0 |
 | branch.publish | branch | 22 | 0 ‡ | 0 ‡ |
 | fs.apply | fs | 1,100 | 26,229,540 ‡ | 0 ‡ |
@@ -80,7 +80,7 @@
 | operator.store.stats | operator | 20 | 0 ‡ | 0 ‡ |
 | sandbox.commit | sandbox | 2,196 | 0 ‡ | 0 ‡ |
 | sandbox.create | sandbox | 5 | — | — |
-| sandbox.exec | sandbox | 5,617 | 29,505,320 ‡ | 18,591,517 ‡ |
+| sandbox.exec | sandbox | 5,617 | 29,510,248 ‡ | 18,663,885 ‡ |
 | sandbox.mount | sandbox | 2,251 | 0 ‡ | 0 ‡ |
 | sandbox.service | sandbox | 11 | 0 ‡ | 0 ‡ |
 | sandbox.status | sandbox | 23 | 0 | 0 |

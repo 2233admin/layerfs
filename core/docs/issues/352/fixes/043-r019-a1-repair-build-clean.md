@@ -9,7 +9,7 @@
 | Kind | none: a harness workload change; the daemon, addon and Store format are unchanged |
 | Binaries | daemon `44ac6c91` and addon `77597adb` unchanged |
 | Commits | this commit: `nodeconfig.mjs` (`repairClean`, `repairBuild`), `closure.mjs` (`closureSteps`); tests in `tests/p2.mjs` |
-| Recovery | range 18 replayed as attempt 5 (fork of snapshot `range-017`; stopped on this fix's first version, see the correction), then attempt 6, then range 19 attempt 2 |
+| Recovery | range 18 replayed as attempt 5 (fork of snapshot `range-017`; stopped on this fix's first version, see the correction), then attempt 6, then range 19 attempt 2 (stopped on orphan package folders, see the second correction), then attempt 3 |
 | Decision | owner, 2026-10-20, via the liaison: option A; option B (point base carried across ranges, build exit judged against native) is out |
 
 ## Old design
@@ -57,6 +57,20 @@
   clean + `wholeBuild`). Natively that build of r18 exits 0 in 7.7 s with 719
   emitted files (diagnostic). The test pins the whole build. Recovery: range 18
   attempt 6 from the r017 snapshot, then range 19 attempt 2.
+
+## Second correction after range 19 a2
+
+- Lanes built in package folders that the checkpoint deletes
+  (`packages/core/agent-core`, `packages/ui/stdio-agent`). The lead's git step
+  removes their tracked files, but the untracked `lib/` stays. tsdown bundles
+  every `packages/<group>/<name>` folder, so r019 a2's repair build failed:
+  `MISSING_EXPORT "AgentId"`, exit 1. Natively it failed the same way.
+- The clean now also removes `packages/*/*/lib` and every tsbuildinfo under
+  `packages/`, then prunes empty folders (`PRUNE_EMPTY`). The repair install
+  already removed their `node_modules`, so the orphan folders go, as on a fresh
+  checkout. Natively the r19 repair build then exits 0 in 7.5 s with 721
+  emitted files (diagnostic). The test pins the sweep. Recovery: range 19
+  attempt 3 from `p3-main-l`'s r018 snapshot.
 
 ## Also fixed (report, a stop inside the closure)
 
