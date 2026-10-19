@@ -7,6 +7,14 @@
 > over this summary. The gates are unchanged: SPEC.md §5 and `gates.mjs` still
 > decide each verdict, against the P3 re-baseline file named below.
 
+> **Speed from range 31 (owner, 2026-10-20):** ranges 31 and later judge
+> Speed against `~/lfs-history/metrics/baseline-27a769a48998-0611f3e0cf81-p3.json`.
+> It was built from run `rb-p3-27a769a4-0611f3e0` on daemon `27a769a4` and
+> addon `0611f3e0`, both built at main `3c7852e50f`; the RESULTS decision log
+> of 2026-10-20 has the details. Ranges 23–30 ran on daemon `45a196ef`, which had
+> no baseline, so their Speed was not judged. The figures below remain range
+> 15's, and storage and correctness comparisons still use this file.
+
 ## 1. Identity
 
 | Item | Value |
