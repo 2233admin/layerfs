@@ -62,7 +62,7 @@ the reply budget) and reads a window of up to 64 files' roots in demands of
 at most 4 MiB, sized from their file lengths, so chain levels are resolved
 together. `fs.glob` starts at an anchored pattern's literal leading folders
 and skips folders it cannot match. Every read call keeps one set of storage
-read caches (`sdk/cached.rs`) and resolves its path through a memo over them;
+read caches (then `sdk/cached.rs`, now store-service `read/cached.rs`) and resolves its path through a memo over them;
 the walker memoizes directory pages and the inode table's upper pages. Results
 are byte-identical to the earlier calls; paging still counts positions.
 
@@ -119,3 +119,111 @@ ownership. Reaping and requests on replaced inodes retain the owner's deferral.
 
 Disposable/WAL/OFF only; Durable is NOT_RUN pending explicit owner reauthorization.
 New Store schema/identity records reject old Disposable Stores without migration.
+
+Issue #352 source update, 2026-10-19 (api shape recovery). Since F-020 the
+`fs`, `branch` and `project.list_branches` methods are not daemon calls: they
+run in the SDK's own process against the Store it opened (Linux only,
+`Unsupported` elsewhere; [direct Store access](../issues/352/DIRECT_STORE.md)).
+The `Request::Sdk` record above now carries only `operator.*` calls to a
+daemon. The source is split in two crates:
+
+- `layerfs-api` is the public surface: one file per JavaScript method, under
+  `project/`, `fs/`, `branch/` and `sandbox/` (#328 standard). Each Store
+  method is `fn(&StoreService, &SdkValue) -> Result<SdkValue, SdkRefusal>`:
+  it reads its arguments (`base/args.rs`) and runs the engine.
+  `layerfs_api::call` (`base/dispatch.rs`) is the method table the native
+  binding calls; it refuses unknown and `operator.*` names `UnknownMethod`.
+- `layerfs-store-service` is the engine, organised by mechanism and free of
+  method names and argument maps: `read/` (file, listing, search, compare,
+  blame, windows and call caches), `write/` (a typed change list applied to
+  one private Workspace and committed once), `history/` (fork, merge,
+  publish, listings, lookups and refusals). The operator tables keep
+  name-keyed arguments; their readers are `operator/args.rs`, which
+  layerfs-api re-exports. layerfs-api depends on layerfs-store-service, never
+  the reverse.
+
+A method reads each argument just before the engine step that first uses it,
+and an argument used after a lookup reaches the engine as `Arg<T>` (read but
+not yet refused), so a call with several faults is refused by the first, as
+before. Answers stay `SdkValue` maps built by the engine. Streamed write
+bodies are not read on this route; a daemon connection drops a call's declared
+bytes before answering (`layerfs-daemon` `application/bodies.rs`).
+
+Layout at `04f2576961` (`tools/production_loc.py --files`; `src/` only; tests
+live in each crate's `tests/`):
+
+```
+layerfs-api/src/                  [2257]
+  lib.rs                             25
+  base/                            [958]
+    args.rs                         121
+    control.rs                      289
+    dispatch.rs                      45
+    failure.rs                       61
+    install.rs                      147
+    install_types.rs                 44
+    internal.rs                     130
+    mod.rs                           10
+    recovery.rs                      52
+    sdk.rs                           59
+  branch/                           [97]
+    diff_branches.rs                 21
+    diff_commits.rs                  13
+    fork.rs                           8
+    list_commits.rs                  12
+    merge.rs                         19
+    mod.rs                           12
+    publish.rs                       12
+  fs/                              [152]
+    apply.rs                          9
+    blame.rs                         14
+    cp.rs                             6
+    diff_files.rs                    13
+    edit.rs                           6
+    glob.rs                          10
+    grep.rs                          13
+    list.rs                           8
+    mkdir.rs                          6
+    mod.rs                           28
+    mv.rs                             6
+    read.rs                          14
+    rm.rs                             6
+    stat.rs                           7
+    write.rs                          6
+  operator/                         [25]  (unchanged; 4 files not listed)
+  project/                         [206]
+    init.rs                         187
+    list_branches.rs                 13
+    mod.rs                            6
+  sandbox/                         [794]  (unchanged; 9 files not listed)
+```
+
+```
+layerfs-store-service/src/        [3706 shown]  (partial: the engine)
+  history/                         [719]
+    branch.rs                       577
+    lookup.rs                       139
+    mod.rs                            3
+  operator/                        [340]  (partial: inspect.rs not listed)
+    args.rs                          44
+    files.rs                        174
+    mod.rs                           21
+    store.rs                        101
+  read/                           [1840]
+    blame.rs                        251
+    cached.rs                        94
+    compare.rs                      391
+    mod.rs                            9
+    plans.rs                         26
+    reads.rs                        295
+    search.rs                       143
+    snapshot.rs                     165
+    walk.rs                         183
+    window.rs                       283
+  write/                           [807]
+    edit.rs                         111
+    files.rs                        193
+    mod.rs                            4
+    mutation.rs                     224
+    recursive.rs                    275
+```

@@ -40,8 +40,9 @@ the changed entries times their path depth. `ChangeWalk::full` lists both trees
 completely. A stale or missing hint cannot change the answer: an inode with
 fewer checked bindings than its reference count, or more than
 `MAXIMUM_CHANGED` (65,536) changed inodes, makes `plan` answer `None`, and the
-caller uses the full walk. The daemon's `sdk/compare.rs` keeps only the SDK
-adapter: arguments, reply budget and paging, and the History catalog behind
+caller uses the full walk. layerfs-store-service `read/compare.rs` (first the
+daemon's, then store-service's `sdk/compare.rs`) keeps only the SDK adapter:
+reply budget and paging, and the History catalog behind
 `BindingHints` (`HistoryCatalog::bindings_of`, the Store's `binding_hint`
 table). The answer, order and paging equal the earlier full walk (oracle test
 `history_diff_oracle`). Every saved tree's bindings are recorded where it is

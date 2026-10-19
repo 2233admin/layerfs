@@ -4,7 +4,9 @@
 > described here was retired by F12 after `52e1f2e18`; use
 > [the current retirement/Init guide](66-host-transport-retirement.md).
 > Original source links below refer to their recorded Git revisions, not the
-> current tree. Historical measurements and verdicts are unchanged.
+> current tree. Historical measurements and verdicts are unchanged. The current
+> SDK layout (layerfs-api method files over the layerfs-store-service engine,
+> #352, 2026-10-19) is in [the SDK call channel](82-sdk-call-channel.md).
 
 The #307 checkpoint after `042849109` embeds an initial runtime at the planned
 SDK composition path (`core/crates/layerfs-api/sdk/src/runtime/mod.rs` at local Git `52e1f2e18`). The active
