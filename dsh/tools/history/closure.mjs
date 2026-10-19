@@ -268,7 +268,10 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
     if (!existsSync(f)) throw new Mismatch(`range ${k}: no node_modules oracle ${f.split("/").at(-1)}; run closure.mjs oracle --run ${run.manifest.run ?? "<run>"} --range ${k} first`);
     const o = JSON.parse(readFileSync(f, "utf8")), want = steps.find((s) => /install/.test(s.kind))?.command;
     if (o.listerVersion !== LISTER_VERSION) throw new Mismatch(`range ${k}: the node_modules oracle ${f.split("/").at(-1)} predates lister version ${LISTER_VERSION}; rerun closure.mjs oracle --range ${k}`);
-    if (files.kind === "clean" && want && o.install !== want) throw new Mismatch(`range ${k}: the node_modules oracle ${f.split("/").at(-1)} was made with another install command; rerun closure.mjs oracle --range ${k}`);
+    // a clean oracle is a fresh checkout's install, which has no node_modules to remove: a milestone's clean install
+    // matches the plain command (rb-p3-…-c r004 stopped on the string); any other difference is still refused
+    const sameCommand = o.install === want || (steps.some((s) => s.kind === "clean-install") && want.replace(`${CLEAN_REMOVE} && `, "") === o.install);
+    if (files.kind === "clean" && want && !sameCommand) throw new Mismatch(`range ${k}: the node_modules oracle ${f.split("/").at(-1)} was made with another install command; rerun closure.mjs oracle --range ${k}`);
   }
   // the recorded mount roots of this chain's earlier steps: listed substitutions (INSTALLS §4, F-034)
   const roots = [...new Set([...chain.map((e) => e.root), ...(run.state.closureRoots ?? [])].filter(Boolean))];
