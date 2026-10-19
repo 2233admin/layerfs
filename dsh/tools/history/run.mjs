@@ -23,9 +23,10 @@
 //     (git and Node on: … --until lead, then … --resume --until lanes, then … --resume)
 //     (a range in two commands, each under 120 s: halves.mjs; the P3 command shape with git on)
 //   node dsh/tools/history/run.mjs git --run <dev run> --on   (F-031 option (c) from the next range; dev runs only until the dev proof is accepted)
-//   node dsh/tools/history/run.mjs node --run <dev run> --on [--inputs-rule plan] [--store-policy verified|release-age-off]
-//     (NODE_RULE from the next range: the lead's first install, lane test points, the lead's repair; §3 and the store
-//     policy are switches until the owner decides them; dev runs only)
+//   node dsh/tools/history/run.mjs node --run <dev run> --on [--inputs-rule plan|r1] [--store-policy verified|release-age-off]
+//     (NODE_RULE from the next range: the lead's first install, lane test points, the lead's repair; dev runs only.
+//     Owner 2026-10-19: §3 is R1, which plays a plan made with plan.mjs --inputs-rule r1; the store is fetched and
+//     verified, so `verified` keeps dsh's policy)
 //   fork … --plan <dir> --oracle <dir>   (a dev run on a dev slice's plan and oracle, slice.mjs)
 // `phase` moves a run to the next phase (P1 → P2 …) at the range it stands
 // at, keeping its pinned binaries and its Store; the move is recorded in the
@@ -48,8 +49,10 @@
 // race, reconcile and publish; every call is recorded (lib.mjs record) for
 // the call table, size classes and the Overview (stats.mjs).
 // The wall budget is read from ~/lfs-history/budget.json ({ wallBudgetMs,
-// ranges, reason }); the projection is the mean tooling wall time of the
-// phase's latest attempts (this one included) × `ranges` (SPEC §5).
+// ranges, reason, phases: { <phase>: { wallBudgetMs, … } } }): the phase's own
+// entry, else the top-level P1-close one (loadBudget); the projection is the
+// mean tooling wall time of the phase's latest attempts (this one included)
+// × `ranges` (SPEC §5).
 // Exit codes: 0 the last range passed (or watch); 3 optimize; 4 stop (a gate,
 // a step that differs from the plan, or a failed checkpoint); 5 the guard
 // refused a range (disk, binary, missing calibration); 1 an error; 2 usage.

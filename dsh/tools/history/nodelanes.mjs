@@ -38,6 +38,9 @@ export function checkNode(node, plan = null) {
   return null;
 }
 
+/** A Commit call's Commit id: `sandbox.commit` answers its record (`commit.id`), others the id itself. */
+export const commitIdOf = (v) => (v?.commit && typeof v.commit === "object" ? v.commit.id : v?.commit) ?? null;
+
 /** Step kinds that land tracked changes on a lane (a test point follows only these). */
 export const WRITING = new Set(["fs", "apply", "stale-apply"]);
 
@@ -152,9 +155,9 @@ export async function playPoint(a, k, ctx, pt, { branch, gitDir, files, install,
     const t0 = Date.now(), r = await sh(install), st = await a.lf.sandbox.status(sb, ws);
     rec.install = { command: install, exitCode: r.exitCode, ms: Date.now() - t0, output: normalizeOutput(`${r.stdout ?? ""}${r.stderr ?? ""}`), base: st?.base ?? null };
     const v = await expectCall(a, `${label} commit`, () => a.lf.sandbox.commit(sb, ws, `${label}.${pt.kind}`), "Committed|UpToDate");
-    rec.install.commit = v?.commit ?? null; rec.install.kind = v?.kind ?? null;
+    rec.install.commit = commitIdOf(v); rec.install.kind = v?.kind ?? null;
     // P3: the paths a no-op refresh changed (UpToDate: none)
-    if (pt.kind === "refresh") rec.install.changed = v?.kind === "Committed" && rec.install.base ? await changedPaths(a, rec.install.base, v.commit) : [];
+    if (pt.kind === "refresh") rec.install.changed = v?.kind === "Committed" && rec.install.base ? await changedPaths(a, rec.install.base, rec.install.commit) : [];
     a.label(`${label}.${pt.kind}`);
     const l = parseLister((await sh(listerCommand([], { roots }))).stdout);
     rec.lister = { groups: l.groups.length, entries: l.groups.reduce((n, g) => n + g.n, 0), normalized: l.normalized };

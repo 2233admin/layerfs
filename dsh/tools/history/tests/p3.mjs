@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { changedPackages, checkNode, inputsHash, testPoints, treeDelta, treeIdCommand, wholeBuild } from "../nodelanes.mjs";
+import { changedPackages, checkNode, commitIdOf, inputsHash, testPoints, treeDelta, treeIdCommand, wholeBuild } from "../nodelanes.mjs";
 import { PRUNE_EMPTY, pointBuild } from "../nodeconfig.mjs";
 import { chooseFiles, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
 import { execTool } from "../run.mjs";
@@ -39,6 +39,13 @@ test("NODE_RULE §4 test points: after the middle and the last writing step; the
   assert.deepEqual(pts.map((p) => [p.id, p.step, p.kind, p.root]), [["L1.mid", "s2", "install", true], ["L1.end", "s4", "refresh", true], ["L2.mid", "t1", "refresh", false], ["L2.end", "t2", "refresh", false]]);
   assert.deepEqual(pts[1].before, ["s1", "s2", "s4"], "a check step is not a writing step");
   assert.equal(testPoints({ ...plan, steps: plan.steps.filter((s) => s.id !== "t2") }).filter((p) => p.lane === "L2").map((p) => p.point).join(), "end", "one point when mid and end coincide");
+});
+
+test("a refresh's Commit id comes from sandbox.commit's record (R1 dev slice: a refresh Committed, and diff_commits got the record)", () => {
+  assert.equal(commitIdOf({ kind: "Committed", commit: { id: "c1", logical: 3 } }), "c1");
+  assert.equal(commitIdOf({ kind: "Committed", commit: "c2" }), "c2");
+  assert.equal(commitIdOf({ kind: "UpToDate" }), null);
+  assert.equal(commitIdOf(null), null);
 });
 
 test("NODE_RULE §3 and the store policy are switches: plan and R1 play their own plans; release-age-off is the one override", () => {
