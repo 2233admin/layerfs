@@ -9,13 +9,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { changedPackages, checkNode, commitIdOf, inputsHash, pointsBefore, testPoints, treeDelta, treeIdCommand, wholeBuild } from "../nodelanes.mjs";
 import { PRUNE_EMPTY, pointBuild } from "../nodeconfig.mjs";
-import { chooseFiles, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
+import { chooseFiles, nativeClean, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
 import { execTool } from "../run.mjs";
 import { installCommand, pointInstall, STORE_POLICIES } from "../closure.mjs";
 import { sliceRange } from "../slice.mjs";
 import { stepSource } from "../storage.mjs";
 import { decoyBytes, Tree } from "../steps.mjs";
 import { proofTally } from "../p3.mjs";
+import { cleanedPaths, cleanScript, marks } from "../gitlanes.mjs";
+import { existsSync } from "node:fs";
 
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
@@ -219,6 +221,40 @@ test("a lane's later steps wait for its test point, never another lane's (#352 r
   assert.deepEqual(pointsBefore(pts, at("s4")), [], "a point's own step does not wait for it");
   assert.deepEqual(pointsBefore(pts, at("s5")), ["L1.end"], "a non-writing step after the point waits: the lane is quiet during it");
   assert.deepEqual(pointsBefore(pts, at("t2")), [], "L2's point is its own");
+});
+
+test("decision B: the lead's git clean removes untracked, unignored files only; native the same; a clean tree is untouched", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lfs352-clean-"));
+  const sh = (cwd, script) => execFileSync("sh", ["-c", script], { cwd, encoding: "utf8", env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
+  const put = (root, path, text) => { mkdirSync(join(root, path, ".."), { recursive: true }); writeFileSync(join(root, path), text); };
+  try {
+    const wt = join(dir, "wt");
+    put(wt, ".gitignore", "node_modules/\nlib/\n"); put(wt, "pkg/src/a.ts", "export {}\n"); put(wt, "pkg/tsconfig.json", "{}\n"); put(wt, "README.md", "r\n");
+    sh(wt, "git init -q && git add -A && git commit -q -m base");
+    // a tree with nothing untracked: nothing removed, nothing listed
+    let m = marks(sh(wt, cleanScript()));
+    assert.deepEqual([m.cleanedFiles, m.cleanedBytes, m.cleanedTracked, m.cleanedIgnored, m.cleanLeft], [0, 0, 0, 0, 0]);
+    // an emitted output beside its source (r016.a1), ignored output, node_modules, an untracked folder
+    put(wt, "pkg/src/a.js", "x\n"); put(wt, "pkg/src/a.d.ts.map", "yy\n"); put(wt, "pkg/lib/types/a.js", "z\n"); put(wt, "node_modules/p/index.js", "n\n"); put(wt, "pkg/node_modules/q/i.js", "q\n"); put(wt, "newdir/f.txt", "f\n");
+    put(wt, "README.md", "changed\n");
+    const out = sh(wt, cleanScript());
+    m = marks(out);
+    assert.deepEqual([m.cleanedFiles, m.cleanedBytes, m.cleanedTracked, m.cleanedIgnored, m.cleanLeft], [2, 5, 0, 0, 0]);
+    assert.deepEqual(cleanedPaths(out).sort(), ["pkg/src/a.d.ts.map", "pkg/src/a.js"]);
+    for (const p of ["pkg/src/a.js", "pkg/src/a.d.ts.map"]) assert.ok(!existsSync(join(wt, p)), `${p} removed`);
+    for (const p of ["pkg/lib/types/a.js", "node_modules/p/index.js", "pkg/node_modules/q/i.js", "newdir/f.txt", "pkg/src/a.ts"]) assert.ok(existsSync(join(wt, p)), `${p} kept (ignored, node_modules, untracked folder: no -x, no -d; tracked)`);
+    assert.equal(sh(wt, "cat README.md"), "changed\n", "a tracked file is never touched");
+    // native: the same list from an index of the tree, no .git in the folder
+    const nat = join(dir, "nat"), tree = sh(wt, "git rev-parse HEAD^{tree}").trim();
+    sh(wt, `git archive HEAD | (mkdir -p ${nat} && tar -x -C ${nat}) && git ls-tree -r -z --full-tree ${tree} > ${join(dir, "0.idx")}`);
+    put(nat, "pkg/src/a.js", "x\n"); put(nat, "pkg/src/a.d.ts.map", "yy\n"); put(nat, "pkg/lib/types/a.js", "z\n"); put(nat, "node_modules/p/index.js", "n\n"); put(nat, "newdir/f.txt", "f\n"); put(nat, "README.md", "changed\n");
+    const nm = sh(nat, nativeClean(0, join(dir, "0.idx"), dir));
+    assert.match(nm, /^@@cleaned 0 2$/m);
+    for (const p of ["pkg/src/a.js", "pkg/src/a.d.ts.map"]) assert.ok(!existsSync(join(nat, p)));
+    for (const p of ["pkg/lib/types/a.js", "node_modules/p/index.js", "newdir/f.txt", "pkg/src/a.ts", "README.md"]) assert.ok(existsSync(join(nat, p)));
+    assert.match(sh(nat, nativeClean(1, join(dir, "0.idx"), dir)), /^@@cleaned 1 0$/m, "natively clean: nothing to remove");
+    assert.match(sh(nat, nativeClean(2, join(dir, "missing.idx"), dir)), /^@@cleaned 2 -1$/m, "a failed native clean says so");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 let failed = 0;

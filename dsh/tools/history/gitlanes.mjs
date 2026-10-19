@@ -109,6 +109,35 @@ export const statusLines = (stdout) => {
   return out;
 };
 
+/**
+ * The untracked, unignored files `git clean -f` removes (liaison decision B, 2026-10-19, owner-delegated 16–20 run):
+ * untracked files outside every ignore rule, never in an untracked folder (no -d) and never ignored ones (no -x), so
+ * node_modules and build output under .gitignore stay. A lane's build can emit beside its sources on a tree the
+ * plan's lane split makes (r016.a1: dsh 72bb02e68e's move split over two lanes), and the lead's merge carries every
+ * file of a Branch into main. `list` prints NUL-separated paths relative to the work tree.
+ */
+export const UNTRACKED_LIST = "git ls-files -z --others --exclude-standard --directory --no-empty-directory | tr '\\0' '\\n' | grep -v '/$' | tr '\\n' '\\0'";
+/** The lead's clean before the status checks: what it removes (count, bytes, the first 200 paths), checked, then `git clean -f`. */
+export const cleanScript = () => [
+  `cl=/tmp/lfs352-clean.$$; ${UNTRACKED_LIST} > $cl`,
+  "echo \"@@cleanedFiles $(tr -cd '\\0' < $cl | wc -c)\"",
+  "echo \"@@cleanedBytes $(xargs -0 -r cat -- < $cl | wc -c)\"",
+  // the guard: none is tracked by the checkpoint, none is ignored
+  "echo \"@@cleanedTracked $(xargs -0 -r git ls-files -- < $cl | wc -l)\"",
+  "echo \"@@cleanedIgnored $( (xargs -0 -r git check-ignore --no-index -- < $cl || true) | wc -l)\"",
+  "echo @@cleaned; tr '\\0' '\\n' < $cl | head -200; echo @@end",
+  "git clean -f -q",
+  `echo "@@cleanLeft $(${UNTRACKED_LIST} | tr -cd '\\0' | wc -c)"; rm -f $cl`,
+].join("\n");
+/** The lines between `@@cleaned` and the next mark. */
+export const cleanedPaths = (stdout) => {
+  const lines = String(stdout).split("\n"), at = lines.indexOf("@@cleaned");
+  if (at < 0) return [];
+  const out = [];
+  for (const l of lines.slice(at + 1)) { if (l.startsWith("@@")) break; if (l) out.push(l); }
+  return out;
+};
+
 /** A lane's linked-worktree git folder (Q3). */
 export const laneGitDir = (lane) => `.git/worktrees/${lane}`;
 /** trace2 lstat (preload and refresh) and scan counts of one timed command, as `@@<name>Lstat` and `@@<name>Scan`. */
@@ -271,6 +300,7 @@ export function finishScript({ checkpoint, prev, count }) {
     "echo \"@@head $(git rev-parse HEAD)\"; echo \"@@tree $(git rev-parse 'HEAD^{tree}')\"",
     `echo "@@count $(git rev-list --count ${prev}..HEAD)"; [ "$(git rev-list --count ${prev}..HEAD)" = ${count} ]`,
     "echo \"@@refsLeft $(git for-each-ref refs/heads/lanes/ | wc -l)\"",
+    cleanScript(),
     statusProbe(),
   ].join("\n");
 }

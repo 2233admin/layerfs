@@ -33,6 +33,7 @@ export { BUILD_GROUPS };
 import { selectTests, vitestCommand } from "./unit-tests.mjs";
 import { devSteps } from "./devcheck.mjs";
 import { decoyBytes, pad, Tree } from "./steps.mjs";
+import { UNTRACKED_LIST } from "./gitlanes.mjs";
 import { installCommand } from "./closure.mjs";
 
 export const PROOFS = ["P1", "P2", "P3", "P4", "P5", "P6"];
@@ -93,6 +94,9 @@ export function modelDelta(plan, base, pt) {
  * skipped there (#352 R1 slice, r015-2-packages-core). The final lister
  * normalizes the earlier roots, as the LayerFS lister does.
  */
+/** The native `git clean -f` of state i in the current folder (decision B): `idx` holds `git ls-tree -r -z` of its tree. */
+export const nativeClean = (i, idx, scratch = "/tmp") => `if rm -rf ${scratch}/cg && git init -q ${scratch}/cg && GIT_DIR=${scratch}/cg/.git GIT_WORK_TREE=$PWD git update-index -z --index-info < ${idx} && (export GIT_DIR=${scratch}/cg/.git GIT_WORK_TREE=$PWD; ${UNTRACKED_LIST}) > ${scratch}/cl${i}; then echo "@@cleaned ${i} $(tr -cd '\\0' < ${scratch}/cl${i} | wc -c | tr -d ' ')"; xargs -0 rm -f -- < ${scratch}/cl${i}; else echo "@@cleaned ${i} -1"; fi`;
+
 export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
   const stage = mkdtempSync(join(tmpdir(), "lfs352-chain-"));
   try {
@@ -118,6 +122,12 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
         }
         prev = st.tree;
       }
+      // decision B (liaison 2026-10-19): the lead's `git clean -f` on the checkpoint before the repair, natively the
+      // same: an index of the state's tree in a scratch git dir, the same untracked, unignored list removed
+      if (st.clean) {
+        writeFileSync(join(stage, `${i}.idx`), execFileSync("git", ["--git-dir", repo, "ls-tree", "-r", "-z", "--full-tree", st.tree], { maxBuffer: 1 << 30 }));
+        script.push(nativeClean(i, `/seq/${i}.idx`));
+      }
       script.push(i < states.length - 1 ? `t=$(date +%s%N); (${st.command}) > /tmp/s${i} 2>&1; e=$?; echo "@@step ${i} $e $(( ($(date +%s%N) - t) / 1000000 ))"`
         : `t=$(date +%s%N); (${st.command}) > /tmp/o 2>&1; echo "@@exit $? $(( ($(date +%s%N) - t) / 1000000 ))"; sed 's/^/@@out /' /tmp/o; ${listerCommand()}`);
     });
@@ -140,6 +150,7 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
       exit: Number(String(pick("@@exit ")[0] ?? "NaN").split(" ")[0]), installMs: Number(String(pick("@@exit ")[0] ?? "").split(" ")[1] ?? NaN), output: normalizeOutput(pick("@@out ").join("\n")), ...parseLister(r.stdout),
       tsc: tsc ? { exit: tsc[0], ms: tsc[1], output: pick("@@tscout ").join("\n") } : null,
       emitted: tail.build ? parseEmitted(pick("@@emit ").join("\n")) : null, vitest, ms: Date.now() - t0, root: at,
+      cleaned: pick("@@cleaned ").map((l) => { const [i, files] = l.split(" ").map(Number); return { i, files }; }),
     };
   } finally { rmSync(stage, { recursive: true, force: true }); }
 }
@@ -298,7 +309,7 @@ export function repairChain(run, m, k) {
   const rootLane = node.inputsRule === "r1" ? plan.lanes.find((l) => l.areas.includes("/"))?.name ?? null : null;
   const ran = m.node.points.filter((q) => q.lane !== "lead" && q.install?.command && q.treeNative);
   const lanes = ran.flatMap((q) => (rootLane && q.lane !== rootLane ? pointStates(q).slice(1) : pointStates(q)));
-  const states = [...chain0, ...lanes, { tree, command: inst.command ?? installCommand({ policy: node.storePolicy }), ...at(inst.root) }];
+  const states = [...chain0, ...lanes, { tree, command: inst.command ?? installCommand({ policy: node.storePolicy }), ...at(inst.root), clean: true }];
   const buildState = build ? { tree, command: build.command ?? buildCommand(build.packages), ...at(build.root) } : null;
   return { tree, states, buildState, tail: build ? { build: buildState.command, packages: build.packages, ...at(build.root) } : {},
     complete: ran.length === m.node.points.filter((q) => q.lane !== "lead").length };
@@ -457,6 +468,11 @@ async function cmdProofs(o) {
       const native = r.complete ? cachedOracle(oracleDir(run), { repo, states: r.states, tail: r.tail, inputs: "repair", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : null;
       const groups = m.closure.repairGroups && existsSync(m.closure.repairGroups) ? JSON.parse(readFileSync(m.closure.repairGroups, "utf8")) : null;
       proofs["lead.repair"] = judgeRepair({ ...m.closure, tree }, native, { groups, nativeMs: native?.ms ?? null });
+      // decision B: the native clean on the checkpoint, beside the lead's (metrics git.lead.cleaned); a failed native clean is a proof not run
+      if (proofs["lead.repair"] && native) {
+        proofs["lead.repair"].nativeCleaned = native.cleaned ?? null;
+        if (!native.cleaned?.length || native.cleaned.some((c) => c.files < 0)) proofs["lead.repair"].proofs.P6 = res("NOT_RUN", "the native clean before the repair did not run");
+      }
     } else if (inst && !proofs["lead.repair"]) left++;
   } finally { blobs.close(); }
   const { fillP3 } = await import("./p3record.mjs");

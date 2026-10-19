@@ -80,6 +80,19 @@ SPEC §2's outer and inner cycles add these git steps:
   At the checkpoint, HEAD must equal the checkpoint commit and its tree
   dsh's tree, and `git status --porcelain` must be empty. In a fresh mount,
   git must also read back no tracked file (`refresh/sum_scan` = 0).
+- **The lead runs `git clean -f` before the status checks** (decision B,
+  liaison 2026-10-19 under the owner's delegation for ranges 16–20). It removes
+  untracked, unignored files only: never `-x` (ignored files and
+  `node_modules` stay) and never `-d` (untracked folders stay). A lane's build
+  can emit beside its sources on a tree the plan's lane split makes, and the
+  lead's merge carries every file of a Branch into main. In r016.a1, dsh
+  `72bb02e68e`'s move was split over two lanes, leaving 116 untracked `tsc`
+  outputs; natively the same tree writes the same files. Each range records the
+  removed files' count, bytes and paths (`git.lead.cleaned`). The step stops if
+  any of them is tracked or ignored, or one is left. The native repair chain
+  runs the same clean on the checkpoint tree (NODE_RULE §6). Range 15 had
+  nothing untracked at its checkpoint, so it is unchanged and the series stays
+  comparable.
 - **Every git exec stays at or under 120 s.** A git range is played in two
   commands (SCRIPTS.md, "The P3 command shape").
 

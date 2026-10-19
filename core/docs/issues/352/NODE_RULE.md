@@ -151,7 +151,10 @@ The tree and commands are unchanged.
   earlier point of the same lane as it ran (its install, then its build,
   whose `lib/` output stays in the lane's tree), then the point itself.
 - **The repair's chain:** the same for every lane, in the order the points
-  ran. Under R1 only the root lane changes install inputs, so only its
+  ran. On the checkpoint tree, before the repair, the chain removes the
+  untracked, unignored files, as the lead's `git clean -f` does (GIT_RULE,
+  decision B, 2026-10-19; `nodeproof.mjs nativeClean`, counted as
+  `nativeCleaned` in the repair proof). Under R1 only the root lane changes install inputs, so only its
   installs change the installed packages. The other lanes contribute their
   builds, not their installs: replayed in one native folder, their refresh of
   the base inputs would remove what the root lane added, which the LayerFS

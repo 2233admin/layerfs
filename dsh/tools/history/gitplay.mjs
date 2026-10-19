@@ -8,7 +8,7 @@
 // closure phase; dev runs prove it before any measured range uses it.
 import { execAll, expectCall, Mismatch, scratchDir, setup } from "./lib.mjs";
 import { git } from "./git.mjs";
-import { catFiles, finishScript, GIT_ENV, JOB_DIR, jobBytes, laneAllowed, laneCommands, LEAD_WRITER, leadJob, marks, parseCommit, seedOps, seedScript, statusLines, statusProbe } from "./gitlanes.mjs";
+import { catFiles, cleanedPaths, finishScript, GIT_ENV, JOB_DIR, jobBytes, laneAllowed, laneCommands, LEAD_WRITER, leadJob, marks, parseCommit, seedOps, seedScript, statusLines, statusProbe } from "./gitlanes.mjs";
 import { pad, quote } from "./steps.mjs";
 
 /** Per-exec deadline of the lead's commit writer: each exec stays well under the 120 s command ceiling. */
@@ -157,8 +157,12 @@ export async function leadGit(run, k, plan, ctx, cur) {
   ctx.work.commits += 2;
   const out = results.at(-1).stdout, f = marks(out), tree = git(run.repo, ["rev-parse", `${plan.checkpoint}^{tree}`]).trim();
   ctx.git.lead = { commits: job.commits.length, merges: job.commits.filter((c) => c.parents.length > 1).length, jobBytes: bytes.length, missing: job.missing, ...writer, ...f,
-    headOk: f.head === plan.checkpoint, treeOk: f.tree === tree, status: statusLines(out), prepMs, workspaceMs: ms, wallMs: Math.round(performance.now() - t0) };
+    headOk: f.head === plan.checkpoint, treeOk: f.tree === tree, status: statusLines(out), prepMs, workspaceMs: ms, wallMs: Math.round(performance.now() - t0),
+    // decision B (liaison 2026-10-19): untracked, unignored files removed before the status checks, recorded
+    cleaned: { files: f.cleanedFiles ?? null, bytes: f.cleanedBytes ?? null, tracked: f.cleanedTracked ?? null, ignored: f.cleanedIgnored ?? null, left: f.cleanLeft ?? null, paths: cleanedPaths(out) } };
   const l = ctx.git.lead;
+  if (l.cleaned.files == null || l.cleaned.tracked || l.cleaned.ignored || l.cleaned.left) throw new Mismatch(`${label}: the clean before the status checks: ${JSON.stringify({ ...l.cleaned, paths: l.cleaned.paths.slice(0, 5) })} (want files counted, 0 tracked, 0 ignored, 0 left)`);
+  if (l.cleaned.files) run.progress?.(`lead git clean: ${l.cleaned.files} untracked, unignored files (${l.cleaned.bytes} B) removed: ${l.cleaned.paths.slice(0, 3).join(", ")}`);
   if (!l.headOk || !l.treeOk) throw new Mismatch(`${label}: HEAD ${f.head} tree ${f.tree}, dsh has ${plan.checkpoint} tree ${tree}`);
   if (l.refsLeft) throw new Mismatch(`${label}: ${l.refsLeft} lane refs left`);
   if (l.statusLines) throw new Mismatch(`${label}: git status --porcelain lists ${l.statusLines} lines at the checkpoint: ${l.status.slice(0, 5).join("; ")}`);

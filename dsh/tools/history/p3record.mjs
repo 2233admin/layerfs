@@ -43,6 +43,8 @@ export function fillP3(m, { groupsOf = () => null } = {}) {
     statusClean: lead.statusLines === 0 && (g.fresh ? g.fresh.statusLines === 0 : true), freshSumScan: g.fresh?.sumScan ?? null,
     guardViolations: (g.guard ?? []).flatMap((x) => x.violations), guard: (g.guard ?? []).map(({ lane, paths, ms }) => ({ lane, paths, ms })),
     lanes, lead: { commitTree: lead.commits ?? null, indexRebuild: lead.refreshMs != null, repack: lead.repackMs != null },
+    // decision B (liaison 2026-10-19): what the lead's `git clean -f` removed before the status checks
+    cleaned: lead.cleaned ?? null,
     perCommit: { commits: (g.lane?.commits ?? 0) + (lead.commits ?? 0), index: lead.indexBytes ?? null, loose: Object.entries(lead).filter(([k]) => k.startsWith("laneBytes_")).reduce((s, [, v]) => s + v, 0), pack: (lead.newPackBytes ?? 0) + (lead.newIdxBytes ?? 0) },
     internals: {
       seedObjects: null, seedPackBytes: g.seed?.packBytes ?? null, seedCommits: g.seed?.commits ?? null,
