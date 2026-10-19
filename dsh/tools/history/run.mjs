@@ -7,6 +7,7 @@
 //   node dsh/tools/history/run.mjs rebaseline --prepare --phase p3 --git --daemon <path> --addon <path> [--plan <dir>] [--run <id>]
 //     then play ranges 2-4 one at a time (… --until lead, --resume --until lanes, --resume), then
 //   node dsh/tools/history/run.mjs rebaseline --write --phase p3 --daemon <path> --addon <path> [--run <id>]
+//     [--accept-storage-row "Reinstall growth" --accept-ranges 3,4 --reason <text>]   (a named exception, baselineRows)
 // Every command that touches the Store (new, play, fork, rebaseline) runs in the runner container (runner.mjs): Store calls run in
 // this process against the run's volume at /layerfs-store (F-020), Linux only.
 // --sdk <dir> picks the SDK's JavaScript (default sdk/js of this checkout);
@@ -849,12 +850,37 @@ async function cmdRebaselineSplit(o) {
   // as the one-command form: a range whose latest attempt does not pass or watch gives no baseline
   const { writeBaseline, loadAttempts } = await import("./report.mjs");
   const latest = loadAttempts(run.manifest.outputs.metrics);
-  const bad = [2, 3, 4].map((k) => [k, latest.get(k)?.at(-1)?.gate?.verdict ?? "none"]).filter(([, v]) => v !== "pass" && v !== "watch");
-  if (bad.length) { console.error(`rebaseline ${id}: ${bad.map(([k, v]) => `range ${k} ${v}`).join(", ")}; no baseline written`); return EXIT.stop; }
-  const r = writeBaseline({ metricsDir: run.manifest.outputs.metrics, ranges: [2, 3, 4], out: join(HISTORY, "metrics"), run: id, phase: o.phase, ...(o.note ? { note: o.note } : {}) });
+  const accept = o["accept-storage-row"] ? { row: o["accept-storage-row"], ranges: String(o["accept-ranges"] ?? "").split(",").filter(Boolean).map(Number), reason: o.reason } : null;
+  const judged = baselineRows([2, 3, 4].map((k) => [k, latest.get(k)?.at(-1)]), accept);
+  if (judged.refused.length) { console.error(`rebaseline ${id}: ${judged.refused.join("; ")}; no baseline written`); return EXIT.stop; }
+  const note = judged.accepted.length ? { ...(o.note ? { text: o.note } : {}), acceptedRows: judged.accepted, reason: accept.reason } : o.note;
+  const r = writeBaseline({ metricsDir: run.manifest.outputs.metrics, ranges: [2, 3, 4], out: join(HISTORY, "metrics"), run: id, phase: o.phase, ...(note ? { note } : {}) });
   run.note({ kind: "baseline", name: r.file, phase: o.phase, from: run.manifest.source });
   console.log(JSON.stringify({ run: id, phase: o.phase, file: r.file, ops: Object.keys(r.baseline.ops).length }));
   return EXIT.done;
+}
+
+/** The storage rows a baseline may take at optimize as a named exception (`--accept-storage-row`). */
+export const ACCEPTABLE_STORAGE_ROWS = new Set(["Reinstall growth"]);
+
+/**
+ * Which baseline ranges may make a baseline. Each latest attempt must pass or watch. The one exception is a named
+ * storage row (`accept`: { row, ranges, reason }) at optimize in the listed ranges, with every other row at pass or
+ * watch (liaison under owner delegation 2026-10-19: rb-p3-…-d r003 and r004, Reinstall growth on link-unit
+ * denominators). A stop, or any other row, still refuses.
+ */
+export function baselineRows(attempts, accept = null) {
+  const refused = [], accepted = [];
+  if (accept && (!ACCEPTABLE_STORAGE_ROWS.has(accept.row) || !accept.ranges.length || !accept.reason)) return { refused: [`--accept-storage-row needs one of ${[...ACCEPTABLE_STORAGE_ROWS].join(", ")}, --accept-ranges and --reason`], accepted };
+  for (const [k, m] of attempts) {
+    const v = m?.gate?.verdict ?? "none";
+    if (v === "pass" || v === "watch") continue;
+    const off = (m?.gate?.checks ?? []).filter((c) => c.result !== "pass" && c.result !== "watch");
+    const ok = accept && v === "optimize" && accept.ranges.includes(k) && off.length === 1 && off[0].name === accept.row && off[0].result === "optimize";
+    if (ok) accepted.push({ range: k, attempt: m.attempt, row: off[0].name, result: off[0].result, value: off[0].value, reinstall: m.storage?.reinstall ?? null });
+    else refused.push(`range ${k} ${v}${off.length ? ` (${off.map((c) => `${c.name} ${c.result}`).join(", ")})` : ""}`);
+  }
+  return { refused, accepted };
 }
 
 /** The run id `rebaseline` makes when none is given (the runner mounts its volume). */

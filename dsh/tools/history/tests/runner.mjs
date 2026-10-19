@@ -13,7 +13,7 @@ import {
   addDelta, deltaSummary, deltaWork,
 } from "../steps.mjs";
 import { blobId as blobOf } from "../git.mjs";
-import { caps, forkPlan, nextAttempt, options, outputs, POLICIES, SWITCHABLE } from "../run.mjs";
+import { baselineRows, caps, forkPlan, nextAttempt, options, outputs, POLICIES, SWITCHABLE } from "../run.mjs";
 import { PLAN_VERSION } from "../plan.mjs";
 import { deltaLine, stageLine } from "../report.mjs";
 
@@ -256,6 +256,19 @@ test("P3 switches and fork plans: git and Node for dev, measured and baseline ru
   assert.throws(() => forkPlan({ plan: slice, label: "measured" }), /dev slice/);
   writeFileSync(join(full, "plan.json"), JSON.stringify({ version: PLAN_VERSION - 1 }));
   assert.throws(() => forkPlan({ plan: full, label: "baseline" }), /plan v/);
+});
+
+test("a baseline takes pass or watch ranges, and one named storage row at optimize only where it is accepted", () => {
+  const at = (verdict, rows) => ({ attempt: 1, gate: { verdict, checks: rows.map(([name, result]) => ({ name, result, value: "v" })) } });
+  const w = at("watch", [["Speed", "watch"]]), r = at("optimize", [["Speed", "watch"], ["Reinstall growth", "optimize"]]);
+  const accept = { row: "Reinstall growth", ranges: [3], reason: "RESULTS 2026-10-19" };
+  assert.deepEqual(baselineRows([[2, w], [3, r]]).refused, ["range 3 optimize (Reinstall growth optimize)"]);
+  assert.deepEqual(baselineRows([[2, w], [3, r]], accept), { refused: [], accepted: [{ range: 3, attempt: 1, row: "Reinstall growth", result: "optimize", value: "v", reinstall: null }] });
+  assert.equal(baselineRows([[4, r]], accept).refused.length, 1, "only the listed ranges");
+  assert.equal(baselineRows([[3, at("optimize", [["Reinstall growth", "optimize"], ["Speed", "optimize"]])]], accept).refused.length, 1, "no other row");
+  assert.equal(baselineRows([[3, at("stop", [["Reinstall growth", "stop"]])]], accept).refused.length, 1, "never a stop");
+  assert.equal(baselineRows([[3, r]], { ...accept, row: "Range growth" }).refused.length, 1, "only a listed storage row");
+  assert.equal(baselineRows([[3, r]], { ...accept, reason: undefined }).refused.length, 1, "a reason is required");
 });
 
 let failed = 0;
