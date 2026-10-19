@@ -909,3 +909,40 @@
 
   **Status: OPEN, owner decision.** Not fixed: changing design 8 reverses an
   owner decision.
+
+- **F-057 · newest-wins over pnpm's install state lets the repair keep stale
+  hoisting (product; measured range 15 a3, `p3-main-c`, 2026-10-19).**
+  - The lead's merge decides `node_modules/**` by newest-wins (`/.lww`, owner
+    S4). In range 15 the root lane installs a changed lockfile, while every
+    other lane refreshes the base inputs at its own mount path. Both rewrite
+    `node_modules/.modules.yaml`. A later refresh's copy (base state) can win,
+    while `node_modules/.pnpm/lock.yaml`, changed only on the root lane, comes
+    from the root lane. The merged install state mixes the two (a2 showed the
+    same on `.modules.yaml`).
+  - The repair install keeps that mix. In a3 the repaired lead's
+    `.modules.yaml` `hoistedDependencies` still lists the stale
+    `@cordisjs/plugin-loader@1.0.0-rc.4(cordis@4.0.0-rc.6)` beside
+    `@cordisjs/plugin-loader@1.0.0-rc.5(cordis@4.0.0-rc.7)(node-addon-require-builtin@0.1.0)`.
+    Natively only rc.5 is listed.
+  - Result: the public hoist `node_modules/.pnpm/node_modules/@cordisjs/plugin-loader`
+    resolves to the workspace package `vendor/loader` in LayerFS, and to
+    `node_modules/.pnpm/@cordisjs+plugin-loader@1.0.0-rc.5_cordis@4.0.0-rc.7_node-addon-require-builtin@0.1.0/node_modules/@cordisjs/plugin-loader`
+    natively. It is the only difference among 761 entries of that group, and
+    every other group is equal (lister v6). P4 passes: 503 emitted files,
+    exit 0.
+  - Impact: a package that relies on hoisting (an undeclared dependency
+    resolved through `.pnpm/node_modules`) loads a different plugin-loader in
+    LayerFS than in a native checkout of the same tree.
+  - Proof: `lead.repair` P6 stop, "P1 stop (missing 0, extra 0, differ 1:
+    node_modules/.pnpm/node_modules)". Receipts:
+    `~/lfs-history/dev/r015-a3-p6-20261019/` (`lfs.out` from the repair
+    Commit `12880da1…`, `native.out` from the repair chain, both listing the
+    group entry by entry with the `hoistedDependencies` section), and a2's
+    `~/lfs-history/dev/r015-a2-p6-20261019/`.
+  - Candidate fixes, none chosen: merge pnpm's install-state files
+    differently, or make the lead's repair a clean relink of `node_modules`.
+    Changing the repair command changes the workload, so it is the owner's
+    call (liaison under owner delegation 2026-10-19).
+
+  **Status: OPEN, product finding; range 15 stays at stop until it is
+  decided.**
