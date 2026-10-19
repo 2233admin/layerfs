@@ -207,19 +207,68 @@ builds. The owner accepted this for item 2; it is #364 item 4.
 
 ### Write-path cost
 
-`layerfs-api/tests/write_cost.rs`, same Store copy, one sample per arm, load
-6.52 at the start of each: 200 `fs.write` calls of 1–8 KiB, each its own Commit, then one
-64 MiB `fs.write`.
+`layerfs-api/tests/write_cost.rs`, a fresh copy of the r015 Store per sample,
+one sample per arm: 200 `fs.write` calls of 1–8 KiB, each its own Commit,
+then one 64 MiB `fs.write`.
 
 | | old | new | delta |
 | --- | --- | --- | --- |
-| `fs.write` p50 | 9.26 ms | 10.12 ms | +0.86 ms (+9%) |
-| `fs.write` p90 | 11.44 ms | 12.35 ms | +0.91 ms |
-| 64 MiB write | 824.2 ms | 951.3 ms | +127 ms (+15%) |
+| first pair (load 6.52), `fs.write` p50 | 9.26 ms | 10.12 ms | +0.86 ms |
+| first pair, p90 | 11.44 ms | 12.35 ms | +0.91 ms |
+| first pair, 64 MiB write | 824.2 ms | 951.3 ms | +127 ms |
+| second pair, with counters (load 11.5), p50 | 9.36 ms | 9.47 ms | +0.11 ms |
+| second pair, p90 | 10.80 ms | 11.22 ms | +0.42 ms |
+| second pair, 64 MiB write | 824.3 ms | 770.3 ms | −54 ms |
 
-The per-call cost is the hash, one digest row and one root lookup per
-Commit; the big write adds BLAKE3 over 64 MiB on the write path, under the
-Workspace lock, plus the row. Neither grows with tree size.
+The liaison asked where the first pair's +0.86 ms goes. The second pair
+(harness `_WORK` lines, the same binaries' code with counters added) counts
+it per call:
+
+| Per small `fs.write` | old | new | delta |
+| --- | --- | --- | --- |
+| Store statements | 165.4 | 171.4 | +6.0 |
+| Store VM steps | 14,062 | 14,116 | +54 |
+| Store time in SQLite | 1.870 ms | 1.884 ms | +0.014 ms |
+| overlay statements | 175.8 | 180.8 | +5.0 |
+| overlay VM steps | 3,670 | 3,803 | +133 |
+| overlay time in SQLite | 0.859 ms | 0.912 ms | +0.053 ms |
+| overlay lock hold | 0.865 ms | 0.947 ms | +0.082 ms |
+| BLAKE3 over the same bytes | — | 0.006 ms | |
+
+| 64 MiB `fs.write` | old | new | delta |
+| --- | --- | --- | --- |
+| Store statements | 630 | 637 | +7 |
+| overlay statements | 24,809 | 26,862 | +2,053 |
+| overlay time in SQLite | 153.6 ms | 102.5 ms | −51 ms (noise) |
+| overlay lock hold | 287.5 ms | 292.9 ms | +5.4 ms |
+| BLAKE3 over the same bytes | — | 50.6–51.1 ms | |
+
+- **Small writes.** The added work is about 0.1 ms a call: 5 overlay
+  statements (the digest row writes and the reads that resume, carry and
+  capture it) and 6 Store statements (two
+  catalog calls, each its own transaction: `BEGIN`, one statement, end).
+  Hashing is 6 µs. The first pair's +0.86 ms is mostly sample noise. The
+  new arm's two samples are 10.12 and 9.47 ms, and the old arm's 9.26 and
+  9.36 ms.
+- **The big write.** It is chunked into about 1,024 jobs. Each job ends by
+  writing the digest row again and starts by reading the latest row to
+  resume, so it adds two statements. BLAKE3 runs under the Workspace lock:
+  about 51 ms per 64 MiB (0.8 ms a MiB), 6% of the write. The two samples
+  differ by more than that (+127 ms, then −54 ms).
+- **What could be cut, not built (liaison: report only).**
+  1. Write the digest row once per file instead of once per job. Keep the
+     one-slot resumable state in memory, journaled as now, and write the
+     row when the slot passes to another file, at capture or at the last
+     close. This needs no read to resume. A chunked write then adds no
+     statements per chunk, about 2,050 fewer for 64 MiB; one 8 KiB write
+     saves about 2.
+  2. Fold the two Store catalog calls into one read and one write
+     transaction per Commit page. That saves 4 of the 6 Store statements,
+     about 0.01 ms.
+  3. The hash itself cannot move off the lock without per-chunk tree
+     hashing. It is about 0.8 ms a MiB.
+
+  Options 1 and 2 cut about 0.05 ms a call. Neither changes a result.
 
 ## 25f50cc876 (resident construction records): dropped
 

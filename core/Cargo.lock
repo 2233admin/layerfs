@@ -546,6 +546,7 @@ dependencies = [
 name = "layerfs-api"
 version = "0.1.7"
 dependencies = [
+ "blake3",
  "layerfs-bridge",
  "layerfs-content",
  "layerfs-history",

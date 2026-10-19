@@ -5,7 +5,9 @@
 //! `LAYERFS_364_RELINK_FROM` as for `relink_commit`, then run with
 //! `--ignored`. The Store is copied first. Prints one `WRITE_SMALL` line
 //! (200 writes of 1-8 KiB, each its own Commit) and one `WRITE_BIG` line
-//! (one 64 MiB write).
+//! (one 64 MiB write), each followed by a `_WORK` line: per call, the Store's
+//! and the overlay's statements, VM steps and time inside SQLite, the overlay
+//! hold time, and the time BLAKE3 takes over the same bytes in this process.
 #[path = "support/installed_store.rs"]
 #[allow(dead_code)]
 mod installed;
@@ -44,6 +46,47 @@ fn bytes(seed: u64, length: usize) -> Vec<u8> {
             state as u8
         })
         .collect()
+}
+
+/// Work so far: Store (statements, VM steps, statement ns), overlay
+/// foreground (executions, VM steps, elapsed ns) and overlay hold ns.
+fn work(service: &StoreService, owner: &Owner) -> [u64; 7] {
+    let store = service.opened.diagnostics().unwrap();
+    let mut out = [0u64; 7];
+    for sql in std::iter::once(&store.writer).chain(store.readers.iter()) {
+        out[0] += sql.statements;
+        out[1] += sql.vm_steps;
+        out[2] += sql.statement_ns;
+    }
+    let overlay = owner.client().diagnostics().unwrap();
+    for statement in overlay.sql_foreground.statements {
+        out[3] += statement.executions;
+        out[4] += statement.vm_steps;
+        out[5] += statement.elapsed_ns;
+    }
+    out[6] = overlay.hold_ns.iter().sum();
+    out
+}
+
+fn report(name: &str, calls: u64, before: [u64; 7], after: [u64; 7], hash_ns: u64) {
+    let per = |at: usize| (after[at] - before[at]) as f64 / calls as f64;
+    println!(
+        "{name}_WORK calls={calls} store_statements={:.1} store_vm_steps={:.0} store_sql_ms={:.3} overlay_statements={:.1} overlay_vm_steps={:.0} overlay_sql_ms={:.3} overlay_hold_ms={:.3} blake3_ms={:.4}",
+        per(0),
+        per(1),
+        per(2) / 1e6,
+        per(3),
+        per(4),
+        per(5) / 1e6,
+        per(6) / 1e6,
+        hash_ns as f64 / calls as f64 / 1e6,
+    );
+}
+
+fn hash_ns(content: &[u8]) -> u64 {
+    let started = std::time::Instant::now();
+    std::hint::black_box(blake3::hash(std::hint::black_box(content)));
+    started.elapsed().as_nanos() as u64
 }
 
 fn write(service: &StoreService, path: &str, content: Vec<u8>) -> f64 {
@@ -100,23 +143,28 @@ fn write_cost() {
             ("from", SdkValue::text(&from)),
         ],
     );
+    let mut hashed = 0u64;
+    let before = work(&service, &owner);
     let mut small: Vec<f64> = (0..200u64)
         .map(|at| {
             let length = 1024 + (at as usize * 7_919) % (7 * 1024);
-            write(
-                &service,
-                &format!("/w364-small-{at:03}.bin"),
-                bytes(at, length),
-            )
+            let content = bytes(at, length);
+            hashed += hash_ns(&content);
+            write(&service, &format!("/w364-small-{at:03}.bin"), content)
         })
         .collect();
+    report("WRITE_SMALL", 200, before, work(&service, &owner), hashed);
     small.sort_by(f64::total_cmp);
     println!(
         "WRITE_SMALL n=200 p50_ms={:.2} p90_ms={:.2} max_ms={:.2}",
         small[100], small[180], small[199]
     );
-    let big = write(&service, "/w364-big.bin", bytes(999, 64 << 20));
+    let content = bytes(999, 64 << 20);
+    let hashed = hash_ns(&content);
+    let before = work(&service, &owner);
+    let big = write(&service, "/w364-big.bin", content);
     println!("WRITE_BIG bytes={} ms={big:.1}", 64u64 << 20);
+    report("WRITE_BIG", 1, before, work(&service, &owner), hashed);
     drop(service);
     owner.stop().unwrap();
     std::fs::remove_dir_all(directory).unwrap();
