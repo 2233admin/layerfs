@@ -29,7 +29,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { lsTree } from "./git.mjs";
 import { compareResults, packageOf, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
-import { BUILD_GROUPS, emittedCommand, nodeOf, parseEmitted, pointBuild, wholeBuild } from "./nodeconfig.mjs";
+import { BUILD_GROUPS, emittedCommand, nodeOf, parseEmitted, pointBuild, PRUNE_EMPTY, wholeBuild } from "./nodeconfig.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
 const quote = (t) => `'${String(t).replaceAll("'", "'\\''")}'`;
@@ -63,6 +63,9 @@ export const CLEAN_REMOVE = "find . -name node_modules -type d -prune -exec rm -
 export const STORE_POLICIES = { verified: "", "release-age-off": "pnpm_config_minimum_release_age=0 " };
 /** NODE_RULE B3: a store gap fails at once instead of hanging on network retries (§11). */
 export const FAIL_FAST = "--fetch-retries=0 --fetch-timeout=3000";
+/** A NODE_RULE point's install (nodelanes.mjs): empty folders pruned first (a replayed removal leaves them; tsdown takes each as a package). */
+export const pointInstall = ({ clean = false, policy = "verified" } = {}) => `${PRUNE_EMPTY} && ${installCommand({ clean, policy })}`;
+
 export function installCommand({ store = STORE_MOUNT, clean = false, policy = "verified" } = {}) {
   if (!(policy in STORE_POLICIES)) throw new Error(`store policy ${policy}: one of ${Object.keys(STORE_POLICIES).join(", ")}`);
   const install = `${STORE_POLICIES[policy]}pnpm install --offline --frozen-lockfile --store-dir /tmp/pnpm-store --cache-dir /tmp/pnpm-cache --ignore-scripts ${FAIL_FAST}`;
@@ -642,7 +645,7 @@ function main() {
     if (nodeOf(manifest).on && (!state.installed || plan.milestone)) {
       const clean = !!state.installed;
       const build = wholeBuild(lsTree(repo, state.prevCommit).files);
-      state = { ...state, installed: true, closureChain: [{ range: k, checkpoint: state.prevCommit, kind: clean ? "clean-install" : "install", command: installCommand({ clean, policy: nodeOf(manifest).storePolicy }) }, ...(build.packages.length ? [{ range: k, checkpoint: state.prevCommit, kind: "tsc", command: build.command }] : [])] };
+      state = { ...state, installed: true, closureChain: [{ range: k, checkpoint: state.prevCommit, kind: clean ? "clean-install" : "install", command: pointInstall({ clean, policy: nodeOf(manifest).storePolicy }) }, ...(build.packages.length ? [{ range: k, checkpoint: state.prevCommit, kind: "tsc", command: build.command }] : [])] };
     }
     const node = nodeOf(manifest), oracleRoot = manifest.oracle ?? join(process.env.HOME, "lfs-history", "oracle");
     const planned = planClosure({ repo, planDir: manifest.plan ?? planDir, k, plan, prevCommit: state.prevCommit, installed: state.installed, checks: false, policy: node.storePolicy, repair: node.on && !!state.installed });

@@ -15,11 +15,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { git, lsTree } from "./git.mjs";
 import { expectCall, Mismatch, setup } from "./lib.mjs";
-import { INSTALL_INPUT, installCommand, listerCommand, normalizeOutput, parseLister, STORE_MOUNT } from "./closure.mjs";
+import { INSTALL_INPUT, listerCommand, normalizeOutput, parseLister, pointInstall, STORE_MOUNT } from "./closure.mjs";
 import { GIT_ENV, laneGitDir } from "./gitlanes.mjs";
 import { packageOf, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
 import { decoyBytes, pad } from "./steps.mjs";
-import { emittedCommand, nodeOf, parseEmitted, pointBuild, PRUNE_EMPTY, vitestMessages, wholeBuild } from "./nodeconfig.mjs";
+import { emittedCommand, nodeOf, parseEmitted, pointBuild, vitestMessages, wholeBuild } from "./nodeconfig.mjs";
 
 export { EMITTED, emittedCommand, nodeOf, parseEmitted, pointBuild, wholeBuild } from "./nodeconfig.mjs";
 
@@ -224,7 +224,7 @@ export async function leadInstall(run, k, plan, ctx) {
   const files = lsTree(run.repo, run.state.prevCommit).files, node = ctx.node.config;
   const clean = !!run.state.installed;
   const pt = { id: "lead.initial", lane: "lead", point: "initial", step: null, root: true, kind: clean ? "clean-install" : "install", tree: git(run.repo, ["rev-parse", `${run.state.prevCommit}^{tree}`]).trim(), base: run.state.prevCommit, inputs: inputsHash(files), delta: [] };
-  const install = `${PRUNE_EMPTY} && ${installCommand({ clean, policy: node.storePolicy })}`;
+  const install = pointInstall({ clean, policy: node.storePolicy });
   const rec = await playPoint(run, k, ctx, pt, { branch: ctx.lead, gitDir: ctx.git ? ".git" : null, files, install, build: wholeBuild(files), roots: run.state.closureRoots ?? [] });
   ctx.node.points.push(rec);
   ctx.work.commits += commitsOf(rec);
@@ -255,7 +255,7 @@ export async function afterStep(a, k, s, ctx, { lock, waitFor, plan, blobs }) {
       branch: pt.lane, gitDir: ctx.git ? laneGitDir(pt.lane) : null, files: tree.files,
       // empty folders first, as the lead's install (a replayed removal can leave one; git and the native tree
       // have none, and the bundler takes every packages/*/* folder as a package: #352 R1 slice, r015-1-docs-rfc.mid)
-      install: `${PRUNE_EMPTY} && ${installCommand({ policy: node.storePolicy })}`, build: lanePackages(tree.files, changed),
+      install: pointInstall({ policy: node.storePolicy }), build: lanePackages(tree.files, changed),
       // every earlier mount root of this node_modules chain: the lead's install and the lane's earlier points (F-034)
       tests: cal?.run ?? [], roots: [...new Set([...(a.state.closureRoots ?? []), ...ctx.node.points.filter((p) => p.lane === pt.lane).map((p) => p.root)])] });
     void blobs;

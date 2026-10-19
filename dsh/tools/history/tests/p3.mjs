@@ -11,7 +11,7 @@ import { changedPackages, checkNode, commitIdOf, inputsHash, testPoints, treeDel
 import { PRUNE_EMPTY, pointBuild } from "../nodeconfig.mjs";
 import { chooseFiles, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
 import { execTool } from "../run.mjs";
-import { installCommand, STORE_POLICIES } from "../closure.mjs";
+import { installCommand, pointInstall, STORE_POLICIES } from "../closure.mjs";
 import { sliceRange } from "../slice.mjs";
 import { stepSource } from "../storage.mjs";
 import { decoyBytes, Tree } from "../steps.mjs";
@@ -206,6 +206,11 @@ test("the devcheck's reinstall oracle under Node: the repair's chain and build, 
       ["t-b1", "tsc b", "/workspaces/3"], [tree, "repair", "/workspaces/4"], [tree, "build", "/workspaces/4"], [tree, "clean install", null]]);
     assert.throws(() => reinstallStates(run, { ...m, p3proofs: {} }, 15, "clean install"), /repair proof has not run/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("the oracle tool predicts the lead's install as the run records it (p3-main-a r015.a1: a seq oracle keyed without PRUNE_EMPTY)", () => {
+  assert.equal(pointInstall({ policy: "verified" }), `${PRUNE_EMPTY} && ${installCommand({ policy: "verified" })}`);
+  assert.equal(pointInstall({ clean: true }), `${PRUNE_EMPTY} && ${installCommand({ clean: true })}`);
 });
 
 let failed = 0;
