@@ -403,7 +403,7 @@ export const rootless = (text, root) => { if (!root || root === "/") throw new E
  * the duration on the "Done in" line, and the store-verification age on the
  * supply-chain line only (dev352-p3g r015: "verified 5h ago" natively, "6h ago"
  * in LayerFS), and the check's own duration on that line once it ran (f031-slice-f r015: "662 entries in 7ms"
- * natively, "in 9ms" in LayerFS). Any other difference stays a mismatch.
+ * natively, "in 9ms" in LayerFS; owner approved 2026-10-19, liaison relay). Any other difference stays a mismatch.
  */
 export const VERIFIED_LINE = /^(✓ Lockfile passes supply-chain policies \(verified )[^)]+( ago\))$/;
 export const CHECKED_LINE = /^(✓ Lockfile passes supply-chain policies \(\d+ entries in )[\d.]+m?s(\))$/;

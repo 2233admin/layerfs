@@ -140,6 +140,7 @@ Proof:
     | pnpm's install output | every occurrence of the install root | `<root>` | some warnings print absolute paths |
     | pnpm's install output | the age on the line `✓ Lockfile passes supply-chain policies (verified <age> ago)` | `<t>` | the time since the store's lockfile verification, which varies with when the install runs (dev352-p3g r015: 5h natively, 6h in LayerFS) |
     | pnpm's install output | the duration on the `Done in <duration> using pnpm` line | `<t>` | the install's wall time (since the oracle was built) |
+    | pnpm's install output | the duration on the line `✓ Lockfile passes supply-chain policies (<n> entries in <duration>)` | `<t>` | the policy check's own wall time (f031-slice-f r015: 7 ms natively, 9 ms in LayerFS; owner approved 2026-10-19, liaison relay); the entry count stays exact |
     | pnpm's install output | `Progress: ` lines | dropped | progress redraws vary with timing (since the oracle was built) |
     | `node_modules/.vite/vitest/*/results.json` | the order of the `results` entries | sorted by spec path | completion order of parallel vitest workers (dev352-p3o r016; lead interim yes 2026-10-18, reported to the owner) |
     | `node_modules/.vite/vitest/*/results.json` | each entry's `duration` value | `<t>` | wall time of the previous run (same) |
