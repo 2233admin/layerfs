@@ -23,6 +23,9 @@ export function quietHolder(file = quietFile()) {
 
 /** Takes QUIET for `run` (kept when that run already holds it). Refused when another run holds it. */
 export function holdQuiet(run, what, file = quietFile()) {
+  // the F-057 diagnostic (nodeconfig.mjs diagUnits): a diagnostic run neither waits for QUIET nor takes it; it runs
+  // beside the main run as declared load (liaison 2026-10-20)
+  try { if (JSON.parse(readFileSync(join(dirname(file), "runs", run, "run.json"), "utf8")).diagUnits) return { ok: true, diagnostic: true }; } catch { /* not a run folder */ }
   const h = quietHolder(file);
   if (h && h.run && h.run !== run) return { ok: false, why: `QUIET is held by run ${h.run} (${h.what ?? "?"}, since ${h.since ?? "?"})` };
   writeFileSync(file, JSON.stringify({ run, what, since: h?.since ?? new Date().toISOString(), at: new Date().toISOString(), pid: process.pid }));

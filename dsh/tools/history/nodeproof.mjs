@@ -29,7 +29,7 @@ import { BlobCache, lsTree } from "./git.mjs";
 import { compareInstalled, LISTER_VERSION, listerCommand, normalizeOutput, ORACLE_ROOT, parseLister, rootless, STORE_MOUNT, firstDifference } from "./closure.mjs";
 import { emittedCommand, groupsFile, inputsHash, nodeOf, parseEmitted, pointBuild, testPoints, treeDelta, wholeBuild, changedPackages } from "./nodelanes.mjs";
 import { buildCommand, planClosure, tscStates } from "./closure.mjs";
-import { BUILD_GROUPS, vitestMessages } from "./nodeconfig.mjs";
+import { BUILD_GROUPS, diagUnits, vitestMessages } from "./nodeconfig.mjs";
 export { BUILD_GROUPS };
 import { selectTests, vitestCommand } from "./unit-tests.mjs";
 import { devSteps } from "./devcheck.mjs";
@@ -115,8 +115,10 @@ export function laneSteps(states, tool = "/seq/lanemerge.mjs", base = "/lanebase
   // left the old sequential model in place)
   const step = (args) => `node ${tool} ${args} 2>/tmp/lane.err || { echo "@@lanefail ${args.split(" ")[0]} $?"; sed 's/^/@@laneerr /' /tmp/lane.err | tail -20; }`;
   let cur = null;
-  const close = (i, cmds) => { cmds.push(step(`capture "$PWD" ${base} ${lanes}/${cur.n}`), step(`restore "$PWD" ${base} ${lanes}/${cur.n}`)); if (i != null) reset[i] = true; };
-  const merge = (cmds) => cmds.push(step(`apply "$PWD" ${[...stores].sort((a, b) => a.merge - b.merge || a.n - b.n).map((x) => `${lanes}/${x.n}`).join(" ")}`));
+  // the F-057 diagnostic: the lane states carry merge units, and the captures merge by the whole-unit rule
+  const units = states.find((s) => s.units)?.units ?? null, u = units ? "--units /seq/units.json " : "";
+  const close = (i, cmds) => { cmds.push(step(`capture ${u}"$PWD" ${base} ${lanes}/${cur.n}`), step(`restore ${u}"$PWD" ${base} ${lanes}/${cur.n}`)); if (i != null) reset[i] = true; };
+  const merge = (cmds) => cmds.push(step(`apply ${u}"$PWD" ${[...stores].sort((a, b) => a.merge - b.merge || a.n - b.n).map((x) => `${lanes}/${x.n}`).join(" ")}`));
   states.forEach((st, i) => {
     if (cur && st.lane !== cur.lane) {
       close(i, before[i]);
@@ -133,7 +135,7 @@ export function laneSteps(states, tool = "/seq/lanemerge.mjs", base = "/lanebase
   });
   const after = [];
   if (cur) { close(null, after); merge(after); }
-  return { before, reset, after, lanes: stores.length };
+  return { before, reset, after, lanes: stores.length, units };
 }
 
 export function nativeChain({ repo, states, tail = {}, image, volume, name, saveState = null }) {
@@ -143,7 +145,8 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name, save
     const script = [`mkdir ${ORACLE_ROOT} /seq && tar -x -C /seq && cd ${ORACLE_ROOT}`];
     let prev = null, at = ORACLE_ROOT, installRoot = ORACLE_ROOT, laneBase = null;
     const lanes = laneSteps(states);
-    if (lanes.lanes) writeFileSync(join(stage, "lanemerge.mjs"), readFileSync(join(here, "lanemerge.mjs")));
+    if (lanes.lanes) for (const f of ["lanemerge.mjs", "globrules.mjs"]) writeFileSync(join(stage, f), readFileSync(join(here, f)));
+    if (lanes.units) writeFileSync(join(stage, "units.json"), JSON.stringify(lanes.units));
     const earlier = [], moveTo = (root) => {
       if (!root || root === at) return;
       if (!/^\/[\w./-]+$/.test(root) || root.split("/").includes("..")) throw new Error(`native chain: root ${root} is not a plain absolute path`);
@@ -219,7 +222,7 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name, save
       emitted: tail.build ? parseEmitted(pick("@@emit ").join("\n")) : null, vitest, ms: Date.now() - t0, root: at, installRoot,
       cleaned: pick("@@cleaned ").map((l) => { const [i, files] = l.split(" ").map(Number); return { i, files }; }),
       ...(lanes.lanes ? { lanes: pick("@@lanecap ").map((l) => { const [n, changed, removed] = l.split(" ").map(Number); return { n, changed, removed }; }),
-        twoSided: { n: Number(pick("@@twosided ")[0] ?? NaN), paths: pick("@@twopath ") } } : {}),
+        twoSided: { n: Number(pick("@@twosided ")[0] ?? NaN), paths: pick("@@twopath ") }, ...(lanes.units ? { units: pick("@@unit ").map((l) => JSON.parse(l)) } : {}) } : {}),
       ran: proven.ran, ...(saved ? { saved: { volume: saveState.volume ?? NATIVE_STATES, file: saveState.file, sha256: saved[0], bytes: Number(saved[1]) } } : {}),
     };
   } finally { rmSync(stage, { recursive: true, force: true }); }
@@ -402,6 +405,9 @@ export function laneWriteOrder(lines, points, mergeOrder, k) {
   }).sort((a, b) => Date.parse(a.end) - Date.parse(b.end) || b.merge - a.merge);
 }
 
+/** The F-057 diagnostic (nodeconfig.mjs diagUnits): a lane state carries the units its captures merge by. */
+const unitsOf = (run) => (diagUnits(run.manifest) ? { units: diagUnits(run.manifest) } : {});
+
 /**
  * The chain the lead's merged node_modules carries at the repair: the lead's install and build, every lane point's
  * install and build in the order they ran, then the repair install on the checkpoint tree (its build is the tail).
@@ -423,7 +429,7 @@ export function repairChain(run, m, k) {
   const order = (plan.consolidation ?? []).filter((c) => c.op === "merge").map((c) => c.lane);
   const wrote = laneWriteOrder(traceOf(run, m), ran, order, k);
   const lanes = wrote.flatMap(({ lane, end }, rank) => ran.filter((q) => q.lane === lane).flatMap((q) => (rootLane && q.lane !== rootLane ? pointStates(q).slice(1) : pointStates(q)))
-    .map((st) => ({ ...st, lane, merge: rank, wrote: end })));
+    .map((st) => ({ ...st, lane, merge: rank, wrote: end, ...unitsOf(run) })));
   const remove = lanes.length ? (plan.consolidation ?? []).filter((c) => c.op === "reconcile").flatMap((c) => c.files.filter((f) => f.op === "rm").map((f) => f.path)) : [];
   const states = [...chain0, ...lanes, { tree, command: inst.command ?? installCommand({ policy: node.storePolicy }), ...at(inst.root), clean: true, ...(remove.length ? { remove } : {}) }];
   const buildState = build ? { tree, command: build.command ?? buildCommand(build.packages), ...at(build.root) } : null;
@@ -507,7 +513,7 @@ async function cmdCalibrate(o) {
  * 4 when the reference is broken. The real oracle is still the proofs' (recorded roots and write order).
  */
 async function calibrateRepair(run, k, plan, have, file, { repo, base, baseTree, blobs, node }) {
-  const planned = planClosure({ repo: run.manifest.repo, planDir: run.manifest.plan, k, plan, prevCommit: run.state.prevCommit, installed: run.state.installed, checks: false, policy: node.storePolicy, repair: node.on && !!run.state.installed });
+  const planned = planClosure({ repo: run.manifest.repo, planDir: run.manifest.plan, k, plan, prevCommit: run.state.prevCommit, installed: run.state.installed, checks: false, policy: node.storePolicy, repair: node.on && !!run.state.installed, incremental: !!diagUnits(run.manifest) });
   if (planned.skipped || planned.missing) { console.log(JSON.stringify({ range: k, repair: planned.skipped ?? planned.missing })); return 4; }
   const inst = planned.steps.find((s) => /install/.test(s.kind)), build = planned.steps.find((s) => s.kind === "build"), test = planned.steps.find((s) => s.kind === "test");
   const rootLane = node.inputsRule === "r1" ? plan.lanes.find((l) => l.areas.includes("/"))?.name ?? null : null;
@@ -517,7 +523,7 @@ async function calibrateRepair(run, k, plan, have, file, { repo, base, baseTree,
     const { tree, delta } = modelDelta(plan, base, q), id = await materialize(repo, baseTree, delta, blobs);
     const packages = changedPackages(tree.files, delta.map((r) => r[0])), b = pointBuild(tree.files, packages).command;
     const sts = [{ tree: id, command: installCommand({ policy: node.storePolicy }) }, ...(b ? [{ tree: id, command: b }] : [])];
-    lanes.push(...(rootLane && lane !== rootLane ? sts.slice(1) : sts).map((st) => ({ ...st, lane, merge: order.indexOf(lane) })));
+    lanes.push(...(rootLane && lane !== rootLane ? sts.slice(1) : sts).map((st) => ({ ...st, lane, merge: order.indexOf(lane), ...unitsOf(run) })));
   }
   const remove = lanes.length ? (plan.consolidation ?? []).filter((c) => c.op === "reconcile").flatMap((c) => c.files.filter((f) => f.op === "rm").map((f) => f.path)) : [];
   const tree = git(run.manifest.repo, ["rev-parse", `${plan.checkpoint}^{tree}`]).trim();

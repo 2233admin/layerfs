@@ -30,7 +30,7 @@ import { dirname, join } from "node:path";
 import { lsTree } from "./git.mjs";
 import { checkStates, provenRun, restoreCommand, stateMounts } from "./nativestate.mjs";
 import { compareResults, packageOf, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
-import { BUILD_GROUPS, emittedCommand, nodeOf, parseEmitted, PRUNE_EMPTY, repairBuild, wholeBuild } from "./nodeconfig.mjs";
+import { BUILD_GROUPS, diagUnits, emittedCommand, nodeOf, parseEmitted, PRUNE_EMPTY, repairBuild, wholeBuild } from "./nodeconfig.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
 const quote = (t) => `'${String(t).replaceAll("'", "'\\''")}'`;
@@ -105,7 +105,7 @@ export const nothingToBuild = (states) => states.length > 0 && states.every((l) 
  * packages that have a tsconfig.json, then the calibrated tests.
  * @param {{ changed: string[], packages: Set<string>, tsconfigs: Set<string>, milestone: boolean, installed: boolean, run: string[] }} r
  */
-export function closureSteps({ changed, packages, tsconfigs, milestone, installed, run = [], store = STORE_MOUNT, checks = false, lwwPicked = false, policy = "verified", repair = false, files = null }) {
+export function closureSteps({ changed, packages, tsconfigs, milestone, installed, run = [], store = STORE_MOUNT, checks = false, lwwPicked = false, policy = "verified", repair = false, files = null, incremental = false }) {
   const steps = [];
   if (milestone && installed) steps.push({ kind: "clean-install", command: installCommand({ store, clean: true, policy }) });
   else if (!installed) steps.push({ kind: "install", command: installCommand({ store, policy }) });
@@ -113,13 +113,14 @@ export function closureSteps({ changed, packages, tsconfigs, milestone, installe
   // NODE_RULE §4 (`repair`): a lead repair follows every consolidation, whatever changed. It is a clean relink on the
   // merged tree (owner 2026-10-19): every node_modules removed, then the frozen offline install, so newest-wins over
   // pnpm's install state (F-057) never reaches the repaired lead; the native repair chain replays the same command
-  else if (installInputsChanged(changed) || lwwPicked || repair) steps.push({ kind: repair ? "repair-install" : "incremental-install", command: installCommand({ store, policy, clean: repair }) });
+  // the F-057 diagnostic (`incremental`, nodeconfig.mjs diagUnits): the repair installs and builds on the merged tree as it is
+  else if (installInputsChanged(changed) || lwwPicked || repair) steps.push({ kind: repair ? "repair-install" : "incremental-install", command: installCommand({ store, policy, clean: repair && !incremental }) });
   // development checks (owner 2026-10-18): a clean reinstall of the unchanged lockfile, whose Commit's metadata bytes are recorded
   if (checks && steps.length) steps.push({ kind: "reinstall-check", command: installCommand({ store, clean: true, policy }) });
   const built = [...new Set(changed.map((p) => packageOf(p, packages)).filter((d) => d && tsconfigs.has(d)))].sort();
   // NODE_RULE (the lead repair, `files` given): its clean of every package's lib/ and tsbuildinfo (F-059), then
   // dsh's whole build, tsc -b of every package then its bundler, after any change to a built package
-  if (built.length) steps.push(files ? { kind: "build", ...repairBuild(files) } : { kind: "build", command: buildCommand(built), packages: built });
+  if (built.length) steps.push(files ? { kind: "build", ...(incremental ? wholeBuild(files) : repairBuild(files)) } : { kind: "build", command: buildCommand(built), packages: built });
   // and the same build again after its Commit, unmount and a fresh mount: it must find nothing to build, or what native finds
   if (checks && built.length) steps.push({ kind: "rebuild", command: rebuildCommand(built), packages: built });
   if (run.length) steps.push({ kind: "test", command: vitestCommand(run), files: run });
@@ -239,7 +240,7 @@ export const CLOSURE_OUTPUT = /(^|\/)node_modules(\/|$)|(^|\/)(dist|lib)\/|\.tsb
  * the stored bytes from the install Commit's traced sizes.
  */
 /** A range's closure plan: the lockfile blob, the calibrated tests and the steps (closureSteps), from git and the run's state. */
-export function planClosure({ repo, planDir, k, plan, prevCommit, installed, checks, lwwPicked = false, policy = "verified", repair = false }) {
+export function planClosure({ repo, planDir, k, plan, prevCommit, installed, checks, lwwPicked = false, policy = "verified", repair = false, incremental = false }) {
   const git = (args) => execFileSync("git", ["--git-dir", repo, ...args], { encoding: "utf8", maxBuffer: 1 << 28 });
   const tree = lsTree(repo, plan.checkpoint).files;
   const lock = tree.get("pnpm-lock.yaml")?.blob;
@@ -249,7 +250,7 @@ export function planClosure({ repo, planDir, k, plan, prevCommit, installed, che
   if (!existsSync(calFile)) return { missing: `range ${k} has no calibration (${calFile})` };
   const cal = JSON.parse(readFileSync(calFile, "utf8"));
   const changed = git(["diff", "--name-only", prevCommit, plan.checkpoint]).split("\n").filter(Boolean);
-  return { lock, steps: closureSteps({ changed, packages: dirsWith("package.json"), tsconfigs: dirsWith("tsconfig.json"), milestone: !!plan.milestone, installed: !!installed, run: cal.run, checks, lwwPicked, policy, repair, files: repair ? tree : null }) };
+  return { lock, steps: closureSteps({ changed, packages: dirsWith("package.json"), tsconfigs: dirsWith("tsconfig.json"), milestone: !!plan.milestone, installed: !!installed, run: cal.run, checks, lwwPicked, policy, repair, files: repair ? tree : null, incremental }) };
 }
 
 /**
@@ -274,7 +275,7 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
   const git = (args) => execFileSync("git", ["--git-dir", run.repo, ...args], { encoding: "utf8", maxBuffer: 1 << 28 });
   // the development checks run after the publish, on a fork (devcheck.mjs; SCRIPTS.md, 120 s rule)
   const node = nodeOf(run.manifest);
-  const planned = planClosure({ repo: run.repo, planDir: run.planDir, k, plan, prevCommit: run.state.prevCommit, installed: run.state.installed, checks: false, lwwPicked, policy: node.storePolicy, repair: node.on && !!run.state.installed });
+  const planned = planClosure({ repo: run.repo, planDir: run.planDir, k, plan, prevCommit: run.state.prevCommit, installed: run.state.installed, checks: false, lwwPicked, policy: node.storePolicy, repair: node.on && !!run.state.installed, incremental: !!diagUnits(run.manifest) });
   if (planned.skipped) return { skipped: planned.skipped };
   if (planned.missing) throw new Mismatch(planned.missing);
   const { lock, steps } = planned, chain = run.state.closureChain ?? [];
@@ -654,7 +655,7 @@ function main() {
       state = { ...state, installed: true, closureChain: [{ range: k, checkpoint: state.prevCommit, kind: clean ? "clean-install" : "install", command: pointInstall({ clean, policy: nodeOf(manifest).storePolicy }) }, ...(build.packages.length ? [{ range: k, checkpoint: state.prevCommit, kind: "tsc", command: build.command }] : [])] };
     }
     const node = nodeOf(manifest), oracleRoot = manifest.oracle ?? join(process.env.HOME, "lfs-history", "oracle");
-    const planned = planClosure({ repo, planDir: manifest.plan ?? planDir, k, plan, prevCommit: state.prevCommit, installed: state.installed, checks: false, policy: node.storePolicy, repair: node.on && !!state.installed });
+    const planned = planClosure({ repo, planDir: manifest.plan ?? planDir, k, plan, prevCommit: state.prevCommit, installed: state.installed, checks: false, policy: node.storePolicy, repair: node.on && !!state.installed, incremental: !!diagUnits(manifest) });
     if (planned.skipped || planned.missing) { console.log(planned.skipped ?? planned.missing); return; }
     const files = oracleFiles(oracleRoot, { lock: planned.lock, steps: planned.steps, chain: state.closureChain ?? [], checkpoint: plan.checkpoint, policy: node.storePolicy });
     const fresh = (f) => existsSync(f) && JSON.parse(readFileSync(f, "utf8")).listerVersion === LISTER_VERSION;

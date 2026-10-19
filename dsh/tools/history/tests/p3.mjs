@@ -4,7 +4,7 @@
 // here starts a Sandbox, a daemon or a container.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { changedPackages, checkNode, commitIdOf, inputsHash, pointsBefore, testPoints, treeDelta, treeIdCommand, wholeBuild } from "../nodelanes.mjs";
@@ -337,6 +337,50 @@ const playLanes = (f, lanes, order) => {
   }
   return lanemerge.apply(f.work, order.map((n) => stores[n]));
 };
+
+test("F-057 diagnostic (fix 050): a unit two lanes changed comes whole from the later writer; one-sided units and outside paths merge as before", () => {
+  const units = [{ name: "install", patterns: ["node_modules", "packages/*/*/node_modules"] }, { name: "build", patterns: ["packages/*/*/lib", "**/tsconfig.tsbuildinfo"] }];
+  const f = folder({ "node_modules/.pnpm/a/i.js": "base a", "node_modules/.pnpm/node_modules/a": "hoist base", "packages/g/p/lib/x.js": "base x", "packages/g/p/src/x.ts": "src", "README": "r" });
+  const base = join(f.dir, "base"), stores = [];
+  const lane = (name, writes, ms) => {
+    const store = join(f.dir, `l-${name}`);
+    lanemerge.mark(store);
+    for (const [p, text] of Object.entries(writes)) {
+      if (text == null) { rmSync(join(f.work, p), { recursive: true, force: true }); continue; }
+      mkdirSync(join(f.work, p, ".."), { recursive: true }); writeFileSync(join(f.work, p), text); utimesSync(join(f.work, p), ms / 1000, ms / 1000);
+    }
+    const c = lanemerge.capture(f.work, base, store, units);
+    lanemerge.restore(f.work, base, store, units);
+    stores.push(store);
+    return c;
+  };
+  try {
+    lanemerge.snapshot(f.work, base);
+    // written first: the hoist the F-057 mix kept; later: the other lane's whole install
+    const a = lane("a", { "node_modules/.pnpm/node_modules/a": "hoist from a", "node_modules/.pnpm/b/i.js": "pkg b", "packages/g/p/lib/x.js": "lib from a", "README": "readme a" }, 2_000_000_000_000);
+    const b = lane("b", { "node_modules/.pnpm/a/i.js": "a from b", "node_modules/.pnpm/c/i.js": "pkg c", "NOTES": "notes b" }, 2_000_000_100_000);
+    assert.deepEqual(a.units.map((u) => [u.unit, u.changed > 0]), [["install", true], ["build", true]]);
+    assert.deepEqual(b.units.map((u) => [u.unit, u.changed]), [["install", 4], ["build", 0]], "b's two files, its new folder and .pnpm's time; a's restore left nothing behind");
+    const two = lanemerge.apply(f.work, stores, units);
+    assert.deepEqual(two.units.map((d) => [d.unit, d.kept, d.dropped > 0]), [["install", 1, true]], "only install is two-sided; the later writer (b) keeps it");
+    assert.deepEqual([f.read("node_modules/.pnpm/a/i.js"), f.read("node_modules/.pnpm/c/i.js"), f.read("node_modules/.pnpm/b/i.js"), f.read("node_modules/.pnpm/node_modules/a")],
+      ["a from b", "pkg c", null, "hoist base"], "the whole unit is b's: a's hoist and package are dropped, not mixed in");
+    assert.deepEqual([f.read("packages/g/p/lib/x.js"), f.read("README"), f.read("NOTES")], ["lib from a", "readme a", "notes b"], "one-sided units and outside paths merge as before");
+    // without units the same captures mix the two installs (the F-057 state)
+    const g = folder({});
+    try {
+      rmSync(g.work, { recursive: true, force: true }); execFileSync("cp", ["-a", base, g.work]);
+      lanemerge.apply(g.work, stores);
+      assert.deepEqual([g.read("node_modules/.pnpm/node_modules/a"), g.read("node_modules/.pnpm/c/i.js")], ["hoist from a", "pkg c"]);
+    } finally { rmSync(g.dir, { recursive: true, force: true }); }
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+  // laneSteps passes the units to every lanemerge step when the states carry them; the key changes with them
+  const st = (lane, merge, u) => ({ tree: "t", command: "c", ...(lane ? { lane, merge } : {}), ...(u ? { units } : {}) });
+  const ls = laneSteps([st("a", 0, true), st()], "/t.mjs", "/b", "/l");
+  assert.ok(ls.before[1].every((c) => /--units \/seq\/units\.json/.test(c)) && ls.units === units);
+  assert.equal(laneSteps([st("a", 0), st()]).units, null);
+  assert.notEqual(oracleKey({ tree: "t", states: [st("a", 0, true)] }), oracleKey({ tree: "t", states: [st("a", 0)] }));
+});
 
 test("option A, r018.a1: lane 2's new tsc output of a moved source survives a later lane's rebuild of the old bytes", () => {
   const out = "packages/core/session/lib/types/tool-pairing.js";

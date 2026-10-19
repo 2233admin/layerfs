@@ -29,6 +29,7 @@ import {
   BLOB_IDS, countMutation, execAll, expectCall, Mismatch, placeCommands, PNPM_STORE, reads, setup, writeOp,
 } from "./lib.mjs";
 import { sandboxVolumes } from "./closure.mjs";
+import { diagUnits } from "./nodeconfig.mjs";
 import { generateLww, gitignores } from "./lww.mjs";
 import { gitContext, laneGit, laneGuard, laneLock, leadGit, seedGit } from "./gitplay.mjs";
 import { afterStep, inputsHash, leadInstall, nodeContext, pointsBefore } from "./nodelanes.mjs";
@@ -329,8 +330,13 @@ export async function consolidateLanes(run, k, plan, ctx, { beforePublish = null
     who.label(`r${pad(k)}.merge ${lane}`);
     who.rec.next = { kind: "entries", n: changes(lane) };
     ctx.tries.set(lane, (ctx.tries.get(lane) ?? 0) + 1);
-    const v = await expectCall(who, `r${pad(k)} merge ${lane}`, () => who.lf.branch.merge(cur, lane, name, `merge ${lane}`), want);
-    run.progress?.(`merge ${lane}: ${v?.kind}`);
+    // the F-057 diagnostic (nodeconfig.mjs diagUnits): merge units on a diagnostic run only, never the main path
+    const units = diagUnits(run.manifest), t0 = performance.now();
+    const v = await expectCall(who, `r${pad(k)} merge ${lane}`, () => (units ? who.lf.branch.merge(cur, lane, name, `merge ${lane}`, units) : who.lf.branch.merge(cur, lane, name, `merge ${lane}`)), want);
+    // fail loud: an SDK or binding without units answers no `units` field (diag-f057's first fork pinned such an SDK)
+    if (units && v && !Array.isArray(v.units)) throw new Mismatch(`r${pad(k)} merge ${lane}: units were passed but the answer has no units field: the SDK or binding dropped them`);
+    if (units) (ctx.units ??= []).push({ lane, kind: v?.kind ?? null, ms: +(performance.now() - t0).toFixed(1), units: v?.units ?? null, unitsTruncated: v?.unitsTruncated ?? null });
+    run.progress?.(`merge ${lane}: ${v?.kind}${units ? ` units ${JSON.stringify(v?.units ?? null)}` : ""}`);
     if (v?.kind === "Merged") { cur = name; ctx.merged.set(lane, (ctx.merged.get(lane) ?? 0) + 1); if (v.fastForward === false) ctx.work.commits++; }
     // LWW picks counted from the merge's own list (F-041: its truncated flag alone is not trusted)
     if (ctx.lww && Array.isArray(v?.lww)) ctx.lww.picks.push({ lane, picks: v.lww.length, nodeModules: v.lww.filter((d) => /(^|\/)node_modules(\/|$)/.test(d.path ?? "")).length, truncatedFlag: v.lwwTruncated ?? null, decided: v.decided ?? null });

@@ -562,6 +562,7 @@ async function playRange(run, k, mode, half = null, until = null, cut = null) {
   if (ctx?.node) m.node = nodeFacts(run, k, ctx);
   if (m.phase === "p3") m.p3raw = p3Raw(t.all);
   if (ctx?.lww) m.lww = { ...ctx.lww, total: ctx.lww.picks.reduce((n, p) => n + p.picks, 0) };
+  if (ctx?.units) m.units = ctx.units;
   if (ctx?.closure && !ctx.closure.skipped) {
     // P3: storage by the step's own Commit (traced sizes), the reinstall gate, STORAGE_STUDY §8
     const commitOf = (kind) => t.all.find((l) => l.method === "sandbox.commit" && l.step === `r${pad(k)}.${kind}`);

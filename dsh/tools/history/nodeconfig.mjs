@@ -6,6 +6,14 @@ const quote = (t) => `'${String(t).replaceAll("'", "'\\''")}'`;
 export const BUILD_GROUPS = /(^|\/)node_modules\/\.(vite|vite-temp|vitest|cache)(\/|$)/;
 /** The run's Node switches (manifest `node`): NODE_RULE on, the §3 install-input rule, the store policy, the vitest cap. */
 export const nodeOf = (manifest) => ({ on: !!manifest?.node?.on, inputsRule: manifest?.node?.inputsRule ?? "plan", storePolicy: manifest?.node?.storePolicy ?? "verified", vitestCapMs: manifest?.node?.vitestCapMs ?? 20_000 });
+/**
+ * The F-057 merge-units diagnostic (#352 fix 050, liaison 2026-10-20; never the main run path): a run whose
+ * manifest has `diagUnits: true` (set by hand on a diagnostic fork) merges its lanes with these units, repairs
+ * incrementally (no clean relink, no clean build), and its native oracle merges the lane captures by the same
+ * whole-unit rule (lanemerge.mjs apply --units).
+ */
+export const F057_UNITS = [{ name: "install", patterns: ["node_modules", "packages/*/*/node_modules"] }, { name: "build", patterns: ["packages/*/*/lib", "**/tsconfig.tsbuildinfo"] }];
+export const diagUnits = (manifest) => (manifest?.diagUnits ? F057_UNITS : null);
 /** Emitted JavaScript and declarations under the packages' lib/ and dist/, as `blob path` lines (P4). */
 export const EMITTED = `const fs=require("fs"),c=require("crypto"),re=/\\.(js|mjs|cjs|d\\.ts|d\\.mts|d\\.cts)$/;const walk=(d)=>{let es;try{es=fs.readdirSync(d,{withFileTypes:true})}catch{return}for(const e of es){const p=d+"/"+e.name;if(e.isDirectory()){if(e.name!=="node_modules")walk(p)}else if(e.isFile()&&re.test(e.name)){const b=fs.readFileSync(p);process.stdout.write(c.createHash("sha1").update("blob "+b.length+"\\0").update(b).digest("hex")+" "+p+"\\n")}}};for(const k of process.argv.slice(1))for(const o of ["lib","dist"])walk(k==="."?o:k+"/"+o)`;
 export const emittedCommand = (packages) => `node -e ${quote(EMITTED)} ${packages.map(quote).join(" ")}`;
