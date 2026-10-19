@@ -7,7 +7,9 @@
 //   node sdk/js/test/verify/direct_locking_real.mjs outer <daemon> <addon> <image digest>
 //
 // One attempt per call. The publishes start together (one Promise.all after
-// every Workspace is prepared); reads loop until they settle.
+// every Workspace is prepared), except daemonA.shared, released after
+// direct.same settles so the same-path pair is ordered (F-055); reads loop
+// until they settle.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -50,14 +52,21 @@ async function inner() {
     const before = {};
     for (const b of ["shared", "lane-a", "lane-b", "lane-c"]) before[b] = (await lf.branch.list_commits(b, 1000)).items.length;
 
+    // daemonA.shared's Commit is released once direct.same has settled
+    // (F-055). wsA1 was mounted in setup, so both change /same.txt from bases
+    // without it: direct.same binds and publishes first, and A's Commit meets
+    // the moved head and is refused Conflict. Unordered, direct.same could
+    // bind after A published, and both would Commit legitimately.
+    let sameSettled;
+    const sameDone = new Promise((resolve) => { sameSettled = resolve; });
     // [name, branch, files it adds, the call]
     const ops = [
-      ["daemonA.shared", "shared", { "/a.txt": "a", "/same.txt": "A" }, () => lf.sandbox.commit(wsA1.sandbox, wsA1.path, "A shared")],
+      ["daemonA.shared", "shared", { "/a.txt": "a", "/same.txt": "A" }, () => sameDone.then(() => lf.sandbox.commit(wsA1.sandbox, wsA1.path, "A shared"))],
       ["daemonB.shared", "shared", { "/b.txt": "b" }, () => lf.sandbox.commit(wsB1.sandbox, wsB1.path, "B shared")],
       ["daemonA.lane-a", "lane-a", { "/la.txt": "la" }, () => lf.sandbox.commit(wsA2.sandbox, wsA2.path, "A lane")],
       ["daemonB.lane-b", "lane-b", { "/lb.txt": "lb" }, () => lf.sandbox.commit(wsB2.sandbox, wsB2.path, "B lane")],
       ["direct.shared", "shared", { "/d.txt": "d" }, () => lf.fs.write("shared", "/d.txt", "d\n", "direct")],
-      ["direct.same", "shared", { "/same.txt": "D" }, () => lf.fs.write("shared", "/same.txt", "D\n", "direct same")],
+      ["direct.same", "shared", { "/same.txt": "D" }, () => lf.fs.write("shared", "/same.txt", "D\n", "direct same").finally(sameSettled)],
       ["direct.lane-c", "lane-c", { "/lc.txt": "lc" }, () => lf.fs.write("lane-c", "/lc.txt", "lc\n", "direct lane")],
       ["direct.merge", "merged", { "/m1.txt": "m1", "/m2.txt": "m2" }, () => lf.branch.merge("m1", "m2", "merged", "merge")],
     ];
@@ -90,6 +99,12 @@ async function inner() {
     const applied = (name) => PUBLISHED.has(report.outcomes[name].kind);
     const expected = { shared: { "/README.md": "base" }, "lane-a": { "/README.md": "base" }, "lane-b": { "/README.md": "base" }, "lane-c": { "/README.md": "base" }, merged: { "/README.md": "base" } };
     for (const [name, branch, files] of ops) if (applied(name)) Object.assign(expected[branch], files);
+    // The ordered pair: direct.same publishes, A's Commit is refused Conflict.
+    assert.deepEqual(
+      [report.outcomes["direct.same"].kind, report.outcomes["daemonA.shared"].refused],
+      ["Committed", "Conflict"],
+      `ordered same-path writers: ${JSON.stringify(report.outcomes)}`,
+    );
     const sameWinners = ["daemonA.shared", "direct.same"].filter(applied);
     assert.ok(sameWinners.length <= 1, `both writers of /same.txt published: ${JSON.stringify(report.outcomes)}`);
     if (sameWinners.length === 1) expected.shared["/same.txt"] = sameWinners[0] === "direct.same" ? "D" : "A";

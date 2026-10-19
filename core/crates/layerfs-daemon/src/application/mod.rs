@@ -1,4 +1,5 @@
 //! Production direct-Store daemon startup/control, with no command supervisor.
+mod bodies;
 mod cli;
 mod config;
 mod connection;

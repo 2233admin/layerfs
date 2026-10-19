@@ -1,6 +1,6 @@
 [package]
 name = "layerfs-api"
-description = "LayerFS implementation library behind the JavaScript SDK: host Init, sealed Store handoff and authenticated control"
+description = "The SDK's public surface behind the JavaScript SDK, one function per method: project Init and Branches, fs and branch Store methods over layerfs-store-service, and Sandbox control"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,3 +15,10 @@ layerfs-storage = { path = "../layerfs-storage" }
 layerfs-telemetry = { path = "../layerfs-telemetry" }
 layerfs-project = { path = "../layerfs-project" }
 layerfs-sandbox = { path = "../layerfs-sandbox" }
+layerfs-store-service = { path = "../layerfs-store-service" }
+
+[dev-dependencies]
+# The Store method tests bind private Workspaces and count the Store's rows.
+layerfs-overlay = { path = "../layerfs-overlay" }
+layerfs-workspace = { path = "../layerfs-workspace" }
+rusqlite = { version = "=0.40.2", features = ["cache", "limits", "blob"] }

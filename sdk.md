@@ -9,6 +9,13 @@
 > the crate is renamed `layerfs-sdk` -> `layerfs-api` at `core/crates/layerfs-api`
 > and regrouped as `project/`, `branch/` and `sandbox/`; links below follow the move.
 > The layout table stays pinned to `ce4e214d9`. See `core/docs/issues/327/SPEC.md`.
+>
+> #352 (2026-10-18 and 2026-10-19): Store methods run in the SDK's process.
+> `fs/`, `branch/` and `project/list_branches.rs` are again one file per
+> JavaScript method; each reads its arguments and calls the layerfs-store-service
+> engine directly. The daemon routes described below for fork, branches and
+> commits (typed History requests over Control) are retired. Current layout:
+> [the SDK call channel](core/docs/architecture/82-sdk-call-channel.md).
 
 The SDK provides three groups with eleven operation methods, plus their existing
 constructors. A Project is a sealed initial Store and its history. A Sandbox owns

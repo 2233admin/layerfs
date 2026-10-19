@@ -181,14 +181,14 @@ impl Application {
                     }
                 }
                 InitialRecord::Control(call) => {
-                    // A write's bodies follow its record; whatever the call
-                    // leaves unread is dropped before the answer.
-                    let mut bodies = crate::sdk::Bodies::of(&call.request, &mut connection.receive);
+                    // Write bodies a call declares follow its record; no call
+                    // here reads them, so they are dropped before the answer.
+                    let bodies = super::bodies::Bodies::of(&call.request, &mut connection.receive);
                     let (outcome, diagnostic_error, telemetry) =
                         if matches!(call.request, Request::Observed { .. }) {
-                            self.observed_control(&call, slot, &mut bodies)
+                            self.observed_control(&call, slot)
                         } else {
-                            (self.control(&call, slot, &mut bodies), None, None)
+                            (self.control(&call, slot), None, None)
                         };
                     if let Err(cause) = bodies.finish() {
                         return Err(ConnectionFailure {
@@ -289,15 +289,13 @@ impl Application {
         &self,
         call: &Call,
         slot: usize,
-        bodies: &mut crate::sdk::Bodies<'_>,
     ) -> Result<crate::control::Success, crate::control::Failure> {
-        self.control_operation(&call.request, slot, bodies)
+        self.control_operation(&call.request, slot)
     }
     pub(super) fn control_operation(
         &self,
         request: &Request,
         slot: usize,
-        bodies: &mut crate::sdk::Bodies<'_>,
     ) -> Result<crate::control::Success, crate::control::Failure> {
         use crate::control::{Failure, Success};
         use layerfs_bridge::control::{ControlCode, DaemonPhase};
@@ -322,7 +320,7 @@ impl Application {
         let phase = state.startup.phase;
         drop(state);
         match service {
-            Some(service) => service.execute_control_with(request, bodies),
+            Some(service) => service.execute_control(request),
             None if phase == DaemonPhase::Retained => Err(Failure::Rejected(
                 ControlCode::Unknown,
                 "original Store startup custody retained",

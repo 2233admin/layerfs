@@ -833,3 +833,51 @@
     - engine_lifecycle and sandbox_operations pass, 7 each, on the host and on Linux; Clippy is clean.
     - The slice point, rerun once on the new binaries: pass. `run.spec.ts` 35/35, the grandchild test 22 ms, 0 zombies under PID 1 after it.
   [fixes/039-f054-sandbox-init-reaper.md](fixes/039-f054-sandbox-init-reaper.md).
+
+- **F-055 · direct_locking_real's oracle assumes an order the test does not
+  make (test oracle, not a product defect; filed by the owner 2026-10-19).**
+  - Test: `sdk/js/test/verify/direct_locking_real.mjs outer` (#352 F-020
+    step 5.1). Eight publishes start in one `Promise.allSettled`, among them
+    `daemonA.shared` (Sandbox A commits Workspace `wsA1`, which set
+    `/same.txt` to `A`) and `direct.same` (in-process `fs.write("shared",
+    "/same.txt", "D\n")`). The oracle asserts that at most one of the two
+    publishes (`both writers of /same.txt published`).
+  - Run 1 **FAILED** (2026-10-19, branch `issue352-api-shape` at
+    `04f2576961`, new Linux addon and daemon): `daemonA.shared` and
+    `direct.same` both Committed and every other op as expected, so
+    `/same.txt` ends as `D`. Run 2 on the same binaries passed (`direct.same`
+    refused `Conflict`, 58 reads during publication none refused, integrity
+    ok). Run 2 is a second sample only, not the result.
+  - Cause: nothing orders `direct.same`'s bind against daemon A's publish.
+    `wsA1` was mounted and written during setup, so A's base is the `shared`
+    head from before the publishes. `fs.write` binds its private Workspace
+    when its native task runs (libuv pool, alongside a read loop) and takes
+    the head at that moment as its base. If it binds before A publishes, one
+    side merges against the other and is refused `Conflict` (the recorded
+    passes). If A publishes first, `direct.same`'s base already holds
+    `/same.txt = A`; its write is a plain overwrite with no merge, and both
+    Commits are correct. Run 1's outcomes match the second order.
+  - On main as well: `git diff 63ecca0ae6..450f171e11` is empty for
+    store-service `store/` and `overlay/` (bind, Commit, merge),
+    `layerfs-history`, `layerfs-workspace`, `layerfs-sandbox`, `sdk/js/src`
+    and `sdk/js/test`. The moved `write/files.rs` differs from main's
+    `sdk/files.rs` only in where arguments are read; bind, change and
+    `commit_captured_via` run in the same order. The test is unchanged since
+    `373b0357cd`.
+  - Options for the owner (not chosen):
+    1. The oracle accepts the second order: when `direct.same` bound after
+       A's publish, both Committed and `/same.txt = D` are expected (for
+       example, compare `direct.same`'s parent with A's Commit).
+    2. The test orders the bind explicitly, so `direct.same` always binds
+       before daemon A publishes and exactly one of the two is refused
+       `Conflict`.
+
+  **Status: FIXED** (branch `issue352-f055-locking-order`, test only).
+  daemon A's Commit is released once `direct.same` has settled, so
+  `direct.same` binds and publishes first and A's Commit, on its setup base,
+  is refused `Conflict` every run. No sleeps. Existing assertions are kept,
+  plus one for the ordered pair. The SDK cannot pause an `fs.write` between
+  its bind and its Commit, so the refused writer is now always daemon A.
+  One run: pass, `direct.same` Committed and `daemonA.shared` refused
+  `Conflict`, 66 reads none refused, integrity ok.
+  [fixes/040-f055-locking-oracle-order.md](fixes/040-f055-locking-oracle-order.md).

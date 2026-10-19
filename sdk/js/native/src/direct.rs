@@ -15,7 +15,7 @@
 use crate::job::{failed, refused, Outcome};
 use crate::registry::lock;
 use layerfs_bridge::control::{SdkCall, SdkRefusal, SdkValue};
-use layerfs_store_service::{sdk::Bodies, telemetry, OpenRefusal, StoreService};
+use layerfs_store_service::{telemetry, OpenRefusal, StoreService};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -149,7 +149,7 @@ pub(crate) fn call(method: &str, args: SdkValue, operator: bool) -> Outcome {
         if operator {
             layerfs_store_service::operator::dispatch(&service, &call)
         } else {
-            layerfs_store_service::sdk::dispatch(&service, &call, &mut Bodies::none())
+            layerfs_api::call(&service, &call)
         }
     };
     if !crate::trace::traced() {
@@ -178,8 +178,8 @@ pub(crate) fn branch_id(
     name: &str,
 ) -> Result<layerfs_history::BranchId, SdkRefusal> {
     let service = service(args)?;
-    let stack = layerfs_store_service::sdk::args::project(&service.store, args)?;
-    Ok(layerfs_store_service::sdk::args::branch(&service.store, &stack, name)?.id)
+    let stack = layerfs_store_service::operator::args::project(&service.store, args)?;
+    Ok(layerfs_store_service::history::lookup::branch(&service.store, &stack, name)?.id)
 }
 
 /// The newest Commit of `branch`, read in this process; `None` when it has none.

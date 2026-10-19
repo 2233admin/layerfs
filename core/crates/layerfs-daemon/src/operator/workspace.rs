@@ -1,16 +1,19 @@
 //! Live Workspace diagnostics over bounded source/list windows, with exact release.
 use crate::{
     control::Service,
-    sdk::{
-        args::{self, Answer},
-        snapshot::{self, Kind, Snap},
-        window::Walker,
-    },
     store::{BoundWorkspace, StoreOperation},
 };
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use layerfs_content::{
     compare::TreeTable, filesystem::FilesystemRootId, object::inode_leaf::InodeKind,
+};
+use layerfs_store_service::{
+    history::lookup::{self as args, Answer},
+    operator::args::{paging, text},
+    read::{
+        snapshot::{self, Kind, Snap},
+        window::Walker,
+    },
 };
 use layerfs_workspace::{OverlayRead, SourceView, ViewStat};
 use std::sync::Arc;
@@ -81,7 +84,7 @@ impl<'a> Live<'a> {
 
 fn selected(service: &Service, args: &SdkValue) -> Result<Arc<BoundWorkspace>> {
     service
-        .operator_workspace(args::text(args, "path")?)
+        .operator_workspace(text(args, "path")?)
         .map_err(|e| args::failed(format!("{e:?}")))
 }
 
@@ -250,7 +253,7 @@ fn scan(
 
 pub(crate) fn changes(service: &Service, args: &SdkValue) -> Answer {
     let workspace = selected(service, args)?;
-    let (limit, pos) = args::paging(args)?;
+    let (limit, pos) = paging(args)?;
     with_source(&workspace, |op, view| {
         let (mut seen, mut items, mut spent, mut more) = (0u64, Vec::new(), 0, false);
         scan(service, &workspace, op, view, |path, kind, markers| {
@@ -258,7 +261,9 @@ pub(crate) fn changes(service: &Service, args: &SdkValue) -> Answer {
                 seen += 1;
                 return Ok(true);
             }
-            if items.len() == limit || spent + path.len() + 96 > crate::sdk::window::BYTES {
+            if items.len() == limit
+                || spent + path.len() + 96 > layerfs_store_service::read::window::BYTES
+            {
                 more = true;
                 return Ok(false);
             }
