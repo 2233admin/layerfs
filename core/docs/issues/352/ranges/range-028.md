@@ -1,27 +1,27 @@
-# Range 028 · **stop** · attempt 1
+# Range 028 · **watch** · attempt 2
 
-**Matches git ✓** · daemon `45a196ef16c6` · image `d3773b4e` · plan v2 · continued from r027 (live Store)
+**Matches git ✓** · daemon `45a196ef16c6` · image `d3773b4e` · plan v2 · forked from snapshot r027 (run p3-main-s)
 dsh `48395a937`..`451fad5a2` · **80 commits** (6 mainline, 74 side) · 2026-07-22 → 2026-07-22
 Areas changed: `examples/acp-agent` 25% · `packages/client` 17% · `/` 10% · other 48%
-**Phase P3** · **Git ✓** · **Node ✗** (P1–P6: 18 pass, 1 stop, 0 NOT_RUN over 5 points) · **Content 0.24×** · **Churn 0.01**
-**Time split:** play 91.5 s · git 124.7 s · Node 185.2 s · verify 8.7 s
+**Phase P3** · **Git ✓** · **Node ✓** (P1–P6: 19 pass, 0 stop, 0 NOT_RUN over 5 points) · **Content 0.24×** · **Churn 0.01**
+**Time split:** play 96.8 s · git 126.4 s · Node 200.6 s · verify 12.1 s
 
 | Latest version | Store on disk | Space amplification | Added this range | Commits | Time |
 | --- | --- | --- | --- | --- | --- |
-| **704.2 MiB** (+53.1 MiB) | **740.7 MiB** (+52.7 MiB) live | **1.05×** (prev 1.06×) | **53.5 MiB** | **1,919** (total 32,548) | **248.4 s** tooling (total 72.8 min) |
+| **704.2 MiB** (+53.1 MiB) | **737.6 MiB** (+49.6 MiB) | **1.05×** (prev 1.06×) | **53.6 MiB** | **1,919** (total 32,548) | **265.4 s** tooling (total 73.1 min) |
 
-**Checks:** 14 pass · 4 watch: Speed not judged: baseline not set (pilot); Scaling branch.diff_commits checkpoint ms in total (entries exponent 0.142): tree files exponent 0.223; Counters glob_tree.vm_steps per tree file: depth exponent 0.333; Contended work not judged: no contended class has 3 ranges of 5+ calls over a tree that grew 1.5× (19 classes too narrow) · 1 optimize/stop: Node proofs
+**Checks:** 15 pass · 4 watch: Speed not judged: baseline not set (pilot); Scaling branch.diff_commits checkpoint ms in total (entries exponent 0.142): tree files exponent 0.184; Counters glob_tree.vm_steps per tree file: depth exponent 0.327; Contended work not judged: no contended class has 3 ranges of 5+ calls over a tree that grew 1.5× (18 classes too narrow)
 **D-6 triggers** (none): max candidate paths in a merge not traced (needs a candidate-path count on branch.merge (e.g. daemon timing `merge.paths` carrying `candidates`)) (trips > 50,000) · max lane hold of the merge at publish not traced (needs a span for the publication-lane hold inside branch.publish (e.g. daemon timing `publish.lane`, ms)) (trips > 500 ms) · Capacity/ObjectLimitExceeded/Busy from 9 merges: 0 (trips at 1)
-**Moved most:** ▲ stored added +135% · ▲ fs.list p95 +66% · ▲ metadata added +41%
-**Budget:** 29 of 202 ranges · projected total 16.3 h (budget 16.8 h) · disk 43% of budget at range 202
+**Moved most:** ▲ stored added +135% · ▲ metadata added +41% · ▲ fs.list p95 +37%
+**Budget:** 29 of 202 ranges · projected total 16.4 h (budget 16.8 h) · disk 43% of budget at range 202
 
 ## 1. Correctness
 
 | Check | Result |
 | --- | --- |
-| Tree vs git | **595 changed paths match** (blob id and mode) via diff_commits; full tree at snapshots |
+| Tree vs git | **2,663 tracked files match** (blob id and mode) |
 | History | 4 lanes merged, 1 publish |
-| Steps | 3,397 / 3,397 outcomes as planned |
+| Steps | 3,387 / 3,387 outcomes as planned |
 | Conflicts | **3 / 3 planned hit · 0 unplanned** |
 | Unit tests | **30 / 30 equal to native** |
 | Installed tree | against the native replay of the on-top chain (lead, lane points, repair): **equal to native** (the repair's P1) · the lead's chain alone (context; without the lane points' installs and builds): 2432 package groups equal · not byte-compared: 3 pnpm state file(s) · by target: 371 bin shims, 3835 links · output root ×0, verification age ×1 |
@@ -42,26 +42,26 @@ Each proof runs the same command natively on the identical tree id (NODE_RULE §
 | r028-2-packages-client | end | `18e377f62d7b` | `c9f333872711` | pass (315 normalized) | pass | pass | pass | n/a | n/a |
 | r028-3-examples-acp-agent | end | `f86f697d5ebc` | `c9f333872711` | pass (315 normalized) | pass | pass | pass | n/a | n/a |
 | r028-4-examples-plan-acp-agent | end | `4451272e250e` | `c9f333872711` | pass (315 normalized) | pass | pass | pass | pass | n/a |
-| lead | repair | `4f848b571fa8` | `null` | n/a | pass | n/a | n/a | pass | stop (112,198 rewritten) |
+| lead | repair | `4f848b571fa8` | `null` | n/a | pass | n/a | n/a | pass | pass (112,160 rewritten) |
 
 P5 skip list (failing natively, set at calibration): `packages/ui/acp/tests/approval.spec.ts` (fails natively) · `packages/ui/acp/tests/bridge.spec.ts` (fails natively) · `packages/ui/acp/tests/codec.spec.ts` (fails natively) · `packages/ui/acp/tests/commands.spec.ts` (fails natively) · `packages/ui/acp/tests/config-options.spec.ts` (fails natively) · `packages/ui/acp/tests/dispose.spec.ts` (fails natively) · `packages/ui/acp/tests/edges.spec.ts` (fails natively) · `packages/ui/acp/tests/load.spec.ts` (fails natively) · `packages/ui/acp/tests/multi-session.spec.ts` (fails natively) · `packages/ui/acp/tests/properties.spec.ts` (fails natively) · `packages/ui/acp/tests/stream-update.spec.ts` (fails natively) · `packages/ui/acp/tests/turns.spec.ts` (fails natively) · `packages/cordis/tool-cordis/tests/cordis-lifecycle.spec.ts` (fails natively) · `packages/cordis/tool-cordis/tests/cross-mount.spec.ts` (fails natively) · `packages/cordis/tool-cordis/tests/inspect.spec.ts` (fails natively) · `packages/cordis/tool-cordis/tests/integration.spec.ts` (fails natively) · `packages/cordis/tool-cordis/tests/mount.spec.ts` (fails natively) · `packages/cordis/tool-cordis/tests/present.spec.ts` (fails natively) · `packages/cordis/tool-cordis/tests/sandbox-context.spec.ts` (fails natively) · `packages/cordis/tool-cordis/tests/tool-cordis.spec.ts` (fails natively) · `packages/cordis/tool-cordis/tests/unmount-hmr.spec.ts` (fails natively) · `packages/core/session/tests/derived-cache.spec.ts` (fails natively) · `packages/core/session/tests/fork.spec.ts` (fails natively) · `packages/core/session/tests/gen-persistence-catalog.spec.ts` (fails natively) · `packages/core/session/tests/invariant.spec.ts` (fails natively) · `packages/core/session/tests/json.spec.ts` (fails natively) · `packages/core/session/tests/out-of-band.spec.ts` (fails natively) · `packages/core/session/tests/properties.spec.ts` (fails natively) · `packages/core/session/tests/repair.spec.ts` (fails natively) · `packages/core/session/tests/request-header.spec.ts` (fails natively) · `packages/core/session/tests/scoped.spec.ts` (fails natively) · `packages/core/session/tests/session.spec.ts` (fails natively) · `packages/core/session/tests/surface.spec.ts` (fails natively) · `packages/core/tools/tests/code-mode.spec.ts` (fails natively) · `packages/core/tools/tests/execution-mode.spec.ts` (fails natively) · `packages/core/tools/tests/execution-signal-types.spec.ts` (fails natively) · `packages/core/tools/tests/gen-tool-catalog.spec.ts` (fails natively) · `packages/core/tools/tests/invariant.spec.ts` (fails natively) · `packages/core/tools/tests/json-schema.spec.ts` (fails natively) · `packages/core/tools/tests/properties.spec.ts` (fails natively) · `packages/core/tools/tests/scoped.spec.ts` (fails natively) · `packages/core/tools/tests/tools.spec.ts` (fails natively) · `packages/core/tools/tests/ts-types.spec.ts` (fails natively) · `packages/llm/llm-deepseek/tests/adapter.spec.ts` (fails natively) · `packages/llm/llm-deepseek/tests/serialize.spec.ts` (fails natively) · `packages/llm/llm-deepseek/tests/sse.spec.ts` (fails natively) · `packages/llm/llm-deepseek/tests/translate.spec.ts` (fails natively) · `packages/llm/llm-retry/tests/invariant.spec.ts` (fails natively) · `packages/llm/llm-retry/tests/loader-composition.spec.ts` (fails natively) · `packages/llm/llm-retry/tests/persistence.spec.ts` (fails natively) · `packages/llm/llm-retry/tests/retry.spec.ts` (fails natively) · `packages/llm/llm/tests/assembler.spec.ts` (fails natively) · `packages/llm/llm/tests/attribution.spec.ts` (fails natively) · `packages/llm/llm/tests/call-config.spec.ts` (fails natively) · `packages/llm/llm/tests/invariant.spec.ts` (fails natively) · `packages/llm/llm/tests/properties.spec.ts` (fails natively) · `packages/llm/llm/tests/service.spec.ts` (fails natively) · `packages/subagent/subagent-acp/tests/subagent-acp.spec.ts` (fails natively) · `packages/ui/acp/tests/approval.spec.ts` (fails natively) · `packages/ui/acp/tests/bridge.spec.ts` (fails natively) · `packages/ui/acp/tests/codec.spec.ts` (fails natively) · `packages/ui/acp/tests/commands.spec.ts` (fails natively) · `packages/ui/acp/tests/config-options.spec.ts` (fails natively) · `packages/ui/acp/tests/dispose.spec.ts` (fails natively) · `packages/ui/acp/tests/edges.spec.ts` (fails natively) · `packages/ui/acp/tests/load.spec.ts` (fails natively) · `packages/ui/acp/tests/modes.spec.ts` (fails natively) · `packages/ui/acp/tests/multi-session.spec.ts` (fails natively) · `packages/ui/acp/tests/properties.spec.ts` (fails natively) · `packages/ui/acp/tests/stream-update.spec.ts` (fails natively) · `packages/ui/acp/tests/turns.spec.ts` (fails natively) · `packages/ui/commands/tests/commands.spec.ts` (fails natively) · `packages/ui/tui/tests/plugin-shape.spec.ts` (fails natively) · `packages/ui/tui/tests/tui.spec.ts` (fails natively) · `packages/ui/user-approval/tests/approval.spec.ts` (fails natively) · `packages/ui/user-approval/tests/invariant.spec.ts` (fails natively) · `packages/ui/user-interaction/tests/user-interaction.spec.ts` (fails natively) · `packages/compact/compact-basic/tests/compact-basic.spec.ts` (fails natively) · `packages/compact/compact-basic/tests/compact-loop-repro.spec.ts` (fails natively) · `packages/compact/compact-basic/tests/loader-composition.spec.ts` (fails natively) · `packages/context/workspace-context/tests/workspace-context.spec.ts` (fails natively) · `packages/hooks/hooks-claude/tests/bridge.spec.ts` (fails natively) · `packages/hooks/hooks-claude/tests/config.spec.ts` (fails natively) · `packages/hooks/hooks-claude/tests/coverage-config.spec.ts` (fails natively) · `packages/hooks/hooks-claude/tests/coverage-context.spec.ts` (fails natively) · `packages/hooks/hooks-claude/tests/coverage-edge-paths.spec.ts` (fails natively) · `packages/hooks/hooks-claude/tests/coverage-stop.spec.ts` (fails natively) · `packages/hooks/hooks-codex/tests/bridge.spec.ts` (fails natively) · `packages/hooks/hooks-codex/tests/config.spec.ts` (fails natively) · `packages/hooks/hooks-codex/tests/coverage-post-tool.spec.ts` (fails natively) · `packages/hooks/hooks-codex/tests/coverage-prompt.spec.ts` (fails natively) · `packages/hooks/hooks-codex/tests/coverage-result-shape.spec.ts` (fails natively) · `packages/lsp/lsp-local/tests/connection.spec.ts` (fails natively) · `packages/lsp/lsp-local/tests/framing.spec.ts` (fails natively) · `packages/lsp/lsp-local/tests/host.spec.ts` (fails natively) · `packages/lsp/lsp-local/tests/instance.spec.ts` (fails natively) · `packages/lsp/lsp-local/tests/lifecycle.spec.ts` (fails natively) · `packages/lsp/lsp-local/tests/provider.spec.ts` (fails natively) · `packages/lsp/lsp-local/tests/translate.spec.ts` (fails natively) · `packages/lsp/tool-lsp/tests/integration.spec.ts` (fails natively) · `packages/lsp/tool-lsp/tests/load-path.spec.ts` (fails natively) · `packages/lsp/tool-lsp/tests/render.spec.ts` (fails natively) · `packages/lsp/tool-lsp/tests/tool-lsp.spec.ts` (fails natively) · `packages/web/web-search-deepseek/tests/deepseek.spec.ts` (fails natively) · `packages/web/web-search-deepseek/tests/redirect.spec.ts` (fails natively) · `packages/bash/tool-bash/tests/bash-env.spec.ts` (fails natively) · `packages/bash/tool-bash/tests/integration.spec.ts` (fails natively) · `packages/bash/tool-bash/tests/tools.spec.ts` (fails natively) · `packages/support/acp-snapshot/tests/suite.spec.ts` (fails natively).
 
 ## 2. Activity
 
-**4,173 calls** · **208 steps** by **10 agents + lead** on **4 Branches + main** · **290 Workspaces** (99% one-shot, 0 open at end)
+**4,166 calls** · **208 steps** by **10 agents + lead** on **4 Branches + main** · **291 Workspaces** (99% one-shot, 0 open at end)
 **File changes:** +524 added · 1,192 modified · −143 deleted · 22.6 MiB written · fs 1,685 : Sandbox 174 (**10 : 1**, reported only in P3)
-**Execs:** 832 (JS 62 · shell 770) · 4 non-zero exits · install 0 · test runs 4 · version figures 12 (tooling)
+**Execs:** 822 (JS 63 · shell 759) · 4 non-zero exits · install 0 · test runs 4 · version figures 1 (tooling)
 
 **Calls by category**
 
 | Category | Calls | Writes | Reads | Outcomes |
 | --- | --- | --- | --- | --- |
 | fs | 2,071 | 1,698 | 373 | Committed 1,695 · Text 44 · NoSuchPath 16 · Equal 2 · UpToDate 3 |
-| sandbox | 1,704 | 1,119 | 5 | commit 287 (Committed 238, UpToDate 48, Conflict 1) · exec 832 (exit:0 828, exit:1 1, exit:2 3) · mount 290 (Mounted 290) · status 5 · unmount 290 (Unmounted 290) |
-| branch | 387 | 33 | 354 | diff_branches 19 · diff_commits 335 · fork 23 (Forked 23) · merge 9 (Merged 9) · publish 1 (Added 1) |
+| sandbox | 1,696 | 1,109 | 5 | commit 287 (Committed 238, UpToDate 48, Conflict 1) · exec 822 (exit:0 818, exit:1 1, exit:2 3) · mount 291 (Mounted 291) · status 5 · unmount 291 (Unmounted 291) |
+| branch | 388 | 34 | 354 | diff_branches 19 · diff_commits 335 · fork 24 (Forked 24) · merge 9 (Merged 9) · publish 1 (Added 1) |
 | project | 10 | 0 | 10 | list_commits 10 |
 | operator | 1 | 0 | 1 | store.stats 1 |
-| **Total** | **4,173** | **2,850** | **743** |  |
+| **Total** | **4,166** | **2,841** | **743** |  |
 
 **Branches**
 
@@ -103,13 +103,13 @@ P5 skip list (failing natively, set at calibration): `packages/ui/acp/tests/appr
 Scale-probe Commits (setup and samples): **22**, not range work and not counted above.
 
 
-**Execs by tool:** git 158 · pnpm 1 · tsc 4 · vitest 4 · other 665
+**Execs by tool:** git 158 · pnpm 1 · tsc 4 · vitest 4 · other 655
 
 | Lane | git status | git diff | git add | git rm --cached | Lane commits | Loose objects |
 | --- | --- | --- | --- | --- | --- | --- |
 | r028-1-root | 24 | 24 | 24 | 5 | 24 | 497 |
-| r028-3-examples-acp-agent | 33 | 33 | 33 | 0 | 33 | 839 |
 | r028-2-packages-client | 33 | 33 | 33 | 0 | 33 | 717 |
+| r028-3-examples-acp-agent | 33 | 33 | 33 | 0 | 33 | 839 |
 | r028-4-examples-plan-acp-agent | 60 | 60 | 60 | 5 | 60 | 898 |
 | **lead** | — | — | — | — | 122 commit-tree | index rebuild ✓ · repack ✓ |
 
@@ -119,7 +119,7 @@ Scale-probe Commits (setup and samples): **22**, not range work and not counted 
 | r028-2-packages-client | 0 | 1 | 1 | 0 | 0 | — / — |
 | r028-3-examples-acp-agent | 0 | 1 | 1 | 0 | 0 | — / — |
 | r028-4-examples-plan-acp-agent | 0 | 1 | 1 | 1 | 11 | 11 / 11 |
-| **lead repair** | 1 | — | 1 | — | — | 112,198 files rewritten |
+| **lead repair** | 1 | — | 1 | — | — | 112,160 files rewritten |
 
 ## 3. Storage
 
@@ -128,30 +128,32 @@ Scale-probe Commits (setup and samples): **22**, not range work and not counted 
 |  | Previous (r027) | Now | Change |
 | --- | --- | --- | --- |
 | Latest version (tracked / `node_modules` / build / `.git`) | 651.1 MiB (15.4 MiB / 564.9 MiB / 13.6 MiB / 57.1 MiB) | 704.2 MiB (17.4 MiB / 611.2 MiB / 16.0 MiB / 59.5 MiB) | +53.1 MiB |
-| Version figures from | — | incremental (62,156 changed paths) | — |
+| Version figures from | — | full: first (no manifest for range 27) | — |
 | Files / directories / symlinks | 47,950 / 8,040 / 3,445 | 51,612 / 8,694 / 3,841 | +3,662 / +654 / +396 |
 | Largest file / largest directory | 23.5 MiB / 1,884 entries | 23.5 MiB (`node_modules/.pnpm/@rolldown+binding-linux-arm64-gnu@1.1.1/node_modules/@rolldown/binding-linux-arm64-gnu/rolldown-binding.linux-arm64-gnu.node`) / 1,884 entries (`node_modules/.pnpm/@mistralai+mistralai@2.2.1/node_modules/@mistralai/mistralai/esm/models/components`) | — |
-| **Store on disk** (allocated, live: file + WAL) | 688.0 MiB | 740.7 MiB | +52.7 MiB |
-| **Space amplification** (total · tracked) | 1.06× · tracked 5.07× | 1.05× · tracked 4.69× | -0.00 |
-| Head cost / history cost | — | — (not at a snapshot) / — | — |
-| **Stored per byte changed** (content / metadata / shared) | — | **9.92** (0.51 / 0.06 / 0.28) | 4.24× the median range |
-| **Stored per Commit** | 54.3 KiB | 28.1 KiB | — |
-| Metadata share | 0.37 | 0.36 | this range 0.34 |
-| History: Commits / Layers / Branches | 30,629 | 32,548 / 16 / 231 | +1,919 |
-| Projection at range 202 (estimate: study model, per-Commit cost × planned Commits + install and build forecast) | — | 10.28 GiB (Commits 8.55 GiB · installs 921.0 MiB · build 111.0 MiB) | — |
+| **Store on disk** (allocated, sealed) | 688.0 MiB | 737.6 MiB | +49.6 MiB |
+| **Space amplification** (total · tracked) | 1.06× · tracked 5.07× | 1.05× · tracked 4.69× | -0.01 |
+| Head cost / history cost | — | — (needs a reachability walk of the sealed file; not built) / — | — |
+| **Stored per byte changed** (content / metadata / shared) | — | **9.92** (0.51 / 0.06 / 0.23) | 4.25× the median range |
+| **Stored per Commit** | 54.3 KiB | 26.3 KiB | — |
+| Metadata share | 0.37 | 0.37 | this range 0.34 |
+| History: Commits / Layers / Branches | 30,629 | 32,548 / 15 / 201 | +1,919 |
+| Projection at range 202 (estimate: study model, per-Commit cost × planned Commits + install and build forecast) | — | 10.29 GiB (Commits 8.56 GiB · installs 921.0 MiB · build 111.0 MiB) | — |
 | Disk guard floor at range 202 (headroom: 256 MiB per range minimum) / disk budget | — | 44.17 GiB / 43% | — |
-| Snapshot | — | none this range | — |
+| Snapshot | — | r028, 643.6 MiB new blocks | — |
 
 **3b. Where the bytes are**
 
 | Part | Bytes | × latest version | Change this range |
 | --- | --- | --- | --- |
-| Content | 468.2 MiB | 0.66 | +31.4 MiB |
-| Metadata | 60.9 MiB | 0.09 | +3.7 MiB |
-| Index rows + waste + other (live, not split) | 211.7 MiB | 0.30 | — |
-| **Total = Store on disk** | **740.7 MiB** | **= 1.05** space amplification | +52.7 MiB |
+| Content | 468.3 MiB | 0.67 | +31.5 MiB |
+| Metadata | 61.1 MiB | 0.09 | +4.0 MiB |
+| Index rows | 171.5 MiB | 0.24 | +12.1 MiB |
+| Waste | 35.8 MiB | 0.05 | +1.9 MiB |
+| Other | 924.0 KiB | 0.00 | +64.0 KiB |
+| **Total = Store on disk** | **737.6 MiB** | **= 1.05** space amplification | +49.6 MiB |
 
-Live: content and metadata from the Commits' traced sizes; the remainder is the file + WAL less them.
+Exact: from the sealed file.
 
 **3c. By source**
 
@@ -159,11 +161,11 @@ Live: content and metadata from the Commits' traced sizes; the remainder is the 
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Tracked | 17.4 MiB | 81.8 MiB (47.1 MiB + 34.6 MiB) | 4.69× | — | 3.5 MiB | 5.4 MiB | 0.64 |
 | `node_modules` | 611.2 MiB | 189.4 MiB (177.8 MiB + 11.6 MiB) | 0.31× | — | 13.6 MiB | 50.3 MiB | 0.27 |
-| Build output | 16.0 MiB | 10.3 MiB (9.8 MiB + 568.3 KiB) | 0.65× | — | 1.0 MiB | 6.2 MiB | 0.16 |
-| `.git` | 59.5 MiB | 220.3 MiB (212.2 MiB + 8.1 MiB) | 3.70× | — | 17.1 MiB | 0.0 KiB | — |
-| Shared (index rows + waste + other) | — | 211.7 MiB | — (not divided) | — | 17.5 MiB | — | — |
-| Unattributed (Saves without traced sizes) | — | 27.2 MiB | — | — | — | — | — |
-| **Total** | — | **740.7 MiB** | **= 1.05×** space amplification | — | — | — | — |
+| Build output | 16.0 MiB | 10.4 MiB (9.8 MiB + 568.2 KiB) | 0.65× | — | 1.0 MiB | 6.2 MiB | 0.17 |
+| `.git` | 59.5 MiB | 220.4 MiB (212.3 MiB + 8.1 MiB) | 3.70× | — | 17.2 MiB | 0.0 KiB | — |
+| Shared (index rows + waste + other) | — | 208.2 MiB | — (not divided) | — | 14.1 MiB | — | — |
+| Unattributed (Saves without traced sizes) | — | 27.4 MiB | — | — | — | — | — |
+| **Total** | — | **737.6 MiB** | **= 1.05×** space amplification | — | — | — | — |
 
 Sources by the Commit that wrote them (an install Commit is `node_modules`, a build Commit build output). Any comparison with git uses the Tracked row only.
 
@@ -171,14 +173,14 @@ Sources by the Commit that wrote them (an install Commit is `node_modules`, a bu
 
 | Object | Total | Added | Avg size | Reused (dedupe hits) | As delta |
 | --- | --- | --- | --- | --- | --- |
-| Whole files | — (at snapshots) | +8,189 | — | 0 (derived) | 52% |
-| Chunks (large files) | — (at snapshots) | +2,706 | — | — | 4% |
-| Large-file extents | — (at snapshots) | — | — | — | — |
-| Directories | — (at snapshots) | 5,429 (with inodes, pooled) | — | — | 64% |
-| Inodes and attributes | — (at snapshots) | ↑ pooled | — | — | — |
-| Symlinks | — (at snapshots) | +3,867 | — | — | — |
+| Whole files | 109,946 | +8,264 | 6.2 KiB | 0 (derived) | 52% |
+| Chunks (large files) | 46,549 | +2,763 | 14.5 KiB | — | 4% |
+| Large-file extents | 13,806 | — | 0.2 KiB | — | — |
+| Directories | 171,368 | 5,423 (with inodes, pooled) | 0.2 KiB | — | 64% |
+| Inodes and attributes | 197,617 | ↑ pooled | 2.6 KiB | — | — |
+| Symlinks | 2,169 | +3,867 | 0.1 KiB | — | — |
 
-Delta: 2.4% at depth cap · 13% of refused bases stopped by budget · `node_modules` reinstall: 0.305× the raw bytes of 210 changed packages (ratio: 14113121 new stored for 46345206 raw)
+Delta: 2.3% at depth cap · 13% of refused bases stopped by budget · `node_modules` reinstall: 0.304× the raw bytes of 210 changed packages (ratio: 14104372 new stored for 46345206 raw)
 
 **3e. Git and Node (P3)**
 
@@ -197,30 +199,30 @@ Daemon `45a196ef16c6` · p50 / p95 · ratio to baseline (dominant size class) in
 
 | write | read | list | Commit (one-shot) | mount | merge | exec (FUSE ÷ native) |
 | --- | --- | --- | --- | --- | --- | --- |
-| 7.8 ms / 17.5 ms | 2.3 ms / 3.9 ms | 2.6 ms / 6.2 ms | 18.8 ms / 51.3 ms | 10.8 ms / 19.4 ms | 275 ms / 317 ms | — (native comparison in P3; exec 39.2 ms / 710 ms) |
-| SQL p50: 157 stmts | 52 stmts | 53 stmts | 199 stmts | 45 stmts | 7,667 stmts | — |
+| 8.2 ms / 18.7 ms | 2.5 ms / 4.8 ms | 2.5 ms / 5.1 ms | 19.1 ms / 62.4 ms | 10.4 ms / 17.7 ms | 268 ms / 356 ms | — (native comparison in P3; exec 39.6 ms / 704 ms) |
+| SQL p50: 158 stmts | 53 stmts | 53 stmts | 198 stmts | 46 stmts | 7,668 stmts | — |
 
-**Commit cost:** 7.21 ms per changed file · **One-shot Workspace** (mount + exec + commit + unmount): 581 ms p50 over 290
-**Slowest:** sandbox.exec 32345 ms · sandbox.exec 26459 ms · sandbox.exec 25135 ms · checkpoint diff_commits 0.10 ms and 1.45 statements per entry (62,021 entries per page)
-**Scaling:** 9 of 15 probes flat · `read` 0.67 · `list_largest` 1.79 · `glob_scoped` 0.33 · `grep_tree` 0.33 · `glob_tree` 0.63 · `oneshot_mount_unmount` 0.69
+**Commit cost:** 6.84 ms per changed file · **One-shot Workspace** (mount + exec + commit + unmount): 551 ms p50 over 291
+**Slowest:** sandbox.exec 33891 ms · sandbox.exec 29934 ms · sandbox.exec 28182 ms · checkpoint diff_commits 0.10 ms and 1.44 statements per entry (62,021 entries per page)
+**Scaling:** 5 of 15 probes flat · `stat` 0.42 · `read` 0.48 · `list_small` 0.36 · `list_largest` 1.50 · `grep_scoped` 0.18 · `glob_scoped` 0.23 · `grep_tree` 0.47 · `glob_tree` 0.97 · `diff_files` 0.17 · `merge` 0.18
 
 **Git and Node** (LayerFS ÷ native on the identical tree; ×base compares only with the P3 re-baseline, none recorded yet: not judged)
 
 | Operation | LayerFS p50 / p95 | Native p50 / p95 | ÷ native (p50) | #362 case ÷ native |
 | --- | --- | --- | --- | --- |
-| git status (cold) | 284 ms / 284 ms | — / — | — | git / status-cold: — |
-| git status (steady) | 293 ms / 419 ms | — / — | — | git / status-steady: — |
-| git add | 27.0 ms / 121 ms | — / — | — | git / add: — |
-| git commit (lane) | 34.0 ms / 88.0 ms | — / — | — | git / commit: — |
-| lead writes main | 3765 ms / 3765 ms | — / — | — | — |
-| repack | 3394 ms / 3394 ms | — / — | — | — |
-| pnpm install (incremental) | 2416 ms / 2416 ms | 1693 ms / 1693 ms | 1.43× | pnpm-reinstall / cold: — |
-| pnpm refresh | 2518 ms / 2518 ms | 1628 ms / 1628 ms | 1.55× | pnpm-reinstall / steady: — |
-| tsc -b | 2130 ms / 2224 ms | 1779 ms / 3197 ms | 1.20× | tsc-b / cold: — |
-| vitest | 4322 ms / 4322 ms | 3842 ms / 3842 ms | 1.12× | vitest / cold: — |
+| git status (cold) | 328 ms / 328 ms | — / — | — | git / status-cold: — |
+| git status (steady) | 279 ms / 389 ms | — / — | — | git / status-steady: — |
+| git add | 26.0 ms / 108 ms | — / — | — | git / add: — |
+| git commit (lane) | 34.0 ms / 103 ms | — / — | — | git / commit: — |
+| lead writes main | 4341 ms / 4341 ms | — / — | — | — |
+| repack | 3303 ms / 3303 ms | — / — | — | — |
+| pnpm install (incremental) | 2611 ms / 2611 ms | 1938 ms / 1938 ms | 1.35× | pnpm-reinstall / cold: — |
+| pnpm refresh | 2456 ms / 2456 ms | 1750 ms / 1750 ms | 1.40× | pnpm-reinstall / steady: — |
+| tsc -b | 2401 ms / 2554 ms | 1806 ms / 3465 ms | 1.33× | tsc-b / cold: — |
+| vitest | 5237 ms / 5237 ms | 3653 ms / 3653 ms | 1.43× | vitest / cold: — |
 
-**Health:** 0 Workspaces open · 0 overlay files left · daemons 2 MB (+0 MB) over 5 of 5 Sandboxes · 15 open files · WAL 3.2 MiB (live)
-**Resilience:** Busy 0 · EAGAIN 0 · refused unmount 0 · writer wait — · lane hold — per Commit (p50 / p95) · daemon RSS max 2 MB, median 2 MB over 1 daemons · overlay max — · unmount 13.3 ms / 24.6 ms
+**Health:** 0 Workspaces open · 0 overlay files left · daemons 2 MB (+0 MB) over 5 of 5 Sandboxes · 15 open files · WAL before seal 0.0 KiB
+**Resilience:** Busy 0 · EAGAIN 0 · refused unmount 0 · writer wait — · lane hold — per Commit (p50 / p95) · daemon RSS max 2 MB, median 2 MB over 1 daemons · overlay max — · unmount 12.9 ms / 23.6 ms
 
 ### Speed as history grows
 
@@ -241,10 +243,10 @@ Range 15 is the reference (owner 2026-10-19; a watch row, not a gate). Uncontend
 | 025.a1 | 27563 | 627.9 | 9.69 (1.64×) · 7543 · 236 (1 solo) | 8.21 (1.32×) · 5480 · 251 (10 solo) | 8.21 (1.13×) · 5279 · 310 (6 solo) | 3.04 (1.53×) · 3708 · — (0 solo) | 11.06 (1.21×) · 1362 · — (daemon) | 9.32 (1.12×) · 3909 · — (daemon) | 229.07 (—×) · 361898 · 6093 (3 solo) |
 | 026.a1 | 29975 | 669.9 | 6.47 (1.10×) · 6137 · 222 (56 solo) | 6.76 (1.09×) · 6376 · 256 (222 solo) | 7.59 (1.04×) · 6682 · 294 (198 solo) | 2.36 (1.19×) · 3365 · 79 (1 solo) | 10.01 (1.10×) · 1362 · — (daemon) | 8.93 (1.07×) · 5092 · — (daemon) | 333.81 (—×) · 621744 · 11927 (3 solo) |
 | 027.a2 | 30629 | 688.0 | 7.75 (1.31×) · 6978 · 228 (24 solo) | 8.12 (1.31×) · 7581 · 288 (119 solo) | 8.98 (1.23×) · 7186 · 327 (41 solo) | 2.71 (1.36×) · 3304 · — (0 solo) | 10.03 (1.10×) · 1362 · — (daemon) | 10.59 (1.27×) · 5757 · — (daemon) | 392.93 (—×) · 655226 · 8832 (3 solo) |
-| 028.a1 | 32548 | 740.7 | 6.49 (1.10×) · 5919 · 247 (9 solo) | 6.60 (1.06×) · 5818 · 222 (70 solo) | 7.61 (1.04×) · 6392 · 323 (100 solo) | 2.15 (1.08×) · 3175 · 45 (8 solo) | 10.44 (1.14×) · 1362 · — (daemon) | 9.60 (1.15×) · 4716 · — (daemon) | 274.75 (—×) · 418268 · 8491 (4 solo) |
+| 028.a2 | 32548 | 737.6 | 6.63 (1.12×) · 5906 · 230 (9 solo) | 6.89 (1.11×) · 5882 · 223 (70 solo) | 8.07 (1.11×) · 6405 · 309 (100 solo) | 2.35 (1.18×) · 3179 · 46 (8 solo) | 10.04 (1.10×) · 1362 · — (daemon) | 10.11 (1.21×) · 4374 · — (daemon) | 268.20 (—×) · 418356 · 8462 (4 solo) |
 
-**WAL across each class this range:** fs.write ≤1 KiB 1841672 → 4194304 B · fs.write ≤8 KiB 453232 → 4194304 B · fs.write ≤64 KiB 189552 → 4194304 B · fs.read ≤8 KiB 4194304 → 4194304 B · sandbox.mount 4194304 → 3341352 B · sandbox.commit 1 file (Committed) 4194304 → 4194304 B · branch.merge 0 → 4194304 B
-**Host load (1-min, recorded, not waited on):** macOS 8.86 at the first command → 8.34 after the last (max 12.83 over 8 commands) · Docker VM 3.45 → 1.97
+**WAL across each class this range:** fs.write ≤1 KiB 1858152 → 4194304 B · fs.write ≤8 KiB 1108312 → 4194304 B · fs.write ≤64 KiB 189552 → 4194304 B · fs.read ≤8 KiB 4173592 → 4194304 B · sandbox.mount 4165352 → 2855192 B · sandbox.commit 1 file (Committed) 4165352 → 4194304 B · branch.merge 0 → 4194304 B
+**Host load (1-min, recorded, not waited on):** macOS 9.05 at the first command → 7.49 after the last (max 9.44 over 8 commands) · Docker VM 1.73 → 2.14
 
 **Control probe** (one sample per arm, same window and binaries; (a) the range 15 Store, (b) the range's). Gap: each clone is copied just before its arm, which warms the OS cache equally in both, so the control cannot see a cold-read effect of a larger Store (storage reads are 0 in both arms); it compares warm-cache work only.
 
@@ -270,8 +272,9 @@ Range 15 is the reference (owner 2026-10-19; a watch row, not a gate). Uncontend
 | control-027.a1 | 12851 · 207.8 | 30629 · 688.1 | 5.59 (0.90× first) / 6.36 · 1.14× · 115/134 | 5.84 (0.91× first) / 6.16 · 1.05× · 108/124 | 2.58 (0.93× first) / 2.33 · 0.90× · 68/80 | 9.22 → 8.97 | pass |
 | control-027.a2 | 12851 · 207.8 | 30629 · 688.0 | 6.10 (0.98× first) / 5.69 · 0.93× · 113/129 | 5.39 (0.84× first) / 5.73 · 1.06× · 111/122 | 2.12 (0.76× first) / 1.84 · 0.87× · 68/76 | 11.42 → 10.90 | pass |
 | control-028.a1 | 12851 · 207.8 | 32548 · 737.6 | 5.91 (0.95× first) / 6.25 · 1.06× · 115/120 | 5.90 (0.92× first) / 5.67 · 0.96× · 112/118 | 2.56 (0.92× first) / 3.11 · 1.22× · 67/126 | 7.82 → 7.67 | pass |
+| control-028.a2 | 12851 · 207.8 | 32548 · 737.6 | 6.12 (0.99× first) / 5.88 · 0.96× · 113/122 | 5.56 (0.87× first) / 5.64 · 1.01× · 110/120 | 2.14 (0.77× first) / 2.71 · 1.26× · 67/127 | 8.05 → 8.05 | pass |
 
-**Watch row** (control (b)/(a) p50 over 1.25×, or (b)'s reads per call over 2× (a)'s): pass (sample control-028.a1)
+**Watch row** (control (b)/(a) p50 over 1.25×, or (b)'s reads per call over 2× (a)'s): pass (sample control-028.a2)
 
 ## 5. Findings and action
 
@@ -324,7 +327,13 @@ Diagnosis pending: `finding-028.a1.json`.
 
 ### Lead's note (written by the lead; never empty unless the verdict is pass)
 
-- (none yet)
+- **a1 (`p3-main-s`, live after r27 a2, daemon `45a196ef`, addon `4668012e`; binaries from main 3ef00d32e5, owner 2026-10-20): STOP.** Checkpoint ok, git ✓. Node: 18 pass, 1 stop, 0 NOT_RUN over 5 points. The stop was the lead repair's P6: P4 found 4 emitted `packages/client/ui-*/lib/client.js` files different.
+  - Cause ([fix 053](../fixes/053-r028-a1-css-module-map-order.md)): tsdown writes CSS-module class maps in no fixed order. A second native build gave a third set of ids. Read back from the Store, LayerFS's files equal that native build once each map is sorted, so this is not a LayerFS defect.
+  - P4's emitted id now sorts those maps on both sides, and the oracle key covers the tail's commands.
+- **a2 (`p3-main-t`, fork of `p3-main-s`'s r027 snapshot; same binaries; harness with fix 053; units not used): WATCH, terminal.** Checkpoint ok, git ✓. Node: 19 pass, 0 stop, 0 NOT_RUN over 5 points. Repair P6 pass (1,487 emitted). Control `control-028.a2` passes.
+  - Watch rows: Speed not judged (baseline not set, accepted); Scaling `branch.diff_commits` checkpoint ms, tree files exponent 0.184; Counters `glob_tree.vm_steps` per tree file, depth exponent 0.327.
+  - Three of the four points calibrated no test (every candidate fails natively at those trees), so their P5 is n/a.
+  - Final steps: repair 104 s (160 s alarm), verify 16 s, finish 44 s. Repair build 17.8 s, install 33.9 s.
 
 
 ## Appendix
@@ -333,21 +342,21 @@ Diagnosis pending: `finding-028.a1.json`.
 
 | Check | Value | Threshold | Result |
 | --- | --- | --- | --- |
-| Correctness | tree ok; steps 3397/3397; conflicts 3/3; tests 30/30 equal to native | all | pass |
+| Correctness | tree ok; steps 3387/3387; conflicts 3/3; tests 30/30 equal to native | all | pass |
 | Health | 0 open, 0 overlays | 0, 0, flat | pass |
 | Speed | not judged: baseline not set (pilot) | ≤ 1.2× | watch |
-| Scaling | branch.diff_commits checkpoint ms in total (entries exponent 0.142): tree files exponent 0.223 | < 0.15 | watch |
-| Counters | glob_tree.vm_steps per tree file: depth exponent 0.333 | < 0.05 | watch |
-| Contended work | not judged: no contended class has 3 ranges of 5+ calls over a tree that grew 1.5× (19 classes too narrow) | < 0.05 (SQL work against tree size) | watch |
-| Directory share | 0.338 | < 0.5 | pass |
-| Reinstall growth | 0.305× the raw bytes of 210 changed packages (ratio: 14113121 new stored for 46345206 raw) | ≤ 2× changed packages; ≤ 1 MiB with none or under 1 MiB raw | pass |
-| Delta at cap | 0.0238 (budget 0.125) | < 0.1 | pass |
-| Range growth | 53.5 MiB, 1.23× the median | ≤ 3× median, ≤ 2 GiB | pass |
-| Snapshot time | not applicable: no snapshot this range | < 0.15 | pass |
+| Scaling | branch.diff_commits checkpoint ms in total (entries exponent 0.142): tree files exponent 0.184 | < 0.15 | watch |
+| Counters | glob_tree.vm_steps per tree file: depth exponent 0.327 | < 0.05 | watch |
+| Contended work | not judged: no contended class has 3 ranges of 5+ calls over a tree that grew 1.5× (18 classes too narrow) | < 0.05 (SQL work against tree size) | watch |
+| Directory share | 0.337 | < 0.5 | pass |
+| Reinstall growth | 0.304× the raw bytes of 210 changed packages (ratio: 14104372 new stored for 46345206 raw) | ≤ 2× changed packages; ≤ 1 MiB with none or under 1 MiB raw | pass |
+| Delta at cap | 0.023 (budget 0.1341) | < 0.1 | pass |
+| Range growth | 53.6 MiB, 1.23× the median | ≤ 3× median, ≤ 2 GiB | pass |
+| Snapshot time | 2381 ms for 643.6 MiB new; size exponent -0.585 | < 0.15 | pass |
 | Disk projection | 0.43 | < 0.8 | pass |
 | Wall projection | 0.97 | ≤ 1 (p3 budget) | pass |
 | Git | HEAD = checkpoint; 122 commits; clean; 0 read back; 0 guard violations | HEAD = checkpoint, commits = dsh, clean, 0 read back, 0 guard | pass |
-| Node proofs | 18 pass · 1 stop · 0 NOT_RUN over 5 points: lead repair P6 | P1–P6 pass at every point | stop |
+| Node proofs | 19 pass · 0 stop · 0 NOT_RUN over 5 points | P1–P6 pass at every point | pass |
 | `.git` conflicts | 0 (tracked 0 · install 246 · build 0; tracked judged by Correctness) | 0 | pass |
 | Resilience | Busy 0 · EAGAIN 0 · refused unmount 0 | 0 Busy, EAGAIN, refused unmount | pass |
 | Content ratio | 0.24× | ≤ 2× (act > 5×) | pass |
@@ -360,125 +369,125 @@ Played vs planned:
 | Steps (bash calls) | 208 | 209 |
 | Lanes / agents | 4 / 10 | 4 / 10 |
 | LayerFS Commits | 1919 | 1758 |
-| Workspaces (one-shot share) | 290 (0.99) | 121 (0.983) |
+| Workspaces (one-shot share) | 291 (0.99) | 121 (0.983) |
 | Reads | 333 | 333 |
 | Reconcile writes | 95 | 95 |
 | Left out (not played in this phase) | install 1, tests 1 | — |
 
 ### B. Latency by method and size class
 
-Binary: daemon `45a196ef16c6` (attempt 1). Each call's own input is its size class; ×base compares the same operation and class only.
+Binary: daemon `45a196ef16c6` (attempt 2). Each call's own input is its size class; ×base compares the same operation and class only.
 
 | Operation | Size class | n | p50 | p95 | p99 | max | ×base p50 | ×base p95 | Depth slope | Tree slope | SQL p50: statements / VM steps / full-scan steps | FUSE opcodes p50 per exec | Per unit (p50) | Slowest phase |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| branch.diff_branches | >64 entries · uncontended | 19 | 17.23 | 301.72 | 301.72 | 306.73 | no baseline | no baseline | -0.35 | -0.68 | 216 / 22,180 / 0 | — | 0.0721 ms per entrie | — |
-| branch.diff_commits | 2–4 entries · uncontended | 1 | 7.26 | 7.26 | 7.26 | 7.26 | no baseline | no baseline | — | — | 102 / 9,601 / 0 | — | 3.63 ms per entrie | — |
-| branch.diff_commits | >64 entries · contended | 2 | 221.86 | 221.86 | 221.86 | 240.50 | no baseline | no baseline | — | — | 5,829 / 197,901 / 0 | — | 1.0416 ms per entrie | — |
-| branch.diff_commits | >64 entries · uncontended | 327 | 20.60 | 36.72 | 62.89 | 330.68 | no baseline | no baseline | 0.10 | 0.06 | 292 / 31,805 / 0 | — | 0.1113 ms per entrie | — |
-| branch.fork | — · uncontended | 7 | 0.67 | 1.34 | 1.34 | 1.90 | no baseline | no baseline | 0.22 | -0.03 | 16 / 274 / 0 | — | — | — |
-| branch.list_commits | 17–64 entries · uncontended | 3 | 1.00 | 1.00 | 1.00 | 1.01 | no baseline | no baseline | -1.00 | -1.02 | 70 / 1,298 / 0 | — | 0.0502 ms per entrie | — |
-| branch.merge | 17–64 entries · Merged · uncontended | 1 | 3.43 | 3.43 | 3.43 | 3.43 | no baseline | no baseline | — | — | 35 / 517 / 0 | — | 0.1904 ms per entrie | — |
-| branch.merge | >64 entries · Merged (new Commit) · uncontended | 3 | 316.67 | 316.67 | 316.67 | 350.10 | no baseline | no baseline | -0.14 | 0.07 | 8,686 / 525,569 / 0 | — | 1.8304 ms per entrie | branch.merge |
-| branch.publish | — · uncontended | 1 | 10.87 | 10.87 | 10.87 | 10.87 | no baseline | no baseline | -0.99 | -0.52 | 45 / 1,015 / 0 | — | — | — |
-| fs.apply | >512 KiB · uncontended | 1 | 32.84 | 32.84 | 32.84 | 32.84 | no baseline | no baseline | -0.15 | -0.45 | 172 / 15,506 / 0 | — | 0 ms per byte | commit |
-| fs.apply | ≤1 KiB · contended | 12 | 10.77 | 26.14 | 26.14 | 29.31 | no baseline | no baseline | -1.17 | -1.27 | 255 / 23,188 / 0 | — | 0.0171 ms per byte | commit |
-| fs.apply | ≤1 KiB · uncontended | 19 | 8.82 | 14.61 | 14.61 | 16.48 | no baseline | no baseline | 0.23 | 0.17 | 130 / 5,453 / 0 | — | 0.0251 ms per byte | commit |
-| fs.apply | ≤512 KiB · uncontended | 1 | 8.67 | 8.67 | 8.67 | 8.67 | no baseline | no baseline | — | — | 118 / 3,795 / 0 | — | 0.0001 ms per byte | commit |
-| fs.apply | ≤64 KiB · contended | 4 | 7.24 | 13.53 | 13.53 | 13.75 | no baseline | no baseline | -7.51 | -6.42 | 128 / 6,008 / 0 | — | 0.0007 ms per byte | commit |
-| fs.apply | ≤64 KiB · uncontended | 9 | 7.27 | 8.34 | 8.34 | 8.78 | no baseline | no baseline | 0.18 | -0.16 | 124 / 5,938 / 0 | — | 0.0005 ms per byte | commit |
-| fs.apply | ≤8 KiB · contended | 31 | 11.97 | 21.99 | 23.32 | 33.68 | no baseline | no baseline | -1.87 | -1.70 | 266 / 18,735 / 0 | — | 0.0074 ms per byte | commit |
-| fs.apply | ≤8 KiB · uncontended | 38 | 7.22 | 13.56 | 14.77 | 16.79 | no baseline | no baseline | 0.37 | 0.06 | 124 / 5,722 / 0 | — | 0.0032 ms per byte | commit |
-| fs.diff_files | ≤1 KiB · contended | 5 | 8.07 | 11.38 | 11.38 | 12.65 | no baseline | no baseline | -1.25 | -0.68 | 193 / 9,017 / 0 | — | 0.0194 ms per byte | sdk.read |
-| fs.diff_files | ≤1 KiB · uncontended | 22 | 6.15 | 8.47 | 10.31 | 15.08 | no baseline | no baseline | -0.71 | -0.72 | 123 / 6,143 / 0 | — | 0.022 ms per byte | sdk.read |
-| fs.diff_files | ≤64 KiB · contended | 6 | 8.08 | 8.93 | 8.93 | 10.59 | no baseline | no baseline | 0.94 | 0.72 | 170 / 8,346 / 0 | — | 0.0005 ms per byte | sdk.read |
-| fs.diff_files | ≤64 KiB · uncontended | 14 | 8.21 | 12.09 | 12.09 | 14.79 | no baseline | no baseline | 1.11 | 1.11 | 135 / 7,753 / 0 | — | 0.0004 ms per byte | sdk.read |
-| fs.diff_files | ≤8 KiB · contended | 1 | 6.46 | 6.46 | 6.46 | 6.46 | no baseline | no baseline | -0.57 | -0.97 | 164 / 8,511 / 0 | — | 0.0061 ms per byte | sdk.read |
-| fs.diff_files | ≤8 KiB · uncontended | 9 | 7.69 | 9.58 | 9.58 | 11.28 | no baseline | no baseline | 0.70 | 0.45 | 188 / 10,226 / 0 | — | 0.0019 ms per byte | sdk.read |
-| fs.glob | 1 files · uncontended | 2 | 1.67 | 1.67 | 1.67 | 2.49 | no baseline | no baseline | 0.28 | -0.28 | 36 / 2,448 / 0 | — | 1.671 ms per file | — |
-| fs.glob | 17–64 files · contended | 3 | 3.93 | 3.93 | 3.93 | 5.16 | no baseline | no baseline | 0.72 | 0.50 | 97 / 6,964 / 0 | — | 0.2071 ms per file | — |
-| fs.glob | 17–64 files · uncontended | 5 | 2.80 | 2.95 | 2.95 | 5.68 | no baseline | no baseline | 0.23 | -0.08 | 50 / 5,427 / 0 | — | 0.1179 ms per file | — |
-| fs.glob | 2–4 files · contended | 1 | 2.14 | 2.14 | 2.14 | 2.14 | no baseline | no baseline | -0.86 | -1.17 | 65 / 5,104 / 0 | — | 1.0705 ms per file | — |
-| fs.glob | 2–4 files · uncontended | 6 | 1.91 | 2.21 | 2.21 | 3.24 | no baseline | no baseline | -0.42 | -0.49 | 36 / 3,472 / 0 | — | 0.477 ms per file | — |
-| fs.glob | 5–16 files · contended | 3 | 2.18 | 2.18 | 2.18 | 3.92 | no baseline | no baseline | -0.59 | -0.67 | 37 / 3,477 / 0 | — | 0.2684 ms per file | — |
-| fs.glob | 5–16 files · uncontended | 13 | 2.97 | 3.75 | 3.75 | 4.71 | no baseline | no baseline | 0.95 | 0.68 | 46 / 3,421 / 0 | — | 0.407 ms per file | — |
-| fs.glob | >64 files · contended | 4 | 8.69 | 18.05 | 18.05 | 21.92 | no baseline | no baseline | 0.66 | -0.09 | 163 / 11,587 / 0 | — | 0.0548 ms per file | — |
-| fs.glob | >64 files · uncontended | 17 | 5.59 | 22.07 | 22.07 | 35.43 | no baseline | no baseline | -0.54 | -0.17 | 91 / 12,581 / 0 | — | 0.0402 ms per file | — |
-| fs.grep | 1 files · uncontended | 6 | 2.01 | 2.32 | 2.32 | 3.89 | no baseline | no baseline | 0.10 | 0.18 | 39 / 2,659 / 0 | — | 2.009 ms per file | sdk.lines |
-| fs.grep | 17–64 files · contended | 2 | 3.68 | 3.68 | 3.68 | 10.94 | no baseline | no baseline | -3.68 | -3.11 | 100 / 4,187 / 0 | — | 0.0899 ms per file | sdk.lines |
-| fs.grep | 17–64 files · uncontended | 8 | 6.02 | 9.35 | 9.35 | 12.29 | no baseline | no baseline | 0.54 | 0.11 | 124 / 7,597 / 0 | — | 0.3316 ms per file | sdk.lines |
-| fs.grep | 2–4 files · contended | 2 | 3.79 | 3.79 | 3.79 | 5.10 | no baseline | no baseline | 0.52 | 0.69 | 113 / 6,855 / 0 | — | 1.2627 ms per file | sdk.lines |
-| fs.grep | 2–4 files · uncontended | 5 | 2.72 | 3.25 | 3.25 | 3.37 | no baseline | no baseline | 0.10 | -0.24 | 59 / 3,815 / 0 | — | 0.8127 ms per file | sdk.lines |
-| fs.grep | 5–16 files · contended | 1 | 5.28 | 5.28 | 5.28 | 5.28 | no baseline | no baseline | 0.68 | 0.50 | 132 / 7,623 / 0 | — | 0.5866 ms per file | sdk.lines |
-| fs.grep | 5–16 files · uncontended | 14 | 4.44 | 8.90 | 8.90 | 11.38 | no baseline | no baseline | 1.13 | 0.66 | 82 / 4,283 / 0 | — | 0.5676 ms per file | sdk.lines |
-| fs.grep | >64 files · contended | 2 | 8.87 | 8.87 | 8.87 | 13.51 | no baseline | no baseline | -5.05 | -4.58 | 200 / 7,557 / 0 | — | 0.0059 ms per file | sdk.lines |
-| fs.grep | >64 files · uncontended | 11 | 22.80 | 35.36 | 35.36 | 38.62 | no baseline | no baseline | -0.30 | 0.25 | 510 / 25,976 / 0 | — | 0.1753 ms per file | sdk.lines |
-| fs.list | 1 entries · uncontended | 5 | 2.26 | 2.33 | 2.33 | 2.98 | no baseline | no baseline | 0.89 | 1.00 | 47 / 3,382 / 0 | — | 2.263 ms per entrie | — |
-| fs.list | 17–64 entries · contended | 7 | 4.93 | 7.70 | 7.70 | 10.83 | no baseline | no baseline | -0.24 | -0.26 | 132 / 8,644 / 0 | — | 0.124 ms per entrie | — |
-| fs.list | 17–64 entries · uncontended | 13 | 4.05 | 5.68 | 5.68 | 11.39 | no baseline | no baseline | -0.46 | -0.13 | 76 / 10,100 / 0 | — | 0.1408 ms per entrie | — |
-| fs.list | 2–4 entries · uncontended | 6 | 1.74 | 2.99 | 2.99 | 3.31 | no baseline | no baseline | -0.61 | -0.82 | 36 / 2,749 / 0 | — | 0.5383 ms per entrie | — |
-| fs.list | 5–16 entries · contended | 5 | 2.58 | 3.36 | 3.36 | 4.12 | no baseline | no baseline | -0.29 | -0.40 | 76 / 4,570 / 0 | — | 0.3689 ms per entrie | — |
-| fs.list | 5–16 entries · uncontended | 21 | 2.06 | 3.67 | 3.67 | 4.25 | no baseline | no baseline | -0.06 | -0.34 | 46 / 3,453 / 0 | — | 0.3468 ms per entrie | — |
-| fs.read | ≤1 KiB · uncontended | 5 | 2.65 | 2.92 | 2.92 | 3.12 | no baseline | no baseline | -0.91 | -0.77 | 45 / 3,456 / 0 | — | 0.0036 ms per byte | sdk.lines |
-| fs.read | ≤64 KiB · uncontended | 4 | 2.37 | 2.97 | 2.97 | 3.30 | no baseline | no baseline | -0.03 | 0.01 | 40 / 2,717 / 0 | — | 0.0002 ms per byte | sdk.lines |
-| fs.read | ≤8 KiB · contended | 16 | 2.46 | 4.50 | 4.50 | 4.62 | no baseline | no baseline | 0.11 | -0.08 | 57 / 3,922 / 0 | — | 0.0006 ms per byte | sdk.lines |
-| fs.read | ≤8 KiB · uncontended | 31 | 2.15 | 3.42 | 3.86 | 3.94 | no baseline | no baseline | -0.28 | -0.48 | 49 / 3,175 / 0 | — | 0.0007 ms per byte | sdk.lines |
-| fs.rm | 1 files · contended | 26 | 8.11 | 11.84 | 12.01 | 12.65 | no baseline | no baseline | -0.11 | -0.74 | 193 / 11,060 / 0 | — | 8.114 ms per file | commit |
-| fs.rm | 1 files · uncontended | 114 | 7.28 | 11.68 | 16.24 | 20.11 | no baseline | no baseline | -0.47 | -0.42 | 131 / 7,679 / 0 | — | 7.275 ms per file | files.change |
-| fs.stat | ≤1 KiB · contended | 3 | 2.81 | 2.81 | 2.81 | 3.55 | no baseline | no baseline | 1.54 | 1.27 | 54 / 3,455 / 0 | — | 0.0077 ms per byte | — |
-| fs.stat | ≤1 KiB · uncontended | 3 | 2.04 | 2.04 | 2.04 | 2.14 | no baseline | no baseline | 0.01 | -0.18 | 36 / 2,689 / 0 | — | 0.0022 ms per byte | — |
-| fs.stat | ≤512 KiB · contended | 2 | 1.90 | 1.90 | 1.90 | 2.16 | no baseline | no baseline | -3.03 | -2.63 | 55 / 2,986 / 0 | — | 0 ms per byte | — |
-| fs.stat | ≤64 KiB · contended | 6 | 2.08 | 2.83 | 2.83 | 8.43 | no baseline | no baseline | -0.58 | -0.64 | 39 / 3,599 / 0 | — | 0.0001 ms per byte | — |
-| fs.stat | ≤64 KiB · uncontended | 14 | 1.86 | 2.71 | 2.71 | 2.94 | no baseline | no baseline | -0.56 | -0.73 | 39 / 2,820 / 0 | — | 0.0001 ms per byte | — |
-| fs.stat | ≤8 KiB · contended | 2 | 2.21 | 2.21 | 2.21 | 2.90 | no baseline | no baseline | -1.04 | -0.77 | 49 / 2,928 / 0 | — | 0.0007 ms per byte | — |
-| fs.stat | ≤8 KiB · uncontended | 18 | 1.93 | 3.02 | 3.02 | 4.05 | no baseline | no baseline | 0.21 | -0.05 | 38 / 2,363 / 0 | — | 0.0007 ms per byte | — |
-| fs.write | ≤1 KiB · contended | 68 | 9.31 | 22.31 | 33.40 | 39.69 | no baseline | no baseline | 0.37 | 0.05 | 260 / 15,993 / 0 | — | 0.0126 ms per byte | commit |
-| fs.write | ≤1 KiB · uncontended | 169 | 6.49 | 11.61 | 20.62 | 42.11 | no baseline | no baseline | -0.63 | -0.73 | 128 / 5,919 / 0 | — | 0.0094 ms per byte | commit |
-| fs.write | ≤512 KiB · contended | 29 | 14.70 | 22.32 | 36.77 | 42.37 | no baseline | no baseline | -0.21 | -0.31 | 335 / 24,203 / 0 | — | 0.0001 ms per byte | commit |
-| fs.write | ≤512 KiB · uncontended | 30 | 8.77 | 16.26 | 17.30 | 18.30 | no baseline | no baseline | -0.47 | -0.61 | 140 / 6,510 / 0 | — | 0.0001 ms per byte | commit |
-| fs.write | ≤64 KiB · contended | 200 | 11.23 | 22.39 | 35.40 | 41.95 | no baseline | no baseline | 0.58 | 0.20 | 319 / 18,161 / 0 | — | 0.0006 ms per byte | commit |
-| fs.write | ≤64 KiB · uncontended | 259 | 7.61 | 13.08 | 17.64 | 27.14 | no baseline | no baseline | 0.00 | -0.09 | 153 / 6,392 / 0 | — | 0.0004 ms per byte | commit |
-| fs.write | ≤8 KiB · contended | 219 | 10.56 | 22.20 | 27.18 | 37.65 | no baseline | no baseline | 0.19 | -0.06 | 299 / 17,766 / 0 | — | 0.0042 ms per byte | commit |
-| fs.write | ≤8 KiB · uncontended | 457 | 6.60 | 11.81 | 16.30 | 35.88 | no baseline | no baseline | -0.25 | -0.37 | 135 / 5,818 / 0 | — | 0.0034 ms per byte | commit |
-| operator.store.stats | — · uncontended | 1 | 0.59 | 0.59 | 0.59 | 0.59 | no baseline | no baseline | 0.63 | 0.15 | 3 / 61 / 0 | — | — | — |
-| sandbox.commit | 0 files · Committed · contended | 72 | 24.43 | 47.39 | 72.34 | 100.34 | no baseline | no baseline | -0.40 | -0.52 | 298 / 26,815 / 0 | — | — | commit |
-| sandbox.commit | 0 files · Committed · uncontended | 79 | 23.89 | 47.75 | 61.57 | 305.57 | no baseline | no baseline | 0.16 | 0.04 | 265 / 25,352 / 0 | — | — | commit |
-| sandbox.commit | 0 files · UpToDate · contended | 11 | 3.62 | 10.77 | 10.77 | 13.54 | no baseline | no baseline | -0.31 | -0.24 | 6 / 71 / 0 | — | — | observe.after |
-| sandbox.commit | 0 files · UpToDate · uncontended | 36 | 3.72 | 5.51 | 6.48 | 6.90 | no baseline | no baseline | 0.12 | 0.15 | 6 / 71 / 0 | — | — | observe.after |
-| sandbox.commit | 1 files · Committed · contended | 20 | 12.36 | 20.00 | 20.00 | 23.70 | no baseline | no baseline | -0.38 | -0.14 | 145 / 5,848 / 0 | — | 12.357 ms per file | commit |
-| sandbox.commit | 1 files · Committed · uncontended | 20 | 9.60 | 14.27 | 14.27 | 20.24 | no baseline | no baseline | 0.16 | 0.11 | 114 / 4,716 / 0 | — | 9.598 ms per file | commit |
-| sandbox.commit | 1 files · Conflict · contended | 1 | 311.24 | 311.24 | 311.24 | 311.24 | no baseline | no baseline | 0.68 | 1.04 | 14,545 / 491,456 / 8,273 | — | 311.235 ms per file | commit |
-| sandbox.commit | 17–64 files · Committed · uncontended | 2 | 13.71 | 13.71 | 13.71 | 18.20 | no baseline | no baseline | -2.72 | -1.93 | 149 / 11,597 / 0 | — | 0.7617 ms per file | commit |
-| sandbox.commit | 2–4 files · Committed · contended | 14 | 15.06 | 26.76 | 26.76 | 35.81 | no baseline | no baseline | -1.01 | -0.42 | 193 / 11,484 / 0 | — | 5.7455 ms per file | commit |
-| sandbox.commit | 2–4 files · Committed · uncontended | 11 | 11.96 | 16.90 | 16.90 | 22.12 | no baseline | no baseline | -0.03 | 0.16 | 139 / 5,707 / 0 | — | 4.2255 ms per file | commit |
-| sandbox.commit | 5–16 files · Committed · contended | 1 | 13.94 | 13.94 | 13.94 | 13.94 | no baseline | no baseline | -0.74 | -1.00 | 166 / 12,321 / 0 | — | 1.0719 ms per file | commit |
-| sandbox.commit | 5–16 files · Committed · uncontended | 3 | 11.87 | 11.87 | 11.87 | 13.43 | no baseline | no baseline | -1.28 | -1.07 | 129 / 8,647 / 0 | — | 1.9785 ms per file | commit |
-| sandbox.commit | — · Committed · contended | 2 | 69.76 | 69.76 | 69.76 | 105.34 | no baseline | no baseline | -3.41 | -4.17 | 1,097 / 120,814 / 0 | — | — | commit |
-| sandbox.commit | — · Committed · uncontended | 9 | 74.87 | 953.30 | 953.30 | 13603.35 | no baseline | no baseline | 0.53 | 0.34 | 653 / 44,327 / 0 | — | — | commit |
-| sandbox.commit | — · UpToDate · uncontended | 1 | 9.80 | 9.80 | 9.80 | 9.80 | no baseline | no baseline | 2.54 | 2.54 | 66 / 7,043 / 0 | — | — | commit |
-| sandbox.exec | 0 files · contended | 272 | 44.39 | 729.54 | 2312.79 | 2432.01 | no baseline | no baseline | -3.69 | -4.83 | 0 / 0 / 0 | 2,853 | — | — |
-| sandbox.exec | 0 files · uncontended | 203 | 36.55 | 547.65 | 729.46 | 6964.56 | no baseline | no baseline | -0.11 | -0.05 | 0 / 0 / 0 | 3028.70 | — | — |
-| sandbox.exec | 1 files · contended | 86 | 34.47 | 57.71 | 68.20 | 74.69 | no baseline | no baseline | -0.61 | -0.58 | 0 / 0 / 0 | 5.30 | 34.465 ms per file | — |
-| sandbox.exec | 1 files · uncontended | 53 | 39.55 | 55.07 | 63.79 | 93.41 | no baseline | no baseline | -0.05 | 0.10 | — | 5.30 | 39.552 ms per file | — |
-| sandbox.exec | 17–64 files · contended | 3 | 72.01 | 72.01 | 72.01 | 82.27 | no baseline | no baseline | 0.04 | 0.25 | — | 104 | 3.6005 ms per file | — |
-| sandbox.exec | 17–64 files · uncontended | 20 | 68.13 | 95.02 | 95.02 | 108.53 | no baseline | no baseline | 0.55 | 0.42 | — | 43.60 | 3.4065 ms per file | — |
-| sandbox.exec | 2–4 files · contended | 59 | 35.91 | 45.35 | 51.19 | 60.37 | no baseline | no baseline | -0.23 | -0.34 | — | 10.80 | 12.9767 ms per file | — |
-| sandbox.exec | 2–4 files · uncontended | 46 | 39.20 | 66.32 | 70.17 | 71.58 | no baseline | no baseline | 0.48 | 0.20 | — | 8.80 | 14.8255 ms per file | — |
-| sandbox.exec | 5–16 files · contended | 17 | 56.73 | 77.89 | 77.89 | 80.00 | no baseline | no baseline | -0.12 | 0.14 | — | 27.70 | 6.1538 ms per file | — |
-| sandbox.exec | 5–16 files · uncontended | 19 | 59.56 | 73.06 | 73.06 | 75.70 | no baseline | no baseline | 0.68 | 0.55 | — | 19.30 | 6.8815 ms per file | — |
-| sandbox.exec | — · contended | 12 | 2411.12 | 25134.78 | 25134.78 | 26459.19 | no baseline | no baseline | -1.34 | -1.15 | — | 33367.90 | — | — |
-| sandbox.exec | — · uncontended | 32 | 94.37 | 13750.87 | 19107.51 | 32344.68 | no baseline | no baseline | -1.87 | -2.54 | — | 33367.90 | — | — |
-| sandbox.mount | — · contended | 123 | 11.51 | 19.86 | 28.51 | 29.11 | no baseline | no baseline | -0.09 | -0.04 | 56 / 1,590 / 82 | — | — | observe.after |
-| sandbox.mount | — · uncontended | 157 | 10.44 | 18.91 | 20.61 | 26.26 | no baseline | no baseline | -0.05 | -0.04 | 45 / 1,362 / 82 | — | — | observe.after |
-| sandbox.status | — · contended | 1 | 4.46 | 4.46 | 4.46 | 4.46 | no baseline | no baseline | — | — | 0 / 0 / 0 | — | — | observe.after |
-| sandbox.status | — · uncontended | 4 | 4.06 | 4.85 | 4.85 | 97.22 | no baseline | no baseline | 0.03 | -0.10 | 0 / 0 / 0 | — | — | observe.after |
-| sandbox.unmount | — · contended | 114 | 14.43 | 23.28 | 26.87 | 37.31 | no baseline | no baseline | 0.37 | 0.50 | 0 / 0 / 0 | — | — | observe.after |
-| sandbox.unmount | — · uncontended | 166 | 12.80 | 26.83 | 110.82 | 289.77 | no baseline | no baseline | 0.37 | 0.34 | 0 / 0 / 0 | — | — | observe.after |
+| branch.diff_branches | >64 entries · uncontended | 19 | 18.48 | 294.36 | 294.36 | 347.80 | no baseline | no baseline | -0.19 | -0.48 | 216 / 22,172 / 0 | — | 0.0767 ms per entrie | — |
+| branch.diff_commits | 2–4 entries · uncontended | 1 | 7.99 | 7.99 | 7.99 | 7.99 | no baseline | no baseline | — | — | 102 / 9,601 / 0 | — | 3.9955 ms per entrie | — |
+| branch.diff_commits | >64 entries · contended | 2 | 245.70 | 245.70 | 245.70 | 340.17 | no baseline | no baseline | — | — | 5,835 / 197,974 / 0 | — | 1.1535 ms per entrie | — |
+| branch.diff_commits | >64 entries · uncontended | 327 | 20.13 | 35.96 | 56.07 | 387.45 | no baseline | no baseline | 0.05 | -0.00 | 293 / 32,018 / 0 | — | 0.1092 ms per entrie | — |
+| branch.fork | — · uncontended | 8 | 0.83 | 3.20 | 3.20 | 3.33 | no baseline | no baseline | 0.72 | 0.57 | 16 / 274 / 0 | — | — | — |
+| branch.list_commits | 17–64 entries · uncontended | 3 | 0.94 | 0.94 | 0.94 | 1.06 | no baseline | no baseline | -1.15 | -1.20 | 70 / 1,298 / 0 | — | 0.0471 ms per entrie | — |
+| branch.merge | 17–64 entries · Merged · uncontended | 1 | 2.08 | 2.08 | 2.08 | 2.08 | no baseline | no baseline | — | — | 35 / 517 / 0 | — | 0.1153 ms per entrie | — |
+| branch.merge | >64 entries · Merged (new Commit) · uncontended | 3 | 356.48 | 356.48 | 356.48 | 421.90 | no baseline | no baseline | 0.21 | 0.42 | 8,686 / 525,585 / 0 | — | 2.0606 ms per entrie | branch.merge |
+| branch.publish | — · uncontended | 1 | 13.52 | 13.52 | 13.52 | 13.52 | no baseline | no baseline | -0.48 | 0.09 | 45 / 1,015 / 0 | — | — | — |
+| fs.apply | >512 KiB · uncontended | 1 | 35.01 | 35.01 | 35.01 | 35.01 | no baseline | no baseline | 0.00 | -0.27 | 173 / 15,597 / 0 | — | 0 ms per byte | commit |
+| fs.apply | ≤1 KiB · contended | 11 | 13.97 | 21.11 | 21.11 | 32.88 | no baseline | no baseline | -0.56 | -0.54 | 290 / 19,780 / 0 | — | 0.0295 ms per byte | commit |
+| fs.apply | ≤1 KiB · uncontended | 20 | 7.78 | 13.17 | 13.17 | 14.84 | no baseline | no baseline | -0.07 | -0.19 | 127 / 5,459 / 0 | — | 0.0159 ms per byte | commit |
+| fs.apply | ≤512 KiB · uncontended | 1 | 12.14 | 12.14 | 12.14 | 12.14 | no baseline | no baseline | — | — | 118 / 3,795 / 0 | — | 0.0002 ms per byte | commit |
+| fs.apply | ≤64 KiB · contended | 3 | 9.42 | 9.42 | 9.42 | 14.27 | no baseline | no baseline | -6.90 | -5.68 | 263 / 14,350 / 0 | — | 0.001 ms per byte | commit |
+| fs.apply | ≤64 KiB · uncontended | 10 | 7.25 | 8.84 | 8.84 | 9.45 | no baseline | no baseline | 0.17 | -0.17 | 128 / 5,938 / 0 | — | 0.0005 ms per byte | commit |
+| fs.apply | ≤8 KiB · contended | 32 | 14.18 | 25.89 | 35.72 | 39.03 | no baseline | no baseline | -1.48 | -1.23 | 277 / 19,895 / 0 | — | 0.0066 ms per byte | commit |
+| fs.apply | ≤8 KiB · uncontended | 37 | 8.15 | 12.02 | 12.67 | 13.04 | no baseline | no baseline | 0.65 | 0.40 | 130 / 5,756 / 0 | — | 0.0045 ms per byte | commit |
+| fs.diff_files | ≤1 KiB · contended | 3 | 10.22 | 10.22 | 10.22 | 12.57 | no baseline | no baseline | -0.70 | -0.01 | 274 / 15,934 / 0 | — | — | sdk.read |
+| fs.diff_files | ≤1 KiB · uncontended | 24 | 5.71 | 10.03 | 10.75 | 14.28 | no baseline | no baseline | -0.88 | -0.93 | 129 / 6,385 / 0 | — | 0.0216 ms per byte | sdk.read |
+| fs.diff_files | ≤64 KiB · contended | 9 | 8.73 | 9.96 | 9.96 | 11.11 | no baseline | no baseline | 1.12 | 0.94 | 184 / 8,346 / 0 | — | 0.0005 ms per byte | sdk.read |
+| fs.diff_files | ≤64 KiB · uncontended | 11 | 8.08 | 11.37 | 11.37 | 14.12 | no baseline | no baseline | 1.08 | 1.06 | 135 / 8,377 / 0 | — | 0.0004 ms per byte | sdk.read |
+| fs.diff_files | ≤8 KiB · contended | 1 | 7.06 | 7.06 | 7.06 | 7.06 | no baseline | no baseline | -0.37 | -0.72 | 164 / 8,511 / 0 | — | 0.0067 ms per byte | sdk.read |
+| fs.diff_files | ≤8 KiB · uncontended | 9 | 7.29 | 9.21 | 9.21 | 9.82 | no baseline | no baseline | 0.58 | 0.30 | 188 / 10,226 / 0 | — | 0.0019 ms per byte | sdk.read |
+| fs.glob | 1 files · contended | 1 | 1.45 | 1.45 | 1.45 | 1.45 | no baseline | no baseline | — | — | 43 / 7,278 / 0 | — | 1.448 ms per file | — |
+| fs.glob | 1 files · uncontended | 1 | 2.90 | 2.90 | 2.90 | 2.90 | no baseline | no baseline | 1.64 | 1.32 | 53 / 3,864 / 0 | — | 2.901 ms per file | — |
+| fs.glob | 17–64 files · contended | 2 | 2.97 | 2.97 | 2.97 | 4.17 | no baseline | no baseline | -0.12 | -0.35 | 64 / 5,320 / 0 | — | 0.1439 ms per file | — |
+| fs.glob | 17–64 files · uncontended | 6 | 2.60 | 4.54 | 4.54 | 8.47 | no baseline | no baseline | 0.06 | -0.28 | 50 / 5,419 / 0 | — | 0.1235 ms per file | — |
+| fs.glob | 2–4 files · uncontended | 7 | 1.85 | 2.93 | 2.93 | 3.42 | no baseline | no baseline | -0.50 | -0.57 | 36 / 3,480 / 0 | — | 0.5655 ms per file | — |
+| fs.glob | 5–16 files · contended | 4 | 2.32 | 3.07 | 3.07 | 5.69 | no baseline | no baseline | -0.44 | -0.49 | 67 / 6,713 / 0 | — | 0.2579 ms per file | — |
+| fs.glob | 5–16 files · uncontended | 12 | 2.23 | 3.83 | 3.83 | 4.81 | no baseline | no baseline | 0.28 | -0.12 | 46 / 3,001 / 0 | — | 0.3668 ms per file | — |
+| fs.glob | >64 files · contended | 5 | 14.19 | 19.63 | 19.63 | 21.35 | no baseline | no baseline | 2.10 | 1.39 | 336 / 32,262 / 0 | — | 0.0474 ms per file | — |
+| fs.glob | >64 files · uncontended | 16 | 5.70 | 13.75 | 13.75 | 32.86 | no baseline | no baseline | -0.49 | -0.11 | 87 / 12,554 / 0 | — | 0.0433 ms per file | — |
+| fs.grep | 1 files · contended | 1 | 1.76 | 1.76 | 1.76 | 1.76 | no baseline | no baseline | — | — | 51 / 2,659 / 0 | — | 1.762 ms per file | sdk.lines |
+| fs.grep | 1 files · uncontended | 5 | 1.62 | 2.23 | 2.23 | 3.74 | no baseline | no baseline | -0.52 | -0.45 | 39 / 3,045 / 0 | — | 1.623 ms per file | sdk.lines |
+| fs.grep | 17–64 files · contended | 1 | 9.00 | 9.00 | 9.00 | 9.00 | no baseline | no baseline | -1.06 | -0.41 | 277 / 12,873 / 0 | — | 0.4736 ms per file | sdk.lines |
+| fs.grep | 17–64 files · uncontended | 9 | 6.27 | 9.72 | 9.72 | 10.96 | no baseline | no baseline | 0.63 | 0.23 | 124 / 7,589 / 0 | — | 0.3299 ms per file | sdk.lines |
+| fs.grep | 2–4 files · contended | 1 | 4.01 | 4.01 | 4.01 | 4.01 | no baseline | no baseline | 0.65 | 0.85 | 138 / 7,760 / 0 | — | 1.3377 ms per file | sdk.lines |
+| fs.grep | 2–4 files · uncontended | 6 | 2.48 | 2.90 | 2.90 | 3.06 | no baseline | no baseline | -0.11 | -0.50 | 59 / 3,807 / 0 | — | 0.6587 ms per file | sdk.lines |
+| fs.grep | 5–16 files · contended | 2 | 3.72 | 3.72 | 3.72 | 4.74 | no baseline | no baseline | -0.14 | -0.48 | 80 / 4,117 / 0 | — | 0.4131 ms per file | sdk.lines |
+| fs.grep | 5–16 files · uncontended | 13 | 4.42 | 13.81 | 13.81 | 16.45 | no baseline | no baseline | 1.12 | 0.64 | 92 / 5,174 / 0 | — | 0.7418 ms per file | sdk.lines |
+| fs.grep | >64 files · contended | 3 | 12.41 | 12.41 | 12.41 | 39.85 | no baseline | no baseline | -4.07 | -3.57 | 337 / 23,295 / 0 | — | 0.0924 ms per file | sdk.lines |
+| fs.grep | >64 files · uncontended | 10 | 21.36 | 25.25 | 25.25 | 36.72 | no baseline | no baseline | -0.46 | 0.06 | 498 / 25,472 / 0 | — | 0.1737 ms per file | sdk.lines |
+| fs.list | 1 entries · uncontended | 5 | 2.19 | 2.55 | 2.55 | 2.69 | no baseline | no baseline | 0.81 | 0.91 | 47 / 3,382 / 0 | — | 2.192 ms per entrie | — |
+| fs.list | 17–64 entries · contended | 7 | 3.51 | 4.55 | 4.55 | 7.22 | no baseline | no baseline | -1.24 | -1.29 | 105 / 8,506 / 0 | — | 0.0909 ms per entrie | — |
+| fs.list | 17–64 entries · uncontended | 13 | 4.15 | 5.23 | 5.23 | 5.67 | no baseline | no baseline | -0.40 | -0.06 | 84 / 9,312 / 0 | — | 0.1372 ms per entrie | — |
+| fs.list | 2–4 entries · uncontended | 6 | 1.80 | 2.85 | 2.85 | 4.92 | no baseline | no baseline | -0.53 | -0.72 | 36 / 2,749 / 0 | — | 0.6058 ms per entrie | — |
+| fs.list | 5–16 entries · contended | 2 | 1.97 | 1.97 | 1.97 | 2.82 | no baseline | no baseline | -0.92 | -1.15 | 71 / 4,531 / 0 | — | 0.219 ms per entrie | — |
+| fs.list | 5–16 entries · uncontended | 24 | 1.96 | 3.01 | 3.76 | 3.98 | no baseline | no baseline | -0.17 | -0.47 | 44 / 3,391 / 0 | — | 0.3308 ms per entrie | — |
+| fs.read | ≤1 KiB · contended | 3 | 2.16 | 2.16 | 2.16 | 3.50 | no baseline | no baseline | -0.34 | -0.75 | 61 / 4,601 / 0 | — | 0.0026 ms per byte | sdk.lines |
+| fs.read | ≤1 KiB · uncontended | 2 | 1.14 | 1.14 | 1.14 | 2.45 | no baseline | no baseline | -2.87 | -3.14 | 34 / 1,304 / 0 | — | 0.0015 ms per byte | sdk.lines |
+| fs.read | ≤64 KiB · uncontended | 4 | 2.59 | 2.87 | 2.87 | 3.21 | no baseline | no baseline | 0.23 | 0.28 | 40 / 2,717 / 0 | — | 0.0002 ms per byte | sdk.lines |
+| fs.read | ≤8 KiB · contended | 8 | 2.57 | 3.38 | 3.38 | 5.40 | no baseline | no baseline | 0.21 | 0.04 | 73 / 5,359 / 0 | — | 0.0007 ms per byte | sdk.lines |
+| fs.read | ≤8 KiB · uncontended | 39 | 2.35 | 4.84 | 5.90 | 6.35 | no baseline | no baseline | -0.09 | -0.24 | 52 / 3,179 / 0 | — | 0.0007 ms per byte | sdk.lines |
+| fs.rm | 1 files · contended | 28 | 7.78 | 11.47 | 12.02 | 12.71 | no baseline | no baseline | -0.21 | -0.86 | 204 / 11,921 / 0 | — | 7.775 ms per file | commit |
+| fs.rm | 1 files · uncontended | 112 | 7.53 | 11.95 | 16.28 | 22.93 | no baseline | no baseline | -0.39 | -0.32 | 134 / 7,878 / 0 | — | 7.532 ms per file | files.change |
+| fs.stat | ≤1 KiB · contended | 2 | 2.14 | 2.14 | 2.14 | 2.27 | no baseline | no baseline | 0.91 | 0.51 | 35 / 2,784 / 0 | — | 0.0023 ms per byte | — |
+| fs.stat | ≤1 KiB · uncontended | 4 | 2.04 | 2.17 | 2.17 | 2.31 | no baseline | no baseline | 0.02 | -0.17 | 36 / 2,689 / 0 | — | 0.0023 ms per byte | — |
+| fs.stat | ≤512 KiB · contended | 2 | 1.68 | 1.68 | 1.68 | 2.35 | no baseline | no baseline | -3.50 | -3.06 | 43 / 2,864 / 0 | — | 0 ms per byte | — |
+| fs.stat | ≤64 KiB · contended | 4 | 2.62 | 2.72 | 2.72 | 6.43 | no baseline | no baseline | -0.06 | 0.00 | 71 / 5,791 / 0 | — | 0.0001 ms per byte | — |
+| fs.stat | ≤64 KiB · uncontended | 16 | 1.97 | 2.92 | 2.92 | 4.71 | no baseline | no baseline | -0.43 | -0.56 | 39 / 2,972 / 0 | — | 0.0001 ms per byte | — |
+| fs.stat | ≤8 KiB · contended | 3 | 1.68 | 1.68 | 1.68 | 2.62 | no baseline | no baseline | -1.84 | -1.60 | 64 / 3,419 / 0 | — | 0.0013 ms per byte | — |
+| fs.stat | ≤8 KiB · uncontended | 17 | 1.84 | 2.63 | 2.63 | 3.00 | no baseline | no baseline | 0.10 | -0.18 | 40 / 2,716 / 0 | — | 0.0006 ms per byte | — |
+| fs.write | ≤1 KiB · contended | 77 | 9.79 | 25.20 | 32.88 | 124.78 | no baseline | no baseline | 0.49 | 0.19 | 253 / 12,956 / 0 | — | 0.0138 ms per byte | files.change |
+| fs.write | ≤1 KiB · uncontended | 160 | 6.63 | 10.57 | 15.79 | 70.80 | no baseline | no baseline | -0.58 | -0.67 | 127 / 5,906 / 0 | — | 0.0093 ms per byte | commit |
+| fs.write | ≤512 KiB · contended | 22 | 13.82 | 36.08 | 46.78 | 46.97 | no baseline | no baseline | -0.35 | -0.48 | 351 / 20,610 / 0 | — | 0.0002 ms per byte | commit |
+| fs.write | ≤512 KiB · uncontended | 37 | 10.08 | 18.88 | 22.97 | 31.23 | no baseline | no baseline | -0.15 | -0.22 | 157 / 7,511 / 0 | — | 0.0001 ms per byte | commit |
+| fs.write | ≤64 KiB · contended | 208 | 10.52 | 21.70 | 30.97 | 40.70 | no baseline | no baseline | 0.42 | 0.01 | 325 / 18,270 / 0 | — | 0.0006 ms per byte | commit |
+| fs.write | ≤64 KiB · uncontended | 251 | 8.07 | 16.39 | 24.75 | 54.26 | no baseline | no baseline | 0.14 | 0.07 | 153 / 6,405 / 0 | — | 0.0004 ms per byte | commit |
+| fs.write | ≤8 KiB · contended | 230 | 9.97 | 21.30 | 28.38 | 120.02 | no baseline | no baseline | 0.06 | -0.22 | 289 / 17,628 / 0 | — | 0.0042 ms per byte | commit |
+| fs.write | ≤8 KiB · uncontended | 446 | 6.89 | 13.03 | 18.81 | 55.71 | no baseline | no baseline | -0.15 | -0.25 | 135 / 5,882 / 0 | — | 0.0035 ms per byte | commit |
+| operator.store.stats | — · uncontended | 1 | 0.89 | 0.89 | 0.89 | 0.89 | no baseline | no baseline | 1.61 | 1.33 | 3 / 61 / 0 | — | — | — |
+| sandbox.commit | 0 files · Committed · contended | 68 | 25.18 | 49.19 | 76.61 | 97.68 | no baseline | no baseline | -0.33 | -0.43 | 310 / 30,368 / 0 | — | — | commit |
+| sandbox.commit | 0 files · Committed · uncontended | 83 | 24.05 | 58.82 | 81.94 | 323.82 | no baseline | no baseline | 0.18 | 0.06 | 256 / 25,587 / 0 | — | — | commit |
+| sandbox.commit | 0 files · UpToDate · contended | 10 | 3.44 | 8.91 | 8.91 | 14.25 | no baseline | no baseline | -0.43 | -0.38 | 6 / 71 / 0 | — | — | observe.after |
+| sandbox.commit | 0 files · UpToDate · uncontended | 37 | 3.74 | 5.91 | 7.04 | 7.80 | no baseline | no baseline | 0.13 | 0.17 | 6 / 71 / 0 | — | — | observe.after |
+| sandbox.commit | 1 files · Committed · contended | 21 | 10.93 | 26.87 | 26.87 | 35.86 | no baseline | no baseline | -0.67 | -0.49 | 146 / 6,946 / 0 | — | 10.93 ms per file | commit |
+| sandbox.commit | 1 files · Committed · uncontended | 19 | 10.11 | 14.35 | 14.35 | 15.25 | no baseline | no baseline | 0.28 | 0.26 | 115 / 4,374 / 0 | — | 10.109 ms per file | commit |
+| sandbox.commit | 1 files · Conflict · contended | 1 | 251.01 | 251.01 | 251.01 | 251.01 | no baseline | no baseline | 0.18 | 0.44 | 14,545 / 491,483 / 8,273 | — | 251.008 ms per file | commit |
+| sandbox.commit | 17–64 files · Committed · uncontended | 2 | 17.25 | 17.25 | 17.25 | 17.72 | no baseline | no baseline | -1.34 | -0.98 | 149 / 11,597 / 0 | — | 0.9582 ms per file | commit |
+| sandbox.commit | 2–4 files · Committed · contended | 14 | 14.26 | 29.78 | 29.78 | 33.49 | no baseline | no baseline | -1.13 | -0.57 | 193 / 13,119 / 0 | — | 6.021 ms per file | commit |
+| sandbox.commit | 2–4 files · Committed · uncontended | 11 | 10.87 | 12.95 | 12.95 | 16.87 | no baseline | no baseline | -0.26 | -0.11 | 154 / 5,878 / 0 | — | 4.89 ms per file | commit |
+| sandbox.commit | 5–16 files · Committed · contended | 2 | 16.99 | 16.99 | 16.99 | 17.02 | no baseline | no baseline | -0.16 | -0.41 | 162 / 12,321 / 0 | — | 1.3066 ms per file | commit |
+| sandbox.commit | 5–16 files · Committed · uncontended | 2 | 13.46 | 13.46 | 13.46 | 14.31 | no baseline | no baseline | -0.91 | -0.69 | 123 / 6,883 / 0 | — | 2.244 ms per file | commit |
+| sandbox.commit | — · Committed · uncontended | 11 | 74.56 | 821.99 | 821.99 | 13291.43 | no baseline | no baseline | 0.52 | 0.32 | 1,097 / 92,308 / 0 | — | — | commit |
+| sandbox.commit | — · UpToDate · uncontended | 1 | 17.33 | 17.33 | 17.33 | 17.33 | no baseline | no baseline | 5.65 | 4.94 | 66 / 5,653 / 0 | — | — | commit |
+| sandbox.exec | 0 files · contended | 274 | 42.92 | 738.62 | 3018.62 | 3159.03 | no baseline | no baseline | -3.77 | -4.92 | 0 / 0 / 0 | 2,854 | — | — |
+| sandbox.exec | 0 files · uncontended | 189 | 37.05 | 581.45 | 655.78 | 7024.23 | no baseline | no baseline | -0.08 | -0.01 | 0 / 0 / 0 | 3032.30 | — | — |
+| sandbox.exec | 1 files · contended | 84 | 36.03 | 54.96 | 63.92 | 81.94 | no baseline | no baseline | -0.51 | -0.46 | — | 4.70 | 36.03 ms per file | — |
+| sandbox.exec | 1 files · uncontended | 55 | 37.25 | 54.11 | 61.69 | 62.30 | no baseline | no baseline | -0.19 | -0.07 | — | 5.30 | 37.254 ms per file | — |
+| sandbox.exec | 17–64 files · contended | 3 | 69.24 | 69.24 | 69.24 | 69.33 | no baseline | no baseline | -0.08 | 0.13 | — | 107 | 3.462 ms per file | — |
+| sandbox.exec | 17–64 files · uncontended | 20 | 60.38 | 97.34 | 97.34 | 123.37 | no baseline | no baseline | 0.27 | 0.08 | — | 43.60 | 3.3077 ms per file | — |
+| sandbox.exec | 2–4 files · contended | 57 | 36.09 | 46.58 | 49.20 | 49.39 | no baseline | no baseline | -0.21 | -0.33 | — | 10.30 | 12.234 ms per file | — |
+| sandbox.exec | 2–4 files · uncontended | 48 | 37.67 | 67.09 | 71.83 | 75.61 | no baseline | no baseline | 0.39 | 0.09 | — | 9 | 15.1085 ms per file | — |
+| sandbox.exec | 5–16 files · contended | 19 | 55.34 | 67.90 | 67.90 | 83.85 | no baseline | no baseline | -0.19 | 0.07 | — | 27.70 | 6.4702 ms per file | — |
+| sandbox.exec | 5–16 files · uncontended | 17 | 42.12 | 77.83 | 77.83 | 77.89 | no baseline | no baseline | -0.13 | -0.42 | 0 / 0 / 0 | 14.60 | 6.3821 ms per file | — |
+| sandbox.exec | — · contended | 13 | 2552.64 | 28181.92 | 28181.92 | 29934.43 | no baseline | no baseline | -1.21 | -0.99 | — | 33,790 | — | — |
+| sandbox.exec | — · uncontended | 33 | 181.34 | 12170.58 | 17765.85 | 33891.26 | no baseline | no baseline | -0.35 | -0.71 | — | 33419.40 | — | — |
+| sandbox.mount | — · contended | 127 | 11.03 | 19.06 | 23.25 | 29.27 | no baseline | no baseline | -0.19 | -0.16 | 54 / 1,569 / 82 | — | — | sandbox.mount.bind |
+| sandbox.mount | — · uncontended | 154 | 10.04 | 15.35 | 18.86 | 21.43 | no baseline | no baseline | -0.14 | -0.14 | 45 / 1,362 / 82 | — | — | observe.after |
+| sandbox.status | — · uncontended | 5 | 4.75 | 6.05 | 6.05 | 36.38 | no baseline | no baseline | 0.40 | 0.35 | 0 / 0 / 0 | — | — | observe.after |
+| sandbox.unmount | — · contended | 113 | 13.72 | 23.59 | 25.99 | 28.45 | no baseline | no baseline | 0.25 | 0.36 | 0 / 0 / 0 | — | — | observe.after |
+| sandbox.unmount | — · uncontended | 168 | 12.78 | 23.13 | 150.96 | 262.13 | no baseline | no baseline | 0.37 | 0.34 | 0 / 0 / 0 | — | — | observe.after |
 
 | Method | Category | Calls | Bytes in | Bytes out | Files / entries | Outcomes |
 | --- | --- | --- | --- | --- | --- | --- |
 | branch.diff_branches | branch | 19 | 0.0 KiB | 1010.2 KiB | 4,491 | ok 19 |
 | branch.diff_commits | branch | 335 | 0.0 KiB | 18.2 MiB | 63,055 | ok 335 |
-| branch.fork | branch | 23 | 0.0 KiB | 0.0 KiB | 0 | Forked 23 |
+| branch.fork | branch | 24 | 0.0 KiB | 0.0 KiB | 0 | Forked 24 |
 | branch.list_commits | project | 10 | 0.0 KiB | 95.8 KiB | 163 | ok 10 |
 | branch.merge | branch | 9 | 0.0 KiB | 0.0 KiB | 0 | Merged 9 |
 | branch.publish | branch | 1 | 0.0 KiB | 0.0 KiB | 0 | Added 1 |
@@ -493,56 +502,101 @@ Binary: daemon `45a196ef16c6` (attempt 1). Each call's own input is its size cla
 | fs.write | fs | 1,431 | 20.0 MiB | 0.0 KiB | 1,431 | Committed 1428, UpToDate 3 |
 | operator.store.stats | operator | 1 | 0.0 KiB | 0.0 KiB | 0 | ok 1 |
 | sandbox.commit | sandbox | 287 | 0.0 KiB | 0.0 KiB | 0 | Committed 238, UpToDate 48, Conflict 1 |
-| sandbox.exec | sandbox | 832 | 4.1 MiB | 3.6 MiB | 0 | exit:0 828, exit:1 1, exit:2 3 |
-| sandbox.mount | sandbox | 290 | 0.0 KiB | 0.0 KiB | 0 | Mounted 290 |
+| sandbox.exec | sandbox | 822 | 3.7 MiB | 4.1 MiB | 0 | exit:0 818, exit:1 1, exit:2 3 |
+| sandbox.mount | sandbox | 291 | 0.0 KiB | 0.0 KiB | 0 | Mounted 291 |
 | sandbox.status | sandbox | 5 | 0.0 KiB | 0.0 KiB | 0 | ok 5 |
-| sandbox.unmount | sandbox | 290 | 0.0 KiB | 0.0 KiB | 0 | Unmounted 290 |
+| sandbox.unmount | sandbox | 291 | 0.0 KiB | 0.0 KiB | 0 | Unmounted 291 |
 
 ### C. Scale probes
 
 Binary: daemon `45a196ef16c6`.
 
-Load average (1-min, runner (Docker VM kernel)): start 3.45 · end 1.97.
+Load average (1-min, runner (Docker VM kernel)): start 1.73 · end 2.14.
 
 | Probe | ms (median) | Samples | Load 1-min | Counters (first sample) |
 | --- | --- | --- | --- | --- |
-| stat | 1.152 | 15.766 · 1.553 · 1.152 · 1.121 · 1.069 | 2.1–2.1 | statements 30, vm_steps 994, fullscan_steps 0, sorts 0, returned_rows 84 |
-| read | 1.518 | 2.058 · 1.518 · 1.374 · 1.107 · 1.938 | 2.1–2.1 | statements 17, vm_steps 712, fullscan_steps 0, sorts 0, returned_rows 71 |
-| list_small | 1.057 | 1.801 · 1.108 · 0.964 · 1.057 · 1.047 | 2.1–2.1 | statements 17, vm_steps 721, fullscan_steps 0, sorts 0, returned_rows 71 |
-| list_largest | 4.544 | 6.861 · 4.747 · 4.394 · 4.455 · 4.544 | 2.1–2.1 | statements 72, vm_steps 8020, fullscan_steps 0, sorts 0, returned_rows 864 |
-| grep_scoped | 1.335 | 2.236 · 1.335 · 1.235 · 1.233 · 1.484 | 2.1–2.1 | statements 22, vm_steps 867, fullscan_steps 0, sorts 0, returned_rows 80 |
-| glob_scoped | 1.353 | 1.672 · 1.476 · 1.105 · 1.353 · 1.338 | 2.1–2.1 | statements 16, vm_steps 700, fullscan_steps 0, sorts 0, returned_rows 70 |
-| grep_tree | 4273.857 | 4747.207 · 4392.355 · 4273.585 · 4273.857 · 4235.916 | 2.06–2.17 | statements 45313, vm_steps 3610924, fullscan_steps 0, sorts 0, returned_rows 365890 |
-| glob_tree | 7.495 | 8.781 · 7.612 · 7.103 · 7.495 · 7.482 | 2.06–2.06 | statements 141, vm_steps 17040, fullscan_steps 0, sorts 0, returned_rows 1789 |
-| diff_files | 4.54 | 4.996 · 4.34 · 4.771 · 4.54 · 4.175 | 2.06–2.06 | statements 84, vm_steps 4156, fullscan_steps 0, sorts 0, returned_rows 426 |
-| list_commits | 0.764 | 1.233 · 0.63 · 0.59 · 0.805 · 0.764 | 2.06–2.06 | statements 70, vm_steps 1298, fullscan_steps 0, sorts 0, returned_rows 52 |
-| diff_commits | 2.241 | 3.158 · 2.357 · 2.241 · 2.066 · 2.061 | 2.06–2.06 | statements 61, vm_steps 2444, fullscan_steps 0, sorts 0, returned_rows 293 |
-| fork | 0.637 | 0.473 · 0.686 · 0.496 · 0.637 · 0.969 | 2.06–2.06 | statements 16, vm_steps 274, fullscan_steps 0, sorts 0, returned_rows 7 |
-| merge | 26.28 | 28.889 · 26.814 · 26.28 · 24.642 · 24.494 | 2.06–2.06 | statements 482, vm_steps 23582, fullscan_steps 0, sorts 0, returned_rows 1915 |
-| oneshot_mount_unmount | 19.897 | 19.897 · 24.955 · 19.952 · 14.753 · 17.196 | 2.05–2.06 | statements 64, vm_steps 2214, fullscan_steps 82, sorts 2, returned_rows 220 |
-| oneshot_commit | 69.061 | 77.914 · 67.882 · 69.811 · 67.786 · 69.061 | 2.05–2.05 | statements 179, vm_steps 12983, fullscan_steps 82, sorts 2, returned_rows 1017 |
-| oneshot_exec | — |  ·  ·  ·  ·  | 2.05–2.06 | statements 0, vm_steps 0, fullscan_steps 0, sorts 0, returned_rows 0 |
+| stat | 1.492 | 11.728 · 1.625 · 1.474 · 1.492 · 1.294 | 2.87–2.87 | statements 30, vm_steps 994, fullscan_steps 0, sorts 0, returned_rows 84 |
+| read | 1.397 | 1.358 · 1.33 · 1.483 · 1.587 · 1.397 | 2.87–2.87 | statements 17, vm_steps 712, fullscan_steps 0, sorts 0, returned_rows 71 |
+| list_small | 1.243 | 1.398 · 1.243 · 1.062 · 1.143 · 1.416 | 2.87–2.87 | statements 17, vm_steps 721, fullscan_steps 0, sorts 0, returned_rows 71 |
+| list_largest | 4.004 | 5.334 · 4.019 · 3.963 · 4.004 · 3.717 | 2.87–2.87 | statements 72, vm_steps 8020, fullscan_steps 0, sorts 0, returned_rows 864 |
+| grep_scoped | 1.547 | 1.676 · 1.599 · 1.547 · 1.41 · 1.248 | 2.87–2.87 | statements 22, vm_steps 867, fullscan_steps 0, sorts 0, returned_rows 80 |
+| glob_scoped | 1.295 | 1.775 · 1.609 · 1.256 · 1.295 · 1.288 | 2.87–2.87 | statements 16, vm_steps 700, fullscan_steps 0, sorts 0, returned_rows 70 |
+| grep_tree | 4539.205 | 4593.158 · 4539.205 · 4382.43 · 4368.527 · 4551.092 | 2.34–2.72 | statements 45290, vm_steps 3603950, fullscan_steps 0, sorts 0, returned_rows 364900 |
+| glob_tree | 8.697 | 12.027 · 8.199 · 8.697 · 8.972 · 8.296 | 2.34–2.34 | statements 142, vm_steps 16996, fullscan_steps 0, sorts 0, returned_rows 1787 |
+| diff_files | 5.17 | 4.994 · 5.413 · 5.728 · 4.943 · 5.17 | 2.34–2.34 | statements 84, vm_steps 4156, fullscan_steps 0, sorts 0, returned_rows 426 |
+| list_commits | 0.694 | 2.043 · 0.739 · 0.694 · 0.688 · 0.617 | 2.34–2.34 | statements 70, vm_steps 1298, fullscan_steps 0, sorts 0, returned_rows 52 |
+| diff_commits | 2.481 | 3.765 · 2.731 · 2.296 · 2.143 · 2.481 | 2.34–2.34 | statements 59, vm_steps 2402, fullscan_steps 0, sorts 0, returned_rows 291 |
+| fork | 0.59 | 0.686 · 1.124 · 0.59 · 0.518 · 0.56 | 2.34–2.34 | statements 16, vm_steps 274, fullscan_steps 0, sorts 0, returned_rows 7 |
+| merge | 37.811 | 31.312 · 33.07 · 37.811 · 85.321 · 92.375 | 2.34–2.34 | statements 482, vm_steps 23598, fullscan_steps 0, sorts 0, returned_rows 1916 |
+| oneshot_mount_unmount | 14.917 | 31.582 · 14.917 · 18.35 · 14.197 · 14.389 | 2.34–2.34 | statements 64, vm_steps 2214, fullscan_steps 82, sorts 2, returned_rows 220 |
+| oneshot_commit | 70.266 | 63.107 · 62.213 · 70.266 · 81.558 · 70.748 | 2.34–2.34 | statements 179, vm_steps 13002, fullscan_steps 82, sorts 2, returned_rows 1018 |
+| oneshot_exec | — |  ·  ·  ·  ·  | 2.34–2.34 | statements 0, vm_steps 0, fullscan_steps 0, sorts 0, returned_rows 0 |
 
 ### D. Storage internals
 
-No snapshot this range: the sealed file's figures are read at snapshots.
+From the sealed file at snapshot r028: 188,831 pages of 4,096 B, 0 free · Commits 32,898 · Branches 585 · Layers 34 · compression 3.51× (canonical ÷ stored).
+
+| Role | Objects | Canonical bytes |
+| --- | --- | --- |
+| 1 | 109,946 | 661.7 MiB |
+| 2 | 46,549 | 658.5 MiB |
+| 3 | 13,765 | 3.1 MiB |
+| 4 | 41 | 8.3 KiB |
+| 5 | 13,669 | 1.4 MiB |
+| 6 | 73,009 | 364.9 MiB |
+| 7 | 171,050 | 39.9 MiB |
+| 8 | 318 | 94.5 KiB |
+| 9 | 62,770 | 122.5 MiB |
+| 10 | 35,347 | 4.3 MiB |
+| 11 | 12,822 | 1.7 MiB |
+| 13 | 2,169 | 177.1 KiB |
+
+| Pack domain | Packs | Bytes |
+| --- | --- | --- |
+| 0 | 33,555 | 61.1 MiB |
+| 1 | 41,386 | 468.3 MiB |
+
+| Table or index | Pages | Bytes | Unused |
+| --- | --- | --- | --- |
+| pack | 141,851 | 554.1 MiB | 20.3 MiB |
+| inode_value | 26,330 | 102.9 MiB | 2.2 MiB |
+| object_location | 7,352 | 28.7 MiB | 3.1 MiB |
+| binding_hint | 7,258 | 28.4 MiB | 2.6 MiB |
+| commit | 2,628 | 10.3 MiB | 1.7 MiB |
+| file_digest | 1,030 | 4.0 MiB | 464.3 KiB |
+| commit_lineage | 709 | 2.8 MiB | 329.8 KiB |
+| commit_runs | 694 | 2.7 MiB | 369.6 KiB |
+| commit_identity | 505 | 2.0 MiB | 215.0 KiB |
+| content_signature | 157 | 628.0 KiB | 17.7 KiB |
+| branch | 25 | 100.0 KiB | 14.7 KiB |
+| branch_names | 10 | 40.0 KiB | 8.9 KiB |
+| history_meta | 8 | 32.0 KiB | 2.1 KiB |
+| branch_identity | 8 | 32.0 KiB | 9.1 KiB |
+| sqlite_schema | 6 | 24.0 KiB | 7.7 KiB |
+| run_merges | 4 | 16.0 KiB | 6.2 KiB |
+| layer | 3 | 12.0 KiB | 6.0 KiB |
+| store_totals | 1 | 4.0 KiB | 3.9 KiB |
+| store_policy | 1 | 4.0 KiB | 4.0 KiB |
+| sqlite_sequence | 1 | 4.0 KiB | 4.0 KiB |
 
 ### E. Stage times
 
-**Time 248.4 s** (tooling): play 93.1 · consolidate 101.4 · verify 16.8 · probes 22.9 · tests 0.0 · seal + snapshot 0.0 · report 14.2
+**Time 265.4 s** (tooling): play 98.3 · consolidate 101.1 · verify 21.8 · probes 23.6 · tests 0.0 · seal + snapshot 6.1 · report 14.5
 
-248.41 s tooling: prepare 1.57 · play 91.54 · consolidate 101.41 · verify 8.69 (diff_commits) · version walk 8.07 · probes 22.93 · metrics 0.86 · Store allocation 0.24 · report 0.29
+265.39 s tooling: prepare 1.54 · play 96.78 · consolidate 101.05 · verify 12.11 (diff_commits + full compareTree) · version walk 9.68 · probes 23.58 · metrics 0.93 · seal 1.23 · sealed figures 2.46 · snapshot copy 2.43 · report 0.30
 
 ### F. Attempts
 
 | # | Binary | Started | Result | Reason |
 | --- | --- | --- | --- | --- |
 | 1 | 45a196ef16c67addd2125ca0788555b3cdefa53df36efe3261c0ddacc17db5ae | 2026-10-19T21:43:45.557Z | stop | Speed: not judged: baseline not set (pilot); Scaling: branch.diff_commits checkpoint ms in total (entries exponent 0.142): tree files exponent 0.223; Counters: glob_tree.vm_steps per tree file: depth exponent 0.333; Contended work: not judged: no contended class has 3 ranges of 5+ calls over a tree that grew 1.5× (19 classes too narrow); Node proofs: 18 pass · 1 stop · 0 NOT_RUN over 5 points: lead repair P6 |
+| 2 | 45a196ef16c67addd2125ca0788555b3cdefa53df36efe3261c0ddacc17db5ae | 2026-10-19T21:57:49.326Z | watch | Speed: not judged: baseline not set (pilot); Scaling: branch.diff_commits checkpoint ms in total (entries exponent 0.142): tree files exponent 0.184; Counters: glob_tree.vm_steps per tree file: depth exponent 0.327; Contended work: not judged: no contended class has 3 ranges of 5+ calls over a tree that grew 1.5× (18 classes too narrow) |
 
 ### G. Evidence
 
 - `~/lfs-history/metrics/range-028.a1.json`
-- trace `~/lfs-history/runs/p3-main-s/trace/range-028.a1.jsonl` · runner log `~/lfs-history/runs/p3-main-s/play.log`
+- `~/lfs-history/metrics/range-028.a2.json`
+- trace `~/lfs-history/runs/p3-main-t/trace/range-028.a2.jsonl` · runner log `~/lfs-history/runs/p3-main-t/play.log` · snapshot manifest `/Users/yifanxu/lfs-history/snapshots/range-028.json`
 
 ### H. Git internals
 
@@ -551,17 +605,17 @@ Seed pack: — objects, — (counted apart from lane objects).
 | Lane | Objects | Index bytes |
 | --- | --- | --- |
 | r028-1-root | 497 | 280.4 KiB |
-| r028-3-examples-acp-agent | 839 | 288.6 KiB |
 | r028-2-packages-client | 717 | 311.2 KiB |
+| r028-3-examples-acp-agent | 839 | 288.6 KiB |
 | r028-4-examples-plan-acp-agent | 898 | 285.8 KiB |
 
 | git command | ms | lstat |
 | --- | --- | --- |
-| `git status --porcelain` | 293.0 | 2,362 |
+| `git status --porcelain` | 279.0 | 2,362 |
 | `git diff --stat` | 31.0 | 2,352 |
-| `git add -f` | 27.0 | — |
+| `git add -f` | 26.0 | — |
 | `git rm --cached` | 7.0 | — |
-| `git commit` | 34.0 | 2,359 |
+| `git commit` | 34.0 | 2,360 |
 
 ### I. Proof details
 
@@ -596,7 +650,7 @@ Seed pack: — objects, — (counted apart from lane objects).
 | lead | repair | P3 | n/a | a repair, not a no-op | — |
 | lead | repair | P4 | n/a | folded into P6 | — |
 | lead | repair | P5 | pass | 30 files | — |
-| lead | repair | P6 | stop | P1 pass, P4 stop (4 emitted file(s) differ: packages/client/ui-conversation/lib/client.js, packages/client/ui-layout/lib/client.js, packages/client/ui-sidebar/lib/client.js) | — |
+| lead | repair | P6 | pass | P1 pass, P4 pass (1487 emitted files, exit 0) | — |
 
 ### J. Conflicts by path class
 
