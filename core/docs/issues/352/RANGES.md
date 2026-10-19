@@ -26,3 +26,4 @@
 | 019 | 81 | 18,401 | **optimize** | Scaling | 27.7 MiB | [range-019](ranges/range-019.md) |
 | 020 | 60 | 19,322 | **optimize** | Scaling | 21.5 MiB | [range-020](ranges/range-020.md) |
 | 021 | 76 | 20,774 | **optimize** | Scaling | 35.0 MiB | [range-021](ranges/range-021.md) |
+| 022 | 63 | 23,062 | **stop** | Disk projection | 40.5 MiB | [range-022](ranges/range-022.md) |
