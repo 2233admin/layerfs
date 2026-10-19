@@ -993,3 +993,29 @@
     lanes' captures in their recorded write order, so the newest writer wins
     as `/.lww` does; two-sided paths stay listed (fix 042). Range 18 a4 plays
     with it.
+
+- **F-059 · lanes' stale build output outlives the repair, and the point
+  oracle's base cannot carry it (harness oracle and workload, not a product
+  defect; range 19 a1, `p3-main-j`, 2026-10-20).**
+  - The repair's build exited 2: `agent-spine-demo` reads
+    `Config` from `packages/bash/tool-bash/lib/types/index.d.ts`, and that
+    file has none. At the checkpoint, tool-bash's `src/index.ts` exports
+    `Config`; lane 3 (`packages-support`) built tool-bash at an older
+    side-branch commit without it. Lane 3 was the only lane that wrote the
+    emitted file, so the merge kept it. Its `tsconfig.tsbuildinfo` was
+    two-sided and the newer write won. The repair's `tsc -b` lists tool-bash
+    (its tests changed) but does not rebuild it.
+  - The native repair chain (fix 042, write order) gives the same result: tsc
+    exit 2 with the same `TS2694`/`TS2339` errors on `Config` (diagnostic run,
+    not recorded as a proof; 22 two-sided paths). LayerFS matches its merge model.
+  - The lane-2 point's P4 stop (`core/session/lib/types/tool-pairing.{d.ts,js}`)
+    has the same cause, one range back. LayerFS's lane 2 starts from r18's
+    repaired main, whose `tool-pairing` is the r18 repair's output
+    `c233d58c` (r18 a4 P6 equal to native). The point's `tsc -b` finds it up
+    to date. The native point oracle's base (`chain0`) is the r18 closure on
+    a fresh checkout of the r18 tree, which builds `2352ae25`. That base cannot
+    carry a lane's output from an earlier range.
+  - Not fixable without a rule decision: the repair's build exit and the
+    point base are workload and oracle rules. Sent to the liaison.
+
+  **Status: OPEN (harness), held for a decision.**
