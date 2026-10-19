@@ -1018,4 +1018,10 @@
   - Not fixable without a rule decision: the repair's build exit and the
     point base are workload and oracle rules. Sent to the liaison.
 
-  **Status: OPEN (harness), held for a decision.**
+  **Status: FIXED (harness and workload, owner decision 2026-10-20, option A).**
+  The repair's build first removes `lib/` and every `*.tsbuildinfo` in every
+  `tsconfig.json` package, and native does the same
+  ([fix 043](fixes/043-r019-a1-repair-build-clean.md), NODE_RULE §4). This is
+  an owner-approved workload change. Range 18 replays as a5 so range 19 starts
+  from clean output, then range 19 a2. Option B (a carried point base, a
+  relaxed build exit) is out.

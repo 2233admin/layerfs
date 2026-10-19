@@ -19,6 +19,25 @@ export const parseEmitted = (stdout) => Object.fromEntries(String(stdout).split(
  * tsdown after every tsc -b, or its tests run against missing or stale bundles.
  */
 const bundled = (files, command) => (files.has("tsdown.config.ts") ? `${command} && ./node_modules/.bin/tsdown` : command);
+/**
+ * The lead repair's clean before its build (F-059, owner decision 2026-10-20, option A; an owner-approved
+ * workload change): lib/ and every *.tsbuildinfo removed in every package with a tsconfig.json, natively the
+ * same (the native repair chain replays the recorded command). A lane that built at an older commit leaves
+ * output and a newer tsbuildinfo the merge keeps, and `tsc -b` then takes the package as up to date (r019 a1:
+ * tool-bash's `index.d.ts` without `Config`); after the clean the repaired main equals a fresh build.
+ */
+export function repairClean(files) {
+  const pk = new Set([...files.keys()].filter((p) => p.endsWith("/package.json")).map((p) => p.slice(0, -13)));
+  const dirs = [...new Set([...files.keys()].filter((p) => p.endsWith("/tsconfig.json")).map((p) => p.slice(0, -14)))].filter((d) => pk.has(d)).sort();
+  if (!dirs.length) return null;
+  const q = dirs.map(quote).join(" ");
+  return `rm -rf ${dirs.map((d) => quote(`${d}/lib`)).join(" ")} && find ${q} -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f`;
+}
+/** The lead repair's build: its clean (repairClean), then the build of the changed packages (pointBuild). */
+export function repairBuild(files, packages) {
+  const b = pointBuild(files, packages), clean = repairClean(files);
+  return { ...b, command: b.command && clean ? `${clean} && ${b.command}` : b.command };
+}
 /** A lane point's build (NODE_RULE §4): `tsc -b` of its changed packages, then dsh's bundler; none changed, no build. */
 export const pointBuild = (files, packages) => ({ command: packages.length ? bundled(files, `./node_modules/.bin/tsc -b ${packages.map(quote).join(" ")}`) : null, packages });
 

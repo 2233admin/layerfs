@@ -117,6 +117,17 @@ fail-fast flags. The native repair chain runs the same command. Owner
 decision 2026-10-19 (liaison relay), verbatim: "Yes: make the lead's repair a clean relink of node_modules on the merged tree (native the same), keep F-057 open for the product fix, and play range 15 a4." Reason: F-057. A
 newest-wins merge of pnpm's install state let the incremental repair keep
 stale hoisting (range 15 a3). The repair keeps its own Commit and storage row.
+The repair's **build first cleans**: `lib/` and every `*.tsbuildinfo` are
+removed in every package with a `tsconfig.json`, then the normal build runs
+(`repairClean`, `repairBuild` in `nodeconfig.mjs`). The native repair chain
+replays the same command. This is an owner-approved workload change (owner
+decision 2026-10-20, option A, liaison relay; F-059, [fix 043](fixes/043-r019-a1-repair-build-clean.md)).
+Reason: a lane that built at an older commit leaves output and a newer
+`tsbuildinfo`, which the merge keeps. `tsc -b` then takes the package as up to
+date (range 19 a1: tool-bash's `index.d.ts` without `Config`). After the clean,
+the repaired main equals a fresh build, so a point oracle's base (a fresh build
+of the previous checkpoint) is exact again. The build row's time includes the
+clean and is reported against r15.
 
 ## 5. Merges
 

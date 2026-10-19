@@ -12,7 +12,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fetchScript } from "../fetch-store.mjs";
 import { addedBySource, changedGroupBytes, cumulative, liveParts, sealedParts, seedBySource, stepSource, storageFigures, storageProblems } from "../storage.mjs";
-import { CLEAN_REMOVE, installCommand, STORE_MOUNT, parseLister, rootless, verifiedAges, buildBytes, buildListCommand, changedPackages, CLOSURE_OUTPUT, closureSteps, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, nothingToBuild, playClosure, tscStates } from "../closure.mjs";
+import { CLEAN_REMOVE, installCommand, STORE_MOUNT, parseLister, rootless, verifiedAges, buildBytes, buildListCommand, changedPackages, CLOSURE_OUTPUT, closureSteps, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, nothingToBuild, playClosure, tscStates, buildCommand } from "../closure.mjs";
+import { repairClean } from "../nodeconfig.mjs";
 import { aggregate, buildBaseline, reinstallGate, evaluate, probeSeries, thinClass } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, installedText, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
@@ -996,6 +997,12 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
   assert.ok(repairStep.command.includes(`${CLEAN_REMOVE} && `) && /--offline --frozen-lockfile/.test(repairStep.command) && repairStep.command.startsWith(storeSetup(STORE_MOUNT)));
   assert.equal(closureSteps({ packages, tsconfigs, run: [], changed: ["pnpm-lock.yaml"], installed: true, milestone: false })[0].command, installCommand(), "an incremental install outside the repair stays incremental");
   assert.equal(closureSteps({ packages, tsconfigs, run: [], changed: [], installed: true, milestone: true, repair: true })[0].kind, "clean-install", "a milestone's clean install is already clean");
+  // F-059 (owner 2026-10-20, option A): the repair's build first removes lib/ and every tsbuildinfo in every tsconfig package
+  const files = new Map(["packages/a/package.json", "packages/a/tsconfig.json", "packages/b/package.json", "packages/b/tsconfig.json", "packages/c/package.json", "tsconfig.json", "tsdown.config.ts"].map((p) => [p, {}]));
+  const repairBuildStep = closureSteps({ packages, tsconfigs, run: [], changed: ["packages/a/src/x.ts"], installed: true, milestone: false, repair: true, files }).find((s) => s.kind === "build");
+  assert.equal(repairBuildStep.command, `${repairClean(files)} && ./node_modules/.bin/tsc -b 'packages/a' && ./node_modules/.bin/tsdown`);
+  assert.equal(repairClean(files), "rm -rf 'packages/a/lib' 'packages/b/lib' && find 'packages/a' 'packages/b' -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f", "every package with a tsconfig, none without; the root's tsconfig is no package");
+  assert.equal(closureSteps({ packages, tsconfigs, run: [], changed: ["packages/a/src/x.ts"], installed: true, milestone: false }).find((s) => s.kind === "build").command, buildCommand(["packages/a"]), "only the repair cleans");
   const kinds = (o) => closureSteps({ packages, tsconfigs, run: [], ...o }).map((s) => s.kind);
   assert.deepEqual(kinds({ changed: ["packages/a/src/x.ts"], installed: false, milestone: false }), ["install", "build"]);
   assert.deepEqual(kinds({ changed: ["packages/c/package.json", "packages/b/src/y.ts"], installed: true, milestone: false }), ["incremental-install", "build"]);
@@ -1043,7 +1050,9 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
     exec: async (sb, ws, c) => { calls.push(kind(c)); return { exitCode: kind(c) === "build" ? 2 : kind(c) === "store?" && !store ? 1 : 0, stdout: "" }; },
     commit: async () => { calls.push("commit"); return { kind: "Committed" }; } } } });
   const deps = { sb: 1, branch: "r015-main-3", expectCall: (r, l, w) => w(), Mismatch: class extends Error {} };
-  await assert.rejects(playClosure(fake(true), 15, steps.slice(0, 2), deps), /r015\.build exited 2/);
+  await assert.rejects(playClosure(fake(true), 15, steps.slice(0, 2), deps), (e) => /r015\.build exited 2/.test(e.message)
+    // a stop inside the closure keeps the steps played so far, so their Commits count (r019 a1: F1 counted one fewer)
+    && e.closureRows.map((r) => [r.kind, r.commit ?? null]).join() === [[steps[0].kind, "Committed"], ["build", null]].join());
   assert.deepEqual(calls, ["mount", "store?", "install", "pwd", "list", "commit", "unmount", "mount", "build", "unmount"]);
   calls.length = 0;
   await assert.rejects(playClosure(fake(false), 15, steps.slice(0, 1), deps), /no pnpm store at \/pnpm-store/);

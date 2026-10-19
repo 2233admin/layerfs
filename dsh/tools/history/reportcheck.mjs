@@ -196,7 +196,8 @@ export function checkReport({ range, metricsDir, docs }) {
   if (verdict !== "pass" && (!note || note === "- (none yet)")) fail("F6", `the verdict is ${verdict} and the lead's note is empty`);
 
   // F7: labels
-  const header = text.slice(0, text.indexOf("\n## "));
+  // the header runs to the first section after the Overview (the older format puts its Overview first: r019 a1)
+  const headerEnd = text.search(/\n## (?!Overview)/), header = headerEnd < 0 ? text : text.slice(0, headerEnd);
   if (binding) { /* the binding format's labels are checkFormat's (F1) */ } else if (!/\| Wall time[^|]*tooling/.test(header) || !/tooling:|\| Wall time[^|]*\| — \|/.test(header)) fail("F7", "the header's wall time is not labeled tooling");
   for (const h of binding ? [] : ["## 3. Operation latency", "## 4. Scale probes"]) if (!/daemon `[0-9a-f]+`/.test(section(text, h) ?? "")) fail("F7", `${h} does not name its binary`);
   for (const c of report.checks) if (/seed/.test(c.value) && !/seeded/.test(c.value)) fail("F7", `check ${c.name} uses seeded points without saying so`);

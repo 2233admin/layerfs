@@ -367,9 +367,13 @@ export async function consolidateLanes(run, k, plan, ctx, { beforePublish = null
       if (ctx.git) { run.progress?.("lead git start"); await leadGit(run, k, plan, ctx, cur); run.progress?.(`lead git ${ctx.git.lead.wallMs} ms; fresh status ${ctx.git.fresh?.wallMs} ms`); }
       // P3: the closure's install, build and tests, each with its own Commit on the Branch published next
       if (beforePublish) {
-        run.progress?.("closure start"); ctx.closure = await beforePublish(cur); run.progress?.("closure done");
-        // the closure's own Commits (install, build, test) are the range's too (f031-slice-h r015: F1 counted 3 fewer)
-        ctx.work.commits += (ctx.closure?.rows ?? []).filter((r) => r.commit === "Committed").length;
+        // the closure's own Commits (install, build, test) are the range's too (f031-slice-h r015: F1 counted 3 fewer),
+        // also when it stops inside (r019 a1: the repair install's Commit before the build's stop)
+        const committed = (rows) => (rows ?? []).filter((r) => r.commit === "Committed").length;
+        run.progress?.("closure start");
+        try { ctx.closure = await beforePublish(cur); } catch (e) { ctx.work.commits += committed(e?.closureRows); throw e; }
+        run.progress?.("closure done");
+        ctx.work.commits += committed(ctx.closure?.rows);
       }
       run.label(`r${pad(k)}.publish`);
       const v = await expectCall(run, `r${pad(k)} publish`, () => run.lf.branch.publish(cur), "Added");

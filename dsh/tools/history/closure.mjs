@@ -29,7 +29,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { lsTree } from "./git.mjs";
 import { compareResults, packageOf, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
-import { BUILD_GROUPS, emittedCommand, nodeOf, parseEmitted, pointBuild, PRUNE_EMPTY, wholeBuild } from "./nodeconfig.mjs";
+import { BUILD_GROUPS, emittedCommand, nodeOf, parseEmitted, PRUNE_EMPTY, repairBuild, wholeBuild } from "./nodeconfig.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
 const quote = (t) => `'${String(t).replaceAll("'", "'\\''")}'`;
@@ -116,8 +116,9 @@ export function closureSteps({ changed, packages, tsconfigs, milestone, installe
   // development checks (owner 2026-10-18): a clean reinstall of the unchanged lockfile, whose Commit's metadata bytes are recorded
   if (checks && steps.length) steps.push({ kind: "reinstall-check", command: installCommand({ store, clean: true, policy }) });
   const built = [...new Set(changed.map((p) => packageOf(p, packages)).filter((d) => d && tsconfigs.has(d)))].sort();
-  // NODE_RULE (the lead repair, `files` given): dsh's build, tsc -b then its bundler, as at the test points
-  if (built.length) steps.push({ kind: "build", command: files ? pointBuild(files, built).command : buildCommand(built), packages: built });
+  // NODE_RULE (the lead repair, `files` given): its clean of every package's lib/ and tsbuildinfo (F-059), then
+  // dsh's build, tsc -b then its bundler, as at the test points
+  if (built.length) steps.push({ kind: "build", command: files ? repairBuild(files, built).command : buildCommand(built), packages: built });
   // and the same build again after its Commit, unmount and a fresh mount: it must find nothing to build, or what native finds
   if (checks && built.length) steps.push({ kind: "rebuild", command: rebuildCommand(built), packages: built });
   if (run.length) steps.push({ kind: "test", command: vitestCommand(run), files: run });
@@ -135,6 +136,15 @@ export function closureSteps({ changed, packages, tsconfigs, milestone, installe
  */
 export async function playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, store = STORE_MOUNT, binCheck = false }) {
   const out = [];
+  try { await playSteps(run, k, steps, out, { sb, branch, expectCall, Mismatch, store, binCheck }); } catch (e) {
+    // a stop inside the closure: the steps played so far (and their Commits) stay countable (r019 a1: F1 counted one fewer)
+    if (e && typeof e === "object") e.closureRows ??= out;
+    throw e;
+  }
+  return out;
+}
+
+async function playSteps(run, k, steps, out, { sb, branch, expectCall, Mismatch, store, binCheck }) {
   for (const s of steps) {
     const label = `r${pad(k)}.${s.kind}`;
     run.label(label);
@@ -183,7 +193,6 @@ export async function playClosure(run, k, steps, { sb, branch, expectCall, Misma
       await run.lf.sandbox.unmount(sb, ws, true);
     }
   }
-  return out;
 }
 
 /** The F-034 fact (dev runs): one bin through its shim in the new mount. */
