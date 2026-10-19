@@ -297,12 +297,15 @@ fn two_clients_of_one_cache_share_objects_and_keep_their_own_upstreams() {
     );
 }
 
-/// Cache acquisitions (hits and misses together) of one call.
+/// Cache acquisitions (hits and misses together) of one call. A page whose
+/// decode is kept (#364) is acquired from that cache instead; a decode miss
+/// is the canonical acquisition it then makes.
 fn acquisitions(client: &CanonicalClient, call: impl FnOnce()) -> u64 {
     let before = work(client);
     call();
     let after = work(client);
-    (after.cache_hits + after.cache_misses) - (before.cache_hits + before.cache_misses)
+    (after.cache_hits + after.cache_misses + after.decoded.hits)
+        - (before.cache_hits + before.cache_misses + before.decoded.hits)
 }
 
 #[test]
@@ -365,12 +368,14 @@ fn portable_metadata_is_decoded_once_remembered_by_root_and_evicted_in_turn() {
         }
     }
     let f = common::fixture_with(Vec::new());
+    // The canonical allowance alone: no decoded page is kept (#364), so
+    // every page a stat reads is an acquisition of this allowance.
     let open = |allowance: usize| {
         let lengths = Arc::new(Lengths(f.store.clone(), Default::default()));
-        let client = Arc::new(CanonicalClient::with_lengths(
+        let client = Arc::new(CanonicalClient::with_cache(
             Arc::new(f.store.clone()),
-            lengths.clone(),
-            allowance,
+            Some(lengths.clone()),
+            Arc::new(CanonicalCache::with_decoded(allowance, 0)),
         ));
         let base = BaseView::open(client.clone(), f.root, f.scope).unwrap();
         (client, base, lengths)

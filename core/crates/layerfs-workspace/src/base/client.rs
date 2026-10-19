@@ -44,6 +44,8 @@ pub struct ClientWork {
     /// Whole-file lengths a published Commit constructed that were
     /// remembered without a Store demand.
     pub seeded_lengths: u64,
+    /// The shared decoded-page cache's hits, misses, evictions and charge.
+    pub decoded: layerfs_content::filesystem::decoded::DecodedWork,
 }
 /// A runtime-backed authenticated object provider with bounded immutable caching.
 /// Upstream implements its public demand-window/authority contract; allocation
@@ -221,6 +223,9 @@ impl CanonicalClient {
     }
 }
 impl AuthenticatedObjects for CanonicalClient {
+    fn decoded_pages(&self) -> Option<&layerfs_content::filesystem::decoded::DecodedPages> {
+        Some(&self.cache.decoded)
+    }
     fn read_canonical_batch(&self, ids: &[ObjectId]) -> ContentResult<Vec<Vec<u8>>> {
         if ids.len() > DEMAND_IDS {
             return Err(ContentError::BoundedCapacityExceeded {

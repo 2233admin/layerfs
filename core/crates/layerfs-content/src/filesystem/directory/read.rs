@@ -10,6 +10,7 @@
 use std::collections::BTreeMap;
 
 use crate::error::{ContentError, ContentResult};
+use crate::filesystem::decoded::{self, Decoded, Role};
 use crate::filesystem::path::PathName;
 use crate::filesystem::sorted::finish::DirectoryRoot;
 use crate::filesystem::sorted::format::{
@@ -59,7 +60,7 @@ pub fn lookup_counted(
     let mut expected: Option<(u8, Option<PathName>)> = None;
     let mut minimum: Option<PathName> = None;
     loop {
-        let wire = load(
+        let decoded = load(
             reader,
             id,
             root_page,
@@ -67,13 +68,19 @@ pub fn lookup_counted(
             minimum.as_ref(),
             work,
         )?;
+        let wire = decoded.directory_wire()?;
         match wire.level {
             0 => {
                 return Ok(wire
                     .entries
-                    .into_iter()
+                    .iter()
                     .find(|entry| entry.key == *name)
-                    .map(|entry| (entry.key, entry.value.expect("directory leaf value"))))
+                    .map(|entry| {
+                        (
+                            entry.key.clone(),
+                            entry.value.expect("directory leaf value"),
+                        )
+                    }))
             }
             level => {
                 let index = wire.entries.partition_point(|entry| entry.key < *name);
@@ -123,18 +130,12 @@ pub fn lookup_many(
             return Err(ContentError::MappingDepthExceeded);
         }
         let ids = level.iter().map(|(id, ..)| *id).collect::<Vec<_>>();
-        let pages = reader.read_canonical_batch(&ids)?;
-        if pages.len() != ids.len() {
-            return Err(ContentError::BatchCardinality {
-                requested: ids.len(),
-                returned: pages.len(),
-            });
-        }
+        let pages = decoded::pages(reader, &ids, Role::Directory)?;
         work.read_waves = work.read_waves.saturating_add(1);
         let mut next = Vec::new();
-        for ((_, root_page, maximum, indices), canonical) in level.into_iter().zip(pages) {
+        for ((_, root_page, maximum, indices), decoded) in level.into_iter().zip(pages) {
             work.pages_read = work.pages_read.saturating_add(1);
-            let wire = decode_checked(&canonical, root_page, None, maximum.as_ref())?;
+            let wire = checked(&decoded, root_page, None, maximum.as_ref())?;
             if wire.level == 0 {
                 for index in indices {
                     if let Ok(position) = wire
@@ -227,12 +228,12 @@ pub fn list_after_bytes(
         {
             continue;
         }
-        let canonical = reader.read_canonical(id)?;
+        let decoded = decoded::page(reader, id, Role::Directory)?;
         work.pages_read = work.pages_read.saturating_add(1);
         work.read_waves = work.read_waves.saturating_add(1);
-        let wire = decode_checked(&canonical, root_page, None, maximum.as_ref())?;
+        let wire = checked(&decoded, root_page, None, maximum.as_ref())?;
         if wire.level == 0 {
-            for entry in wire.entries {
+            for entry in &wire.entries {
                 if after.is_some_and(|cursor| entry.key.as_bytes() <= cursor) {
                     continue;
                 }
@@ -260,17 +261,20 @@ pub fn list_after_bytes(
                     });
                 }
                 bytes += width;
-                entries.push((entry.key, entry.value.expect("directory leaf value")));
+                entries.push((
+                    entry.key.clone(),
+                    entry.value.expect("directory leaf value"),
+                ));
             }
             continue;
         }
-        for entry in wire.entries.into_iter().rev() {
+        for entry in wire.entries.iter().rev() {
             stack.push((
                 entry
                     .child
                     .ok_or(ContentError::InvalidRecord("directory child"))?,
                 false,
-                Some(entry.key),
+                Some(entry.key.clone()),
             ));
         }
     }
@@ -280,22 +284,17 @@ pub fn list_after_bytes(
     })
 }
 
-/// Decodes one page and applies the context checks a read must keep.
-fn decode_checked(
-    canonical: &[u8],
+/// The checks a read applies to one decoded page where it found it: the
+/// fill rule off the root, at least two rows in a branch, and the level and
+/// largest name its parent recorded.
+fn checked<'d>(
+    decoded: &'d Decoded,
     root: bool,
     expected_level: Option<u8>,
     maximum: Option<&PathName>,
-) -> ContentResult<Wire<PathName, u64>> {
-    if canonical.len() > crate::filesystem::limits::MAXIMUM_PAGE_BYTES {
-        return Err(ContentError::ObjectLimitExceeded {
-            limit: crate::filesystem::limits::MAXIMUM_PAGE_BYTES,
-            actual: canonical.len(),
-        });
-    }
-    let wire = <CompactDirectory as Format>::decode(canonical)?;
-    if (!root
-        && !<CompactDirectory as Format>::filled(canonical.len(), wire.entries.len(), wire.level))
+) -> ContentResult<&'d Wire<PathName, u64>> {
+    let wire = decoded.directory_wire()?;
+    if (!root && !<CompactDirectory as Format>::filled(wire.size, wire.entries.len(), wire.level))
         || (wire.level > 0 && wire.entries.len() < 2)
     {
         return Err(ContentError::NonCanonicalPagePartition);
@@ -316,12 +315,12 @@ fn load(
     expected: Option<&(u8, Option<PathName>)>,
     minimum: Option<&PathName>,
     work: &mut DirectoryReadWork,
-) -> ContentResult<Wire<PathName, u64>> {
+) -> ContentResult<std::sync::Arc<Decoded>> {
     work.pages_read = work.pages_read.saturating_add(1);
     work.read_waves = work.read_waves.saturating_add(1);
-    let canonical = reader.read_canonical(id)?;
-    let wire = decode_checked(
-        &canonical,
+    let decoded = decoded::page(reader, id, Role::Directory)?;
+    let wire = checked(
+        &decoded,
         root,
         expected.map(|(level, _)| *level),
         expected.and_then(|(_, maximum)| maximum.as_ref()),
@@ -333,5 +332,15 @@ fn load(
     }) {
         return Err(ContentError::NonCanonicalOrdering);
     }
-    Ok(wire)
+    Ok(decoded)
+}
+
+/// The recorded level and subtree row count of a directory's root page.
+pub fn root_shape(
+    reader: &dyn AuthenticatedObjects,
+    root: DirectoryRoot,
+) -> ContentResult<(u8, u64)> {
+    let decoded = decoded::page(reader, root.0, Role::Directory)?;
+    let wire = decoded.directory_wire()?;
+    Ok((wire.level, wire.count))
 }

@@ -65,6 +65,13 @@ pub trait AuthenticatedObjects {
         })
     }
 
+    /// Decoded pages this provider keeps for reuse (#364): a read that
+    /// finds a page there skips its copy and decode, never a check that
+    /// depends on where the page was found. None keeps nothing.
+    fn decoded_pages(&self) -> Option<&crate::filesystem::decoded::DecodedPages> {
+        None
+    }
+
     /// Reads one object under the caller's timing scope.
     fn read_canonical_scoped(
         &self,

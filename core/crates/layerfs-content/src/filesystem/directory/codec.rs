@@ -182,9 +182,3 @@ pub const fn role(level: u8) -> u8 {
         DIRECTORY_BRANCH_ROLE
     }
 }
-
-/// Decodes a page and reports its recorded row count and level.
-pub fn page_shape(canonical: &[u8]) -> ContentResult<(u8, u64)> {
-    let wire = <CompactDirectory as Format>::decode(canonical)?;
-    Ok((wire.level, wire.count))
-}

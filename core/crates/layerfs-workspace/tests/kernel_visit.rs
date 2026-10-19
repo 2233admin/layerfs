@@ -271,7 +271,8 @@ fn a_read_visit_decides_in_one_job_from_resident_objects_or_names_the_facts_it_n
     };
     assert_eq!(again, found);
     let read = b.cache.diagnostics().unwrap();
-    assert!(read.cache_hits > work.cache_hits);
+    // Answered from memory: canonical bytes or their kept decode (#364).
+    assert!(read.cache_hits + read.decoded.hits > work.cache_hits + work.decoded.hits);
     assert_eq!(
         (read.cache_misses, read.upstream_batches),
         (work.cache_misses, work.upstream_batches)

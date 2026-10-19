@@ -9,8 +9,8 @@
 use std::collections::BTreeMap;
 
 use crate::error::{ContentError, ContentResult};
-use crate::filesystem::limits::MAXIMUM_PAGE_BYTES;
-use crate::filesystem::sorted::format::{CompactInodes, Format};
+use crate::filesystem::decoded::{self, Role};
+use crate::filesystem::sorted::format::{CompactInodes, Format, Wire};
 use crate::object::inode_leaf::InodeValue;
 use crate::object::{AuthenticatedObjects, ObjectId};
 
@@ -48,20 +48,16 @@ pub fn lookup(
     let mut root_page = true;
     let mut expected: Option<(u8, u64)> = None;
     loop {
-        let canonical = reader.read_canonical(id)?;
+        let decoded = decoded::page(reader, id, Role::Inodes)?;
         work.pages_read = work.pages_read.saturating_add(1);
         work.read_waves = work.read_waves.saturating_add(1);
-        let page = page(&canonical, root_page, expected)?;
-        match page {
+        match page(decoded.inode_wire()?, root_page, expected)? {
             Page::Leaf { maximum, rows } => {
                 work.demands = work.demands.saturating_add(1);
                 if serial > maximum {
                     return Ok(None);
                 }
-                return Ok(rows
-                    .into_iter()
-                    .find(|(key, _)| *key == serial)
-                    .map(|(_, value)| value));
+                return Ok(rows.find(serial));
             }
             Page::Branch { level, children } => {
                 let index = children.partition_point(|(key, _)| *key < serial);
@@ -105,25 +101,16 @@ pub fn lookup_many(
             return Err(ContentError::MappingDepthExceeded);
         }
         let ids = level.iter().map(|(id, ..)| *id).collect::<Vec<_>>();
-        let pages = reader.read_canonical_batch(&ids)?;
-        if pages.len() != ids.len() {
-            return Err(ContentError::BatchCardinality {
-                requested: ids.len(),
-                returned: pages.len(),
-            });
-        }
+        let pages = decoded::pages(reader, &ids, Role::Inodes)?;
         work.read_waves = work.read_waves.saturating_add(1);
         let mut next = Vec::new();
-        for ((_, root_page, expected, indices), canonical) in level.into_iter().zip(pages) {
+        for ((_, root_page, expected, indices), decoded) in level.into_iter().zip(pages) {
             work.pages_read = work.pages_read.saturating_add(1);
-            match page(&canonical, root_page, expected)? {
+            match page(decoded.inode_wire()?, root_page, expected)? {
                 Page::Leaf { rows, .. } => {
                     for index in indices {
                         work.demands = work.demands.saturating_add(1);
-                        answers[index] = rows
-                            .iter()
-                            .find(|(key, _)| *key == serials[index])
-                            .map(|(_, value)| *value);
+                        answers[index] = rows.find(serials[index]);
                     }
                 }
                 Page::Branch { level, children } => {
@@ -163,13 +150,16 @@ pub fn rows_after(
     let mut expected: Option<(u8, u64)> = None;
     let mut floor: Option<u64> = None;
     loop {
-        let canonical = reader.read_canonical(id)?;
+        let decoded = decoded::page(reader, id, Role::Inodes)?;
         work.pages_read = work.pages_read.saturating_add(1);
         work.read_waves = work.read_waves.saturating_add(1);
-        let (first, next) = match page(&canonical, expected.is_none(), expected)? {
-            Page::Leaf { mut rows, .. } => {
-                let first = rows.first().map(|(key, _)| *key);
-                rows.retain(|(key, _)| after.is_none_or(|after| *key > after));
+        let (first, next) = match page(decoded.inode_wire()?, expected.is_none(), expected)? {
+            Page::Leaf { rows, .. } => {
+                let first = rows.0.first().map(|entry| entry.key);
+                let rows = rows
+                    .iter()
+                    .filter(|(key, _)| after.is_none_or(|after| *key > after))
+                    .collect();
                 (first, Err(rows))
             }
             Page::Branch { level, children } => {
@@ -210,26 +200,41 @@ pub fn rows_after(
     }
 }
 
-/// One decoded inode page, reduced to what a demand walk needs.
-enum Page {
+/// One checked inode page, as a demand walk reads it.
+enum Page<'w> {
     Leaf {
         maximum: u64,
-        rows: Vec<(u64, InodeValue)>,
+        rows: Rows<'w>,
     },
     Branch {
         level: u8,
         children: Vec<(u64, ObjectId)>,
     },
 }
-
-fn page(canonical: &[u8], root: bool, expected: Option<(u8, u64)>) -> ContentResult<Page> {
-    if canonical.len() > MAXIMUM_PAGE_BYTES {
-        return Err(ContentError::ObjectLimitExceeded {
-            limit: MAXIMUM_PAGE_BYTES,
-            actual: canonical.len(),
-        });
+/// A leaf's rows; every one carries a value.
+struct Rows<'w>(&'w [crate::filesystem::sorted::format::WireEntry<u64, InodeValue>]);
+impl Rows<'_> {
+    fn iter(&self) -> impl Iterator<Item = (u64, InodeValue)> + '_ {
+        self.0
+            .iter()
+            .filter_map(|entry| entry.value.map(|value| (entry.key, value)))
     }
-    let wire = <CompactInodes as Format>::decode(canonical)?;
+    fn find(&self, serial: u64) -> Option<InodeValue> {
+        self.0
+            .iter()
+            .find(|entry| entry.key == serial)
+            .and_then(|entry| entry.value)
+    }
+}
+
+/// The checks a read applies to one decoded page where it found it: the
+/// fill rule off the root, the level and largest key its parent recorded,
+/// and a value in every leaf row and a child in every branch row.
+fn page(
+    wire: &Wire<u64, InodeValue>,
+    root: bool,
+    expected: Option<(u8, u64)>,
+) -> ContentResult<Page<'_>> {
     if !root && !<CompactInodes as Format>::filled(wire.size, wire.entries.len(), wire.level) {
         return Err(ContentError::NonCanonicalPagePartition);
     }
@@ -239,27 +244,19 @@ fn page(canonical: &[u8], root: bool, expected: Option<(u8, u64)>) -> ContentRes
         }
     }
     if wire.level == 0 {
+        if wire.entries.iter().any(|entry| entry.value.is_none()) {
+            return Err(ContentError::InvalidRecord("inode leaf value"));
+        }
         Ok(Page::Leaf {
             maximum: wire.entries.last().map_or(0, |entry| entry.key),
-            rows: wire
-                .entries
-                .into_iter()
-                .map(|entry| {
-                    Ok((
-                        entry.key,
-                        entry
-                            .value
-                            .ok_or(ContentError::InvalidRecord("inode leaf value"))?,
-                    ))
-                })
-                .collect::<ContentResult<Vec<_>>>()?,
+            rows: Rows(&wire.entries),
         })
     } else {
         Ok(Page::Branch {
             level: wire.level,
             children: wire
                 .entries
-                .into_iter()
+                .iter()
                 .map(|entry| {
                     Ok((
                         entry.key,

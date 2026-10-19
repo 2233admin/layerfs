@@ -200,8 +200,11 @@ impl BaseView {
         if value.kind != InodeKind::Directory {
             return Err(ContentError::WrongLogicalRole);
         }
-        let page = self.client.read_canonical(value.content_root)?;
-        Ok(layerfs_content::filesystem::directory::codec::page_shape(&page)?.1)
+        Ok(layerfs_content::filesystem::directory::root_shape(
+            self.client.as_ref(),
+            layerfs_content::filesystem::DirectoryRoot(value.content_root),
+        )?
+        .1)
     }
     pub fn readlink(&self, serial: u64) -> ContentResult<SymlinkTarget> {
         let value = self.inode(serial)?.value;

@@ -3,6 +3,7 @@
 //! Entry module: declarations and re-exports only.
 
 pub mod attributes;
+pub mod decoded;
 pub mod directory;
 pub mod identity;
 pub mod inode;
