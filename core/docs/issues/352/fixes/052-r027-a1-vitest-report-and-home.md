@@ -39,10 +39,11 @@
 - Tests: the compact report of a 1.3 MiB report (300 files) comes back under
   100 KB, parses, keeps the failing file's message and the exit status.
 
-## Open question for the owner
+## Owner decision (2026-10-20)
 
-The Sandbox exec's stdout cap (about 1 MiB) cut a 204-file vitest report.
-Whether that cap is an artificial transport limit (AGENTS.md: resident
-containers and transport frames must not impose artificial caps) is an open
-question for the owner. The cap is not changed here; the harness works around
-it by reading the report from a file.
+The Sandbox exec's stdout limit (about 1 MiB) is intentional and stays. The
+owner: "1mib output limit should not be removed. i would rather to skip the
+test than changing that part of code". When a replay command's output would
+pass the limit, the harness uses a compact report (as `nodelanes.mjs` now
+does for vitest) or skips that test, records which, and never changes the
+product.

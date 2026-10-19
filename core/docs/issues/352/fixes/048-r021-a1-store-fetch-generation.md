@@ -40,3 +40,9 @@
 ## Result
 
 a2 (`p3-main-r`): `r021-1-root.end` P1–P5 pass; all 5 points pass.
+
+## Owner decision (2026-10-20)
+
+Sandboxes may keep reaching the npm registry during an install: keep the
+current behaviour. Nothing is changed for it; the store fetch above remains
+what keeps the native oracle comparable.
