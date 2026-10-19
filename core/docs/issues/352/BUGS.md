@@ -872,4 +872,12 @@
        before daemon A publishes and exactly one of the two is refused
        `Conflict`.
 
-  **Status: OPEN.** The test is unchanged.
+  **Status: FIXED** (branch `issue352-f055-locking-order`, test only).
+  daemon A's Commit is released once `direct.same` has settled, so
+  `direct.same` binds and publishes first and A's Commit, on its setup base,
+  is refused `Conflict` every run. No sleeps. Existing assertions are kept,
+  plus one for the ordered pair. The SDK cannot pause an `fs.write` between
+  its bind and its Commit, so the refused writer is now always daemon A.
+  One run: pass, `direct.same` Committed and `daemonA.shared` refused
+  `Conflict`, 66 reads none refused, integrity ok.
+  [fixes/040-f055-locking-oracle-order.md](fixes/040-f055-locking-oracle-order.md).
