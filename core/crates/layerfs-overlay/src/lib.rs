@@ -56,6 +56,7 @@ pub use open::{OpenDisposals, OpenStateCounts};
 pub use payload::captured_types::{
     CapturedGap, CapturedRunCursor, CapturedRunReply, CapturedRunStep, CapturedRunWork,
 };
+pub use payload::digest::CapturedDigest;
 pub use profile::{DatabaseProfile, ProfileConfig};
 pub use reclaim::ReclaimStep;
 pub use types::{

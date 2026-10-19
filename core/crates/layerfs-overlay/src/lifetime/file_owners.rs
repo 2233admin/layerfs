@@ -40,6 +40,9 @@ impl Overlay {
             .unwrap_or_default();
         refs.change(kind, add)?;
         self.open.borrow_mut().custody.put(serial, refs);
+        if !add && matches!(kind, ReferenceKind::File) && refs.opens == 0 {
+            self.digest_closed(serial)?;
+        }
         if add {
             if !matches!(kind, ReferenceKind::Lookup) && self.orphan(serial)?.is_some() {
                 self.enqueue(crate::maintenance::ORPHAN, serial, -1)?;

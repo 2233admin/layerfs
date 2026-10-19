@@ -65,6 +65,16 @@ CREATE TABLE fs_data_ref (
     source_offset INTEGER NOT NULL CHECK(source_offset>=0),
     PRIMARY KEY(generation,inode,file_offset)
 ) STRICT, WITHOUT ROWID;
+-- The whole-content digest of a file written as appends from offset 0 by
+-- descriptors that are all closed (#364): BLAKE3 of its `length` bytes. It
+-- describes the inode row whose content sequence is `sequence` and no later
+-- one; every row write moves the sequence, so a later change leaves it stale.
+CREATE TABLE fs_digest (
+    inode INTEGER PRIMARY KEY CHECK(inode>0),
+    sequence INTEGER NOT NULL CHECK(sequence>0),
+    length INTEGER NOT NULL CHECK(length>=0),
+    digest BLOB NOT NULL CHECK(length(digest)=32)
+) STRICT;
 CREATE INDEX fs_data_generation ON fs_data(generation,inode,cell_offset);
 CREATE INDEX fs_truncate_generation ON fs_truncate(generation,inode,depth);
 
@@ -94,4 +104,4 @@ CREATE TABLE commit_record (
     PRIMARY KEY(operation,file_scope,kind,key)
 ) STRICT, WITHOUT ROWID;
 
-PRAGMA user_version=37;
+PRAGMA user_version=38;

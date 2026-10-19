@@ -27,6 +27,11 @@ pub(crate) struct OpenState {
     /// Serials whose active row `keep_live_row` carried and nothing wrote
     /// since: their only change is a live mtime, which is not counted dirty.
     pub kept_live: JournalMap<i64, ()>,
+    /// Files followed as appends for their whole-content digest (#364).
+    pub digests: JournalMap<i64, crate::payload::digest::Digesting>,
+    /// The last file finished with no descriptor: serial, content sequence
+    /// and followed state, so its next chunked append resumes. One slot.
+    pub resumable: JournalMap<(), (i64, i64, crate::payload::digest::Digesting)>,
     pub waits: JournalMap<(i64, i64), ()>,
     /// One attached/revoked mount, restored by whole-job rollback.
     pub mount: Option<(KernelMount, bool)>,
@@ -50,6 +55,8 @@ impl OpenState {
         self.custody.commit();
         self.orphans.commit();
         self.kept_live.commit();
+        self.digests.commit();
+        self.resumable.commit();
         self.waits.commit();
         self.directories.commit();
         self.operations.commit();
@@ -67,6 +74,8 @@ impl OpenState {
         self.custody.rollback();
         self.orphans.rollback();
         self.kept_live.rollback();
+        self.digests.rollback();
+        self.resumable.rollback();
         self.waits.rollback();
         self.directories.rollback();
         self.operations.rollback();

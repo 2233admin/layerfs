@@ -180,6 +180,8 @@ impl Overlay {
                 return Err(OverlayError::Invalid("read-only descriptor"));
             }
         }
+        self.resume_digest(changes)?;
+        let carried = self.carried_digests(changes)?;
         let mut inodes = 0_i64;
         let mut layers = Vec::with_capacity(changes.inodes.len());
         for inode in &changes.inodes {
@@ -248,6 +250,7 @@ impl Overlay {
                 self.detach_orphan(&state, inode)?;
             }
         }
+        self.follow_digests(&state, changes, &carried)?;
         self.settle(&state, inodes, directory_entries)
     }
 }
