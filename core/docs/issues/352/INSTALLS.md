@@ -108,6 +108,14 @@ Proof:
 
 ## 4. Proof
 
+> **Lister v6 supersedes the installed-tree rules below (owner decision
+> 2026-10-19, NODE_RULE §6).** Package files are compared byte for byte; links
+> and `.bin` shims by resolved target; the resolved package set (`pnpm ls --json
+> --depth Infinity`) must be equal; pnpm's state files are not byte-compared.
+> The root and time substitutions below, and the earlier-roots lists, are
+> retired with it. The output rules (pnpm's exit and output) still apply. The
+> rest of this section records v3–v5 as they were.
+
 - **Installed tree equals native, per lockfile hash** (SPEC §2's `node_modules`
   oracle): file list, symlinks and their targets, modes, git blob ids, against the
   tree a native install of the same lockfile made in the same image. Any

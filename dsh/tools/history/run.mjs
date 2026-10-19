@@ -455,14 +455,12 @@ async function playRange(run, k, mode, half = null, until = null, cut = null) {
       if (until === "lanes" && (saved?.stage === "lead" || saved?.stage === "part")) stop("lanes");
       else if (until === "lanes" && !saved) stop("lanes");
       since = performance.now();
-      const beforePublish = phase.closure ? async (cur) => rangeClosure(run, k, plan, cur, { sb: await setup(run), expectCall, Mismatch, oracleDir: run.manifest.oracle, checks: run.manifest.label === "dev", lwwPicked: !!ctx.lww?.picks.some((p) => p.picks > 0), laneRoots: (ctx.node?.points ?? []).map((p) => p.root), dumpTo: run.manifest.label === "dev" ? (mkdirSync(join(run.dir, "closure"), { recursive: true }), join(run.dir, "closure", `dump-${pad(k)}.json`)) : null }) : null;
+      const beforePublish = phase.closure ? async (cur) => rangeClosure(run, k, plan, cur, { sb: await setup(run), expectCall, Mismatch, oracleDir: run.manifest.oracle, checks: run.manifest.label === "dev", lwwPicked: !!ctx.lww?.picks.some((p) => p.picks > 0), dumpTo: run.manifest.label === "dev" ? (mkdirSync(join(run.dir, "closure"), { recursive: true }), join(run.dir, "closure", `dump-${pad(k)}.json`)) : null }) : null;
       published = await consolidateLanes(run, k, plan, ctx, { beforePublish });
       branch = ctx.final;
       ctx.tree = ctx.mainTree;
       // the node_modules chain since the last install proved equal to a clean one (closure.mjs nextChain)
       if (ctx.closure?.executed) run.state.closureChain = nextChain(run.state.closureChain, k, plan.checkpoint, ctx.closure.executed);
-      // every closure mount root the run has used: a merged node_modules can carry any of them, not only this chain's (scale S4)
-      if (ctx.closure?.executed) run.state.closureRoots = [...new Set([...(run.state.closureRoots ?? []), ...ctx.closure.executed.map((e) => e.root).filter(Boolean)])];
       if (ctx.closure?.groups) {
         const file = join(run.dir, "closure", `groups-${pad(k)}.json`);
         writeJson(file, ctx.closure.groups);

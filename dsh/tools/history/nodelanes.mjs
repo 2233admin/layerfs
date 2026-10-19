@@ -1,6 +1,6 @@
 // NODE_RULE.md from P3, played (owner-approved 2026-10-19; §3 R1 chosen that day): the
-// lead's first install before the lanes fork (§2), each lane's two test
-// points (§4: after its middle step and at its end) and the facts the proofs
+// lead's first install before the lanes fork (§2), each lane's test point
+// (§4: at its end, once the lane is quiet; owner 2026-10-19) and the facts the proofs
 // (§6, nodeproof.mjs) compare with native on the identical tree. A test point
 // is one one-shot Workspace on the lane: the refresh (the root lane's install
 // when the window changed install inputs), its own Commit; `tsc -b` of the
@@ -44,14 +44,16 @@ export const commitIdOf = (v) => (v?.commit && typeof v.commit === "object" ? v.
 /** Step kinds that land tracked changes on a lane (a test point follows only these). */
 export const WRITING = new Set(["fs", "apply", "stale-apply"]);
 
-/** Each lane's test points (§4): after its middle writing step and at its last; one point when they coincide. */
+/**
+ * Each lane's test point (§4): at its end, after its last writing step, with every later step of the lane held
+ * until it is done (pointsBefore), so the lane is quiet. Mid-lane points are dropped (owner 2026-10-19, liaison relay).
+ */
 export function testPoints(plan) {
   const rootLane = plan.lanes.find((l) => l.areas.includes("/"))?.name ?? null, out = [];
   for (const l of plan.lanes) {
     const steps = plan.steps.filter((s) => s.lane === l.name && WRITING.has(s.kind)).sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : 1));
     if (!steps.length) continue;
-    const mid = steps[Math.ceil(steps.length / 2) - 1], end = steps.at(-1);
-    const at = mid === end ? [["end", end]] : [["mid", mid], ["end", end]];
+    const at = [["end", steps.at(-1)]];
     let from = 0;
     for (const [point, s] of at) {
       const upto = steps.indexOf(s), window = steps.slice(from, upto + 1);
@@ -148,7 +150,7 @@ export const groupsFile = (run, k, id) => join(run.dir, "node", `r${pad(k)}`, `$
  * `tsc -b` and the emitted files (P4) with its Commit, vitest (P5) with its
  * Commit. Returns the point's record; the lister groups go to a side file.
  */
-export async function playPoint(a, k, ctx, pt, { branch, gitDir, files, install, build = null, tests = [], roots = [] }) {
+export async function playPoint(a, k, ctx, pt, { branch, gitDir, files, install, build = null, tests = [] }) {
   const sb = await setup(a), rec = { ...pt, files: undefined, branch, started: new Date().toISOString() };
   const label = pt.lane === "lead" ? `r${pad(k)}` : `${pt.lane}.${pt.point}`;
   a.label(`${label}.${pt.kind}`);
@@ -170,9 +172,11 @@ export async function playPoint(a, k, ctx, pt, { branch, gitDir, files, install,
     if (pt.kind === "refresh" && v?.kind === "Committed" && rec.install.base) {
       rec.install.parent = (await parentOf(a, branch, rec.install.commit)) ?? rec.install.base;
       rec.install.changed = await changedPaths(a, rec.install.parent, rec.install.commit);
+      // which of them are symlinks: P3 takes a rewritten link as bookkeeping (P1 judges it by target, lister v6)
+      if (rec.install.changed.length) rec.install.links = String((await sh(linksCommand(rec.install.changed))).stdout).split("\n").filter(Boolean);
     } else if (pt.kind === "refresh") rec.install.changed = [];
     a.label(`${label}.${pt.kind}`);
-    const l = parseLister((await sh(listerCommand([], { roots }))).stdout);
+    const l = parseLister((await sh(listerCommand())).stdout);
     rec.lister = { groups: l.groups.length, entries: l.groups.reduce((n, g) => n + g.n, 0), normalized: l.normalized };
     writeGroups(a, k, pt.id, l.groups);
     if (build?.packages.length) {
@@ -197,6 +201,9 @@ export async function playPoint(a, k, ctx, pt, { branch, gitDir, files, install,
   rec.ms = Date.now() - Date.parse(rec.started);
   return rec;
 }
+
+/** The symlinks among `paths` in the mount (cwd), one per line. */
+export const linksCommand = (paths) => `node -e 'const fs=require("fs");for(const p of JSON.parse(Buffer.from(process.argv[1],"base64").toString()))try{if(fs.lstatSync(p).isSymbolicLink())console.log(p)}catch{}' ${Buffer.from(JSON.stringify(paths)).toString("base64")}`;
 
 /** A Commit's parent, from its Branch's latest Commits (null when it is not among them). */
 async function parentOf(a, branch, id) {
@@ -234,14 +241,13 @@ export async function leadInstall(run, k, plan, ctx) {
   const clean = !!run.state.installed;
   const pt = { id: "lead.initial", lane: "lead", point: "initial", step: null, root: true, kind: clean ? "clean-install" : "install", tree: git(run.repo, ["rev-parse", `${run.state.prevCommit}^{tree}`]).trim(), base: run.state.prevCommit, inputs: inputsHash(files), delta: [] };
   const install = pointInstall({ clean, policy: node.storePolicy });
-  const rec = await playPoint(run, k, ctx, pt, { branch: ctx.lead, gitDir: ctx.git ? ".git" : null, files, install, build: wholeBuild(files), roots: run.state.closureRoots ?? [] });
+  const rec = await playPoint(run, k, ctx, pt, { branch: ctx.lead, gitDir: ctx.git ? ".git" : null, files, install, build: wholeBuild(files) });
   ctx.node.points.push(rec);
   ctx.work.commits += commitsOf(rec);
   // the chain restarts at the lead's install (closure.mjs nextChain: a first or clean install begins it)
   run.state.installed = true;
   // the lead's whole build is in the chain too: every lane inherits its lib/ output, so a native replay builds it as well
   run.state.closureChain = [{ range: k, checkpoint: run.state.prevCommit, kind: pt.kind, command: install, root: rec.root }, ...(rec.tsc ? [{ range: k, checkpoint: run.state.prevCommit, kind: "tsc", command: rec.tsc.command, root: rec.root }] : [])];
-  run.state.closureRoots = [...new Set([...(run.state.closureRoots ?? []), rec.root])];
   return rec;
 }
 
@@ -265,8 +271,7 @@ export async function afterStep(a, k, s, ctx, { lock, waitFor, plan, blobs }) {
       // empty folders first, as the lead's install (a replayed removal can leave one; git and the native tree
       // have none, and the bundler takes every packages/*/* folder as a package: #352 R1 slice, r015-1-docs-rfc.mid)
       install: pointInstall({ policy: node.storePolicy }), build: lanePackages(tree.files, changed),
-      // every earlier mount root of this node_modules chain: the lead's install and the lane's earlier points (F-034)
-      tests: cal?.run ?? [], roots: [...new Set([...(a.state.closureRoots ?? []), ...ctx.node.points.filter((p) => p.lane === pt.lane).map((p) => p.root)])] });
+      tests: cal?.run ?? [] });
     void blobs;
     const row = laneRow(ctx, pt.lane);
     if (pt.kind === "install") row.installs++; else row.refreshes++;

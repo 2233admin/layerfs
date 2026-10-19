@@ -36,8 +36,10 @@ import { decoyBytes, pad, Tree } from "./steps.mjs";
 import { installCommand } from "./closure.mjs";
 
 export const PROOFS = ["P1", "P2", "P3", "P4", "P5", "P6"];
-/** pnpm's state files: the only paths a no-op refresh may change (P3). */
-export const STATE_FILES = /^(.*\/)?node_modules\/(\.modules\.yaml|\.pnpm\/lock\.yaml|\.pnpm-workspace-state(-v\d+)?\.json)$/;
+/** pnpm's state files (not byte-compared since lister v6; owner 2026-10-19). */
+export const STATE_FILES = /^(.*\/)?node_modules\/(\.modules\.yaml|\.pnpm\/lock\.yaml|\.pnpm-workspace-state[^/]*\.json)$/;
+/** A `.bin` shim (lister v6 judges it by target). With the state files, pnpm's bookkeeping: all a no-op refresh may change (P3). */
+export const SHIM = /(^|\/)node_modules\/\.bin\/[^/]+$/;
 
 const git = (repo, args, opts = {}) => execFileSync("git", ["--git-dir", repo, ...args], { encoding: "utf8", maxBuffer: 1 << 28, ...opts });
 
@@ -117,7 +119,7 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
         prev = st.tree;
       }
       script.push(i < states.length - 1 ? `t=$(date +%s%N); (${st.command}) > /tmp/s${i} 2>&1; e=$?; echo "@@step ${i} $e $(( ($(date +%s%N) - t) / 1000000 ))"`
-        : `t=$(date +%s%N); (${st.command}) > /tmp/o 2>&1; echo "@@exit $? $(( ($(date +%s%N) - t) / 1000000 ))"; sed 's/^/@@out /' /tmp/o; ${listerCommand([], { roots: [...new Set(earlier)] })}`);
+        : `t=$(date +%s%N); (${st.command}) > /tmp/o 2>&1; echo "@@exit $? $(( ($(date +%s%N) - t) / 1000000 ))"; sed 's/^/@@out /' /tmp/o; ${listerCommand()}`);
     });
     moveTo(tail.root);
     if (tail.build) script.push(`t=$(date +%s%N); (${tail.build}) > /tmp/b 2>&1; echo "@@tsc $? $(( ($(date +%s%N) - t) / 1000000 ))"; tail -c ${tail.outputBytes ?? 4000} /tmp/b | sed 's/^/@@tscout /'`, `${emittedCommand(tail.packages ?? [])} | sed 's/^/@@emit /'`);
@@ -185,12 +187,16 @@ export function chooseFiles(results, durations, capMs) {
 // ---- judging (pure, for the tests) ----
 
 const res = (result, detail = null, extra = {}) => ({ result, ...(detail ? { detail } : {}), ...extra });
-/** P1: the installed tree against native, file by file (lister groups), build-output caches left out; roots and timestamps normalized and counted. */
+/**
+ * P1: the installed tree against native (lister v6 groups), build-output caches left out: package files byte for
+ * byte, links and shims by resolved target, the resolved package set (`#pnpm-ls`). `normalized` counts what is not
+ * byte-compared: pnpm's state files and the shims judged by target.
+ */
 export function judgeP1(native, groups, normalized) {
   if (!native?.groups || !groups) return res("NOT_RUN", "no lister on one side");
   const keep = (gs) => gs.filter((g) => !BUILD_GROUPS.test(g.g));
   const c = compareInstalled({ groups: keep(native.groups) }, keep(groups));
-  const count = (n) => (n?.shims?.files ?? 0) + Object.keys(n ?? {}).filter((k) => k.startsWith("node_modules/")).length;
+  const count = (n) => (n?.bookkeeping ?? 0) + (typeof n?.shims === "number" ? n.shims : 0);
   return c.ok ? res("pass", null, { normalized: count(normalized) }) : res("stop", `missing ${c.missing.length}, extra ${c.extra.length}, differ ${c.differ.length}: ${[...c.missing, ...c.extra, ...c.differ].slice(0, 3).join(", ")}`, { normalized: count(normalized) });
 }
 /** P2: pnpm's exit and output equal native, each root as <root>. */
@@ -201,22 +207,20 @@ export function judgeP2(native, install, root) {
   return a === b ? res("pass", `exit ${native.exit}`) : res("stop", firstDifference(b, a));
 }
 /**
- * P3: a no-op refresh (install inputs unchanged since the chain's last install) changes only pnpm's state files.
- * When its mount root moved from the previous install's (`prevRoot`; every LayerFS mount gets a new path),
- * pnpm skips its up-to-date shortcut (its workspace state keys projects by absolute path) and rewrites what
- * carries the root (bin shims, hoisted links): any path inside node_modules is then allowed, and P1 judges
- * those files against native run at the same roots. A path outside node_modules is a stop either way.
+ * P3: a no-op refresh (install inputs unchanged since the chain's last install) changes only pnpm's bookkeeping:
+ * its state files, `.bin` shims and symlinks under node_modules (`install.links`, read in the mount), which P1
+ * judges by target (owner 2026-10-19; the moved-root allowance is retired with it). Any other path is a stop,
+ * wherever the mount root is: a package file's bytes, or anything outside node_modules.
  */
-export function judgeP3(pt, prevInputs, prevRoot = null) {
+export function judgeP3(pt, prevInputs) {
   if (pt.kind !== "refresh") return res("n/a", "an install, not a refresh");
   if (prevInputs != null && prevInputs !== pt.inputs) return res("n/a", "install inputs changed: not a no-op");
   const changed = pt.install?.changed;
   if (!Array.isArray(changed)) return res("NOT_RUN", "changed paths not recorded");
-  const moved = prevRoot != null && pt.root != null && prevRoot !== pt.root;
-  const other = changed.filter((p) => !STATE_FILES.test(p) && !(moved && /(^|\/)node_modules\//.test(p)));
-  const kept = changed.length - other.length;
-  return other.length ? res("stop", `${other.length} non-state path(s): ${other.slice(0, 3).join(", ")}`)
-    : res("pass", moved ? `${kept} path(s) in node_modules, root moved` : `${kept} state file(s)`);
+  const links = new Set(pt.install?.links ?? []);
+  const other = changed.filter((p) => !STATE_FILES.test(p) && !SHIM.test(p) && !(links.has(p) && /(^|\/)node_modules\//.test(p)));
+  return other.length ? res("stop", `${other.length} non-bookkeeping path(s): ${other.slice(0, 3).join(", ")}`)
+    : res("pass", `${changed.length} bookkeeping path(s)`);
 }
 /** P4: tsc's exit equal native and every emitted .js/.d.ts equal by blob id. */
 export function judgeP4(native, tsc) {
@@ -240,12 +244,12 @@ export function judgeP5(native, vitest, calibration) {
 }
 
 /** All six for one recorded point and its native oracle (or null: NOT_RUN for the native ones). */
-export function judgePoint(pt, native, { groups, prevInputs, prevRoot = null, calibration, treeOk }) {
+export function judgePoint(pt, native, { groups, prevInputs, calibration, treeOk }) {
   if (!treeOk) {
     const why = `tree differs: LayerFS ${String(pt.treeLfs ?? "none").slice(0, 12)}, native ${String(pt.tree ?? "none").slice(0, 12)}`;
     return Object.fromEntries(PROOFS.map((id) => [id, id === "P6" ? res("n/a", "not a repair") : res("NOT_RUN", why)]));
   }
-  return { P1: judgeP1(native, groups, pt.lister?.normalized), P2: judgeP2(native, pt.install, pt.root), P3: pt.lane === "lead" ? res("n/a", "the lead's first install") : judgeP3(pt, prevInputs, prevRoot),
+  return { P1: judgeP1(native, groups, pt.lister?.normalized), P2: judgeP2(native, pt.install, pt.root), P3: pt.lane === "lead" ? res("n/a", "the lead's first install") : judgeP3(pt, prevInputs),
     P4: judgeP4(native, pt.tsc), P5: pt.lane === "lead" ? res("n/a", "no tests at the first install") : judgeP5(native, pt.vitest, calibration), P6: res("n/a", "not a repair") };
 }
 
@@ -441,7 +445,7 @@ async function cmdProofs(o) {
       const prev = pt.lane === "lead" ? null : before?.inputs ?? m.node.chainInputs ?? null;
       const cal = m.node.calibration?.points?.find((c) => c.id === pt.id) ?? null;
       pt.treeNative = tree;
-      proofs[pt.id] = { tree, treeOk, kind: pt.kind, cached: !!native?.cached, key: native?.key ?? null, nativeMs: native?.ms ?? null, nativeInstallMs: native?.installMs ?? null, nativeTscMs: native?.tsc?.ms ?? null, nativeVitestMs: native?.vitest?.ms ?? null, proofs: judgePoint({ ...pt, tree }, native, { groups, prevInputs: prev, prevRoot: before?.root ?? null, calibration: cal, treeOk }),
+      proofs[pt.id] = { tree, treeOk, kind: pt.kind, cached: !!native?.cached, key: native?.key ?? null, nativeMs: native?.ms ?? null, nativeInstallMs: native?.installMs ?? null, nativeTscMs: native?.tsc?.ms ?? null, nativeVitestMs: native?.vitest?.ms ?? null, proofs: judgePoint({ ...pt, tree }, native, { groups, prevInputs: prev, calibration: cal, treeOk }),
         native: native ? { install: native.exit, tsc: native.tsc?.exit ?? null, vitest: native.vitest?.exit ?? null } : null };
       console.error(`${pt.id}: ${Object.entries(proofs[pt.id].proofs).map(([id, r]) => `${id} ${r.result}`).join(" · ")} (native ${native?.cached ? "cached" : `${native?.ms ?? 0} ms`})`);
     }

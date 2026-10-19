@@ -131,7 +131,7 @@ export function closureSteps({ changed, packages, tsconfigs, milestone, installe
  * or a test that does not give its native pass, is a stop finding
  * (Mismatch); nothing is retried.
  */
-export async function playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, store = STORE_MOUNT, roots = [], binCheck = false }) {
+export async function playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, store = STORE_MOUNT, binCheck = false }) {
   const out = [];
   for (const s of steps) {
     const label = `r${pad(k)}.${s.kind}`;
@@ -153,13 +153,13 @@ export async function playClosure(run, k, steps, { sb, branch, expectCall, Misma
       if (/install/.test(s.kind)) {
         if (nodeOf(run.manifest).on) row.command = s.command;
         row.output = normalizeOutput(`${r.stdout ?? ""}${r.stderr ?? ""}`);
-        Object.assign(row, parseLister((await run.lf.sandbox.exec(sb, ws, listerCommand([], { roots }))).stdout));
+        Object.assign(row, parseLister((await run.lf.sandbox.exec(sb, ws, listerCommand())).stdout));
         // dev: the vitest cache as installed, for the .vite finding (lead 2026-10-18; never compared)
         if (binCheck) row.dump = parseDump((await run.lf.sandbox.exec(sb, ws, dumpCommand(DEV_DUMP))).stdout);
         // F-034 (owner 2026-10-18): a fact, not a gate: does a bin whose shim holds an earlier mount's root run in this mount?
         if (binCheck && s.kind === "incremental-install") {
           const b = await run.lf.sandbox.exec(sb, ws, BIN_CHECK);
-          row.binCheck = { command: BIN_CHECK, exitCode: b.exitCode, output: `${b.stdout ?? ""}${b.stderr ?? ""}`.trim().slice(0, 300), shimRoots: Object.keys(row.normalized?.earlierRoots?.["node_modules/.bin/tsc"] ?? {}) };
+          row.binCheck = { command: BIN_CHECK, exitCode: b.exitCode, output: `${b.stdout ?? ""}${b.stderr ?? ""}`.trim().slice(0, 300) };
         }
       }
       if (s.kind === "rebuild") {
@@ -258,7 +258,7 @@ export function oracleFiles(oracleDir, { lock, steps, chain = [], checkpoint, po
   };
 }
 
-export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir, checks = false, lwwPicked = false, laneRoots = [], dumpTo = null }) {
+export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir, checks = false, lwwPicked = false, dumpTo = null }) {
   const git = (args) => execFileSync("git", ["--git-dir", run.repo, ...args], { encoding: "utf8", maxBuffer: 1 << 28 });
   // the development checks run after the publish, on a fork (devcheck.mjs; SCRIPTS.md, 120 s rule)
   const node = nodeOf(run.manifest);
@@ -276,17 +276,13 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
     const sameCommand = o.install === want || (steps.some((s) => s.kind === "clean-install") && want.replace(`${CLEAN_REMOVE} && `, "") === o.install);
     if (files.kind === "clean" && want && !sameCommand) throw new Mismatch(`range ${k}: the node_modules oracle ${f.split("/").at(-1)} was made with another install command; rerun closure.mjs oracle --range ${k}`);
   }
-  // the recorded mount roots of this chain's earlier steps: listed substitutions (INSTALLS §4, F-034); with Node on,
-  // the lane points' too: the merge brings their shims into the lead, and the native repair chain lists their roots
-  // as earlier roots (#352 p3-main-b r015.a2 lead.repair: shims written at /workspaces/15 hashed raw here only)
-  const roots = [...new Set([...chain.map((e) => e.root), ...(run.state.closureRoots ?? []), ...laneRoots].filter(Boolean))];
-  const rows = await playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, roots, binCheck: checks });
+  const rows = await playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, binCheck: checks });
   const out = { steps: steps.map((s) => s.kind), rows: rows.map(({ groups, dump, ...r }) => r), oracleKind: files.kind,
     executed: steps.map((s, i) => ({ kind: s.kind, command: s.command, root: rows[i]?.root ?? null })) };
   const done = rows.find((r) => /install/.test(r.kind));
   if (done) {
     const oracle = JSON.parse(readFileSync(files.install, "utf8"));
-    out.earlierRoots = { roots, install: earlierRootCount(done.normalized), perFile: done.normalized?.earlierRoots ?? {}, binCheck: done.binCheck ?? null };
+    out.binCheck = done.binCheck ?? null;
     // pnpm prints the install root in some warnings: the root alone is compared as <root> (INSTALLS §4)
     // the oracle's output is normalized again here, so a rule added after it was built applies to both sides
     const nativeOutput = normalizeOutput(oracle.output), native = rootless(nativeOutput, oracle.root), ours = rootless(done.output, done.root);
@@ -330,7 +326,7 @@ export function judgeDevChecks(k, rows, { cleanOracle, Mismatch, nativeRun = nul
   const again = rows.find((r) => r.kind === "reinstall-check");
   if (again) {
     const same = compareInstalled(cleanOracle, again.groups);
-    out.reinstallCheck = { commit: again.commit ?? null, ms: again.ms, oracleOk: same.ok, earlierRoots: earlierRootCount(again.normalized) };
+    out.reinstallCheck = { commit: again.commit ?? null, ms: again.ms, oracleOk: same.ok };
     if (!same.ok) throw new Mismatch(`r${pad(k)} clean reinstall differs from native: ${JSON.stringify({ missing: same.missing.slice(0, 5), extra: same.extra.slice(0, 5), differ: same.differ.slice(0, 5) })}`);
   }
   const rebuild = rows.find((r) => r.kind === "rebuild");
@@ -363,18 +359,20 @@ export function firstDifference(a, b) {
  * its dependency links.
  */
 /**
- * The node_modules lister. Version 4 (dev352-p3c r015; v3 counts what it normalizes; v4 substitutes roots only at a path boundary and the chain's earlier mount roots, dev352-p3h r016): pnpm writes the
- * install root into the \`.bin\` shims, \`.modules.yaml\` and
- * \`.pnpm-workspace-state-v1.json\`, and the run's time into the last two
- * (\`prunedAt\`, \`lastValidatedTimestamp\`). Only for those files, the
- * digest hashes the content with the root (the lister's cwd) as \`<root>\` and
- * those two values as \`<t>\`. Every other file is its git blob id. The raw
- * size stays in \`bytes\`. Native installs at ORACLE_ROOT, a path no package
- * content contains, so the replacement cannot touch unrelated bytes.
+ * The node_modules lister, version 6 (owner decision 2026-10-19, liaison relay: compare what was installed, not
+ * pnpm's bookkeeping). One line per entry under every node_modules, grouped per package folder:
+ * - a file: its git blob id, byte for byte (package content, under `.pnpm/<pkg>/node_modules/<name>/` and the rest);
+ * - a symlink: where it resolves, relative to the root (the lister's cwd), not its bytes; `missing:` when dangling;
+ * - a `.bin` shim (pnpm's `#!/bin/sh` script): the target it runs, resolved the same way, not its bytes;
+ * - pnpm's state files (`node_modules/.modules.yaml`, `node_modules/.pnpm/lock.yaml`, any
+ *   `.pnpm-workspace-state*.json`): not listed, only counted.
+ * The group `#pnpm-ls` is the resolved package set, `pnpm ls --json --depth Infinity` with the root written
+ * `<root>`: one line per package, name, version and path; its `list` field keeps the lines. No other root or
+ * time normalization (v5's state-file and shim substitutions are retired with them). The raw size stays in `bytes`.
  */
-export const LISTER_VERSION = 5;
+export const LISTER_VERSION = 6;
 export const ORACLE_ROOT = "/lfs352-native-root";
-export const LISTER = `const fs=require("fs"),c=require("crypto");const full=new Set(process.argv.slice(1));const groups=new Map(),bytes=new Map();const groupOf=(p)=>{const s=p.split("/");const i=s.indexOf("node_modules");let j=i+1;if(s[j]===".pnpm"||(s[j]||"").startsWith("@"))j++;return s.slice(0,Math.min(j+1,s.length)).join("/")};const add=(p,line,n)=>{const g=groupOf(p);bytes.set(g,(bytes.get(g)||0)+n);let e=groups.get(g);if(!e)groups.set(g,e=[]);e.push(line)};const root=process.cwd(),state={"node_modules/.modules.yaml":/("prunedAt": )"[^"\\n]*"/,"node_modules/.pnpm-workspace-state-v1.json":/("lastValidatedTimestamp": )\\d+/},shim=/(^|\\/)node_modules\\/\\.bin\\/[^/]+$/;const stale=JSON.parse(process.env.LFS352_ROOTS||"[]").filter((x)=>x&&x!==root);const sub=(s,r)=>{let o="",i=0,n=0;for(;;){const j=s.indexOf(r,i);if(j<0)break;if(/[A-Za-z0-9_.-]/.test(s[j+r.length]||"")){o+=s.slice(i,j+r.length);i=j+r.length;continue}o+=s.slice(i,j)+"<root>";i=j+r.length;n++}return[o+s.slice(i),n]};const norm={shims:{files:0,root:0}};const blob=(p,n)=>{let b=fs.readFileSync(p);if(p.startsWith("node_modules/.vite/vitest/")&&p.endsWith("/results.json")&&p.split("/").length===5){let j;try{j=JSON.parse(b.toString("utf8"))}catch{j=null}const v=norm.vitest=norm.vitest||{files:0,entries:0,reordered:0,durations:0,unparsed:0};if(j&&Array.isArray(j.results)&&j.results.every((r)=>Array.isArray(r)&&r.length===2&&typeof r[0]==="string"&&r[1]&&typeof r[1]==="object")){const keys=j.results.map((r)=>r[0]);const sorted=[...j.results].sort((x,y)=>(x[0]<y[0]?-1:x[0]>y[0]?1:0));v.files++;v.entries+=sorted.length;if(sorted.some((r,i)=>r[0]!==keys[i]))v.reordered++;for(const r of sorted)if("duration" in r[1]){r[1].duration="<t>";v.durations++}j.results=sorted;b=Buffer.from(JSON.stringify(j))}else v.unparsed++}const t=state[p];if(t||(shim.test(p)&&b.subarray(0,10).toString()==="#!/bin/sh\\n")){let[s,r0]=sub(b.toString("utf8"),root);const st={};for(const x of stale){const[s2,c]=sub(s,x);if(c){st[x]=c;s=s2}}if(Object.keys(st).length){norm.earlierRoots=norm.earlierRoots||{};norm.earlierRoots[p]=st}if(t){if(!t.test(s))throw new Error(p+": no "+t);s=s.replace(t,"$1<t>");norm[p]={root:r0,time:1}}else{norm.shims.files++;norm.shims.root+=r0}b=Buffer.from(s)}const h=c.createHash("sha1");h.update("blob "+b.length+"\\0");h.update(b);return h.digest("hex")};const walk=(d,nm)=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=d==="."?e.name:d+"/"+e.name;if(p===".git"||p===".lfs-probe")continue;const inNm=nm||e.name==="node_modules";const s=fs.lstatSync(p);const m=(s.mode&0o7777).toString(8);if(s.isSymbolicLink()){if(inNm)add(p,"l "+m+" "+fs.readlinkSync(p)+" "+p,s.size)}else if(s.isDirectory()){if(inNm&&e.name!=="node_modules")add(p,"d "+m+" - "+p,0);walk(p,inNm)}else if(inNm)add(p,"f "+m+" "+blob(p,s.size)+" "+p,s.size)}};walk(".",false);for(const g of [...groups.keys()].sort()){const ls=groups.get(g).sort();if(full.size){if(full.has(g))for(const l of ls)process.stdout.write(l+"\\n");continue}process.stdout.write(JSON.stringify({g,n:ls.length,bytes:bytes.get(g)||0,digest:c.createHash("sha256").update(ls.join("\\n")).digest("hex")})+"\\n")}if(!full.size)process.stdout.write("#normalized "+JSON.stringify(norm)+"\\n")`;
+export const LISTER = `const fs=require("fs"),c=require("crypto"),P=require("path"),cp=require("child_process");const full=new Set(process.argv.slice(1));const groups=new Map(),bytes=new Map();const groupOf=(p)=>{const s=p.split("/");const i=s.indexOf("node_modules");let j=i+1;if(s[j]===".pnpm"||(s[j]||"").startsWith("@"))j++;return s.slice(0,Math.min(j+1,s.length)).join("/")};const add=(p,line,n)=>{const g=groupOf(p);bytes.set(g,(bytes.get(g)||0)+n);let e=groups.get(g);if(!e)groups.set(g,e=[]);e.push(line)};const root=process.cwd();const book=(p)=>p==="node_modules/.modules.yaml"||p==="node_modules/.pnpm/lock.yaml"||/(^|\\/)node_modules\\/(.*\\/)?\\.pnpm-workspace-state[^/]*\\.json$/.test(p);const shim=/(^|\\/)node_modules\\/\\.bin\\/[^/]+$/;const norm={bookkeeping:0,shims:0,links:0};const at=(t)=>{const r=P.relative(root,t);return r===""?".":r.startsWith("../")||r===".."||P.isAbsolute(r)?t:r};const target=(p,raw)=>{const t=P.resolve(P.dirname(p),raw);try{return at(fs.realpathSync(t))}catch{return "missing:"+at(t)}};const blob=(p)=>{let b=fs.readFileSync(p);if(p.startsWith("node_modules/.vite/vitest/")&&p.endsWith("/results.json")&&p.split("/").length===5){let j;try{j=JSON.parse(b.toString("utf8"))}catch{j=null}const v=norm.vitest=norm.vitest||{files:0,entries:0,reordered:0,durations:0,unparsed:0};if(j&&Array.isArray(j.results)&&j.results.every((r)=>Array.isArray(r)&&r.length===2&&typeof r[0]==="string"&&r[1]&&typeof r[1]==="object")){const keys=j.results.map((r)=>r[0]);const sorted=[...j.results].sort((x,y)=>(x[0]<y[0]?-1:x[0]>y[0]?1:0));v.files++;v.entries+=sorted.length;if(sorted.some((r,i)=>r[0]!==keys[i]))v.reordered++;for(const r of sorted)if("duration" in r[1]){r[1].duration="<t>";v.durations++}j.results=sorted;b=Buffer.from(JSON.stringify(j))}else v.unparsed++}const h=c.createHash("sha1");h.update("blob "+b.length+"\\0");h.update(b);return h.digest("hex")};const shimTarget=(p)=>{const b=fs.readFileSync(p,"utf8");if(!b.startsWith("#!/bin/sh\\n"))return null;const ts=[...b.matchAll(/"\\$basedir\\/([^"]+)"/g)].map((x)=>x[1]).filter((x)=>x!=="node");return ts.length?target(p,ts[ts.length-1]):null};const walk=(d,nm)=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=d==="."?e.name:d+"/"+e.name;if(p===".git"||p===".lfs-probe")continue;const inNm=nm||e.name==="node_modules";const s=fs.lstatSync(p);const m=(s.mode&0o7777).toString(8);if(s.isSymbolicLink()){if(inNm){norm.links++;add(p,"l "+target(p,fs.readlinkSync(p))+" "+p,s.size)}}else if(s.isDirectory()){if(inNm&&e.name!=="node_modules")add(p,"d "+m+" - "+p,0);walk(p,inNm)}else if(inNm){if(book(p)){norm.bookkeeping++;continue}const t=shim.test(p)?shimTarget(p):null;if(t!=null){norm.shims++;add(p,"s "+m+" "+t+" "+p,s.size)}else add(p,"f "+m+" "+blob(p)+" "+p,s.size)}}};walk(".",false);const ls=()=>{let j;try{j=JSON.parse(cp.execSync("pnpm ls --json --depth Infinity",{cwd:root,maxBuffer:1<<28,encoding:"utf8",stdio:["ignore","pipe","pipe"]}))}catch(e){return["error "+String(e.status)+" "+String(e.stderr||e.message).trim().split("\\n").slice(-1)[0]]}const rel=(x)=>typeof x==="string"&&(x===root||x.startsWith(root+"/"))?"<root>"+x.slice(root.length):String(x);const set=new Set();const deps=(o)=>{for(const k of ["dependencies","devDependencies","optionalDependencies"])for(const [n,d] of Object.entries(o[k]||{})){set.add(n+"@"+d.version+" "+rel(d.path));deps(d)}};for(const p of Array.isArray(j)?j:[j]){set.add((p.name||"")+"@"+(p.version||"")+" "+rel(p.path));deps(p)}return[...set].sort()};for(const g of [...groups.keys()].sort()){const ls=groups.get(g).sort();if(full.size){if(full.has(g))for(const l of ls)process.stdout.write(l+"\\n");continue}process.stdout.write(JSON.stringify({g,n:ls.length,bytes:bytes.get(g)||0,digest:c.createHash("sha256").update(ls.join("\\n")).digest("hex")})+"\\n")}if(!full.size){const list=ls();process.stdout.write(JSON.stringify({g:"#pnpm-ls",n:list.length,bytes:0,digest:c.createHash("sha256").update(list.join("\\n")).digest("hex"),list})+"\\n");process.stdout.write("#normalized "+JSON.stringify(norm)+"\\n")}`;
 /** Lister stdout: its groups, and what version 2 normalized (`#normalized`: per state file root and time substitutions; shims: files and root substitutions). */
 /**
  * Development dump (lead, 2026-10-18, .vite): every file under the given
@@ -391,20 +389,8 @@ export const parseLister = (stdout) => {
   const lines = String(stdout).split("\n"), norm = lines.find((l) => l.startsWith("#normalized "));
   return { groups: lines.filter((l) => l.startsWith("{")).map((l) => JSON.parse(l)), normalized: norm ? JSON.parse(norm.slice(12)) : null };
 };
-/**
- * The lister's command. `roots` are the recorded mount roots of earlier steps
- * in this node_modules chain: each is substituted by exact string, like the
- * current root, and counted per file (`normalized.earlierRoots`). A new
- * directory per mount is the product's model (owner, F-034, 2026-10-18), so
- * pnpm's files keep the root of the mount that wrote them.
- */
-export const listerCommand = (groups = [], { roots = [] } = {}) =>
-  `${roots.length ? `LFS352_ROOTS=${quote(JSON.stringify(roots))} ` : ""}node -e ${quote(LISTER)} ${groups.map(quote).join(" ")}`;
-/** The earlier-root substitutions of a lister's `normalized`: occurrences and files. */
-export const earlierRootCount = (normalized) => {
-  const files = Object.values(normalized?.earlierRoots ?? {});
-  return { files: files.length, occurrences: files.reduce((n, f) => n + Object.values(f).reduce((a, x) => a + x, 0), 0) };
-};
+/** The lister's command (v6 compares link and shim targets, so an earlier mount's root needs no substitution). */
+export const listerCommand = (groups = []) => `node -e ${quote(LISTER)} ${groups.map(quote).join(" ")}`;
 
 /** `text` with every occurrence of the install `root` written `<root>`; a missing root is refused. */
 export const rootless = (text, root) => { if (!root || root === "/") throw new Error(`no install root to normalize (${root})`); return String(text).split(root).join("<root>"); };

@@ -32,14 +32,19 @@ export const HEADLINE_CELLS = ["Latest version", "Store on disk", "Space amplifi
  * The closure's install against the native oracle, with the count of every
  * normalized field (INSTALLS §4, lister v3), so the comparison can't silently
  * widen: install root and time in the two named state files, root in sh bin
- * shims, root in pnpm's output.
+ * shims, root in pnpm's output. Lister v6: what is not byte-compared and what is
+ * compared by target, counted the same way.
  */
 export function installedText(cl) {
   const o = cl.oracle, n = cl.normalized, f = n?.files ?? {};
   const st = (p) => (f[p] ? `\`${p.slice(13)}\` root ×${f[p].root}, time ×${f[p].time}` : `\`${p.slice(13)}\` absent`);
-  const norm = n ? `normalized: ${st("node_modules/.modules.yaml")} · ${st("node_modules/.pnpm-workspace-state-v1.json")} · root ×${f.shims?.root ?? 0} in ${f.shims?.files ?? 0} bin shims · output root ×${n.outputRoot}${n.outputVerifiedAge != null ? `, verification age ×${n.outputVerifiedAge}` : ""}${f.vitest ? ` · vitest results: order sorted in ${f.vitest.reordered} of ${f.vitest.files} files, duration ×${f.vitest.durations}${f.vitest.unparsed ? `, ${f.vitest.unparsed} unparsed` : ""}` : ""}` : "normalized: not recorded";
+  const vt = f.vitest ? ` · vitest results: order sorted in ${f.vitest.reordered} of ${f.vitest.files} files, duration ×${f.vitest.durations}${f.vitest.unparsed ? `, ${f.vitest.unparsed} unparsed` : ""}` : "";
+  // lister v6 (owner 2026-10-19): pnpm's state files are not compared, shims and links are compared by target
+  const v6 = n && f.bookkeeping != null ? `not byte-compared: ${f.bookkeeping} pnpm state file(s) · by target: ${f.shims} bin shims, ${f.links} links · output root ×${n.outputRoot}${n.outputVerifiedAge != null ? `, verification age ×${n.outputVerifiedAge}` : ""}${vt}` : null;
+  const norm = v6 ?? (n ? `normalized: ${st("node_modules/.modules.yaml")} · ${st("node_modules/.pnpm-workspace-state-v1.json")} · root ×${f.shims?.root ?? 0} in ${f.shims?.files ?? 0} bin shims · output root ×${n.outputRoot}${n.outputVerifiedAge != null ? `, verification age ×${n.outputVerifiedAge}` : ""}${f.vitest ? ` · vitest results: order sorted in ${f.vitest.reordered} of ${f.vitest.files} files, duration ×${f.vitest.durations}${f.vitest.unparsed ? `, ${f.vitest.unparsed} unparsed` : ""}` : ""}` : "normalized: not recorded");
   const er = cl.earlierRoots, earlier = er ? ` · earlier mount roots ×${er.install.occurrences} in ${er.install.files} files (${er.roots.length} roots${er.reinstall ? `; reinstall ×${er.reinstall.occurrences}` : ""})${er.binCheck ? ` · \`${er.binCheck.command}\` in the new mount: exit ${er.binCheck.exitCode}` : ""}` : "";
-  return `${cl.oracleKind === "sequence" ? "against the native replay of its chain · " : ""}${o.ok ? `**${o.groups} package groups equal to native**` : `**differs**: ${o.missing.length} missing, ${o.extra.length} extra, ${o.differ.length} differ`} · ${norm}${earlier}`;
+  const bin = !er && cl.binCheck ? ` · \`${cl.binCheck.command}\` in the new mount: exit ${cl.binCheck.exitCode}` : "";
+  return `${cl.oracleKind === "sequence" ? "against the native replay of its chain · " : ""}${o.ok ? `**${o.groups} package groups equal to native**` : `**differs**: ${o.missing.length} missing, ${o.extra.length} extra, ${o.differ.length} differ`} · ${norm}${earlier}${bin}`;
 }
 
 /** The range's 1-min load average line (owner 2026-10-18), or why there is none. */

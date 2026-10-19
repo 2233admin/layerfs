@@ -90,14 +90,19 @@ come from different branches, and non-lockfile commits still change
 
 ## 4. Lane churn
 
-Each lane has **two test points**: after its middle step and at lane end.
+Each lane has **one test point, at its end**: after its last writing step,
+with every later step of the lane held until the point is done, so the lane is
+quiet. The lead is proved after its repair, and the dev range also at the
+devcheck points. Mid-lane points were dropped by owner decision 2026-10-19
+(liaison relay, "proceed"): a mid point raced the lane's later steps (#352
+`p3-main-b` r015.a2, `r015-2-docs-rfc.mid`).
 
 | Event | Where | When |
 | --- | --- | --- |
 | Incremental install | Root lane | At a test point whose window changed install inputs |
 | Refresh | Every lane | Before **every** build or test, in every lane |
-| `tsc -b` | Every lane | At each test point, the lane's changed packages (`./node_modules/.bin/tsc -b`) |
-| vitest | Every lane | At each test point, the selected test files of packages the lane changed, capped at **20 s native per point**, calibrated natively on the lane's own tree |
+| `tsc -b` | Every lane | At the test point, the lane's changed packages (`./node_modules/.bin/tsc -b`) |
+| vitest | Every lane | At the test point, the selected test files of packages the lane changed, capped at **20 s native per point**, calibrated natively on the lane's own tree |
 
 At most one install (incremental or refresh) per test point. Like the lead's
 first install, each point's install first removes empty folders outside
@@ -169,12 +174,33 @@ compared away.
 
 | Id | Proof | Stop on |
 | --- | --- | --- |
-| P1 | The installed tree equals native file by file (path, mode, blob id). Only roots and timestamps are normalized (INSTALLS §4 table), and each normalized file is counted | Any other difference |
+| P1 | The installed tree equals native (lister v6): every package file byte for byte (path, mode, blob id), under `node_modules/.pnpm/<pkg>/node_modules/<name>/` and everywhere else in `node_modules`; every link by the package it resolves to, not its bytes; every `.bin` shim by its target only; the resolved package set (`pnpm ls --json --depth Infinity`, the root written `<root>`) equal. pnpm's state and bookkeeping files (`node_modules/.modules.yaml`, `node_modules/.pnpm/lock.yaml`, `.pnpm-workspace-state*.json`) are not byte-compared; they and the shims are counted | A package byte, an extra or missing package or entry, a link or shim resolving elsewhere, a different package set |
 | P2 | pnpm exit status and output equal native (roots normalized) | Any difference |
-| P3 | A no-op refresh changes only pnpm state files. When its mount path moved from the previous install's, any path inside `node_modules` is allowed: the shims and links pnpm rewrites because they carry the path. The allowance tests where a path is, not its content. P1 is the content check: it judges every one of those paths, file by file, against native at the same path, so nothing goes unchecked (accepted as built, liaison under owner delegation 2026-10-19). Reason: stop 1 of `f031-r1-slice-d` (pnpm state keyed by `/workspaces/2` while the refresh mounted `/workspaces/1`; 131 shims and 5 hoisted links rewritten; liaison under owner delegation 2026-10-19) | A changed path outside `node_modules`; with an unmoved path, any non-state path |
+| P3 | A no-op refresh changes only pnpm's bookkeeping: its state files, `.bin` shims and symlinks under `node_modules` (read in the mount after the Commit), which P1 judges by target. The moved-root allowance is retired: no path needs it, wherever the mount is | Any other changed path: a package file, or anything outside `node_modules` |
 | P4 | `tsc -b` exit equal native; emitted `.js` and `.d.ts` equal native by blob id | Any difference |
 | P5 | Each test file's result equals native. Files failing natively are skip-listed at calibration only | Pass natively, fail on LayerFS |
 | P6 | After-merge repair: P1 and P4 on the merged tree, plus the repair's rewritten-file count | P1 or P4 |
+
+### Owner decision 2026-10-19: compare what was installed
+
+Approved by the owner ("proceed", 2026-10-19, liaison relay), replacing the
+liaison's B2 option 1 (a native replay of the lane merge). Range 15 a2
+(`p3-main-b`) stopped on `node_modules/.modules.yaml` at the lead repair. The
+merge's newest-wins kept a later non-root refresh's copy (base state) beside
+the root lane's `.pnpm/lock.yaml`, and the repair kept the stale
+`hoistedDependencies` and `prunedAt`. The installed packages were equal, and
+P4 passed.
+
+1. P1 and the repair proof compare what was installed, not pnpm's bookkeeping
+   (the P1 row above). Lister v6 retires v5's root and time substitutions in
+   state files and shims, and the earlier-roots lists they needed. P2's output
+   comparison keeps its root normalization. P4 and P5 are unchanged.
+2. Node proofs run only at quiet points: each lane at its end, the lead after
+   its repair, and the devcheck points (§4).
+
+Lanes still install and commit their `node_modules`, and the lead merge still
+merges them, so LayerFS's merge of install output is still exercised. The
+native repair chain is unchanged.
 
 ## 7. Resilience checks per range
 

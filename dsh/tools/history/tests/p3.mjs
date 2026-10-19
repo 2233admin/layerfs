@@ -34,11 +34,11 @@ const plan = {
   ],
 };
 
-test("NODE_RULE §4 test points: after the middle and the last writing step; the root lane installs when its window changed an input", () => {
+test("NODE_RULE §4 test points: one per lane at its end, after its last writing step (owner 2026-10-19); the root lane installs when the lane changed an input", () => {
   const pts = testPoints(plan);
-  assert.deepEqual(pts.map((p) => [p.id, p.step, p.kind, p.root]), [["L1.mid", "s2", "install", true], ["L1.end", "s4", "refresh", true], ["L2.mid", "t1", "refresh", false], ["L2.end", "t2", "refresh", false]]);
-  assert.deepEqual(pts[1].before, ["s1", "s2", "s4"], "a check step is not a writing step");
-  assert.equal(testPoints({ ...plan, steps: plan.steps.filter((s) => s.id !== "t2") }).filter((p) => p.lane === "L2").map((p) => p.point).join(), "end", "one point when mid and end coincide");
+  assert.deepEqual(pts.map((p) => [p.id, p.step, p.kind, p.root]), [["L1.end", "s4", "install", true], ["L2.end", "t2", "refresh", false]]);
+  assert.deepEqual(pts[0].before, ["s1", "s2", "s4"], "a check step is not a writing step");
+  assert.equal(testPoints({ ...plan, steps: plan.steps.filter((s) => s.id !== "s2") }).find((p) => p.lane === "L1").kind, "refresh", "no install input changed on the lane: a refresh");
 });
 
 test("a refresh's Commit id comes from sandbox.commit's record (R1 dev slice: a refresh Committed, and diff_commits got the record)", () => {
@@ -103,8 +103,8 @@ test("the native tree is the identical tree: materialize from the delta equals g
 test("P1–P5 judges: pass, stop, n/a and NOT_RUN; build-output caches are not install output", () => {
   const g = (name, d) => ({ g: name, digest: d, n: 1, bytes: 1 });
   const native = { groups: [g("node_modules/a", "1"), g("node_modules/.vite", "x")], exit: 0, output: "Done in <t> using pnpm\n/lfs352-native-root ok", tsc: { exit: 0 }, emitted: { "packages/a/lib/i.js": "e1" }, vitest: { results: { "t1.spec.ts": "pass", "t2.spec.ts": "fail" } } };
-  assert.equal(judgeP1(native, [g("node_modules/a", "1"), g("node_modules/.vite", "y")], { shims: { files: 3 }, "node_modules/.modules.yaml": {} }).result, "pass");
-  assert.equal(judgeP1(native, [g("node_modules/a", "1"), g("node_modules/.vite", "y")], { shims: { files: 3 }, "node_modules/.modules.yaml": {} }).normalized, 4);
+  assert.equal(judgeP1(native, [g("node_modules/a", "1"), g("node_modules/.vite", "y")], { bookkeeping: 2, shims: 3, links: 9 }).result, "pass");
+  assert.equal(judgeP1(native, [g("node_modules/a", "1"), g("node_modules/.vite", "y")], { bookkeeping: 2, shims: 3, links: 9 }).normalized, 5, "not byte-compared: state files and shims");
   assert.match(judgeP1(native, [g("node_modules/a", "2")]).detail, /differ 1/);
   assert.equal(judgeP1(null, []).result, "NOT_RUN");
   assert.equal(judgeP2(native, { exitCode: 0, output: "Done in <t> using pnpm\n/w/ws1 ok" }, "/w/ws1").result, "pass");
@@ -113,12 +113,12 @@ test("P1–P5 judges: pass, stop, n/a and NOT_RUN; build-output caches are not i
   assert.equal(judgeP3({ kind: "refresh", inputs: "b" }, "a").result, "n/a");
   assert.equal(judgeP3({ kind: "refresh", inputs: "a", install: { changed: ["node_modules/.modules.yaml", "packages/x/node_modules/.pnpm-workspace-state-v1.json"] } }, "a").result, "pass");
   assert.equal(judgeP3({ kind: "refresh", inputs: "a", install: { changed: ["node_modules/a/index.js"] } }, "a").result, "stop");
-  // R1 slice r015-2-packages-core: a new mount path makes pnpm rewrite its root-carrying shims and links
-  const shims = { kind: "refresh", inputs: "a", root: "/workspaces/20", install: { changed: ["node_modules/.modules.yaml", "node_modules/.bin/tsc", "node_modules/.pnpm/node_modules/cosmokit", "packages/x/node_modules/.bin/cordis"] } };
-  assert.equal(judgeP3(shims, "a").result, "stop", "the same root: only state files");
-  assert.equal(judgeP3(shims, "a", "/workspaces/20").result, "stop");
-  assert.deepEqual([judgeP3(shims, "a", "/workspaces/2").result, judgeP3(shims, "a", "/workspaces/2").detail], ["pass", "4 path(s) in node_modules, root moved"]);
-  assert.equal(judgeP3({ ...shims, install: { changed: [...shims.install.changed, "examples/acp-agent/README.md"] } }, "a", "/workspaces/2").result, "stop", "a path outside node_modules still stops");
+  // R1 slice r015-2-packages-core: a new mount path makes pnpm rewrite its shims and links; bookkeeping at any root
+  const shims = { kind: "refresh", inputs: "a", root: "/workspaces/20", install: { changed: ["node_modules/.modules.yaml", "node_modules/.bin/tsc", "node_modules/.pnpm/node_modules/cosmokit", "packages/x/node_modules/.bin/cordis"], links: ["node_modules/.pnpm/node_modules/cosmokit"] } };
+  assert.deepEqual([judgeP3(shims, "a").result, judgeP3(shims, "a").detail], ["pass", "4 bookkeeping path(s)"]);
+  assert.equal(judgeP3({ ...shims, install: { ...shims.install, links: [] } }, "a").result, "stop", "a rewritten path that is not a link is a package file: stop");
+  assert.equal(judgeP3({ ...shims, install: { ...shims.install, changed: [...shims.install.changed, "examples/acp-agent/README.md"] } }, "a").result, "stop", "a path outside node_modules stops");
+  assert.equal(judgeP3({ ...shims, install: { changed: ["docs/x"], links: ["docs/x"] } }, "a").result, "stop", "a link outside node_modules stops");
   // P2 strips native's own root when it ran at LayerFS's path (nativeChain `root`)
   assert.equal(judgeP2({ exit: 0, output: "/workspaces/20/x ok", root: "/workspaces/20" }, { exitCode: 0, output: "/workspaces/20/x ok" }, "/workspaces/20").result, "pass");
   assert.ok(STATE_FILES.test("node_modules/.pnpm/lock.yaml") && !STATE_FILES.test("node_modules/.pnpm/a@1/node_modules/a/index.js"));
@@ -213,13 +213,12 @@ test("the oracle tool predicts the lead's install as the run records it (p3-main
   assert.equal(pointInstall({ clean: true }), `${PRUNE_EMPTY} && ${installCommand({ clean: true })}`);
 });
 
-test("a lane's later steps wait for its earlier test points, never another lane's (#352 r015.a2: s0073 landed during docs-rfc.mid)", () => {
-  const pts = testPoints(plan), at = (id) => plan.steps.find((s) => s.id === id);
-  assert.deepEqual(pointsBefore(pts, at("s1")), []);
-  assert.deepEqual(pointsBefore(pts, at("s2")), [], "a point's own step does not wait for it");
-  assert.deepEqual(pointsBefore(pts, at("s3")), ["L1.mid"], "a non-writing step waits too: no step after a point runs during it");
-  assert.deepEqual(pointsBefore(pts, at("s4")), ["L1.mid"]);
-  assert.deepEqual(pointsBefore(pts, at("t2")), ["L2.mid"]);
+test("a lane's later steps wait for its test point, never another lane's (#352 r015.a2: s0073 landed during docs-rfc.mid)", () => {
+  const later = { ...plan, steps: [...plan.steps, { id: "s5", lane: "L1", kind: "check", order: 6, files: [] }] };
+  const pts = testPoints(later), at = (id) => later.steps.find((s) => s.id === id);
+  assert.deepEqual(pointsBefore(pts, at("s4")), [], "a point's own step does not wait for it");
+  assert.deepEqual(pointsBefore(pts, at("s5")), ["L1.end"], "a non-writing step after the point waits: the lane is quiet during it");
+  assert.deepEqual(pointsBefore(pts, at("t2")), [], "L2's point is its own");
 });
 
 let failed = 0;
