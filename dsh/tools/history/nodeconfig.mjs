@@ -33,10 +33,14 @@ export function repairClean(files) {
   const q = dirs.map(quote).join(" ");
   return `rm -rf ${dirs.map((d) => quote(`${d}/lib`)).join(" ")} && find ${q} -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f`;
 }
-/** The lead repair's build: its clean (repairClean), then the build of the changed packages (pointBuild). */
-export function repairBuild(files, packages) {
-  const b = pointBuild(files, packages), clean = repairClean(files);
-  return { ...b, command: b.command && clean ? `${clean} && ${b.command}` : b.command };
+/**
+ * The lead repair's build: its clean (repairClean), then dsh's whole build (wholeBuild), since tsdown bundles
+ * every package from its lib/types and a build of the changed packages alone leaves the others without one
+ * (r018 a5: `UNRESOLVED_ENTRY lib/types/index.js`, natively the same).
+ */
+export function repairBuild(files) {
+  const b = wholeBuild(files), clean = repairClean(files);
+  return { ...b, command: clean ? `${clean} && ${b.command}` : b.command };
 }
 /** A lane point's build (NODE_RULE §4): `tsc -b` of its changed packages, then dsh's bundler; none changed, no build. */
 export const pointBuild = (files, packages) => ({ command: packages.length ? bundled(files, `./node_modules/.bin/tsc -b ${packages.map(quote).join(" ")}`) : null, packages });

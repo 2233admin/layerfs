@@ -117,8 +117,8 @@ export function closureSteps({ changed, packages, tsconfigs, milestone, installe
   if (checks && steps.length) steps.push({ kind: "reinstall-check", command: installCommand({ store, clean: true, policy }) });
   const built = [...new Set(changed.map((p) => packageOf(p, packages)).filter((d) => d && tsconfigs.has(d)))].sort();
   // NODE_RULE (the lead repair, `files` given): its clean of every package's lib/ and tsbuildinfo (F-059), then
-  // dsh's build, tsc -b then its bundler, as at the test points
-  if (built.length) steps.push({ kind: "build", command: files ? repairBuild(files, built).command : buildCommand(built), packages: built });
+  // dsh's whole build, tsc -b of every package then its bundler, after any change to a built package
+  if (built.length) steps.push(files ? { kind: "build", ...repairBuild(files) } : { kind: "build", command: buildCommand(built), packages: built });
   // and the same build again after its Commit, unmount and a fresh mount: it must find nothing to build, or what native finds
   if (checks && built.length) steps.push({ kind: "rebuild", command: rebuildCommand(built), packages: built });
   if (run.length) steps.push({ kind: "test", command: vitestCommand(run), files: run });

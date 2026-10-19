@@ -1000,7 +1000,8 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
   // F-059 (owner 2026-10-20, option A): the repair's build first removes lib/ and every tsbuildinfo in every tsconfig package
   const files = new Map(["packages/a/package.json", "packages/a/tsconfig.json", "packages/b/package.json", "packages/b/tsconfig.json", "packages/c/package.json", "tsconfig.json", "tsdown.config.ts"].map((p) => [p, {}]));
   const repairBuildStep = closureSteps({ packages, tsconfigs, run: [], changed: ["packages/a/src/x.ts"], installed: true, milestone: false, repair: true, files }).find((s) => s.kind === "build");
-  assert.equal(repairBuildStep.command, `${repairClean(files)} && ./node_modules/.bin/tsc -b 'packages/a' && ./node_modules/.bin/tsdown`);
+  // then dsh's whole build: tsdown bundles every package from its lib/types (r018 a5: UNRESOLVED_ENTRY after a partial build)
+  assert.deepEqual([repairBuildStep.command, repairBuildStep.packages], [`${repairClean(files)} && ./node_modules/.bin/tsc -b 'packages/a' 'packages/b' && ./node_modules/.bin/tsdown`, ["packages/a", "packages/b"]]);
   assert.equal(repairClean(files), "rm -rf 'packages/a/lib' 'packages/b/lib' && find 'packages/a' 'packages/b' -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f", "every package with a tsconfig, none without; the root's tsconfig is no package");
   assert.equal(closureSteps({ packages, tsconfigs, run: [], changed: ["packages/a/src/x.ts"], installed: true, milestone: false }).find((s) => s.kind === "build").command, buildCommand(["packages/a"]), "only the repair cleans");
   const kinds = (o) => closureSteps({ packages, tsconfigs, run: [], ...o }).map((s) => s.kind);

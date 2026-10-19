@@ -9,7 +9,7 @@
 | Kind | none: a harness workload change; the daemon, addon and Store format are unchanged |
 | Binaries | daemon `44ac6c91` and addon `77597adb` unchanged |
 | Commits | this commit: `nodeconfig.mjs` (`repairClean`, `repairBuild`), `closure.mjs` (`closureSteps`); tests in `tests/p2.mjs` |
-| Recovery | range 18 replayed as attempt 5 (fork of snapshot `range-017`), then range 19 attempt 2 |
+| Recovery | range 18 replayed as attempt 5 (fork of snapshot `range-017`; stopped on this fix's first version, see the correction), then attempt 6, then range 19 attempt 2 |
 | Decision | owner, 2026-10-20, via the liaison: option A; option B (point base carried across ranges, build exit judged against native) is out |
 
 ## Old design
@@ -35,16 +35,28 @@
 
 ## New design
 
-- The repair's build command is `repairClean(files) && <normal build>`.
+- The repair's build command is `repairClean(files) && <whole build>`.
   `repairClean` removes `<pkg>/lib` and every `*.tsbuildinfo` (outside
   `node_modules`) in every package that has both `package.json` and
-  `tsconfig.json` at the checkpoint. Then `tsc -b` of the changed packages and
-  the bundler run as before. The build row's time includes the clean.
+  `tsconfig.json` at the checkpoint. Then dsh's whole build runs (`wholeBuild`:
+  `tsc -b` of every such package, then tsdown), and its emitted files are
+  listed for P6. The build row's time includes the clean.
 - The native repair chain replays the recorded command, so it cleans too. The
   closure chain records the command, so the next range's point base (a fresh
   checkout plus that chain) equals the repaired main.
 - Lane points build as before. No gate, threshold, proof scope or timeout
   changes.
+
+## Correction after range 18 a5
+
+- The first version cleaned every package and then built only the changed
+  ones (`pointBuild`). tsdown bundles every package from its `lib/types`, so
+  r018 a5's repair build failed `UNRESOLVED_ENTRY ... lib/types/index.js`
+  (exit 1). Natively it failed the same way.
+- The repair now runs the whole build after its clean (`repairBuild(files)` =
+  clean + `wholeBuild`). Natively that build of r18 exits 0 in 7.7 s with 719
+  emitted files (diagnostic). The test pins the whole build. Recovery: range 18
+  attempt 6 from the r017 snapshot, then range 19 attempt 2.
 
 ## Also fixed (report, a stop inside the closure)
 
@@ -57,8 +69,8 @@
 
 ## Cost
 
-- The repair builds every changed package's types from scratch, and the
-  bundler rebuilds every bundle, each range. Range 18 a5 and 19 a2 report the
+- The repair builds every package's types from scratch, and the bundler
+  rebuilds every bundle, each range (natively 7.7 s at r18). Range 18 a5 and 19 a2 report the
   build time against r15. If the full build pushes a range's final command
   past its 295 s alarm, the run stops and the liaison is told; the alarm is
   not raised.
@@ -66,6 +78,6 @@
 ## Tests
 
 - `tests/p2.mjs` "closure (INSTALLS)": the repair's build is the clean, then
-  `tsc -b` and tsdown. The clean covers every package with a tsconfig, never
+  `tsc -b` of every tsconfig package and tsdown. The clean covers every package with a tsconfig, never
   the root, and only the repair cleans. A stop inside the closure keeps the
   played rows (`closureRows`).

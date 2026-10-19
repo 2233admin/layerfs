@@ -118,7 +118,9 @@ decision 2026-10-19 (liaison relay), verbatim: "Yes: make the lead's repair a cl
 newest-wins merge of pnpm's install state let the incremental repair keep
 stale hoisting (range 15 a3). The repair keeps its own Commit and storage row.
 The repair's **build first cleans**: `lib/` and every `*.tsbuildinfo` are
-removed in every package with a `tsconfig.json`, then the normal build runs
+removed in every package with a `tsconfig.json`, then dsh's whole build runs
+(`tsc -b` of every such package, then tsdown; a build of the changed packages
+alone leaves tsdown without the others' `lib/types`, range 18 a5)
 (`repairClean`, `repairBuild` in `nodeconfig.mjs`). The native repair chain
 replays the same command. This is an owner-approved workload change (owner
 decision 2026-10-20, option A, liaison relay; F-059, [fix 043](fixes/043-r019-a1-repair-build-clean.md)).
