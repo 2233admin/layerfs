@@ -12,7 +12,8 @@
 //! `LAYERFS_364_RELINK_LIMIT` relinks only that many files.
 //! `LAYERFS_364_RELINK_ROUNDS=2` relinks again over the first relink's
 //! Commit and then pages `branch.diff_commits` between the two (range 16's
-//! relink-over-relink verify), printing one `RELINK_DIFF` line.
+//! relink-over-relink verify), printing one `RELINK_DIFF` line and
+//! `RELINK_DIFF_PAGE` lines for the first, every 25th and the last page.
 //! `LAYERFS_364_RELINK_TIMES=now` leaves each new file its write time, as
 //! pnpm's copy does; by default the original times are set again, so the
 //! root depends only on the build.
@@ -296,7 +297,9 @@ fn clean_relink_commit() {
         let (writer, readers) = statements(&service);
         let started = std::time::Instant::now();
         let (mut pages, mut entries, mut cursor) = (0u64, 0usize, SdkValue::Null);
+        let mut each = Vec::new();
         loop {
+            let (page_started, page_statements) = (std::time::Instant::now(), statements(&service));
             let page = call(
                 &service,
                 "branch.diff_commits",
@@ -308,15 +311,30 @@ fn clean_relink_commit() {
                 ],
             );
             pages += 1;
-            if let Some(SdkValue::List(items)) = page.get("items") {
-                entries += items.len();
-            }
+            let listed = match page.get("items") {
+                Some(SdkValue::List(items)) => items.len(),
+                _ => 0,
+            };
+            entries += listed;
+            let after = statements(&service);
+            let spent = after.0 + after.1 - page_statements.0 - page_statements.1;
+            each.push((page_started.elapsed().as_secs_f64() * 1e3, spent, listed));
             cursor = page.get("nextCursor").cloned().unwrap_or(SdkValue::Null);
             if matches!(cursor, SdkValue::Null) {
                 break;
             }
         }
         let ms = started.elapsed().as_secs_f64() * 1e3;
+        // Each page's own cost, at the first, every 25th and the last page:
+        // whether it follows the page's position in the difference.
+        for (index, (page_ms, spent, listed)) in each.iter().enumerate() {
+            if index % 25 == 0 || index + 1 == each.len() {
+                println!(
+                    "RELINK_DIFF_PAGE page={} ms={page_ms:.1} statements={spent} entries={listed}",
+                    index + 1
+                );
+            }
+        }
         let (writer_after, readers_after) = statements(&service);
         let read = readers_after - readers + (writer_after - writer);
         println!(
