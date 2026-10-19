@@ -169,7 +169,7 @@ For documentation/release work, read the
 For measurements, read the [agent measurement workflow](docs/general/agent-measurement-policy.md),
 [benchmark rules](docs/general/benchmark_rules.md),
 [report template](benchmark_agent_report.md) and owning harness/family contract.
-Core routing is [core/benchmark/fs-bench-pro/AGENTS.md](core/benchmark/fs-bench-pro/AGENTS.md).
+Core routing is [benchmark/fs-bench-pro/AGENTS.md](benchmark/fs-bench-pro/AGENTS.md).
 **fs-bench-pro is frozen and left broken (owner, 2026-10-18).** Do not edit,
 build, run or repair it, and leave it out of workspace builds and checks. Its
 call sites broken by #352 F-020 (`ProjectApi` fork and commits,

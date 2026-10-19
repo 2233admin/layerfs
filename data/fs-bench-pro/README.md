@@ -17,8 +17,8 @@ these files.
 All three were measured by the v0.1.6-era harness against the reference
 implementation that R9c retired; reproduce a row from tag
 `reference-v0.1.6-final`. The core port of the suite,
-[core/benchmark/fs-bench-pro](../../core/benchmark/fs-bench-pro/AGENTS.md), is
-frozen. v0.1.7 published no benchmarks; 1.0.0 results wait on issue #332.
+[benchmark/fs-bench-pro](../../benchmark/fs-bench-pro/AGENTS.md), is
+frozen and broken (#352 F-020); it does not run at HEAD. v0.1.7 published no benchmarks; 1.0.0 results wait on issue #332.
 
 To add a release, create `v<version>/` with that release's two CSVs, copied
 unchanged from its release notes.
