@@ -13,13 +13,14 @@ mod installed;
 #[allow(dead_code)]
 mod support;
 
-use layerfs_bridge::control::SdkValue;
+use layerfs_bridge::control::{SdkCall, SdkValue};
 use layerfs_content::ObjectId;
 use layerfs_history::records::{
     AddLayerOutcome, AddLayerRequest, CommitMeta, CommitOutcome, CommitRequest, CommitVia,
     ForkRequest, ForkSource,
 };
 use layerfs_history::{BranchId, CommitId, HistoryName, LayerId, LayerStackId, NodeId};
+use layerfs_store_service::operator;
 use std::fmt::Write;
 use std::fs;
 use std::time::Instant;
@@ -342,14 +343,28 @@ fn b_layers_between_two_sides() {
         published.get("overwroteHasMore"),
         Some(&SdkValue::Bool(true))
     );
-    let tail = fixture.call(
-        "project.list_overwritten",
-        vec![
-            ("layer", text(&id)),
-            ("pageSize", SdkValue::Int(1000)),
-            ("pagePos", SdkValue::Int(total - 10)),
-        ],
-    );
+    // The full list is the operator's (owner 2026-10-19); the public table
+    // refuses the old name.
+    let fields = vec![
+        ("layer", text(&id)),
+        ("pageSize", SdkValue::Int(1000)),
+        ("pagePos", SdkValue::Int(total - 10)),
+    ];
+    let refusal = fixture
+        .try_call("project.list_overwritten", fields.clone())
+        .unwrap_err();
+    assert_eq!(refusal.code, "UnknownMethod");
+    let call = SdkCall {
+        method: "operator.store.overwritten".into(),
+        args: SdkValue::Map(
+            fields
+                .into_iter()
+                .chain([("project", text("installed"))])
+                .map(|(name, value)| (name.to_owned(), value))
+                .collect(),
+        ),
+    };
+    let tail = operator::dispatch(&fixture.service, &call).unwrap();
     assert_eq!(support::items(&tail).len(), 10, "{tail:?}");
     assert_eq!(tail.get("hasMore"), Some(&SdkValue::Bool(false)));
     println!("SCALE_353b ancestry={walks:?} merge={merges:?} publish_probe={publishes:?} publish_x={work:?} overwroteCount={:?} profile=Disposable", published.get("overwroteCount"));

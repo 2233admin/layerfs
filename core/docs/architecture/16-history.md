@@ -44,7 +44,8 @@
 > computes its skipped Layers from heights and records only their count: they
 > are the chain's heights `(covered, H]`, so `LayerRecord.overwrote` is
 > replaced by `overwrote_count`, and `overwritten(layer, position, limit)`
-> (SDK `project.list_overwritten`) pages the full list. **Breaking API
+> (operator `store.overwritten`; it was public `project.list_overwritten`
+> until the owner moved it on 2026-10-19) pages the full list. **Breaking API
 > change:** `LayerRecord.overwrote` and `AddLayerOutcome::Added { overwrote }`
 > are gone; the SDK layer value drops `overwrote`/`overwroteTruncated` for
 > `overwroteCount`, and `branch.publish` returns `overwroteCount`,

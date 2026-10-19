@@ -542,7 +542,7 @@ pub fn publish(store: &Arc<Store>, args: &SdkValue) -> Answer {
     Ok(match outcome {
         AddLayerOutcome::Added { layer } => {
             // The overwritten Layers are read after the publication, one
-            // page; `project.list_overwritten` pages the rest.
+            // page; operator `store.overwritten` pages the rest.
             let (overwrote, more) = overwritten(store, layer.id, 0, 50)?;
             SdkValue::map([
                 ("kind", SdkValue::text("Added")),
@@ -579,7 +579,7 @@ pub fn publish(store: &Arc<Store>, args: &SdkValue) -> Answer {
 
 /// Up to `limit` Layers `layer` overwrote after `position`, newest first, and
 /// whether more follow.
-fn overwritten(
+pub(crate) fn overwritten(
     store: &Arc<Store>,
     layer: LayerId,
     position: u64,
@@ -601,22 +601,4 @@ fn overwritten(
     let more = items.len() > limit;
     items.truncate(limit);
     Ok((items, more))
-}
-
-/// `project.list_overwritten({ layer, pageSize?, pagePos? })`: the Layers a
-/// publication overwrote, newest first, one page.
-pub fn list_overwritten(store: &Arc<Store>, args: &SdkValue) -> Answer {
-    args::project(store, args)?;
-    let layer = match args::node(text(args, "layer")?)? {
-        NodeId::Layer(layer) => layer,
-        NodeId::Commit(_) => return Err(invalid("list_overwritten takes a Layer")),
-    };
-    let (limit, pos) = args::paging(args)?;
-    let (items, more) = overwritten(store, layer, pos, limit)?;
-    let next = args::next_page(pos, items.len(), more);
-    Ok(SdkValue::map([
-        ("items", SdkValue::List(items)),
-        ("hasMore", SdkValue::Bool(more)),
-        ("nextPagePos", next),
-    ]))
 }

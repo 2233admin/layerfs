@@ -7,6 +7,7 @@ use crate::{
     store::Store,
 };
 use layerfs_bridge::control::SdkValue;
+use layerfs_history::NodeId;
 use std::sync::Arc;
 
 pub fn stats(store: &Arc<Store>) -> Answer {
@@ -80,5 +81,23 @@ pub fn commits(store: &Arc<Store>, args: &SdkValue) -> Answer {
             "nextPagePos",
             value.get("nextPagePos").cloned().unwrap_or_default(),
         ),
+    ]))
+}
+
+/// `operator.store.overwritten({ layer, pageSize?, pagePos? })`: the Layers a
+/// publication overwrote, newest first, one page.
+pub fn overwritten(store: &Arc<Store>, args: &SdkValue) -> Answer {
+    args::project(store, args)?;
+    let layer = match args::node(args::text(args, "layer")?)? {
+        NodeId::Layer(layer) => layer,
+        NodeId::Commit(_) => return Err(args::invalid("overwritten takes a Layer")),
+    };
+    let (limit, pos) = args::paging(args)?;
+    let (items, more) = branch::overwritten(store, layer, pos, limit)?;
+    let next = args::next_page(pos, items.len(), more);
+    Ok(SdkValue::map([
+        ("items", SdkValue::List(items)),
+        ("hasMore", SdkValue::Bool(more)),
+        ("nextPagePos", next),
     ]))
 }

@@ -8,7 +8,6 @@ import { LayerFSError } from "./errors.js";
 import * as fsMethods from "./fs/index.js";
 import { init } from "./project/init.js";
 import { list_branches } from "./project/list_branches.js";
-import { list_overwritten } from "./project/list_overwritten.js";
 import { diff_branches } from "./branch/diff_branches.js";
 import { diff_commits } from "./branch/diff_commits.js";
 import { fork } from "./branch/fork.js";
@@ -75,7 +74,7 @@ export class LayerFS {
     this.sandboxes = new Set(selected ? [selected] : []);
     this.serviceSandbox = selected ? Promise.resolve(selected) : null;
     this.fs = bind(this, fsMethods);
-    this.project = bind(this, { init, list_branches, list_overwritten });
+    this.project = bind(this, { init, list_branches });
     this.branch = bind(this, { list_commits, diff_commits, diff_branches, fork, merge, publish });
     this.sandbox = bind(this, { create, close, mount, exec, status, commit, unmount });
   }
