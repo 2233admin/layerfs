@@ -219,7 +219,7 @@ pub(crate) fn new_commit(
                     .map_err(|_| HistoryError::Capacity("stored bytes"))?,
                 i64::try_from(record.meta.statistics.new_metadata)
                     .map_err(|_| HistoryError::Capacity("metadata bytes"))?,
-                super::facts::encode(&record.meta.lww)?,
+                super::facts::encode(&record.meta.lww, &record.meta.units)?,
                 record.meta.displaced.map(|id| id.to_bytes().to_vec()),
             ],
         )

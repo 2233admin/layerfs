@@ -143,6 +143,43 @@ The `/.lww` rules are gitignore-style, with `%include <file>`. They are read
 from the side `RulesFrom` names: theirs for a Workspace Commit, ours for a
 Branch merge.
 
+**Merge units (#352 F-057).** A Branch merge may name `units`: groups of
+patterns in the `/.lww` syntax (`Units::new` admits them; a malformed
+pattern or an empty or repeated name is refused). A unit covers what its
+patterns match and everything below; a path two units match belongs to the
+first listed; the root is in none. Units run before `merge_roots`, which is
+unchanged:
+
+1. **Classify** (`unit_changes`). For each side, a walk of the base against
+   that side (`ChangeWalk`, planned from recorded bindings, else full) counts
+   per unit the paths it changed and their latest mtime. Added, deleted, a
+   new kind, new file or symlink content and new metadata are changes; a new
+   serial with the same kind, content and metadata is not, so a relink is
+   none. A deletion takes its nearest surviving parent's mtime. The state is
+   one count and one time per unit and side.
+2. **Decide** (`decide_units`). A unit both sides changed is kept from the
+   side with the later write, ours on a tie, and reported. A unit one side
+   changed merges as before.
+3. **Revert** (`revert_units`). A side that lost a unit has its changes
+   there reverted to the base: the same walk binds, at each path of a lost
+   unit, the base's entry with the base's value, through the merge plan's
+   records and one backed update of that side. A base directory the side
+   lacks is rebuilt from its base listing; one the side moved out of the
+   unit is rebuilt under a fresh serial beside the move. A restored file the
+   side also binds outside the unit keeps one serial with the base's value
+   (a cross link).
+4. **Merge.** `merge_roots` runs on the reverted roots. Inside a decided unit
+   only the winner changed anything, so no text merge, conflict or `/.lww`
+   rule applies there; outside units nothing changes. Without units, or when
+   no unit is decided, the inputs and the result are exactly those of a
+   merge without units.
+
+The result lists the decided units (`unit`, `kept`, `keptTime` as RFC 3339
+UTC, `changedOurs`, `changedTheirs`, `dropped`, `crossLinks`) in a 16 KiB
+window with `unitsTruncated`; the merge Commit's record keeps the unit list,
+outside Commit identity, and `branch.list_commits` shows it as `units`.
+Workspace Commit merges take no units.
+
 The same matcher serves `fs.glob`. A `**/` segment at a name boundary matches
 zero or more complete directory names, so `src/**/*.js` includes both
 `/src/cart.js` and `/src/web/cart.js`. A single `*` stays within one name.
@@ -159,6 +196,11 @@ paths are text files that still hold a complete marker block (an opening
   from the root. Its cost grows with the directories above the serial, not
   only with the change. Only the serials that need a path pay it.
 - A hard-linked file is reported at its first path only.
+- Merge units: a lost unit's revert writes its own reverted root into the
+  merge's Save, and those objects stay there when the merged root does not
+  use them. Each side's classification and revert walk the whole trees when
+  the side changed more than `MAXIMUM_CHANGED` inodes or bindings are
+  missing.
 - Merged text and marker files take the kind and metadata of the side they
   came from, with each one-sided metadata change applied.
 

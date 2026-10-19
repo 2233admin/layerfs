@@ -131,7 +131,7 @@ and supervises no commands.
 | project (2) | `init(sourcePath)`, `list_branches(pageSize?, pagePos?)` |
 | fs reads (7) | `read(ref, path, startLine?, endLine?)`, `list(ref, path?, pageSize?, pagePos?)`, `stat(ref, path)`, `grep(ref, pattern, path?, pageSize?, pagePos?)`, `glob(ref, pattern, path?, pageSize?, pagePos?)`, `diff_files(leftRef, leftPath, rightRef, rightPath)`, `blame(ref, path, fromLine?)` |
 | fs writes (7) | `write(branch, path, content, message?)`, `edit(branch, path, oldText, newText, message?)`, `apply(branch, changes, message?)`, `mkdir(branch, path, message?)`, `rm(branch, path, message?)`, `cp(branch, from, to, message?)`, `mv(branch, from, to, message?)` |
-| branch (6) | `fork(name, fromRef?)`, `list_commits(branch, pageSize?, pagePos?)`, `diff_commits(from, to, pageSize?, pagePos?, { cursor?, hunks? }?)`, `diff_branches(from, to, pageSize?, pagePos?, { cursor?, hunks? }?)`, `merge(a, b, name, message?)`, `publish(branch, commit?)` |
+| branch (6) | `fork(name, fromRef?)`, `list_commits(branch, pageSize?, pagePos?)`, `diff_commits(from, to, pageSize?, pagePos?, { cursor?, hunks? }?)`, `diff_branches(from, to, pageSize?, pagePos?, { cursor?, hunks? }?)`, `merge(a, b, name, message?, units?)`, `publish(branch, commit?)` |
 | sandbox (7) | `create(name, project, image, { volumes }?)`, `mount(id, branch)` → path, `exec(id, path, command, message?)`, `status(id, path)`, `commit(id, path, message?, force?)`, `unmount(id, path, discard?)`, `close(id)` |
 
 Every grouped method returns a Promise and takes positional arguments only; no
@@ -203,7 +203,7 @@ Diff hunks can be omitted explicitly when their bounded comparison/reply cannot
 represent them; equal content is decided by immutable content identity.
 
 Merge diagnostics also use byte windows within the unchanged control frame.
-`branch.merge` returns `lwwTruncated` and `conflictsTruncated` alongside its
+`branch.merge` returns `lwwTruncated`, `conflictsTruncated` and `unitsTruncated` alongside its
 diagnostic lists (including in `Conflict.detail`); `sandbox.commit` reports
 `lwwTruncated` and its conflict detail reports both flags. Each conflict keeps
 its original `blocks` count and reports `hunksOmitted` if whole hunks were left

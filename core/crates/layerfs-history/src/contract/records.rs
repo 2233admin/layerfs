@@ -121,8 +121,8 @@ impl CommitVia {
 pub const MAXIMUM_MESSAGE_BYTES: usize = 4096;
 
 /// Commit provenance and publication facts. Branch, via, message, merge origin
-/// and displaced head participate in identity; time, byte statistics and LWW
-/// details are persisted facts outside that identity.
+/// and displaced head participate in identity; time, byte statistics, LWW
+/// details and merge units are persisted facts outside that identity.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommitMeta {
     /// Branch the Commit was made on; the catalog sets it from the request.
@@ -137,6 +137,9 @@ pub struct CommitMeta {
     pub lww: Vec<layerfs_content::merge::LwwDecision>,
     /// True when a transport observation omitted persisted decisions.
     pub lww_truncated: bool,
+    /// The merge units a Branch merge ran with (#352 F-057), persisted
+    /// outside identity like the LWW decisions.
+    pub units: Vec<layerfs_content::merge::MergeUnit>,
     /// Snapshot logical size and this producer's acknowledged new bytes.
     pub statistics: CommitStatistics,
     /// Head displaced by the original forced publication.
@@ -155,6 +158,7 @@ impl CommitMeta {
             merged_from: None,
             lww: Vec::new(),
             lww_truncated: false,
+            units: Vec::new(),
             statistics: CommitStatistics::ZERO,
             displaced: None,
             time_ms: 0,

@@ -11,14 +11,18 @@ pub mod markers;
 mod metadata;
 mod names;
 mod places;
+mod revert;
 mod rows;
 mod serial;
 mod spill;
 pub mod text;
 mod types;
+mod units;
 
 pub use entry::merge_roots;
 pub use lww::{Rule, Rules};
 pub use markers::paths_with_markers;
+pub use revert::{revert_units, RevertInput, Reverted};
 pub use text::{has_markers, merge3, Hunk, TextMerge};
+pub use units::{decide_units, unit_changes, MergeUnit, UnitChange, UnitReport, Units};
 pub use types::{Conflict, ConflictKind, LwwDecision, MergeInput, MergeOutcome, RulesFrom, Side};

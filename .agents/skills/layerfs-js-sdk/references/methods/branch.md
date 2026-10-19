@@ -98,7 +98,7 @@ const d = await layerfs.branch.diff_branches("main", "work");
 console.log(`${d.items.length}${d.hasMore ? "+" : ""} paths differ from main`);
 ```
 
-## `branch.merge(a, b, name, message?)`
+## `branch.merge(a, b, name, message?, units?)`
 
 Merges Branches `a` and `b` into a **new** Branch `name`. `a` and `b` don't change.
 
@@ -107,7 +107,18 @@ conflicts: [], lww }`. `fastForward: true` means one side already contained the 
 `lww` lists files decided last-writer-wins by `a`'s
 [`/.lww` rules](../rules/lww.md), each `{ path, kept, deleted, rule }`.
 
-The lists use byte windows: `lwwTruncated` and `conflictsTruncated` explicitly
+**Merge units** (`units`, optional, a list): each entry is a pattern in the
+`/.lww` syntax, named by itself, or `{ name, patterns }`. A unit covers what
+its patterns match and everything below; a path two units match belongs to
+the first listed. When both sides changed a unit, the whole unit comes from
+the side with the later write (ours on a tie): no text merge, conflict or
+`/.lww` rule inside it, and the losing side's changes there are dropped.
+`units` in the result lists those units, each `{ unit, kept, keptTime,
+changedOurs, changedTheirs, dropped, crossLinks }`, with `unitsTruncated`; the
+merge Commit keeps the unit list (`units` in `branch.list_commits`). A
+malformed pattern or an empty or repeated name is refused `InvalidInput`.
+
+The lists use byte windows: `lwwTruncated`, `conflictsTruncated` and `unitsTruncated` explicitly
 report omitted decisions or conflict paths, including in `Conflict.detail`.
 Each conflict's `blocks` is its original count; `hunksOmitted` says its full
 hunk text did not fit. No merge work or source change is omitted. For an

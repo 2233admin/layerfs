@@ -1,23 +1,58 @@
 //! Persistent history facts and constant-size Store accounting reads.
 use super::{provider::HistoryProvider, rows::cell};
 use crate::backend::records::Param;
-use layerfs_content::merge::LwwDecision;
+use layerfs_content::merge::{LwwDecision, MergeUnit};
 use layerfs_history::{HistoryError, HistoryResult, InitStatistics, StoreStatistics};
 
-pub(crate) fn encode(values: &[LwwDecision]) -> HistoryResult<Vec<u8>> {
+/// Marks the merge units after the LWW decisions: no path is that long, so
+/// a blob written before units reads as having none (#352 F-057).
+const UNITS: [u8; 4] = [0xFF; 4];
+fn put(out: &mut Vec<u8>, count: usize) -> HistoryResult<()> {
+    let count = u32::try_from(count)
+        .ok()
+        .filter(|count| *count != u32::MAX)
+        .ok_or(HistoryError::Capacity("history fact text"))?;
+    out.extend_from_slice(&count.to_be_bytes());
+    Ok(())
+}
+pub(crate) fn encode(values: &[LwwDecision], units: &[MergeUnit]) -> HistoryResult<Vec<u8>> {
     let mut out = Vec::new();
     for value in values {
         for text in [&value.path, &value.rule] {
-            let length = u32::try_from(text.len())
-                .map_err(|_| HistoryError::Capacity("history fact text"))?;
-            out.extend_from_slice(&length.to_be_bytes());
+            put(&mut out, text.len())?;
             out.extend_from_slice(text.as_bytes());
         }
         out.push(u8::from(value.kept_ours) | (u8::from(value.deleted) << 1));
     }
+    if !units.is_empty() {
+        out.extend_from_slice(&UNITS);
+        put(&mut out, units.len())?;
+        for unit in units {
+            put(&mut out, unit.name.len())?;
+            out.extend_from_slice(unit.name.as_bytes());
+            put(&mut out, unit.patterns.len())?;
+            for pattern in &unit.patterns {
+                put(&mut out, pattern.len())?;
+                out.extend_from_slice(pattern.as_bytes());
+            }
+        }
+    }
     Ok(out)
 }
-pub(crate) fn decode(mut bytes: &[u8]) -> HistoryResult<Vec<LwwDecision>> {
+type Facts = (Vec<LwwDecision>, Vec<MergeUnit>);
+pub(crate) fn decode(mut bytes: &[u8]) -> HistoryResult<Facts> {
+    fn count(bytes: &mut &[u8]) -> HistoryResult<usize> {
+        let count = bytes
+            .get(..4)
+            .ok_or(HistoryError::Integrity("history fact length"))?;
+        let count = u32::from_be_bytes(
+            count
+                .try_into()
+                .map_err(|_| HistoryError::Integrity("history fact length"))?,
+        ) as usize;
+        *bytes = &bytes[4..];
+        Ok(count)
+    }
     fn text(bytes: &mut &[u8]) -> HistoryResult<String> {
         let count = bytes
             .get(..4)
@@ -38,7 +73,22 @@ pub(crate) fn decode(mut bytes: &[u8]) -> HistoryResult<Vec<LwwDecision>> {
         Ok(out)
     }
     let mut out = Vec::new();
+    let mut units = Vec::new();
     while !bytes.is_empty() {
+        if bytes.starts_with(&UNITS) {
+            bytes = &bytes[4..];
+            for _ in 0..count(&mut bytes)? {
+                let name = text(&mut bytes)?;
+                let patterns = (0..count(&mut bytes)?)
+                    .map(|_| text(&mut bytes))
+                    .collect::<HistoryResult<_>>()?;
+                units.push(MergeUnit { name, patterns });
+            }
+            if !bytes.is_empty() || units.is_empty() {
+                return Err(HistoryError::Integrity("history fact units"));
+            }
+            break;
+        }
         let path = text(&mut bytes)?;
         let rule = text(&mut bytes)?;
         let flags = *bytes
@@ -55,7 +105,7 @@ pub(crate) fn decode(mut bytes: &[u8]) -> HistoryResult<Vec<LwwDecision>> {
             deleted: flags & 2 != 0,
         });
     }
-    Ok(out)
+    Ok((out, units))
 }
 impl HistoryProvider {
     pub(crate) fn statistics(&self) -> HistoryResult<StoreStatistics> {

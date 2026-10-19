@@ -15,7 +15,7 @@ use crate::store::{CommitError, Store};
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use layerfs_content::{
     filesystem::FilesystemRootId,
-    merge::{merge_roots, MergeInput, RulesFrom},
+    merge::{merge_roots, MergeInput, MergeUnit, RulesFrom, Units},
 };
 use layerfs_history::{
     AddLayerOutcome, AddLayerRequest, BranchId, BranchMergeRequest, CommitHistoryRequest,
@@ -277,7 +277,8 @@ pub fn list_commits(
 }
 
 /// Merges `left` and `right` (Branch names or main) into a new Branch
-/// `name`; `message` names the merge Commit.
+/// `name`; `message` names the merge Commit. A unit both sides changed is
+/// taken whole from the side with the later write (#352 F-057).
 pub fn merge(
     store: &Arc<Store>,
     stack: &LayerStackRecord,
@@ -285,10 +286,12 @@ pub fn merge(
     right: &str,
     name: &str,
     message: Option<&str>,
+    units: &[MergeUnit],
 ) -> Answer {
     if left == right {
         return Err(invalid("merge takes two different sources"));
     }
+    let admitted = Units::new(units).map_err(invalid)?;
     if name == MAIN {
         return Err(refuse(
             "ReservedName",
@@ -353,6 +356,8 @@ pub fn merge(
             ("lww", SdkValue::List(Vec::new())),
             ("conflictsTruncated", SdkValue::Bool(false)),
             ("lwwTruncated", SdkValue::Bool(false)),
+            ("units", SdkValue::List(Vec::new())),
+            ("unitsTruncated", SdkValue::Bool(false)),
         ]));
     }
     let base_node = catalog
@@ -382,10 +387,28 @@ pub fn merge(
     let policy = store.policy().construction();
     let capacities = policy.capacities();
     let hints = crate::store::CatalogHints::new(catalog);
-    let input = MergeInput {
-        base: FilesystemRootId(root(store, base_node)?),
-        ours: FilesystemRootId(root(store, ln)?),
+    let (base_root, ours) = (
+        FilesystemRootId(root(store, base_node)?),
+        FilesystemRootId(root(store, ln)?),
+    );
+    let mut sides = super::units::Sides {
+        base: base_root,
+        ours,
         theirs: FilesystemRootId(root(store, rn)?),
+        policy,
+        capacities: &capacities,
+    };
+    let mut decided = Vec::new();
+    if !admitted.is_empty() {
+        let units = crate::telemetry::timed("branch.merge.units", |timing| {
+            super::units::decide(store, &save, &hints, &admitted, &sides, &mut fresh, timing)
+        })?;
+        (sides.ours, sides.theirs, decided) = (units.ours, units.theirs, units.reports);
+    }
+    let input = MergeInput {
+        base: base_root,
+        ours: sides.ours,
+        theirs: sides.theirs,
         labels: [&labels[0], &labels[1]],
         rules_from: RulesFrom::Ours,
         policy,
@@ -441,6 +464,11 @@ pub fn merge(
                     "lwwTruncated",
                     SdkValue::Bool(layerfs_bridge::sdk_values::lww_truncated(&merged.lww)),
                 ),
+                ("units", layerfs_bridge::sdk_values::units(&decided)),
+                (
+                    "unitsTruncated",
+                    SdkValue::Bool(layerfs_bridge::sdk_values::units_truncated(&decided)),
+                ),
             ]),
         ));
     }
@@ -454,7 +482,7 @@ pub fn merge(
     let mut refused = None;
     let logical = layerfs_content::filesystem::statistics::logical_size_after_with(
         &reader,
-        input.ours,
+        ours,
         merged.root,
         known,
         &mut |roots| {
@@ -468,7 +496,7 @@ pub fn merge(
         Some(error) => args::failed(error),
         None => args::content(error),
     })?;
-    crate::store::record_new_bindings(&reader, catalog, Some(input.ours), merged.root).map_err(
+    crate::store::record_new_bindings(&reader, catalog, Some(ours), merged.root).map_err(
         |error| match error {
             CommitError::History(error) => history(error),
             CommitError::Content { error, .. } => args::content(error),
@@ -498,6 +526,7 @@ pub fn merge(
                 message.map_or_else(|| format!("Merge {left} and {right}"), str::to_owned),
             ),
             lww: merged.lww.clone(),
+            units: units.to_vec(),
             statistics: layerfs_history::CommitStatistics {
                 logical,
                 new_canonical: saved.canonical_bytes,
@@ -528,6 +557,11 @@ pub fn merge(
         (
             "lwwTruncated",
             SdkValue::Bool(layerfs_bridge::sdk_values::lww_truncated(&merged.lww)),
+        ),
+        ("units", layerfs_bridge::sdk_values::units(&decided)),
+        (
+            "unitsTruncated",
+            SdkValue::Bool(layerfs_bridge::sdk_values::units_truncated(&decided)),
         ),
     ]))
 }

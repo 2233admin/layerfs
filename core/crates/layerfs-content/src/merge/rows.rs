@@ -80,6 +80,11 @@ impl ChangeWriter {
         Ok(())
     }
 
+    /// True when no name was pushed.
+    pub(super) fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+
     fn flush(&mut self, spill: &Spill<'_>) -> ContentResult<()> {
         if self.chunk.is_empty() {
             return Ok(());

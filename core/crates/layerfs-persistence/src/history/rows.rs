@@ -75,6 +75,7 @@ pub(crate) fn branch_row(row: &Row) -> HistoryResult<BranchRecord> {
 
 /// Decodes one Commit row.
 pub(crate) fn commit_row(row: &Row) -> HistoryResult<CommitRecord> {
+    let (lww, units) = super::facts::decode(&cell::<Vec<u8>>(row, 15)?)?;
     let record = CommitRecord {
         id: required(commit_column(row, 0)?, "Commit identity")?,
         stack: required(stack_column(row, 1)?, "LayerStack identity")?,
@@ -101,8 +102,9 @@ pub(crate) fn commit_row(row: &Row) -> HistoryResult<CommitRecord> {
                 new_stored: cell::<i64>(row, 13)? as u64,
                 new_metadata: cell::<i64>(row, 14)? as u64,
             },
-            lww: super::facts::decode(&cell::<Vec<u8>>(row, 15)?)?,
+            lww,
             lww_truncated: false,
+            units,
             displaced: commit_column(row, 16)?,
         },
     };

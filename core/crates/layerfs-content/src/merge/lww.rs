@@ -58,6 +58,15 @@ impl Rules {
         Ok(rules)
     }
 
+    /// One group of patterns in the rules-file syntax, in order: the last
+    /// matching pattern decides and a negated one clears the match (#352
+    /// F-057 merge units).
+    pub fn of(patterns: &[String]) -> Self {
+        Self {
+            rules: patterns.iter().map(|pattern| parse(pattern)).collect(),
+        }
+    }
+
     /// True when no rule exists.
     pub fn is_empty(&self) -> bool {
         self.rules.is_empty()

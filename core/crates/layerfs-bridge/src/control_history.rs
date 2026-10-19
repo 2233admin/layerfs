@@ -210,6 +210,8 @@ pub(crate) fn meta(input: &mut Reader<'_>) -> Result<CommitMeta, ControlError> {
         displaced: head(input)?,
         lww: Vec::new(),
         lww_truncated: boolean(input)?,
+        // Like the decisions, the unit list stays in the Store.
+        units: Vec::new(),
     })
 }
 pub(crate) fn put_node(out: &mut Writer, value: Option<NodeId>) -> Result<(), ControlError> {

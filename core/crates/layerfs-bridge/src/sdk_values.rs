@@ -62,7 +62,7 @@ pub fn commit_value(record: &CommitRecord, branch: Option<&str>) -> SdkValue {
             bytes <= 4096
         })
         .count();
-    SdkValue::map([
+    let mut value = SdkValue::map([
         ("id", SdkValue::text(hex(record.id.as_slice()))),
         ("branch", SdkValue::opt_text(branch)),
         (
@@ -104,7 +104,21 @@ pub fn commit_value(record: &CommitRecord, branch: Option<&str>) -> SdkValue {
             "lwwTruncated",
             SdkValue::Bool(meta.lww_truncated || meta.lww.len() > count),
         ),
-    ])
+    ]);
+    // The merge units a Branch merge ran with (#352 F-057), only when given.
+    if let (false, SdkValue::Map(fields)) = (meta.units.is_empty(), &mut value) {
+        let units = meta.units.iter().map(|unit| {
+            SdkValue::map([
+                ("name", SdkValue::text(&unit.name)),
+                (
+                    "patterns",
+                    SdkValue::List(unit.patterns.iter().map(SdkValue::text).collect()),
+                ),
+            ])
+        });
+        fields.push(("units".to_owned(), SdkValue::List(units.collect())));
+    }
+    value
 }
 
 /// A Layer as the SDK shows it.
@@ -129,4 +143,6 @@ pub fn layer_value(record: &LayerRecord, source_branch: Option<&str>) -> SdkValu
     ])
 }
 
-pub use crate::sdk_merge_values::{conflicts, conflicts_truncated, lww, lww_truncated};
+pub use crate::sdk_merge_values::{
+    conflicts, conflicts_truncated, lww, lww_truncated, units, units_truncated,
+};
