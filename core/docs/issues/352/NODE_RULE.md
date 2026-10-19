@@ -261,8 +261,10 @@ store's `lockfile-verified.jsonl` grew from 231 to 281 rows, and
 - Receipts: `~/lfs-history/evidence/node-rule-11a-recheck-20261019/`
   (`IDENTITY.md`, `w/results-a.jsonl`). Three fetches were killed for memory
   while another session's build shared the Docker VM, and were fetched once
-  more alone. Docker Desktop restarted by itself during range 20; its two
-  remaining rows ran once afterwards on the same chain.
+  more alone. During range 20 the owner restarted Docker Desktop (memory
+  4 → 8 GB), which interrupted the check; its two rows that had not run ran
+  once afterwards on the same chain. The store fill had finished before the
+  restart and the store checked intact after it.
 
 **(b) Under the plan rule, every lane step's tree has consistent install
 inputs** (policy off, so only consistency is tested):
