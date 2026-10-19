@@ -91,7 +91,11 @@ the cache (the SDK, tests) is unchanged.
     - `fp21_detach_stages` (0/2) is F-047, which fails on main since A1;
     - `complete_installed_roots` (1 failure) is the huge case, which needs `LAYERFS_Q1_PREPARED` (known NOT_RUN).
   - Clippy is clean.
-- **Host** at the final SHA: see the commit and the liaison report.
+- **Linux at the landed C** (`da8a363aea`, pinned image, `-j 6`): 143 test binaries of content, workspace and daemon; 140 pass. All three failures are pre-existing or environmental:
+  - `fp21_detach_stages` (0/2) is F-047, which fails on main since A1;
+  - `complete_installed_roots` (1 failure) is the huge case, which needs the prepared input `LAYERFS_Q1_PREPARED` (NOT_RUN);
+  - `forced_unavailable` failed its precondition "the control filesystem must not be mounted here": the shared Docker VM had `fusectl` mounted. It passed in the earlier run, and C touches no FUSE code.
+- **Host at the landed C:** content and workspace tests (93 binaries) pass; Clippy `-D warnings --all-targets` is clean on content, workspace and api.
 - **Build jobs.** Builds ran at `-j 2` while `~/lfs-history/QUIET` existed, otherwise `-j 6`. Each receipt records its QUIET state.
 
 ## Performance, old vs new
