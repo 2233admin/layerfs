@@ -28,3 +28,4 @@
 | 021 | 76 | 20,774 | **optimize** | Scaling | 35.0 MiB | [range-021](ranges/range-021.md) |
 | 022 | 63 | 23,062 | **stop** | Disk projection | 40.5 MiB | [range-022](ranges/range-022.md) |
 | 023 | 63 | 24,522 | **watch** | Speed | 67.8 MiB | [range-023](ranges/range-023.md) |
+| 024 | 61 | 25,762 | **watch** | Speed | 30.5 MiB | [range-024](ranges/range-024.md) |
