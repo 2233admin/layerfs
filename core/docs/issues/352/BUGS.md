@@ -981,4 +981,13 @@
     changes are captured and applied in the consolidation's merge order
     before the repair. No gate, proof scope or workload change.
 
-  **Status: Fixed** in the harness (fix 042); range 18 a2 plays with it.
+  **Status: OPEN (harness).** Range 18 a2 found a silent failure in fix 042
+  (links followed; corrected in `029db0950f`). Range 18 a3 ran the merge
+  whole and moved the difference to two-sided paths: 19 paths both lanes
+  wrote (18 `tsconfig.tsbuildinfo`, `vendor/cordis/bin.js`).
+  - The rule the liaison set (later-merged lane wins) took examples' copies.
+  - The product's `/.lww` takes the newer write, so packages-core's copies,
+    because its build finished last in the play.
+  - The native repair build then failed `TS2694` (exit 2, LayerFS 0).
+  - Which rule the native merge should follow for two-sided paths is with the
+    liaison.
