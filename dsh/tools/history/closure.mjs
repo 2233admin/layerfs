@@ -26,10 +26,10 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { lsTree } from "./git.mjs";
 import { compareResults, packageOf, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
-import { emittedCommand, nodeOf, parseEmitted, wholeBuild } from "./nodeconfig.mjs";
+import { BUILD_GROUPS, emittedCommand, nodeOf, parseEmitted, pointBuild, wholeBuild } from "./nodeconfig.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
 const quote = (t) => `'${String(t).replaceAll("'", "'\\''")}'`;
@@ -101,7 +101,7 @@ export const nothingToBuild = (states) => states.length > 0 && states.every((l) 
  * packages that have a tsconfig.json, then the calibrated tests.
  * @param {{ changed: string[], packages: Set<string>, tsconfigs: Set<string>, milestone: boolean, installed: boolean, run: string[] }} r
  */
-export function closureSteps({ changed, packages, tsconfigs, milestone, installed, run = [], store = STORE_MOUNT, checks = false, lwwPicked = false, policy = "verified", repair = false }) {
+export function closureSteps({ changed, packages, tsconfigs, milestone, installed, run = [], store = STORE_MOUNT, checks = false, lwwPicked = false, policy = "verified", repair = false, files = null }) {
   const steps = [];
   if (milestone && installed) steps.push({ kind: "clean-install", command: installCommand({ store, clean: true, policy }) });
   else if (!installed) steps.push({ kind: "install", command: installCommand({ store, policy }) });
@@ -111,7 +111,8 @@ export function closureSteps({ changed, packages, tsconfigs, milestone, installe
   // development checks (owner 2026-10-18): a clean reinstall of the unchanged lockfile, whose Commit's metadata bytes are recorded
   if (checks && steps.length) steps.push({ kind: "reinstall-check", command: installCommand({ store, clean: true, policy }) });
   const built = [...new Set(changed.map((p) => packageOf(p, packages)).filter((d) => d && tsconfigs.has(d)))].sort();
-  if (built.length) steps.push({ kind: "build", command: buildCommand(built), packages: built });
+  // NODE_RULE (the lead repair, `files` given): dsh's build, tsc -b then its bundler, as at the test points
+  if (built.length) steps.push({ kind: "build", command: files ? pointBuild(files, built).command : buildCommand(built), packages: built });
   // and the same build again after its Commit, unmount and a fresh mount: it must find nothing to build, or what native finds
   if (checks && built.length) steps.push({ kind: "rebuild", command: rebuildCommand(built), packages: built });
   if (run.length) steps.push({ kind: "test", command: vitestCommand(run), files: run });
@@ -147,6 +148,7 @@ export async function playClosure(run, k, steps, { sb, branch, expectCall, Misma
       // every step's mount root: the node_modules chain records it, and a later install's lister substitutes it
       row.root = String((await run.lf.sandbox.exec(sb, ws, "pwd")).stdout).trim();
       if (/install/.test(s.kind)) {
+        if (nodeOf(run.manifest).on) row.command = s.command;
         row.output = normalizeOutput(`${r.stdout ?? ""}${r.stderr ?? ""}`);
         Object.assign(row, parseLister((await run.lf.sandbox.exec(sb, ws, listerCommand([], { roots }))).stdout));
         // dev: the vitest cache as installed, for the .vite finding (lead 2026-10-18; never compared)
@@ -232,7 +234,7 @@ export function planClosure({ repo, planDir, k, plan, prevCommit, installed, che
   if (!existsSync(calFile)) return { missing: `range ${k} has no calibration (${calFile})` };
   const cal = JSON.parse(readFileSync(calFile, "utf8"));
   const changed = git(["diff", "--name-only", prevCommit, plan.checkpoint]).split("\n").filter(Boolean);
-  return { lock, steps: closureSteps({ changed, packages: dirsWith("package.json"), tsconfigs: dirsWith("tsconfig.json"), milestone: !!plan.milestone, installed: !!installed, run: cal.run, checks, lwwPicked, policy, repair }) };
+  return { lock, steps: closureSteps({ changed, packages: dirsWith("package.json"), tsconfigs: dirsWith("tsconfig.json"), milestone: !!plan.milestone, installed: !!installed, run: cal.run, checks, lwwPicked, policy, repair, files: repair ? tree : null }) };
 }
 
 /**
@@ -281,12 +283,21 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
     // the oracle's output is normalized again here, so a rule added after it was built applies to both sides
     const nativeOutput = normalizeOutput(oracle.output), native = rootless(nativeOutput, oracle.root), ours = rootless(done.output, done.root);
     out.normalized = { root: done.root, nativeRoot: oracle.root, files: done.normalized, nativeFiles: oracle.normalized, outputRoot: done.output.split(done.root).length - 1, nativeOutputRoot: oracle.output.split(oracle.root).length - 1, outputVerifiedAge: verifiedAges(done.output), nativeOutputVerifiedAge: verifiedAges(nativeOutput) };
-    out.oracle = compareInstalled(oracle, done.groups);
+    // NODE_RULE P1 (Node on): build-output caches (node_modules/.vite, the test points' vitest cache) are not install output
+    out.oracle = node.on ? { ...compareInstalled({ ...oracle, groups: oracle.groups.filter((g) => !BUILD_GROUPS.test(g.g)) }, done.groups.filter((g) => !BUILD_GROUPS.test(g.g))), buildGroups: done.groups.filter((g) => BUILD_GROUPS.test(g.g)).map((g) => g.g) } : compareInstalled(oracle, done.groups);
     // dev: the dumped groups as installed (playClosure, before any later step), for the finding (never compared)
     if (dumpTo && done.dump) writeFileSync(dumpTo, JSON.stringify({ range: k, groups: DEV_DUMP, differ: out.oracle.differ, files: done.dump }, null, 1));
     out.outputOk = ours === native;
-    if (!out.oracle.ok) throw new Mismatch(`r${pad(k)} install differs from native: ${JSON.stringify({ missing: out.oracle.missing.slice(0, 5), extra: out.oracle.extra.slice(0, 5), differ: out.oracle.differ.slice(0, 5) })}`);
-    if (ours !== native) throw new Mismatch(`r${pad(k)} install output differs from native: ${firstDifference(native, ours)}`);
+    // Node on: this oracle's chain is the lead's alone, not the lane points' installs the merged node_modules carries;
+    // nodeproof.mjs judges the repair (P6) against that on-top chain, from the groups kept here (f031-slice-e r015:
+    // pendingBuilds gains one "." per install, so a lead-only chain differs by the root lane's install)
+    if (node.on) {
+      const file = join(run.dir, "node", `r${pad(k)}`, "lead.repair.groups.json");
+      mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, JSON.stringify(done.groups));
+      out.repairGroups = file;
+    }
+    if (!out.oracle.ok && !node.on) throw new Mismatch(`r${pad(k)} install differs from native: ${JSON.stringify({ missing: out.oracle.missing.slice(0, 5), extra: out.oracle.extra.slice(0, 5), differ: out.oracle.differ.slice(0, 5) })}`);
+    if (ours !== native && !node.on) throw new Mismatch(`r${pad(k)} install output differs from native: ${firstDifference(native, ours)}`);
     let prevLock = "";
     try { prevLock = git(["show", `${run.state.prevCommit}:pnpm-lock.yaml`]); } catch { prevLock = ""; }
     const ch = changedPackages(prevLock, git(["show", `${plan.checkpoint}:pnpm-lock.yaml`]));
@@ -361,7 +372,7 @@ export const LISTER = `const fs=require("fs"),c=require("crypto");const full=new
  * comparison.
  */
 export const DUMP = `const fs=require("fs");const walk=(p)=>{let s;try{s=fs.lstatSync(p)}catch{return}if(s.isDirectory()){for(const e of fs.readdirSync(p).sort())walk(p+"/"+e);return}const b=s.isSymbolicLink()?Buffer.from("-> "+fs.readlinkSync(p)):fs.readFileSync(p);process.stdout.write("@@dump "+Buffer.from(p).toString("base64")+" "+b.toString("base64")+"\\n")};for(const g of process.argv.slice(1))walk(g)`;
-export const DEV_DUMP = ["node_modules/.vite"];
+export const DEV_DUMP = ["node_modules/.vite", "node_modules/.modules.yaml"];
 export const dumpCommand = (groups) => `node -e ${quote(DUMP)} ${groups.map(quote).join(" ")}`;
 export const parseDump = (stdout) => Object.fromEntries(String(stdout).split("\n").filter((l) => l.startsWith("@@dump ")).map((l) => { const [, p, b] = l.split(" "); return [Buffer.from(p, "base64").toString(), Buffer.from(b ?? "", "base64").toString("utf8")]; }));
 
@@ -391,10 +402,12 @@ export const rootless = (text, root) => { if (!root || root === "/") throw new E
  * pnpm's output without what varies run to run (INSTALLS §4): progress lines,
  * the duration on the "Done in" line, and the store-verification age on the
  * supply-chain line only (dev352-p3g r015: "verified 5h ago" natively, "6h ago"
- * in LayerFS). Any other difference stays a mismatch.
+ * in LayerFS), and the check's own duration on that line once it ran (f031-slice-f r015: "662 entries in 7ms"
+ * natively, "in 9ms" in LayerFS). Any other difference stays a mismatch.
  */
 export const VERIFIED_LINE = /^(✓ Lockfile passes supply-chain policies \(verified )[^)]+( ago\))$/;
-export const normalizeOutput = (text) => String(text).split("\n").filter((l) => !/^Progress: /.test(l)).map((l) => l.replace(/Done in [\d.ms ]+using/, "Done in <t> using").replace(VERIFIED_LINE, "$1<t>$2")).join("\n").trim();
+export const CHECKED_LINE = /^(✓ Lockfile passes supply-chain policies \(\d+ entries in )[\d.]+m?s(\))$/;
+export const normalizeOutput = (text) => String(text).split("\n").filter((l) => !/^Progress: /.test(l)).map((l) => l.replace(/Done in [\d.ms ]+using/, "Done in <t> using").replace(VERIFIED_LINE, "$1<t>$2").replace(CHECKED_LINE, "$1<t>$2")).join("\n").trim();
 /** How many store-verification ages normalizeOutput replaced in `normalized` output. */
 export const verifiedAges = (normalized) => String(normalized).split("\n").filter((l) => l === "✓ Lockfile passes supply-chain policies (verified <t> ago)").length;
 

@@ -25,6 +25,8 @@ import { BlobCache, lsTree } from "./git.mjs";
 import { compareInstalled, LISTER_VERSION, listerCommand, normalizeOutput, ORACLE_ROOT, parseLister, rootless, STORE_MOUNT, firstDifference } from "./closure.mjs";
 import { emittedCommand, groupsFile, inputsHash, nodeOf, parseEmitted, pointBuild, testPoints, treeDelta, wholeBuild, changedPackages } from "./nodelanes.mjs";
 import { buildCommand } from "./closure.mjs";
+import { BUILD_GROUPS, vitestMessages } from "./nodeconfig.mjs";
+export { BUILD_GROUPS };
 import { selectTests, vitestCommand } from "./unit-tests.mjs";
 import { decoyBytes, pad, Tree } from "./steps.mjs";
 import { installCommand } from "./closure.mjs";
@@ -32,8 +34,6 @@ import { installCommand } from "./closure.mjs";
 export const PROOFS = ["P1", "P2", "P3", "P4", "P5", "P6"];
 /** pnpm's state files: the only paths a no-op refresh may change (P3). */
 export const STATE_FILES = /^(.*\/)?node_modules\/(\.modules\.yaml|\.pnpm\/lock\.yaml|\.pnpm-workspace-state(-v\d+)?\.json)$/;
-/** Lister groups that are build output (tool caches, NODE_RULE §1), never install output (P1 leaves them out). */
-export const BUILD_GROUPS = /(^|\/)node_modules\/\.(vite|vitest|cache)(\/|$)/;
 
 const git = (repo, args, opts = {}) => execFileSync("git", ["--git-dir", repo, ...args], { encoding: "utf8", maxBuffer: 1 << 28, ...opts });
 
@@ -89,7 +89,10 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
     states.forEach((st, i) => {
       if (st.tree !== prev) {
         if (!existsSync(join(stage, `${st.tree}.tar`))) writeFileSync(join(stage, `${st.tree}.tar`), execFileSync("git", ["--git-dir", repo, "archive", st.tree], { maxBuffer: 1 << 30 }));
-        script.push(`tar -x -C ${ORACLE_ROOT} -f /seq/${st.tree}.tar`);
+        // -m: the files get the time of the extraction, as a checkout's (and a LayerFS step's) writes do; with the
+        // archive's commit times tsc -b and pnpm take changed sources as older than their outputs and skip them
+        // (f031-slice-f r015: native "Already up to date" and tsc exit 0 where LayerFS rebuilt and failed)
+        script.push(`tar -x -m -C ${ORACLE_ROOT} -f /seq/${st.tree}.tar`);
         if (prev) {
           writeFileSync(join(stage, `${i}.del`), git(repo, ["diff", "--no-renames", "--name-only", "--diff-filter=D", prev, st.tree]));
           script.push(`while IFS= read -r f; do rm -f -- "$f"; done < /seq/${i}.del`);
@@ -127,13 +130,15 @@ export function vitestReport(text, root) {
     const report = JSON.parse(String(text).slice(String(text).indexOf("{")));
     const rel = (n) => (n.startsWith(`${root}/`) ? n.slice(root.length + 1) : n);
     return { results: Object.fromEntries(report.testResults.map((t) => [rel(t.name), t.status === "passed" ? "pass" : "fail"])), durations: Object.fromEntries(report.testResults.map((t) => [rel(t.name), Math.max(0, (t.endTime ?? 0) - (t.startTime ?? 0))])),
-      // a failing file's first message (suite-level or its first failed test), for the skip list's reason
-      messages: Object.fromEntries(report.testResults.filter((t) => t.status !== "passed").map((t) => [rel(t.name), String(t.message || t.assertionResults?.find((x) => x.status === "failed")?.failureMessages?.[0] || "").replaceAll(root, "<root>").slice(0, 300)])) };
+      // a failing file's first message, for the skip list's reason
+      messages: vitestMessages(text, root) };
   } catch { return { results: null, durations: null, messages: null }; }
 }
 
 /** The oracle's cache key: the tree, its install inputs and the chain that leads to it (NODE_RULE §6). */
-export const oracleKey = ({ tree, inputs, states, tail, image }) => createHash("sha256").update(JSON.stringify({ v: LISTER_VERSION, tree, inputs, states, tail, image })).digest("hex").slice(0, 24);
+/** How nativeChain lays a tree down; part of the key, so an oracle made the old way is never reused (2: tar -m). */
+export const CHAIN_VERSION = 2;
+export const oracleKey = ({ tree, inputs, states, tail, image }) => createHash("sha256").update(JSON.stringify({ v: LISTER_VERSION, chain: CHAIN_VERSION, tree, inputs, states, tail, image })).digest("hex").slice(0, 24);
 
 /** The native oracle of one point, cached under `dir` by its key. */
 export function cachedOracle(dir, args) {
@@ -218,17 +223,21 @@ export function judgePoint(pt, native, { groups, prevInputs, calibration, treeOk
 }
 
 /** The repair point (P6, the closure on the merged tree): P1 and P2 judged inline by the closure, P4 natively here, its rewritten-file count. */
-export function judgeRepair(closure, nativeBuild) {
+export function judgeRepair(closure, nativeBuild, { groups = null } = {}) {
   const inst = closure?.rows?.find((r) => /install/.test(r.kind)), build = closure?.rows?.find((r) => r.kind === "build");
   if (!inst) return null;
-  const p1 = closure.oracle ? (closure.oracle.ok ? res("pass") : res("stop", "installed tree differs from native")) : res("NOT_RUN", "no oracle comparison");
+  // P1 against the on-top native chain when it ran (Node on); else the closure's own comparison
+  const p1 = groups && nativeBuild?.groups ? judgeP1(nativeBuild, groups, inst.normalized)
+    : closure.oracle ? (closure.oracle.ok ? res("pass") : res("stop", "installed tree differs from native")) : res("NOT_RUN", "no oracle comparison");
+  const p2 = nativeBuild && inst.output != null && inst.root ? judgeP2(nativeBuild, inst, inst.root) : closure.outputOk == null ? res("NOT_RUN") : closure.outputOk ? res("pass") : res("stop", "pnpm output differs");
   const p4 = build ? judgeP4(nativeBuild, { exitCode: build.exitCode, emitted: build.emitted }) : res("n/a", "no changed package to build");
   const p6 = p1.result === "stop" || p4.result === "stop" ? "stop" : p1.result === "pass" && (p4.result === "pass" || p4.result === "n/a") ? "pass" : "NOT_RUN";
   const tests = closure.rows.find((r) => r.kind === "test")?.results;
   return { lane: "lead", point: "repair", id: "lead.repair", kind: inst.kind, tree: closure.tree ?? null, inputs: closure.inputs ?? null, cached: !!nativeBuild?.cached,
-    proofs: { P1: res("n/a", "folded into P6"), P2: closure.outputOk == null ? res("NOT_RUN") : closure.outputOk ? res("pass") : res("stop", "pnpm output differs"), P3: res("n/a", "a repair, not a no-op"),
+    nativeInstallMs: nativeBuild?.installMs ?? null, nativeTscMs: nativeBuild?.tsc?.ms ?? null,
+    proofs: { P1: res("n/a", "folded into P6"), P2: p2, P3: res("n/a", "a repair, not a no-op"),
       P4: res("n/a", "folded into P6"), P5: tests ? (tests.differ.length ? res("stop", `${tests.differ.length} differ`) : res("pass", `${tests.run} files`)) : res("n/a", "no range tests"),
-      P6: res(p6, `P1 ${p1.result}, P4 ${p4.result}${p4.detail ? ` (${p4.detail})` : ""}`, { rewritten: inst.rewritten ?? null }) } };
+      P6: res(p6, `P1 ${p1.result}${p1.detail ? ` (${p1.detail})` : ""}, P4 ${p4.result}${p4.detail ? ` (${p4.detail})` : ""}`, { rewritten: inst.rewritten ?? null }) } };
 }
 
 // ---- commands ----
@@ -340,15 +349,24 @@ async function cmdProofs(o) {
         native: native ? { install: native.exit, tsc: native.tsc?.exit ?? null, vitest: native.vitest?.exit ?? null } : null };
       console.error(`${pt.id}: ${Object.entries(proofs[pt.id].proofs).map(([id, r]) => `${id} ${r.result}`).join(" · ")} (native ${native?.cached ? "cached" : `${native?.ms ?? 0} ms`})`);
     }
-    // the repair's build natively (P6's P4 part) on the checkpoint tree
-    if (m.closure && !proofs["lead.repair"] && Date.now() - t0 <= budget) {
-      const build = m.closure.rows?.find((r) => r.kind === "build"), tree = git(run.manifest.repo, ["rev-parse", `${m.plan.checkpoint}^{tree}`]).trim();
-      const nb = build ? cachedOracle(oracleDir(run), { repo, states: [{ tree, command: installCommand({ policy: node.storePolicy }) }], tail: { build: build.command ?? buildCommand(build.packages), packages: build.packages }, inputs: "checkpoint", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : null;
-      proofs["lead.repair"] = judgeRepair({ ...m.closure, tree }, nb);
-    } else if (m.closure && !proofs["lead.repair"]) left++;
+    // the repair (P6) on top of the chain its merged node_modules carries: the lead's install and build, every lane
+    // point's install in the order they ran, then the repair install and build on the checkpoint tree
+    const inst = m.closure?.rows?.find((r) => /install/.test(r.kind));
+    if (inst && !proofs["lead.repair"] && Date.now() - t0 <= budget) {
+      const build = m.closure.rows.find((r) => r.kind === "build"), tree = git(run.manifest.repo, ["rev-parse", `${m.plan.checkpoint}^{tree}`]).trim();
+      const lanes = m.node.points.filter((q) => q.lane !== "lead" && q.install?.command && q.treeNative).map((q) => ({ tree: q.treeNative, command: q.install.command }));
+      const states = [...chain0, ...lanes, { tree, command: inst.command ?? installCommand({ policy: node.storePolicy }) }];
+      const native = lanes.length === m.node.points.filter((q) => q.lane !== "lead").length
+        ? cachedOracle(oracleDir(run), { repo, states, tail: build ? { build: build.command ?? buildCommand(build.packages), packages: build.packages } : {}, inputs: "repair", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : null;
+      const groups = m.closure.repairGroups && existsSync(m.closure.repairGroups) ? JSON.parse(readFileSync(m.closure.repairGroups, "utf8")) : null;
+      proofs["lead.repair"] = judgeRepair({ ...m.closure, tree }, native, { groups, nativeMs: native?.ms ?? null });
+    } else if (inst && !proofs["lead.repair"]) left++;
   } finally { blobs.close(); }
   const { fillP3 } = await import("./p3record.mjs");
   m.p3 = fillP3(m, { groupsOf: (id) => (existsSync(groupsFile(run, k, id)) ? JSON.parse(readFileSync(groupsFile(run, k, id), "utf8")) : null) });
+  // the gate stored at the play's end judged these proofs NOT_RUN: kept as it was, and the report evaluates the
+  // attempt again with them (frozen.mjs storeGate stores the new one)
+  if (m.gate && !m.gateBeforeProofs) { m.gateBeforeProofs = m.gate; delete m.gate; } else if (m.gate) delete m.gate;
   writeFileSync(`${mfile}.tmp`, JSON.stringify(m, null, 1)); renameSync(`${mfile}.tmp`, mfile);
   const r = spawnSync("node", [join(new URL(".", import.meta.url).pathname, "report.mjs"), "--metrics", metrics, "--plan", run.manifest.plan, "--docs", run.manifest.outputs.docs, "--oracle", run.manifest.oracle, "--range", String(k)], { encoding: "utf8" });
   process.stdout.write(r.stdout); process.stderr.write(r.stderr);

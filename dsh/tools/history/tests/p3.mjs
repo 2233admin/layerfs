@@ -8,6 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { changedPackages, checkNode, inputsHash, testPoints, treeDelta, treeIdCommand, wholeBuild } from "../nodelanes.mjs";
+import { PRUNE_EMPTY, pointBuild } from "../nodeconfig.mjs";
 import { chooseFiles, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
 import { execTool } from "../run.mjs";
 import { installCommand, STORE_POLICIES } from "../closure.mjs";
@@ -118,6 +119,13 @@ test("P1–P5 judges: pass, stop, n/a and NOT_RUN; build-output caches are not i
   assert.deepEqual([t.pass, t.stop, t.notRun, t.na], [0, 0, 5, 1], "n/a is never counted as NOT_RUN or pass");
   const rp = judgeRepair({ rows: [{ kind: "repair-install", rewritten: 12 }, { kind: "build", exitCode: 0, emitted: { "packages/a/lib/i.js": "e1" } }], oracle: { ok: true }, outputOk: true }, native);
   assert.deepEqual([rp.proofs.P6.result, rp.proofs.P6.rewritten, rp.proofs.P2.result], ["pass", 12, "pass"]);
+  // Node on: P1 against the on-top native chain's lister, even where the closure's lead-only oracle differed
+  const merged = [{ g: "node_modules/.modules.yaml", digest: "y3" }, { g: "node_modules/.vite", digest: "cache" }];
+  const onTop = { ...native, groups: [{ g: "node_modules/.modules.yaml", digest: "y3" }] };
+  const closure = { rows: [{ kind: "repair-install", rewritten: 1, exitCode: native.exit, output: "", root: "/w" }, { kind: "build", exitCode: 0, emitted: { "packages/a/lib/i.js": "e1" } }], oracle: { ok: false }, outputOk: false };
+  assert.equal(judgeRepair(closure, onTop, { groups: merged }).proofs.P6.result, "pass", "the vitest cache is build output; the state file equals the on-top chain's");
+  assert.match(judgeRepair(closure, { ...onTop, groups: [{ g: "node_modules/.modules.yaml", digest: "y2" }] }, { groups: merged }).proofs.P6.detail, /P1 stop \(missing 0, extra 0, differ 1/);
+  assert.equal(judgeRepair(closure, native).proofs.P6.result, "stop", "without the on-top lister the closure's comparison decides");
 });
 
 test("the vitest cap: passing files fastest first within 20 s native; failing files skip-listed with their reason", () => {
@@ -135,6 +143,13 @@ test("builds: the lead's whole workspace (dsh's tsconfig.build.json), a lane's c
   assert.equal(wholeBuild(files).command, "./node_modules/.bin/tsc -b tsconfig.build.json");
   assert.deepEqual(wholeBuild(new Map([...files].filter(([p]) => p !== "tsconfig.build.json"))).command, "./node_modules/.bin/tsc -b 'packages/a'");
   assert.deepEqual(changedPackages(files, ["packages/a/src/x.ts", "packages/b/y.ts", "docs/x.md"]), ["packages/a"]);
+  // dsh's build bundles after tsc (its package.json `build`): tsc emits only lib/types, the tests resolve lib/index.js
+  const bundled = new Map([...files, ["tsdown.config.ts", f("5")]]);
+  assert.equal(wholeBuild(bundled).command, "./node_modules/.bin/tsc -b tsconfig.build.json && ./node_modules/.bin/tsdown");
+  assert.deepEqual(pointBuild(bundled, ["packages/a"]), { command: "./node_modules/.bin/tsc -b 'packages/a' && ./node_modules/.bin/tsdown", packages: ["packages/a"] });
+  assert.equal(pointBuild(bundled, []).command, null);
+  // the lead's install first removes empty folders a P2 replay left (tsdown takes each as a package); .git and node_modules are kept
+  assert.match(PRUNE_EMPTY, /-path \.\/\.git -o -name node_modules \\\) -prune -o -type d -empty/);
 });
 
 test("execs by tool and storage by step: git, pnpm, tsc, vitest, other; .git-*, Node and build labels", () => {

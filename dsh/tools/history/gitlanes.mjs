@@ -163,7 +163,8 @@ export function laneCommands({ lane, add, remove, message, date }, scratch) {
  */
 export function laneAllowed(lane) {
   const l = lane.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`^\\.git/(objects/[0-9a-f]{2}(/[0-9a-f]{38})?|worktrees(/${l}(/(HEAD|commondir|gitdir|index|COMMIT_EDITMSG))?)?|refs/heads/lanes(/${l})?)$`);
+  // the folders above an allowed path change too, by gaining an entry (r015 f031-slice-b: .git/objects, .git/refs/heads)
+  return new RegExp(`^\\.git(/(objects(/[0-9a-f]{2}(/[0-9a-f]{38})?)?|worktrees(/${l}(/(HEAD|commondir|gitdir|index|COMMIT_EDITMSG))?)?|refs(/heads(/lanes(/${l})?)?)?))?$`);
 }
 
 /** A dsh commit's raw header fields and message (git cat-file commit). */

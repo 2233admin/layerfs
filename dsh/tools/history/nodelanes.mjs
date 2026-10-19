@@ -19,7 +19,7 @@ import { INSTALL_INPUT, installCommand, listerCommand, normalizeOutput, parseLis
 import { GIT_ENV, laneGitDir } from "./gitlanes.mjs";
 import { packageOf, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
 import { decoyBytes, pad } from "./steps.mjs";
-import { emittedCommand, nodeOf, parseEmitted, pointBuild, wholeBuild } from "./nodeconfig.mjs";
+import { emittedCommand, nodeOf, parseEmitted, pointBuild, PRUNE_EMPTY, vitestMessages, wholeBuild } from "./nodeconfig.mjs";
 
 export { EMITTED, emittedCommand, nodeOf, parseEmitted, pointBuild, wholeBuild } from "./nodeconfig.mjs";
 
@@ -169,7 +169,7 @@ export async function playPoint(a, k, ctx, pt, { branch, gitDir, files, install,
       const t1 = Date.now(), t = await sh(vitestCommand(tests, 110));
       let results = null;
       try { results = Object.fromEntries(parseVitestJson(String(t.stdout), rec.root)); } catch (e) { rec.vitestError = String(e.message).slice(0, 200); }
-      rec.vitest = { files: tests, exitCode: t.exitCode, ms: Date.now() - t1, results };
+      rec.vitest = { files: tests, exitCode: t.exitCode, ms: Date.now() - t1, results, messages: vitestMessages(String(t.stdout), rec.root) };
       rec.vitest.commit = (await expectCall(a, `${label} vitest commit`, () => a.lf.sandbox.commit(sb, ws, `${label}.vitest`), "Committed|UpToDate"))?.kind;
     }
     landed = true;
@@ -209,7 +209,7 @@ export async function leadInstall(run, k, plan, ctx) {
   const files = lsTree(run.repo, run.state.prevCommit).files, node = ctx.node.config;
   const clean = !!run.state.installed;
   const pt = { id: "lead.initial", lane: "lead", point: "initial", step: null, root: true, kind: clean ? "clean-install" : "install", tree: git(run.repo, ["rev-parse", `${run.state.prevCommit}^{tree}`]).trim(), base: run.state.prevCommit, inputs: inputsHash(files), delta: [] };
-  const install = installCommand({ clean, policy: node.storePolicy });
+  const install = `${PRUNE_EMPTY} && ${installCommand({ clean, policy: node.storePolicy })}`;
   const rec = await playPoint(run, k, ctx, pt, { branch: ctx.lead, gitDir: ctx.git ? ".git" : null, files, install, build: wholeBuild(files), roots: run.state.closureRoots ?? [] });
   ctx.node.points.push(rec);
   ctx.work.commits += commitsOf(rec);

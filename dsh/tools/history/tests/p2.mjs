@@ -1202,10 +1202,11 @@ test("F-031 option (c): seed pack, lane commits with their own index and ref, th
     assert.equal(sh(wt, "git rev-parse refs/heads/lanes/L1^").trim(), m.commit);
     writeFileSync(join(wt, "a.txt"), "a2\n");
     // the lane guard's allowed set: exactly what the lane wrote (A4)
-    const wrote = sh(wt, "find .git -newer ../marker -type f | sort").trim().split("\n").filter((p) => !/^\.git\/objects\/pack\//.test(p));
+    // folders too: one gains an entry when the lane adds a loose object or its ref (f031-slice-b r015: .git/objects, .git/refs/heads)
+    const wrote = sh(wt, "find .git -newer ../marker | sort").trim().split("\n").filter((p) => !/^\.git\/objects\/pack\//.test(p));
     const ok = g.laneAllowed("L1");
     assert.deepEqual(wrote.filter((p) => !ok.test(p)), [], "every file a lane exec writes is in its allowed set");
-    for (const p of [".git/index", ".git/HEAD", ".git/refs/heads/main", ".git/worktrees/L2/index", ".git/refs/heads/lanes/L2", ".git/worktrees/L1/ORIG_HEAD", ".git/packed-refs"]) assert.equal(ok.test(p), false, p);
+    for (const p of [".git/index", ".git/HEAD", ".git/refs/heads/main", ".git/worktrees/L2/index", ".git/refs/heads/lanes/L2", ".git/worktrees/L1/ORIG_HEAD", ".git/packed-refs", ".git/refs/tags", ".git/worktrees/L2", ".git/objects/info", ".git/refs/heads/lanes/L2/x"]) assert.equal(ok.test(p), false, p);
     // the lead: every commit after A from the job, blobs no step wrote unpacked from the pack, ids equal
     const job = g.leadJob(join(src, ".git"), A, head, new Set());
     assert.deepEqual([job.commits.length, job.commits.filter((c) => c.parents.length > 1).length], [4, 1]);

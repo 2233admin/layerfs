@@ -20,6 +20,7 @@
 //   node dsh/tools/history/run.mjs phase --run <id> --phase p2
 //   node dsh/tools/history/run.mjs devcheck --run <dev run> --range k   (devcheck.mjs: dev checks after the publish)
 //   node dsh/tools/history/run.mjs play --run <id> --from k --to k --mode fast|measured --until lanes   then   … --resume
+//     (git and Node on: … --until lead, then … --resume --until lanes, then … --resume)
 //     (a range in two commands, each under 120 s: halves.mjs; the P3 command shape with git on)
 //   node dsh/tools/history/run.mjs git --run <dev run> --on   (F-031 option (c) from the next range; dev runs only until the dev proof is accepted)
 //   node dsh/tools/history/run.mjs node --run <dev run> --on [--inputs-rule plan] [--store-policy verified|release-age-off]
@@ -365,7 +366,7 @@ export function runnerMemory() {
 const HALFWAY = Symbol("halfway");
 
 /** Plays range k. Returns the exit code the range ends with (0 to go on). */
-async function playRange(run, k, mode, half = null) {
+async function playRange(run, k, mode, half = null, until = null) {
   const phase = PHASES[run.manifest.phase], measured = mode === "measured";
   // Tooling wall time per stage (never operation latency: that is m.ops).
   const plan = run.plan(k), wall = {};
@@ -420,16 +421,18 @@ async function playRange(run, k, mode, half = null) {
     let since = performance.now();
     if (p2) {
       if (!run.state.head) throw new Error("P2 continues a run whose first range wrote the probe fixture (a P1 run, or a fork of one)");
+      const stop = (stage) => { saveHalf(run, k, { stage, ctx, attempt, traceFile, started: m.started, hostLoadStart: m.hostLoad.start, before, depthBefore, wall, elapsedMs: Math.round(performance.now() - t0) }); throw HALFWAY; };
       if (saved) ctx = ctxFromJson(saved.ctx, (base) => p2Plan(plan, new Set(new Tree(base).dirs.keys())));
-      else {
-        ctx = await startRange(run, k, plan, measured);
+      else ctx = await startRange(run, k, plan, measured);
+      // `--until lead` stops after the fork, the seed and the lead's first install (NODE_RULE §2); playMs then sums both parts
+      if (until === "lead" && !saved) { lap("startMs", since); stop("lead"); }
+      if (!saved || saved.stage === "lead") {
         await playAgents(run, k, ctx);
         lap("playMs", since);
+        if (wall.startMs != null) wall.playMs += wall.startMs;
       }
-      if (half === "until") {
-        saveHalf(run, k, { ctx, attempt, traceFile, started: m.started, hostLoadStart: m.hostLoad.start, before, depthBefore, wall, elapsedMs: Math.round(performance.now() - t0) });
-        throw HALFWAY;
-      }
+      if (until === "lanes" && saved?.stage === "lead") stop("lanes");
+      else if (until === "lanes" && !saved) stop("lanes");
       since = performance.now();
       const beforePublish = phase.closure ? async (cur) => rangeClosure(run, k, plan, cur, { sb: await setup(run), expectCall, Mismatch, oracleDir: run.manifest.oracle, checks: run.manifest.label === "dev", lwwPicked: !!ctx.lww?.picks.some((p) => p.picks > 0), dumpTo: run.manifest.label === "dev" ? (mkdirSync(join(run.dir, "closure"), { recursive: true }), join(run.dir, "closure", `dump-${pad(k)}.json`)) : null }) : null;
       published = await consolidateLanes(run, k, plan, ctx, { beforePublish });
@@ -533,7 +536,7 @@ async function playRange(run, k, mode, half = null) {
     const inst = ctx.closure.rows.find((r) => /install/.test(r.kind)), build = ctx.closure.rows.find((r) => r.kind === "build");
     const instSizes = inst ? commitOf(inst.kind)?.sizes ?? null : null;
     if (ctx.closure.reinstall && m.storage) m.storage.reinstall = { changedPackages: ctx.closure.reinstall.changedPackages, rawChangedBytes: ctx.closure.reinstall.rawChangedBytes, storedNewBytes: instSizes?.newStored ?? null };
-    m.closure = { lwwPicked: !!ctx?.lww?.picks.some((p) => p.picks > 0), steps: ctx.closure.steps, rows: ctx.closure.rows, oracle: ctx.closure.oracle ?? null, oracleKind: ctx.closure.oracleKind ?? null, normalized: ctx.closure.normalized ?? null, earlierRoots: ctx.closure.earlierRoots ?? null, outputOk: ctx.closure.outputOk ?? null };
+    m.closure = { lwwPicked: !!ctx?.lww?.picks.some((p) => p.picks > 0), steps: ctx.closure.steps, rows: ctx.closure.rows, oracle: ctx.closure.oracle ?? null, oracleKind: ctx.closure.oracleKind ?? null, normalized: ctx.closure.normalized ?? null, earlierRoots: ctx.closure.earlierRoots ?? null, outputOk: ctx.closure.outputOk ?? null, repairGroups: ctx.closure.repairGroups ?? null };
     // the development checks run after the publish: run.mjs devcheck (devcheck.mjs)
     m.study = studyMeasurements({
       fsWrites: t.all.filter((l) => l.method === "fs.write" && l.sizes).map((l) => ({ sizes: l.sizes })),
@@ -601,7 +604,9 @@ async function playRange(run, k, mode, half = null) {
     reads: p2 ? plan.steps.reduce((n, s) => n + (s.reads?.length ?? 0), 0) : ops.reduce((n, o) => n + o.reads.length, 0),
     reconcile: p2 ? ctx.p2.reconcile.length : reconcile.length, leftOut: p2 ? ctx.p2.left : left, sdkCalls: t.lines };
   m.overview = buildOverview({ plan: p2 ? plan : { ...plan, conflicts: [], lanes: [{ name: branch, agents: ["a01"] }], agents: ["a01"] }, log: run.sink.log, played, leadSteps,
-    laneOf: (label) => (p2 ? stepLane.get(label) ?? null : String(label ?? "").startsWith(`r${pad(k)}.s`) ? branch : null),
+    // a step's lane git exec (`<step>.git-commit`, gitplay.mjs) and a test point's labels (`<lane>.<mid|end>.install|refresh|
+    // tsc|vitest`, nodelanes.mjs) are that lane's
+    laneOf: (label) => (p2 ? stepLane.get(label) ?? stepLane.get(String(label ?? "").replace(/\.git-commit$/, "")) ?? plan.lanes.find((l) => String(label ?? "").startsWith(`${l.name}.`))?.name ?? null : String(label ?? "").startsWith(`r${pad(k)}.s`) ? branch : null),
     events: ctx.events ?? [], race: ctx.race ?? null, merged: ctx.merged ?? new Map(), tries: ctx.tries ?? new Map(), published: ctx.published ?? new Set(),
     lanesPlayed: p2 ? plan.lanes.map((l) => ({ name: l.name, agents: l.agents, steps: l.agents.reduce((n, a) => n + (ctx.steps.get(a) ?? 0), 0) })) : [{ name: branch, agents: ["a01"], steps: ops.length }],
     runningBefore: run.state.depth.commits, phase: run.manifest.phase });
@@ -696,15 +701,18 @@ async function cmdPlay(o) {
   if (run.state.dirty != null) { console.error(`run ${o.run} stopped in range ${run.state.dirty}; recover by fork from a snapshot (SPEC §6)`); return EXIT.guard; }
   if (from !== run.state.next) { console.error(`run ${o.run} stands at range ${run.state.next}, not ${from}`); return EXIT.usage; }
   // a range in two commands (halves.mjs): one range per command; a run halfway through a range only resumes it
-  const half = o.until === "lanes" ? "until" : "resume" in o ? "resume" : null;
-  if ("until" in o && o.until !== "lanes") return usage();
-  if (half && to !== from) { console.error("--until lanes and --resume play one range (--to = --from)"); return EXIT.usage; }
-  if (half === "until" && PHASES[run.manifest.phase]?.lanes !== "plan") { console.error(`--until lanes needs a lanes phase (P2 on), not ${run.manifest.phase}`); return EXIT.usage; }
+  // `--until lead` (after the lead's install), `--until lanes` (after the agents); `--resume` continues from either, and
+  // `--resume --until lanes` continues a lead stop to the lanes stop: a range with git and Node on in three commands
+  const until = o.until ?? null, half = "resume" in o ? "resume" : until ? "until" : null;
+  if (until && !["lead", "lanes"].includes(until)) return usage();
+  if (half && to !== from) { console.error("--until and --resume play one range (--to = --from)"); return EXIT.usage; }
+  if (until && PHASES[run.manifest.phase]?.lanes !== "plan") { console.error(`--until ${until} needs a lanes phase (P2 on), not ${run.manifest.phase}`); return EXIT.usage; }
+  if (until === "lead" && half === "resume") { console.error("--until lead starts a range; it does not resume one"); return EXIT.usage; }
   if (run.state.halfway != null && half !== "resume") { console.error(`run ${o.run} is halfway through range ${run.state.halfway}; continue it with play --resume`); return EXIT.guard; }
   if (mode === "measured") process.env.LAYERFS_CONSTRUCTION_WORKERS = "1";
   let code = EXIT.done;
   try {
-    for (let k = from; k <= to && code === EXIT.done; k++) code = await playRange(run, k, mode, half);
+    for (let k = from; k <= to && code === EXIT.done; k++) code = await playRange(run, k, mode, half, until);
   } catch (error) {
     console.error(error.stack ?? error);
     code = EXIT.error;
