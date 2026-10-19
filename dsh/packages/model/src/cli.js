@@ -100,6 +100,7 @@ export const CLI = {
   "project.progress": { at: null },
   "store.stats": { at: null },
   "store.commits": { at: null },
+  "store.overwritten": { at: null },
   "files.stats": { at: null },
   "files.history": { at: null },
   "workspace.overlay": { at: null },

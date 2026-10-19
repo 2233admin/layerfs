@@ -14,6 +14,7 @@ pub fn dispatch(service: &StoreService, call: &SdkCall) -> Result<SdkValue, SdkR
     match call.method.as_str() {
         "operator.store.stats" => store::stats(&service.store),
         "operator.store.commits" => store::commits(&service.store, &call.args),
+        "operator.store.overwritten" => store::overwritten(&service.store, &call.args),
         "operator.files.stats" => files::stats(&service.store, &call.args),
         "operator.files.history" => files::history(&service.store, &call.args),
         method => Err(SdkRefusal {

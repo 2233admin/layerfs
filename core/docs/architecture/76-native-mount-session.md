@@ -264,6 +264,32 @@ requires exactly that set: a missing, widened or additional capability, device
 or security option is not reported as the daemon endpoint. Commands still run
 as the nonroot command identity with an empty effective capability set.
 
+**PID 1 reaps orphans (#352 F-054, 2026-10-19).** The container is created with
+`HostConfig.Init: true`, so the Engine's init (`docker-init`, tini) is PID 1 and
+the daemon is its child. A command runs through an Engine exec, so any process
+that outlives its parent is reparented to PID 1; the init waits on it, and no
+zombie stays behind. Before this, the daemon was PID 1 and never waited on
+processes it did not start. A killed grandchild then stayed a zombie until the
+Sandbox closed: 19 of 20 in a count, against 0 of 20 natively, where PID 1 was
+`sh`. A tool that polls `kill(pid, 0)` for a killed process to go, as dsh's
+`run.spec.ts` does, waited forever. The contract is:
+
+- a Sandbox's PID 1 reaps every orphan;
+- a command's exit status is its own: the daemon's waits on what it starts are
+  unchanged, and nothing else calls `waitpid(-1)` in the daemon, which would race
+  them;
+- the daemon is not PID 1, so `SIGTERM` from `docker stop` ends it rather than
+  being dropped (there is still no graceful drain).
+
+Topology inspection requires `Init: true` like every other setting above, on
+create and on reopen, so a Sandbox created by an earlier build is refused and
+must be closed and created again. A backend other than this Docker one has to
+give the same contract, with its own init (Podman's catatonit, a VM's init) or
+an equivalent. The real-Docker check is
+[`reap_real.mjs`](../../../sdk/js/test/verify/reap_real.mjs): orphans that exit
+are gone, PID 1 is not the daemon, and `exit 7` still answers 7. The record is
+[fix 039](../issues/352/fixes/039-f054-sandbox-init-reaper.md).
+
 ## Limits of this record
 
 - The native status block does not include engine open-handle or lookup counts,

@@ -1,10 +1,35 @@
-# LayerFS × DSH
+<p align="center">
+  <img src="brand/mark.svg" alt="LayerFS mark" width="80">
+</p>
+
+<h1 align="center">LayerFS × DSH</h1>
+
+<p align="center"><strong>Every agent gets its own Branch. You watch them all, live.</strong></p>
+
+<p align="center">
+  <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/plugin%20for-DeepSeek%20Harness-7C3AED.svg" alt="Plugin for DeepSeek Harness"></a>
+  <a href="../README.md"><img src="https://img.shields.io/badge/built%20on-LayerFS-A78BFA.svg" alt="Built on LayerFS"></a>
+  <img src="https://img.shields.io/badge/node-%E2%89%A522.19-339933.svg?logo=node.js&amp;logoColor=white" alt="Node 22.19 or newer">
+  <a href="../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+</p>
+
+<p align="center">
+  <img src="../docs/assets/demo/layerfs-dsh.gif" alt="The LayerFS tab in DeepSeek Harness: agents fork Branches, mount Workspaces, Commit and merge while the History graph grows" width="860">
+</p>
+
+<p align="center">
+  <a href="#-what-it-adds">What it adds</a> ·
+  <a href="#-install-into-a-dsh-profile">Install</a> ·
+  <a href="#-develop">Develop</a> ·
+  <a href="../README.md">LayerFS</a>
+</p>
+
 
 `dsh-layerfs` is a plugin bundle for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh). It changes no dsh code.
 
 With the bundle, agents in a dsh session work on a LayerFS project from bash, through short Node scripts that use the LayerFS JavaScript SDK. They fork Branches, test them in Sandboxes, and merge and publish. The conversation gets a **LayerFS** tab that draws what each agent did, subagents included. The design is in issue #346.
 
-## What it adds
+## ✨ What it adds
 
 | Piece | Package | Where it shows |
 |---|---|---|
@@ -17,7 +42,7 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
 
 The LayerFS tab is the only LayerFS UI. The standalone HTML pages that used to live in `sdk_sim/` (the terminal UI page and its design preview) and their live server are removed; do not build or revive a standalone HTML or TUI page. `sdk_sim/` keeps only the simulation engine: `simulation_engine/model.js` and `files.js`, which the client and the Host import, the terminal engine (`terminal.js`, `backend/sim.js`) and demo stories (`demo.js`) that the demos were written from, and the avatars (`avatars/`).
 
-### Host plugin
+### 🔌 Host plugin
 
 - **Bash environment.** A bash call in a session bound to a project gets:
   - `DSH_LAYERFS_PROJECT` and the deployment settings;
@@ -55,7 +80,7 @@ The LayerFS tab is the only LayerFS UI. The standalone HTML pages that used to l
 
   Trees are bounded: 4000 entries, 128 KB per file, 8 MB in all. `node_modules`, `.git`, `.next`, `dist` and `build` are listed but not opened.
 
-### Client plugin
+### 🖥️ Client plugin
 
 - **The LayerFS tab** (beside Chat and Trajectory) replays the root session's lines while it is shown and draws:
   - the project terminal with agent tags;
@@ -101,7 +126,7 @@ The LayerFS tab is the only LayerFS UI. The standalone HTML pages that used to l
   Workspaces without a project offer Init.
 - **The Init dialog** (Setup and the page) imports the workspace folder by default. "Choose folder…" browses for another source: in the page where dsh offers it, otherwise with the native picker. The project is attached to the workspace folder either way. The name is optional and defaults to the source folder's.
 
-### Preset
+### 🎛️ Preset
 
 The preset has bash with background jobs, subagents (spawn) with their control tools, and compaction. It has no read, write or edit tools. Its persona carries:
 - an SDK cheat-sheet with a stdin script template;
@@ -109,7 +134,7 @@ The preset has bash with background jobs, subagents (spawn) with their control t
 
 Run the preset's sessions in Workspace Write mode; subagents inherit it.
 
-### Mock model and demos
+### 🎬 Mock model and demos
 
 The `dsh-layerfs-demo` bundle adds the LayerFS mock model: an LLM provider that is explicitly not a language model. Each scenario in `scenarios/` becomes one model, "LayerFS mock · <title>". It replies with scripted calls to the preset's own tools: bash, subagent, send_message, list_agents and the job tools. dsh runs those calls for real, against a real LayerFS project, and subagents inherit the mock model, so they run their own part of the script. No API key is needed.
 
@@ -182,7 +207,7 @@ Known limits:
 - Sim imports the `sdk_sim` model from this repository, so the Host package needs the repository beside it to Init or read a simulated project.
 - `demo-workspace` is inside this repository. A turn's "Edited" card lists every change made in the repository during the turn, including other work in the checkout.
 
-## Install into a dsh profile
+## 📦 Install into a dsh profile
 
 You need:
 - Node 22.19 or newer, pnpm, and Docker;
@@ -224,7 +249,7 @@ You need:
 
 Only dsh web is checked; dsh desktop serves the same web client but was not tested. The headless profile composes no preset registry, so there the preset is not offered. The Host and the bash environment still work there.
 
-## Develop
+## 🧰 Develop
 
 | Command | Does |
 |---|---|

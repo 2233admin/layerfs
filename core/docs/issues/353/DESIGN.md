@@ -100,6 +100,13 @@ returns `overwroteCount` and `overwroteHasMore`; `project.list_overwritten({
 layer, pageSize, pagePos })` pages the rest. Layers published before #353 keep
 their stored list (same set), and its length becomes their count.
 
+> **Owner, 2026-10-19:** the full list moved from the public SDK to the
+> internal operator: `project.list_overwritten` is removed (public dispatch
+> refuses it as `UnknownMethod`) and `operator.store.overwritten({ layer,
+> pageSize, pagePos })` pages it with the same function. `branch.publish`
+> keeps `overwroteCount`, the first 50 `overwrote` and `overwroteHasMore`.
+> The "full list, paged" ruling holds through the operator.
+
 ## 3. The walks after the change
 
 All per-node reads are by primary key or a covering index (O(log n) B-tree

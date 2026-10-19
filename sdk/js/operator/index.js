@@ -11,6 +11,8 @@ export class LayerFSOperator {
     this.store = {
       stats: async () => { const v = await call("store.stats"); return { ...v, dedupe: v.dedupe === null ? null : Number(v.dedupe), compression: v.compression === null ? null : Number(v.compression) }; },
       commits: (branch, pageSize, pagePos) => call("store.commits", { branch, ...page(pageSize,pagePos) }),
+      // every Layer one publication overwrote, newest first, one page
+      overwritten: (layer, pageSize, pagePos) => call("store.overwritten", { layer, ...page(pageSize,pagePos) }),
     };
     this.files = {
       stats: (ref,path) => call("files.stats", { branch: ref,path }),

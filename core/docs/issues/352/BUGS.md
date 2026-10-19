@@ -806,3 +806,30 @@
   `sdk/js/native` or `core/crates` relies on close alone: the writer lane
   and the telemetry retention lock use nix `Flock`, whose drop unlocks.
   [fixes/037-f053-discovery-lock-fork.md](fixes/037-f053-discovery-lock-fork.md).
+
+- **F-054 · a Sandbox's PID 1 never reaps orphaned processes (product;
+  found by the F-031 dev slice, filed by the owner 2026-10-19).**
+  - The Sandbox container ran `layerfs-daemon` as PID 1 with no init.
+    Processes orphaned by a `sandbox.exec` command (an Engine exec of
+    `bash -c`) were reparented to it and stayed zombies until the Sandbox
+    closed. Natively, PID 1 is `sh`, which reaps.
+  - Count, the test's own sequence 20 times: **19 of 20** grandchildren were
+    left as zombies under PID 1 in a Sandbox, **0 of 20** natively.
+  - Exposed test: dsh `packages/bash/bash-local/tests/run.spec.ts`, "kills
+    the whole process group (grandchildren die too)". It polls
+    `kill(pid, 0)` on the killed grandchild, a zombie answers, and the test
+    hits vitest's 5 s timeout. Seen at the slice point
+    `r015-1-docs-rfc.end` (P5 stop, 4 of 5 replays; native always passes).
+    It is the same leak as #347 BUGS row 30 (290 Chromium zombies).
+
+  **Status: FIXED** (branch `dsh-352-f054-reaper`, `99728208c5`, from
+  `sandbox-init-reaper` `fb71dcca4`). Fix kind: a Sandbox container setting,
+  HostConfig `"Init": true`, with Docker's init as PID 1 and the daemon its
+  child; not a Store format change. The endpoint check requires it, so
+  Sandboxes created by an earlier build are refused on reopen and must be
+  recreated.
+  - Checks:
+    - `reap_real.mjs` passes, with PID 1 `docker-init`, and fails on the old binaries.
+    - engine_lifecycle and sandbox_operations pass, 7 each, on the host and on Linux; Clippy is clean.
+    - The slice point, rerun once on the new binaries: pass. `run.spec.ts` 35/35, the grandchild test 22 ms, 0 zombies under PID 1 after it.
+  [fixes/039-f054-sandbox-init-reaper.md](fixes/039-f054-sandbox-init-reaper.md).

@@ -25,6 +25,8 @@ if (selected === "lazy") {
   assert.equal(client.inspect, undefined);
   assert.equal(client.sandbox.list_processes, undefined);
   assert.equal(client.sandbox.cancel, undefined);
+  assert.equal(client.project.list_overwritten, undefined);
+  assert.equal(typeof operator.store.overwritten, "function");
   assert.equal(typeof operator.inspect.snapshot, "function");
   assert.equal(typeof operator.process.cancel, "function");
   await assert.rejects(client.call("operator.inspect.snapshot", {}), { code: "UnknownMethod" });

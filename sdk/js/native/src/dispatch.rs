@@ -94,6 +94,7 @@ pub(crate) fn operator_call(op: String, args: JsUnknown) -> napi::Result<AsyncTa
             "operator.project.progress" => crate::project::progress(&args),
             "operator.store.stats"
             | "operator.store.commits"
+            | "operator.store.overwritten"
             | "operator.files.stats"
             | "operator.files.history" => direct::call(&op, args, true),
             "operator.inspect.snapshot"
