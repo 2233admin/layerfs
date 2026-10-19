@@ -836,7 +836,9 @@ async function cmdRebaselineSplit(o) {
     if (!from) { console.error(`no pilot range-1 snapshot in ${REBASELINE_SOURCES.join(", ")}`); return EXIT.usage; }
     await cmdFork({ run: id, "from-run": from, range: 1, label: "baseline", daemon, addon, sdk: o.sdk, ...(o.plan ? { plan: o.plan } : {}) });
     const run = new Run(join(HISTORY, "runs", id));
-    if (run.manifest.phase !== o.phase && cmdPhase({ run: id, phase: o.phase }) !== EXIT.done) return EXIT.usage;
+    // one phase at a time (p1 → p2 → p3), each move recorded at range 2
+    const order = Object.keys(PHASES).sort((a, b) => PHASES[a].order - PHASES[b].order);
+    for (const ph of order.slice(order.indexOf(run.manifest.phase) + 1, order.indexOf(o.phase) + 1)) if (cmdPhase({ run: id, phase: ph }) !== EXIT.done) return EXIT.usage;
     if (o.git && cmdGit({ run: id, on: true }) !== EXIT.done) return EXIT.usage;
     console.log(JSON.stringify({ run: id, from, phase: o.phase, git: !!o.git, next: "play ranges 2-4, then rebaseline --write" }));
     return EXIT.done;
@@ -844,7 +846,11 @@ async function cmdRebaselineSplit(o) {
   const run = new Run(join(HISTORY, "runs", id));
   if (run.manifest.label !== "baseline" || run.manifest.phase !== o.phase) { console.error(`rebaseline ${id}: not a ${o.phase} baseline run`); return EXIT.usage; }
   if (run.state.dirty != null || run.state.next !== 5) { console.error(`rebaseline ${id}: stands at range ${run.state.next}${run.state.dirty != null ? `, dirty at ${run.state.dirty}` : ""}; no baseline written`); return EXIT.stop; }
-  const { writeBaseline } = await import("./report.mjs");
+  // as the one-command form: a range whose latest attempt does not pass or watch gives no baseline
+  const { writeBaseline, loadAttempts } = await import("./report.mjs");
+  const latest = loadAttempts(run.manifest.outputs.metrics);
+  const bad = [2, 3, 4].map((k) => [k, latest.get(k)?.at(-1)?.gate?.verdict ?? "none"]).filter(([, v]) => v !== "pass" && v !== "watch");
+  if (bad.length) { console.error(`rebaseline ${id}: ${bad.map(([k, v]) => `range ${k} ${v}`).join(", ")}; no baseline written`); return EXIT.stop; }
   const r = writeBaseline({ metricsDir: run.manifest.outputs.metrics, ranges: [2, 3, 4], out: join(HISTORY, "metrics"), run: id, phase: o.phase, ...(o.note ? { note: o.note } : {}) });
   run.note({ kind: "baseline", name: r.file, phase: o.phase, from: run.manifest.source });
   console.log(JSON.stringify({ run: id, phase: o.phase, file: r.file, ops: Object.keys(r.baseline.ops).length }));

@@ -298,8 +298,11 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
     }
     if (!out.oracle.ok && !node.on) throw new Mismatch(`r${pad(k)} install differs from native: ${JSON.stringify({ missing: out.oracle.missing.slice(0, 5), extra: out.oracle.extra.slice(0, 5), differ: out.oracle.differ.slice(0, 5) })}`);
     if (ours !== native && !node.on) throw new Mismatch(`r${pad(k)} install output differs from native: ${firstDifference(native, ours)}`);
+    // the lockfile installed before this install: none on a run's first install (every package is new; rb-p3 r002 read
+    // 935479× against the previous range's lockfile, which was never installed); with Node on the lead installed the
+    // range base's lockfile first (NODE_RULE §2)
     let prevLock = "";
-    try { prevLock = git(["show", `${run.state.prevCommit}:pnpm-lock.yaml`]); } catch { prevLock = ""; }
+    if (run.state.installed || node.on) try { prevLock = git(["show", `${run.state.prevCommit}:pnpm-lock.yaml`]); } catch { prevLock = ""; }
     const ch = changedPackages(prevLock, git(["show", `${plan.checkpoint}:pnpm-lock.yaml`]));
     out.reinstall = { changedPackages: ch.count, rawChangedBytes: rawChangedBytes(ch, oracle.groups), changed: ch };
     out.prevGroups = run.state.nmGroupsFile ? JSON.parse(readFileSync(run.state.nmGroupsFile, "utf8")) : [];
