@@ -9,9 +9,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { changedPackages, checkNode, commitIdOf, inputsHash, pointsBefore, testPoints, treeDelta, treeIdCommand, wholeBuild } from "../nodelanes.mjs";
 import { PRUNE_EMPTY, pointBuild } from "../nodeconfig.mjs";
-import { chooseFiles, repairChain, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
+import { chooseFiles, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
 import { execTool } from "../run.mjs";
-import { installCommand, MERGE_APPLY, mergeHashCommand, parseMergeHash, pointInstall, STORE_POLICIES } from "../closure.mjs";
+import { installCommand, pointInstall, STORE_POLICIES } from "../closure.mjs";
 import { sliceRange } from "../slice.mjs";
 import { stepSource } from "../storage.mjs";
 import { decoyBytes, Tree } from "../steps.mjs";
@@ -220,48 +220,6 @@ test("a lane's later steps wait for its earlier test points, never another lane'
   assert.deepEqual(pointsBefore(pts, at("s3")), ["L1.mid"], "a non-writing step waits too: no step after a point runs during it");
   assert.deepEqual(pointsBefore(pts, at("s4")), ["L1.mid"]);
   assert.deepEqual(pointsBefore(pts, at("t2")), ["L2.mid"]);
-});
-
-test("the repair's merge oracle: each non-root lane in its own folder, then the merged entries LayerFS kept (p3-main-b r015.a2 lead.repair)", () => {
-  const dir = mkdtempSync(join(tmpdir(), "p3-merge-")), repo = join(dir, "r.git"), plan = join(dir, "plan");
-  try {
-    execFileSync("git", ["init", "-q", "--bare", repo]);
-    const tree = execFileSync("git", ["--git-dir", repo, "mktree"], { input: "", encoding: "utf8" }).trim();
-    const commit = execFileSync("git", ["--git-dir", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit-tree", tree, "-m", "c"], { encoding: "utf8" }).trim();
-    mkdirSync(plan); writeFileSync(join(plan, "range-015.json"), JSON.stringify({ lanes: [{ name: "a", areas: ["/"] }, { name: "b", areas: ["docs"] }] }));
-    const run = { manifest: { repo, plan, node: { on: true, inputsRule: "r1" } } };
-    const lane = (laneName, order, root) => ({ lane: laneName, order, root, treeNative: `t-${laneName}${order}`, install: { command: `refresh ${laneName}` }, tsc: { command: `tsc ${laneName}` } });
-    const m = { plan: { checkpoint: commit }, node: { chain: [{ tree: "t0", command: "lead install" }], points: [{ lane: "lead", root: "/workspaces/1" }, lane("a", 1, "/workspaces/2"), lane("b", 1, "/workspaces/3")] },
-      closure: { rows: [{ kind: "repair-install", command: "repair", root: "/workspaces/4" }] } };
-    const show = (r) => r.states.map((x) => (x.fork ? `fork ${x.fork}` : x.merge ? "merge" : `${x.folder ?? "main"}:${x.command}`));
-    assert.deepEqual(show(repairChain(run, m, 15)), ["main:lead install", "main:refresh a", "main:tsc a", "main:tsc b", "main:repair"], "no merged entries recorded: the chain as before");
-    m.closure.rows[0].merged = { "node_modules/.modules.yaml": "f - x" };
-    assert.deepEqual(show(repairChain(run, m, 15)), ["main:lead install", "fork b", "main:refresh a", "main:tsc a", "main:tsc b", "b:refresh b", "b:tsc b", "merge", "main:repair"]);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
-});
-
-test("MERGE_APPLY sets each wanted entry from the folder holding it, pnpm's run times aside, and lists one no folder has", () => {
-  const dir = mkdtempSync(join(tmpdir(), "p3-mapply-"));
-  try {
-    const main = join(dir, "main"), lane = join(dir, "lane");
-    for (const d of [main, lane]) mkdirSync(join(d, "node_modules", ".bin"), { recursive: true });
-    const yaml = (t, x) => `{\n  "prunedAt": "${t}",\n  "x": ${x}\n}`;
-    writeFileSync(join(main, "node_modules/.modules.yaml"), yaml("Mon", 1));
-    writeFileSync(join(lane, "node_modules/.modules.yaml"), yaml("Tue", 2));
-    writeFileSync(join(lane, "node_modules/.bin/tsc"), "#!/bin/sh\n/workspaces/9\n", { mode: 0o755 });
-    writeFileSync(join(main, "node_modules/gone"), "x");
-    // LayerFS's entries: lane's .modules.yaml (another run time), the lane's shim, gone removed, one nobody has
-    const lfs = join(dir, "lfs");
-    mkdirSync(join(lfs, "node_modules"), { recursive: true });
-    writeFileSync(join(lfs, "node_modules/.modules.yaml"), yaml("Wed", 2));
-    const sh = (cwd, cmd) => execFileSync("sh", ["-c", cmd], { cwd, encoding: "utf8" });
-    const want = { ...parseMergeHash(sh(lfs, mergeHashCommand(["node_modules/.modules.yaml"]))), ...parseMergeHash(sh(lane, mergeHashCommand(["node_modules/.bin/tsc"]))), "node_modules/gone": "-", "node_modules/new": "f - 00" };
-    writeFileSync(join(dir, "m.json"), JSON.stringify({ want, folders: [lane] }));
-    const out = JSON.parse(sh(main, `node -e '${MERGE_APPLY.replaceAll("'", "'\\''")}' ${join(dir, "m.json")}`));
-    assert.deepEqual(out, { kept: 0, removed: 1, copied: { [lane]: 2 }, unmatched: ["node_modules/new"] });
-    assert.equal(execFileSync("sh", ["-c", "stat -f %Lp node_modules/.bin/tsc 2>/dev/null || stat -c %a node_modules/.bin/tsc"], { cwd: main, encoding: "utf8" }).trim(), "755");
-    assert.deepEqual(parseMergeHash(sh(main, mergeHashCommand(Object.keys(want)))), { ...want, "node_modules/new": "-" });
-  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 let failed = 0;

@@ -74,17 +74,6 @@ export function pointsBefore(points, s) {
   return points.filter((p) => p.lane === s.lane && p.order < s.order).map((p) => p.id);
 }
 
-/**
- * The paths whose merged entry the repair's oracle reads from LayerFS (NODE_RULE P6): every path a non-root lane's
- * refresh changed. Each was written on its lane and maybe on the root lane or another lane too; the merge kept one
- * by LWW (file times), which a native replay cannot reproduce, so the oracle takes the version LayerFS kept from
- * the lane folder that has it, and a version no lane folder has stops P6.
- */
-export function mergedPaths(ctx) {
-  const rootLane = new Set((ctx.node?.plan ?? []).filter((p) => p.root).map((p) => p.lane));
-  return [...new Set((ctx.node?.points ?? []).filter((p) => p.lane !== "lead" && !rootLane.has(p.lane) && p.kind === "refresh").flatMap((p) => p.install?.changed ?? []))].sort();
-}
-
 /** The hash of a tree's install inputs (path and blob), the oracle's second key (NODE_RULE §6). */
 export function inputsHash(files) {
   const rows = [...files].filter(([p]) => INSTALL_INPUT.test(p) && !p.includes("node_modules/")).map(([p, v]) => `${v.mode} ${v.blob} ${p}`).sort();
