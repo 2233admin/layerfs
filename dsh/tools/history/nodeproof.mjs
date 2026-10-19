@@ -101,7 +101,7 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
   const stage = mkdtempSync(join(tmpdir(), "lfs352-chain-"));
   try {
     const script = [`mkdir ${ORACLE_ROOT} /seq && tar -x -C /seq && cd ${ORACLE_ROOT}`];
-    let prev = null, at = ORACLE_ROOT;
+    let prev = null, at = ORACLE_ROOT, installRoot = ORACLE_ROOT;
     const earlier = [], moveTo = (root) => {
       if (!root || root === at) return;
       if (!/^\/[\w./-]+$/.test(root) || root.split("/").includes("..")) throw new Error(`native chain: root ${root} is not a plain absolute path`);
@@ -128,6 +128,7 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
         writeFileSync(join(stage, `${i}.idx`), execFileSync("git", ["--git-dir", repo, "ls-tree", "-r", "-z", "--full-tree", st.tree], { maxBuffer: 1 << 30 }));
         script.push(nativeClean(i, `/seq/${i}.idx`));
       }
+      if (i === states.length - 1) installRoot = at;
       script.push(i < states.length - 1 ? `t=$(date +%s%N); (${st.command}) > /tmp/s${i} 2>&1; e=$?; echo "@@step ${i} $e $(( ($(date +%s%N) - t) / 1000000 ))"`
         : `t=$(date +%s%N); (${st.command}) > /tmp/o 2>&1; echo "@@exit $? $(( ($(date +%s%N) - t) / 1000000 ))"; sed 's/^/@@out /' /tmp/o; ${listerCommand()}`);
     });
@@ -149,7 +150,7 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
       steps: pick("@@step ").map((l) => { const [i, exit, ms] = l.split(" ").map(Number); return { i, exit, ms }; }),
       exit: Number(String(pick("@@exit ")[0] ?? "NaN").split(" ")[0]), installMs: Number(String(pick("@@exit ")[0] ?? "").split(" ")[1] ?? NaN), output: normalizeOutput(pick("@@out ").join("\n")), ...parseLister(r.stdout),
       tsc: tsc ? { exit: tsc[0], ms: tsc[1], output: pick("@@tscout ").join("\n") } : null,
-      emitted: tail.build ? parseEmitted(pick("@@emit ").join("\n")) : null, vitest, ms: Date.now() - t0, root: at,
+      emitted: tail.build ? parseEmitted(pick("@@emit ").join("\n")) : null, vitest, ms: Date.now() - t0, root: at, installRoot,
       cleaned: pick("@@cleaned ").map((l) => { const [i, files] = l.split(" ").map(Number); return { i, files }; }),
     };
   } finally { rmSync(stage, { recursive: true, force: true }); }
@@ -214,7 +215,10 @@ export function judgeP1(native, groups, normalized) {
 export function judgeP2(native, install, root) {
   if (!native || !install) return res("NOT_RUN", "no install on one side");
   if (native.exit !== install.exitCode) return res("stop", `exit ${install.exitCode}, native ${native.exit}`);
-  const a = rootless(install.output, root), b = rootless(native.output, native.root ?? ORACLE_ROOT);
+  // native's install output names the folder the install ran in, not the build's after it (r016.a2: install at
+  // /workspaces/3, build at /workspaces/4, pnpm's bin warning carried /workspaces/3)
+  const nativeRoot = native.installRoot ?? native.states?.at(-1)?.root ?? native.root ?? ORACLE_ROOT;
+  const a = rootless(install.output, root), b = rootless(native.output, nativeRoot);
   return a === b ? res("pass", `exit ${native.exit}`) : res("stop", firstDifference(b, a));
 }
 /**

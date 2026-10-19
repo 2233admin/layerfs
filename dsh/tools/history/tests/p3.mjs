@@ -123,6 +123,12 @@ test("P1–P5 judges: pass, stop, n/a and NOT_RUN; build-output caches are not i
   assert.equal(judgeP3({ ...shims, install: { changed: ["docs/x"], links: ["docs/x"] } }, "a").result, "stop", "a link outside node_modules stops");
   // P2 strips native's own root when it ran at LayerFS's path (nativeChain `root`)
   assert.equal(judgeP2({ exit: 0, output: "/workspaces/20/x ok", root: "/workspaces/20" }, { exitCode: 0, output: "/workspaces/20/x ok" }, "/workspaces/20").result, "pass");
+  // the repair (r016.a2): native installs at /workspaces/3, then its build moves the folder to /workspaces/4 (root);
+  // the install's output names /workspaces/3, so P2 strips the install's folder, never the build's
+  const warn = (r) => `[WARN] Failed to create bin at ${r}/python/x/.bin/a. ENOENT: open '${r}/packages/b/lib/bin.js'`;
+  assert.equal(judgeP2({ exit: 0, output: warn("/workspaces/3"), root: "/workspaces/4", installRoot: "/workspaces/3" }, { exitCode: 0, output: warn("/workspaces/3") }, "/workspaces/3").result, "pass");
+  assert.equal(judgeP2({ exit: 0, output: warn("/workspaces/3"), root: "/workspaces/4", states: [{ root: "/workspaces/1" }, { root: "/workspaces/3" }] }, { exitCode: 0, output: warn("/workspaces/3") }, "/workspaces/3").result, "pass", "a cached oracle: the last state's folder");
+  assert.equal(judgeP2({ exit: 0, output: warn("/workspaces/3"), root: "/workspaces/4", installRoot: "/workspaces/3" }, { exitCode: 0, output: warn("/workspaces/3").replace("bin.js", "cli.js") }, "/workspaces/3").result, "stop", "a real difference still stops");
   assert.ok(STATE_FILES.test("node_modules/.pnpm/lock.yaml") && !STATE_FILES.test("node_modules/.pnpm/a@1/node_modules/a/index.js"));
   assert.equal(judgeP4(native, null).result, "n/a");
   assert.equal(judgeP4(native, { exitCode: 0, emitted: { "packages/a/lib/i.js": "e1" } }).result, "pass");
