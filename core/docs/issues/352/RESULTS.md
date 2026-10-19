@@ -405,6 +405,40 @@ Fast mode under the owner's delegation, liaison rulings in the decision log. Ran
 - **Runs:** `p3-main-r` (r21 a2–r27 a1), `p3-main-s` (r27 a2–r28 a1, a fork
   of r25's snapshot with r26 replayed in fast mode as setup), and
   `p3-main-t` (r28 a2–r30, a fork of `p3-main-s`'s r27 snapshot).
+- **Index rows by table (liaison request, read-only).** The sealed
+  snapshots `range-023` (`p3-main-r`, after r23) and `range-030`
+  (`p3-main-t`, after r30) were rebuilt from their blocks into scratch
+  volumes. Each sha matches its manifest. They were read with SQLite
+  `dbstat` (`node:sqlite`, B-tree pages including their indexes) and
+  `count(*)`. Nothing was rerun. The difference covers seven ranges,
+  r24–r30.
+
+  | Table | r23 MiB | r23 rows | r30 MiB | r30 rows | MiB per range | Rows per range | Bytes per row |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | `pack` (content) | 381.7 | 59,735 | 594.2 | 80,030 | 30.4 | 2,899 | — |
+  | `inode_value` | 67.5 | 821,288 | 119.4 | 1,453,249 | 7.41 | 90,280 | 86 |
+  | `binding_hint` | 18.4 | 610,925 | 32.9 | 1,085,207 | 2.07 | 67,755 | 32 |
+  | `object_location` | 21.2 | 399,097 | 31.7 | 596,754 | 1.50 | 28,237 | 56 |
+  | `commit` | 9.1 | 24,784 | 13.2 | 35,417 | 0.58 | 1,519 | 390 |
+  | `commit_lineage` | 4.2 | 24,784 | 5.9 | 35,417 | 0.25 | 1,519 | 176 |
+  | `file_digest` | 3.1 | 39,119 | 4.4 | 56,226 | 0.19 | 2,444 | 83 |
+  | `content_signature` | 0.6 | 8,192 | 0.6 | 8,192 | 0 | 0 | — |
+  | `branch`, `layer*`, `reach`, other | 0.2 | — | 0.2 | — | 0.01 | — | — |
+  | All but `pack` | 124.4 | — | 208.5 | — | **12.0** | — | — |
+  | File (4 KiB pages, no free pages) | 506.8 | — | 803.7 | — | 42.4 | — | — |
+
+  - The index rows grow by 12.0 MiB per range, inside the 10–20 MiB the
+    question names.
+  - `inode_value` is 62% of that: about 90k rows per range at 86 bytes each.
+    `binding_hint` adds about 68k rows per range at 32 bytes.
+  - Both track the lead's clean relink. Each range's repair rewrote 108,039–125,711
+    entries (repair P6 `rewritten`), 800,598 over r24–r30. `inode_value` grew
+    by 631,961 rows (79% of that) and `binding_hint` by 474,282 (59%).
+  - `object_location` grows by about 28k rows per range. That is far fewer:
+    a relinked file's content is unchanged, so it finds its existing object.
+    `commit` and `commit_lineage` follow the about 1,519 Commits per range.
+  - Bytes per row are flat between the two snapshots in every table. The
+    growth is in row count, not in row size.
 - **Open questions for the owner:**
   - The LayerFS Sandbox verified pnpm's release age online at r21, where the
     native replay could not offline. The replay assumes hermetic installs.
