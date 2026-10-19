@@ -173,7 +173,12 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name, save
         // -m: the files get the time of the extraction, as a checkout's (and a LayerFS step's) writes do; with the
         // archive's commit times tsc -b and pnpm take changed sources as older than their outputs and skip them
         // (f031-slice-f r015: native "Already up to date" and tsc exit 0 where LayerFS rebuilt and failed)
-        script.push(`tar -x -m -C ${at} -f /seq/${st.tree}.tar`);
+        // only files whose content, mode or link differs from the folder's get the time of the extraction (r029 a1,
+        // fix 054): a checkout and a LayerFS step write only those, so tsc -b judges an unchanged package by its old
+        // times, as LayerFS does; extracting the whole tree made every package look edited and rebuilt them all. By
+        // content, not by a git diff: after the lanes' merge the folder is not any one tree.
+        if (prev) script.push(`rm -rf /x && mkdir /x && tar -x -m -C /x -f /seq/${st.tree}.tar && node -e '${SYNC_TREE}' /x ${at} && rm -rf /x`);
+        else script.push(`tar -x -m -C ${at} -f /seq/${st.tree}.tar`);
         if (prev) {
           writeFileSync(join(stage, `${i}.del`), git(repo, ["diff", "--no-renames", "--name-only", "--diff-filter=D", prev, st.tree]));
           script.push(`while IFS= read -r f; do rm -f -- "$f"; done < /seq/${i}.del`);
@@ -241,7 +246,9 @@ export function vitestReport(text, root) {
 
 /** The oracle's cache key: the tree, its install inputs and the chain that leads to it (NODE_RULE §6). */
 /** How nativeChain lays a tree down; part of the key, so an oracle made the old way is never reused (2: tar -m). */
-export const CHAIN_VERSION = 2;
+export const CHAIN_VERSION = 4;
+/** Copies into argv[2] each file or link of argv[1] that is missing there or differs in content, mode or target (no single quotes). */
+export const SYNC_TREE = "const fs=require(`fs`),p=require(`path`);const [src,dst]=process.argv.slice(1);const walk=(d)=>{for(const e of fs.readdirSync(p.join(src,d),{withFileTypes:true})){const r=p.join(d,e.name),a=p.join(src,r),b=p.join(dst,r);if(e.isDirectory()){walk(r);continue}let same=false;try{const s=fs.lstatSync(b);if(e.isSymbolicLink())same=s.isSymbolicLink()&&fs.readlinkSync(a)===fs.readlinkSync(b);else same=s.isFile()&&s.mode===fs.lstatSync(a).mode&&fs.readFileSync(a).equals(fs.readFileSync(b))}catch{}if(!same){fs.mkdirSync(p.dirname(b),{recursive:true});fs.rmSync(b,{recursive:true,force:true});if(e.isSymbolicLink())fs.symlinkSync(fs.readlinkSync(a),b);else{fs.copyFileSync(a,b);fs.chmodSync(b,fs.lstatSync(a).mode)}}}};walk(`.`)";
 /** The lanes' merge (fix 042) in the key of a chain with lane states only: 2 after the a2 silent-failure fix. */
 export const LANE_MERGE_VERSION = 3;
 export const oracleKey = ({ tree, inputs, states, tail, image }) => createHash("sha256").update(JSON.stringify({ v: LISTER_VERSION, chain: CHAIN_VERSION, tree, inputs, states, tail, image,

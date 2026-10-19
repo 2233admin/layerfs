@@ -625,6 +625,31 @@ test("oracleKey: a tail with a build or tests carries the harness's emitted-id a
   assert.equal(k({}), oracleKey({ tree: "t", states: [st], tail: {} }));
 });
 
+test("SYNC_TREE copies only what differs (content, mode, link), keeping an unchanged file's time (fix 054)", async () => {
+  const { SYNC_TREE } = await import("../nodeproof.mjs");
+  const { statSync, utimesSync, lstatSync } = await import("node:fs");
+  const dir = mkdtempSync(join(tmpdir(), "sync-")), a = join(dir, "a"), b = join(dir, "b");
+  try {
+    for (const d of [a, b]) mkdirSync(join(d, "p/src"), { recursive: true });
+    writeFileSync(join(a, "p/src/same.ts"), "same\n"); writeFileSync(join(b, "p/src/same.ts"), "same\n");
+    writeFileSync(join(a, "p/src/edit.ts"), "new\n"); writeFileSync(join(b, "p/src/edit.ts"), "old\n");
+    writeFileSync(join(a, "p/src/added.ts"), "add\n");
+    writeFileSync(join(a, "run.sh"), "x\n", { mode: 0o755 }); writeFileSync(join(b, "run.sh"), "x\n", { mode: 0o644 });
+    symlinkSync("src/same.ts", join(a, "p/link")); symlinkSync("src/edit.ts", join(b, "p/link"));
+    mkdirSync(join(b, "p/dir-now-file")); writeFileSync(join(a, "p/dir-now-file"), "f\n");
+    const old = new Date("2020-01-01T00:00:00Z");
+    for (const f of ["p/src/same.ts", "p/src/edit.ts"]) utimesSync(join(b, f), old, old);
+    execFileSync("node", ["-e", SYNC_TREE, a, b]);
+    assert.equal(statSync(join(b, "p/src/same.ts")).mtimeMs, old.getTime(), "unchanged file keeps its time");
+    assert.ok(statSync(join(b, "p/src/edit.ts")).mtimeMs > old.getTime());
+    assert.equal(readFileSync(join(b, "p/src/edit.ts"), "utf8"), "new\n");
+    assert.equal(readFileSync(join(b, "p/src/added.ts"), "utf8"), "add\n");
+    assert.equal(lstatSync(join(b, "run.sh")).mode & 0o777, 0o755);
+    assert.equal(readlinkSync(join(b, "p/link")), "src/same.ts");
+    assert.equal(readFileSync(join(b, "p/dir-now-file"), "utf8"), "f\n");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try { await fn(); console.log(`ok ${name}`); } catch (e) { failed++; console.log(`FAIL ${name}\n${e.stack}`); }
