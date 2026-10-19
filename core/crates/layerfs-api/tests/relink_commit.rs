@@ -15,6 +15,10 @@
 //! `LAYERFS_364_RELINK_TIMES=now` leaves each new file its write time, as
 //! pnpm's copy does; by default the original times are set again, so the
 //! root depends only on the build.
+//! `LAYERFS_364_RELINK_SAVE=<path>` keeps the Store after the run there;
+//! `LAYERFS_364_RELINK_RESUME=1` starts from such a Store on its existing
+//! `relink` Branch, whose head is the first side of the diff. Together they
+//! split a two-round run too long for one process.
 #[path = "support/installed_store.rs"]
 #[allow(dead_code)]
 mod installed;
@@ -228,6 +232,11 @@ fn clean_relink_commit() {
     std::fs::create_dir(&directory).unwrap();
     let path = directory.join("store.sqlite");
     std::fs::copy(&source, &path).unwrap();
+    let wal = |path: &std::path::Path| path.with_extension("sqlite-wal");
+    if wal(std::path::Path::new(&source)).exists() {
+        std::fs::copy(wal(std::path::Path::new(&source)), wal(&path)).unwrap();
+    }
+    let resume = std::env::var("LAYERFS_364_RELINK_RESUME").is_ok();
     let mut permissions = std::fs::metadata(&path).unwrap().permissions();
     #[allow(clippy::permissions_set_readonly_false)]
     permissions.set_readonly(false);
@@ -248,14 +257,16 @@ fn clean_relink_commit() {
     )
     .unwrap();
     let service = StoreService::new(opened, &owner);
-    call(
-        &service,
-        "branch.fork",
-        vec![
-            ("name", SdkValue::text("relink")),
-            ("from", SdkValue::text(&from)),
-        ],
-    );
+    if !resume {
+        call(
+            &service,
+            "branch.fork",
+            vec![
+                ("name", SdkValue::text("relink")),
+                ("from", SdkValue::text(&from)),
+            ],
+        );
+    }
     let store = &service.store;
     let stack = layerfs_store_service::history::lookup::project(store, "dsh").unwrap();
     let branch = layerfs_store_service::history::lookup::branch(store, &stack, "relink").unwrap();
@@ -267,8 +278,13 @@ fn clean_relink_commit() {
         )
     })
     .unwrap();
-    let commits: Vec<String> = (1..=rounds)
-        .map(|round| relink(&service, &workspace, round, keep_times))
+    let head = branch
+        .head_commit
+        .filter(|_| resume)
+        .map(|id| hex(layerfs_history::NodeId::Commit(id).as_slice()));
+    let commits: Vec<String> = head
+        .into_iter()
+        .chain((1..=rounds).map(|round| relink(&service, &workspace, round, keep_times)))
         .collect();
     drop(workspace);
     if let [first, second] = commits.as_slice() {
@@ -307,5 +323,12 @@ fn clean_relink_commit() {
     }
     drop(service);
     owner.stop().unwrap();
+    if let Ok(save) = std::env::var("LAYERFS_364_RELINK_SAVE") {
+        let save = std::path::PathBuf::from(save);
+        std::fs::copy(&path, &save).unwrap();
+        if wal(&path).exists() {
+            std::fs::copy(wal(&path), wal(&save)).unwrap();
+        }
+    }
     std::fs::remove_dir_all(directory).unwrap();
 }
