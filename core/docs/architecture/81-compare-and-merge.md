@@ -40,7 +40,11 @@ the changed entries times their path depth. `ChangeWalk::full` lists both trees
 completely. A stale or missing hint cannot change the answer: an inode with
 fewer checked bindings than its reference count, or more than
 `MAXIMUM_CHANGED` (65,536) changed inodes, makes `plan` answer `None`, and the
-caller uses the full walk. layerfs-store-service `read/compare.rs` (first the
+caller uses the full walk. Since #364 item 4 the SDK adapter's plan cache
+(`read/plans.rs`) keeps that `None` like a plan, so the later pages of the same
+two roots do not plan again, and a resumed full walk, like a planned one, starts
+each directory on the cursor's path at the cursor's name (one lookup per side)
+instead of its first name. layerfs-store-service `read/compare.rs` (first the
 daemon's, then store-service's `sdk/compare.rs`) keeps only the SDK adapter:
 reply budget and paging, and the History catalog behind
 `BindingHints` (`HistoryCatalog::bindings_of`, the Store's `binding_hint`
