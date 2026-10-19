@@ -565,7 +565,9 @@ async function cmdSavestate(o) {
   const run = loadRun(o.run), pending = join(run.dir, "native-state-pending.json");
   if (run.state.halfway) throw new Error(`run ${o.run} is halfway through range ${run.state.halfway}`);
   const chain = run.state.closureChain ?? [], treeOf = (c) => git(run.manifest.repo, ["rev-parse", `${c}^{tree}`]).trim();
-  const asState = (e) => ({ tree: treeOf(e.checkpoint), command: e.command, ...(e.state ? { state: e.state } : {}) });
+  // each state at the root LayerFS ran it at (r030 a1, fix 055): tsdown writes a module's absolute path into its
+  // output (CSS-module class hashes, region comments), so a snapshot built at the oracle root left other bundles
+  const asState = (e) => ({ tree: treeOf(e.checkpoint), command: e.command, ...(e.root ? { root: e.root } : {}), ...(e.state ? { state: e.state } : {}) });
   const repo = scratchRepo(join(oracleDir(run), "repo.git"), run.manifest.repo), image = run.manifest.env.LAYERFS_IMAGE;
   if (o.adopt) {
     const p = JSON.parse(readFileSync(pending, "utf8"));
@@ -672,6 +674,13 @@ async function cmdProofs(o) {
     if (!m.p3proofs) throw new Error(`${mfile}: no proofs to re-judge`);
     m.rejudged = [...(m.rejudged ?? []), { after: o.rejudge, at: new Date().toISOString(), proofs: Object.fromEntries(Object.entries(m.p3proofs).map(([id, p]) => [id, Object.fromEntries(Object.entries(p.proofs ?? {}).map(([n, r]) => [n, r.result]))])), gate: m.gate?.verdict ?? m.gateBeforeProofs?.verdict ?? null }];
     delete m.p3proofs;
+    // a native state remade for the same states (fix 055: rebuilt at LayerFS's roots) stands in for the one the attempt
+    // recorded; the swap is kept in the metrics
+    const now = run.state.closureChain?.[0], was = m.node.chain?.[0];
+    if (now?.state && was?.state && now.state.sha256 !== was.state.sha256 && JSON.stringify(now.state.of) === JSON.stringify(was.state.of)) {
+      m.node.chainRestated = [...(m.node.chainRestated ?? []), { after: o.rejudge, from: was.state.file, to: now.state.file, of: now.state.of }];
+      m.node.chain[0] = { ...was, command: now.command, state: now.state };
+    }
   }
   const node = nodeOf(run.manifest), repo = scratchRepo(join(oracleDir(run), "repo.git"), run.manifest.repo), blobs = new BlobCache(run.manifest.repo);
   const proofs = (m.p3proofs ??= {});
