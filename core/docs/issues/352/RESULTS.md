@@ -372,6 +372,47 @@ The baseline is range 15's terminal attempt. Each later range is its terminal at
 - **Harness and oracle fixes along the way:** F-058 (lanes merge as LayerFS does, in write order), F-059 (repair clean and whole build), F-060 (the native chain applies the reconcile), and the Installed-tree row. A chain reset was tried and reverted (fix 043). None is a product change. The open product items stay with #364 and the earlier open F-numbers.
 
 
+### Ranges 21–30, the ranges session (2026-10-20)
+
+Fast mode under the owner's delegation, liaison rulings in the decision log. Ranges 21–22 ran on daemon `44ac6c91` and addon `77597adb`. From range 23 they ran on binaries built from main 3ef00d32e5 (daemon `45a196ef`, addon `4668012e`), owner 2026-10-20. The image stayed `d3773b4e` throughout and F-057 merge units were not used. One sample per attempt. The range-by-range comparison against range 15 is in [RANGES_21_29_REPORT.md](RANGES_21_29_REPORT.md).
+
+| Range | Attempts | Terminal verdict | Stops and causes | Repair build s | Final commands s (repair / verify / finish) |
+| --- | --- | --- | --- | --- | --- |
+| 21 | 2 | optimize (#364 item 4) | a1: the oracle's pnpm store lacked the range's intermediate lockfile versions, so pnpm's offline release-age check failed natively ([048](fixes/048-r021-a1-store-fetch-generation.md)) | 12.2 | 109 / 96 / 40 |
+| 22 | 1 | terminal by ruling: advanced on optimize (#364 item 4); disk projection (issue364 cargo target) and counters recorded | the native-first check caught a repair clean that missed a root `.typecheck/` tsbuildinfo before the attempt ([051](fixes/051-r022-native-first-tsbuildinfo.md)) | 12.6 | 101 / 94 / 36 |
+| 23 | 1 | watch | — (first range on main's binaries; verify 13 s against 91–96 s) | 12.5 | 95 / 13 / 41 |
+| 24 | 1 | watch | — | 14.5 | 110 / 13 / 35 |
+| 25 | 1 | optimize, counters recorded | — (`glob_tree.statements` depth exponent 1.489) | 14.7 | 111 / 14 / 42 |
+| 26 | 1 | optimize, counters recorded | — (`glob_tree.vm_steps` depth exponent 0.726) | 18.6 | 117 / 12 / 36 |
+| 27 | 2 | watch | a1: the ~1 MiB Sandbox exec stdout cap cut a vitest report, and the native HOME differed from the Sandbox's `HOME=/tmp` ([052](fixes/052-r027-a1-vitest-report-and-home.md)) | 15.8 | 93 / 15 / 41 |
+| 28 | 2 | watch | a1: tsdown writes CSS-module class maps in no fixed order ([053](fixes/053-r028-a1-css-module-map-order.md)) | 17.8 | 104 / 16 / 44 |
+| 29 | 1 | watch (re-judged) | the native chain gave every file a new time, so `tsc -b` rebuilt packages a checkout leaves up to date ([054](fixes/054-r029-a1-native-unchanged-file-times.md)) | 19.1 | 110 / 12 / 39 |
+| 30 | 1 | optimize, counters recorded (re-judged) | native state snapshots were built at the oracle root, and tsdown writes the absolute path into its bundles ([055](fixes/055-r030-a1-native-state-roots.md)); Contended work `fs.rm` exponent 1.573 recorded | 21.2 | 119 / 18 / 49 |
+
+- **No stop was a LayerFS defect.** Every stop was in the oracle or harness,
+  or in a workload property: an offline store, a stdout cap, HOME, bundler
+  order, mtimes or build paths. Each has a fix record. Ranges 29 and 30 were
+  re-judged on retained state; ranges 21, 27 and 28 needed a new attempt.
+  Every terminal attempt has Node P1–P6 with no stop and no NOT_RUN, and every report
+  check is F1–F8 PASS.
+- **Harness hardening (step 0):** fail-loud native replays (`provenRun`),
+  native-first repair checks, re-judging on retained state, resumable final
+  commands (`--until repair`, `--until verified`), QUIET as a lock the harness
+  holds, native state snapshots, `fixno.mjs`, and a harness-hash check
+  between host and container. Native snapshots took a range's native
+  replay from 74–94 s to 17–18 s. Fix 055 found that they had been built at
+  the oracle root; the r29 snapshot was remade at LayerFS's roots.
+- **Runs:** `p3-main-r` (r21 a2–r27 a1), `p3-main-s` (r27 a2–r28 a1, a fork
+  of r25's snapshot with r26 replayed in fast mode as setup), and
+  `p3-main-t` (r28 a2–r30, a fork of `p3-main-s`'s r27 snapshot).
+- **Open questions for the owner:**
+  - The LayerFS Sandbox verified pnpm's release age online at r21, where the
+    native replay could not offline. The replay assumes hermetic installs.
+    Should the Sandbox have reached the npm registry? (liaison: not an action
+    item.)
+  - Is the Sandbox exec's ~1 MiB stdout cap an artificial transport limit
+    (fix 052)? It is unchanged; the harness reads reports from a file.
+
 ## P4 · Recovery and demo
 
 Pending.
