@@ -80,10 +80,9 @@ pub(crate) fn to_js(env: &Env, value: &SdkValue) -> Result<JsUnknown> {
         SdkValue::Bool(value) => env.get_boolean(*value)?.into_unknown(),
         SdkValue::Int(value) => env.create_int64(*value)?.into_unknown(),
         SdkValue::Text(text) => env.create_string(text)?.into_unknown(),
-        SdkValue::Bytes(bytes) => env
-            .create_buffer_with_data(bytes.clone())?
-            .into_raw()
-            .into_unknown(),
+        // Copied into memory V8 allocates and counts toward collection, with
+        // no second Rust copy; an external buffer is neither (#352 fix 056).
+        SdkValue::Bytes(bytes) => env.create_buffer_copy(bytes)?.into_raw().into_unknown(),
         SdkValue::List(items) => {
             let mut array = env.create_array_with_length(items.len())?;
             for (index, item) in items.iter().enumerate() {
