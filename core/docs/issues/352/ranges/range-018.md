@@ -417,7 +417,10 @@ Diagnosis pending: `finding-018.a6.json`.
     - Content ratio 0.24× (0.29×); churn 0.02 (0.26).
     - Tooling 340.1 s; the final command took 239 s under the 295 s alarm.
 - **a5 (`p3-main-k`, fork of `p3-main-g`'s r017 snapshot, harness `1a0393ad8b`, daemon `44ac6c91`, addon `77597adb`): STOP. A harness defect in fix 043, not a LayerFS defect.** This is the replay the owner's F-059 option A requires. The repair's new clean removed every package's `lib/`, then `tsc -b` rebuilt only the changed packages. tsdown bundles every package from its `lib/types`, so it failed: `UNRESOLVED_ENTRY ... lib/types/index.js`, exit 1 after 10.7 s. The native repair chain with the same command fails the same way (diagnostic). Corrected in fix 043: after the clean, the repair runs dsh's whole build (`tsc -b` of every tsconfig package, then tsdown). Natively that build exits 0 in 7.7 s with 719 emitted files. The run is dirty; a6 forks the r017 snapshot again. Lanes 92 s; final command 117 s under the 295 s alarm. Report check F1–F8 PASS (the F1 fix counts the repair install's Commit).
-
+- **a6 (`p3-main-l`, fork of `p3-main-g`'s r017 snapshot, harness `15b3cce060`, daemon `44ac6c91`, addon `77597adb`): OPTIMIZE, terminal: advanced on optimize: #364 item 4.** This is the F-059 option A replay (owner-approved workload change): the repair cleans `lib/` and `*.tsbuildinfo` in every tsconfig package, then runs dsh's whole build. Checkpoint ok, git ✓. Node 17 pass, 0 stop, 0 NOT_RUN over 4 points; the repair's P6 passes with 719 emitted files equal to native. The only optimize row is the checkpoint `diff_commits` scaling (#364 item 4). Speed and Counters are watch.
+  - **Repair build time against r15** (one sample each): LayerFS 12.06 s (clean plus whole build, 719 emitted files) against 8.64 s at a4 (changed packages, 418) and 7.60 s at r15 a4 (503). Native 7.74 s against 5.98 s and 5.96 s. Repair install 40.4 s (r15 26.1 s, unchanged command).
+  - The final command took 254 s under the declared 295 s alarm, with 41 s of margin. Control sample `control-018.a6` passes the watch row (0.71–0.99×).
+  - Range 19 a2 continues from this run's live state.
 
 ## Appendix
 
