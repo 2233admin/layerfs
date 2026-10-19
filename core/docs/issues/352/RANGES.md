@@ -35,3 +35,4 @@
 | 028 | 80 | 32,548 | **watch** | Speed | 53.6 MiB | [range-028](ranges/range-028.md) |
 | 029 | 90 | 33,478 | **watch** | Speed | 37.1 MiB | [range-029](ranges/range-029.md) |
 | 030 | 65 | 35,023 | **optimize** | Contended work | 35.6 MiB | [range-030](ranges/range-030.md) |
+| 031 | 32 | 35,351 | **watch** | Speed | 33.8 MiB | [range-031](ranges/range-031.md) |
