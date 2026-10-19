@@ -200,6 +200,7 @@
 | 2026-10-20 | **Range 24 a1 (`p3-main-r`, daemon `45a196ef`): WATCH, terminal.** Checkpoint ok, git ✓, Node 17 pass, 0 stop, 0 NOT_RUN over 4 points, repair P6 pass. Final-step alarms rebalanced within 295 s (repair 160, verify 70, finish 65) now that verify takes ~10 s | — |
 | 2026-10-20 | **Range 25 a1 (`p3-main-r`, daemon `45a196ef`): OPTIMIZE, terminal under the fast-mode ruling (counters recorded).** Checkpoint ok, git ✓, Node 13 pass, 0 stop, 0 NOT_RUN over 4 points, repair P6 pass. Only optimize row: Counters `glob_tree.statements` per tree file, depth exponent 1.489 (3 same-binary points) | — |
 | 2026-10-20 | **Range 26 a1 (`p3-main-r`, daemon `45a196ef`): OPTIMIZE, terminal under the fast-mode ruling (counters recorded).** Checkpoint ok, git ✓, Node 16 pass, 0 stop, 0 NOT_RUN over 4 points, repair P6 pass (1,167 emitted). Only optimize row: Counters `glob_tree.vm_steps` per tree file, depth exponent 0.726 | — |
+| 2026-10-20 | **Range 27 a2 (`p3-main-s`, daemon `45a196ef`): WATCH, terminal.** a1 stopped on two harness causes (fix 052: a vitest report cut by the ~1 MiB Sandbox exec stdout cap; native HOME differed from the Sandbox's HOME=/tmp). a2 on a fork of r25's snapshot with r26 replayed fast as setup: checkpoint ok, git ✓, Node 16 pass, 0 stop, 0 NOT_RUN over 4 points, repair P6 pass (1,175 emitted). Watch rows: Speed not judged, Counters `glob_tree.vm_steps` exponent 0.468, Directory share 0.563 | open: is the exec stdout cap an artificial transport limit (owner) |
 
 ## P1 · Pilot
 

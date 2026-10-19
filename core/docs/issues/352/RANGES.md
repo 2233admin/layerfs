@@ -31,4 +31,4 @@
 | 024 | 61 | 25,762 | **watch** | Speed | 30.5 MiB | [range-024](ranges/range-024.md) |
 | 025 | 64 | 27,563 | **optimize** | Counters | 97.3 MiB | [range-025](ranges/range-025.md) |
 | 026 | 60 | 29,975 | **optimize** | Counters | 43.5 MiB | [range-026](ranges/range-026.md) |
-| 027 | 63 | 30,629 | **stop** | Node proofs | 22.7 MiB | [range-027](ranges/range-027.md) |
+| 027 | 63 | 30,629 | **watch** | Speed | 22.7 MiB | [range-027](ranges/range-027.md) |
