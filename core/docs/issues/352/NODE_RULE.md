@@ -147,6 +147,16 @@ The tree and commands are unchanged.
   the base inputs would remove what the root lane added, which the LayerFS
   merge keeps. P1 at each of their points judges what their refresh
   rewrote.
+- **The devcheck's clean reinstall** (`run.mjs devcheck`): the repair's
+  chain and build, then the same clean reinstall
+  (`nodeproof.mjs reinstall`, run on the host before devcheck, into
+  `metrics/devcheck-oracle-k.json`). The reinstall runs on the published
+  main, whose untracked build output stays. pnpm links a workspace bin only
+  when its target exists, so a fresh checkout's clean install is not the
+  oracle for this state. In R1 slice `f031-r1-slice-f`, LayerFS linked
+  `python/sdk-runtime/node_modules/.bin/dsh-jsonrpc-agent`, whose target is
+  `packages/ui/jsonrpc-agent/lib/bin.js`; the fresh checkout has no `lib/`.
+  With Node off, the clean oracle stays.
 
 The underlying product property is that a Workspace's path is new on every
 mount (F-029, by design). Tools that cache absolute paths therefore redo

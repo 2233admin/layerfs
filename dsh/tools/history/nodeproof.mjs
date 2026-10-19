@@ -14,6 +14,9 @@
 //     after the play: native oracles for the recorded points (cached), P1–P6
 //     into the attempt's metrics, its p3 object refilled and the report rendered again;
 //     points left over the budget wait for the next command
+//   node dsh/tools/history/nodeproof.mjs reinstall --run <id> --range k [--attempt a]
+//     after the proofs, before run.mjs devcheck: the clean reinstall natively on top of the repair's chain
+//     (metrics/devcheck-oracle-k.json), the devcheck's oracle when Node is on
 // The trees are rebuilt in a scratch repository whose objects borrow dsh.git's
 // (alternates): dsh blobs by id, decoys from their base and marker.
 import { execFileSync, spawnSync } from "node:child_process";
@@ -28,6 +31,7 @@ import { buildCommand } from "./closure.mjs";
 import { BUILD_GROUPS, vitestMessages } from "./nodeconfig.mjs";
 export { BUILD_GROUPS };
 import { selectTests, vitestCommand } from "./unit-tests.mjs";
+import { devSteps } from "./devcheck.mjs";
 import { decoyBytes, pad, Tree } from "./steps.mjs";
 import { installCommand } from "./closure.mjs";
 
@@ -263,6 +267,56 @@ export function judgeRepair(closure, nativeBuild, { groups = null } = {}) {
       P6: res(p6, `P1 ${p1.result}${p1.detail ? ` (${p1.detail})` : ""}, P4 ${p4.result}${p4.detail ? ` (${p4.detail})` : ""}`, { rewritten: inst.rewritten ?? null }) } };
 }
 
+/** Each state at the mount path LayerFS ran it at (nativeChain): the lead's chain at the lead's root, and an earlier
+ * point as its lane ran it, its install and then its build (its lib/ output stays in the lane's tree, as the lead's
+ * build does in chain0; R1 slice f031-r1-slice-e r015-1-docs-rfc.end). */
+function chainParts(m) {
+  const at = (root) => (root ? { root } : {}), leadRoot = m.node.points.find((q) => q.lane === "lead")?.root ?? null;
+  const chain0 = m.node.chain.map((e) => ({ tree: e.tree, command: e.command, ...at(leadRoot) }));
+  const pointStates = (q) => [{ tree: q.treeNative, command: q.install.command, ...at(q.root) }, ...(q.tsc?.command ? [{ tree: q.treeNative, command: q.tsc.command, ...at(q.root) }] : [])];
+  return { at, chain0, pointStates };
+}
+
+/**
+ * The chain the lead's merged node_modules carries at the repair: the lead's install and build, every lane point's
+ * install and build in the order they ran, then the repair install on the checkpoint tree (its build is the tail).
+ * `complete` is false until the proofs recorded every lane point's native tree.
+ */
+export function repairChain(run, m, k) {
+  const node = nodeOf(run.manifest), { at, chain0, pointStates } = chainParts(m);
+  const inst = m.closure.rows.find((r) => /install/.test(r.kind)), build = m.closure.rows.find((r) => r.kind === "build");
+  const tree = git(run.manifest.repo, ["rev-parse", `${m.plan.checkpoint}^{tree}`]).trim();
+  // NODE_RULE §3 R1: only the root lane changes install inputs, so only its installs change the installed
+  // packages; another lane's install is a refresh of the range base's inputs (P1 at its point judges what it
+  // rewrites). Replayed in one native folder, that refresh would remove what the root lane added, which the
+  // merge keeps (R1 slice f031-r1-slice-e: js-yaml), so only those lanes' builds are in the chain
+  const plan = JSON.parse(readFileSync(join(run.manifest.plan, `range-${pad(k)}.json`), "utf8"));
+  const rootLane = node.inputsRule === "r1" ? plan.lanes.find((l) => l.areas.includes("/"))?.name ?? null : null;
+  const ran = m.node.points.filter((q) => q.lane !== "lead" && q.install?.command && q.treeNative);
+  const lanes = ran.flatMap((q) => (rootLane && q.lane !== rootLane ? pointStates(q).slice(1) : pointStates(q)));
+  const states = [...chain0, ...lanes, { tree, command: inst.command ?? installCommand({ policy: node.storePolicy }), ...at(inst.root) }];
+  const buildState = build ? { tree, command: build.command ?? buildCommand(build.packages), ...at(build.root) } : null;
+  return { tree, states, buildState, tail: build ? { build: buildState.command, packages: build.packages, ...at(build.root) } : {},
+    complete: ran.length === m.node.points.filter((q) => q.lane !== "lead").length };
+}
+
+/**
+ * The devcheck's clean reinstall, natively on top of the state it runs on (devcheck.mjs, Node on): the repair's
+ * chain and build, then the devcheck's command. The reinstall keeps the published main's untracked build output,
+ * and pnpm links a workspace bin only when its target exists (R1 slice f031-r1-slice-f:
+ * `python/sdk-runtime/node_modules/.bin/dsh-jsonrpc-agent` -> packages/ui/jsonrpc-agent/lib/bin.js), so a fresh
+ * checkout's clean install is not this state's oracle. A clean install removes every node_modules first, so no
+ * earlier root survives into its tree and it runs where the chain ends.
+ */
+export function reinstallStates(run, m, k, command) {
+  if (!m.p3proofs?.["lead.repair"]) throw new Error(`range ${k}: the repair proof has not run (nodeproof.mjs proofs first)`);
+  const r = repairChain(run, m, k);
+  if (!r.complete) throw new Error(`range ${k}: the proofs did not record every lane point's native tree`);
+  return [...r.states, ...(r.buildState ? [r.buildState] : []), { tree: r.tree, command }];
+}
+export const reinstallOracleFile = (metrics, k) => join(metrics, `devcheck-oracle-${pad(k)}.json`);
+
+// ---- commands ----
 // ---- commands ----
 
 function loadRun(id) {
@@ -343,6 +397,22 @@ async function cmdInputs(o) {
   } finally { blobs.close(); }
 }
 
+/** The devcheck's on-top reinstall oracle (reinstallStates), cached, into metrics/devcheck-oracle-k.json; run on the host before devcheck. */
+async function cmdReinstall(o) {
+  const run = loadRun(o.run), k = Number(o.range), metrics = run.manifest.outputs.metrics;
+  const files = readdirSync(metrics).filter((f) => new RegExp(`^range-${pad(k)}\\.a(\\d+)\\.json$`).test(f));
+  const a = o.attempt ?? Math.max(...files.map((f) => Number(/\.a(\d+)\./.exec(f)[1])));
+  const m = JSON.parse(readFileSync(join(metrics, `range-${pad(k)}.a${a}.json`), "utf8"));
+  const step = devSteps(m.closure).find((s) => s.kind === "reinstall-check");
+  if (!step) { console.log(JSON.stringify({ range: k, attempt: a, reinstall: false })); return; }
+  const repo = scratchRepo(join(oracleDir(run), "repo.git"), run.manifest.repo);
+  const n = cachedOracle(oracleDir(run), { repo, states: reinstallStates(run, m, k, step.command), tail: {}, inputs: "reinstall-check", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() });
+  const file = reinstallOracleFile(metrics, k);
+  writeFileSync(`${file}.tmp`, JSON.stringify({ range: k, attempt: a, kind: "on-top", key: n.key, cached: n.cached, command: step.command, exit: n.exit, root: n.root, listerVersion: LISTER_VERSION, groups: n.groups, normalized: n.normalized, ms: n.ms }, null, 1));
+  renameSync(`${file}.tmp`, file);
+  console.log(JSON.stringify({ range: k, attempt: a, file, exit: n.exit, groups: n.groups.length, cached: n.cached, ms: n.ms }));
+}
+
 /** The proofs of a played attempt (see the header): native oracles per recorded point, P1–P6, the p3 object refilled, the report again. */
 async function cmdProofs(o) {
   const run = loadRun(o.run), k = Number(o.range), budget = Number(o["budget-s"] ?? 90) * 1000, t0 = Date.now();
@@ -354,13 +424,7 @@ async function cmdProofs(o) {
   const proofs = (m.p3proofs ??= {});
   let left = 0;
   try {
-    const baseTree = m.node.baseTree;
-    // each state at the mount path LayerFS ran it at (nativeChain): the lead's install and build at the lead's
-    const at = (root) => (root ? { root } : {}), leadRoot = m.node.points.find((q) => q.lane === "lead")?.root ?? null;
-    const chain0 = m.node.chain.map((e) => ({ tree: e.tree, command: e.command, ...at(leadRoot) }));
-    // an earlier point as the lane ran it: its install, then its build (its lib/ output stays in the lane's tree,
-    // as the lead's build does in chain0; R1 slice f031-r1-slice-e r015-1-docs-rfc.end)
-    const pointStates = (q) => [{ tree: q.treeNative, command: q.install.command, ...at(q.root) }, ...(q.tsc?.command ? [{ tree: q.treeNative, command: q.tsc.command, ...at(q.root) }] : [])];
+    const baseTree = m.node.baseTree, { at, chain0, pointStates } = chainParts(m);
     for (const pt of m.node.points) {
       if (proofs[pt.id]) continue;
       if (Date.now() - t0 > budget) { left++; continue; }
@@ -382,18 +446,8 @@ async function cmdProofs(o) {
     // point's install and build in the order they ran, then the repair install and build on the checkpoint tree
     const inst = m.closure?.rows?.find((r) => /install/.test(r.kind));
     if (inst && !proofs["lead.repair"] && Date.now() - t0 <= budget) {
-      const build = m.closure.rows.find((r) => r.kind === "build"), tree = git(run.manifest.repo, ["rev-parse", `${m.plan.checkpoint}^{tree}`]).trim();
-      // NODE_RULE §3 R1: only the root lane changes install inputs, so only its installs change the installed
-      // packages; another lane's install is a refresh of the range base's inputs (P1 at its point judges what it
-      // rewrites). Replayed in one native folder, that refresh would remove what the root lane added, which the
-      // merge keeps (R1 slice f031-r1-slice-e: js-yaml), so only those lanes' builds are in the chain
-      const plan = JSON.parse(readFileSync(join(run.manifest.plan, `range-${pad(k)}.json`), "utf8"));
-      const rootLane = node.inputsRule === "r1" ? plan.lanes.find((l) => l.areas.includes("/"))?.name ?? null : null;
-      const ran = m.node.points.filter((q) => q.lane !== "lead" && q.install?.command && q.treeNative);
-      const lanes = ran.flatMap((q) => (rootLane && q.lane !== rootLane ? pointStates(q).slice(1) : pointStates(q)));
-      const states = [...chain0, ...lanes, { tree, command: inst.command ?? installCommand({ policy: node.storePolicy }), ...at(inst.root) }];
-      const native = ran.length === m.node.points.filter((q) => q.lane !== "lead").length
-        ? cachedOracle(oracleDir(run), { repo, states, tail: build ? { build: build.command ?? buildCommand(build.packages), packages: build.packages, ...at(build.root) } : {}, inputs: "repair", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : null;
+      const r = repairChain(run, m, k), tree = r.tree;
+      const native = r.complete ? cachedOracle(oracleDir(run), { repo, states: r.states, tail: r.tail, inputs: "repair", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : null;
       const groups = m.closure.repairGroups && existsSync(m.closure.repairGroups) ? JSON.parse(readFileSync(m.closure.repairGroups, "utf8")) : null;
       proofs["lead.repair"] = judgeRepair({ ...m.closure, tree }, native, { groups, nativeMs: native?.ms ?? null });
     } else if (inst && !proofs["lead.repair"]) left++;
@@ -412,7 +466,7 @@ async function cmdProofs(o) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [cmd, ...rest] = process.argv.slice(2), o = {};
   for (let i = 0; i < rest.length; i++) if (rest[i].startsWith("--")) o[rest[i].slice(2)] = rest[i + 1] == null || rest[i + 1].startsWith("--") ? true : rest[++i];
-  const run = { calibrate: cmdCalibrate, inputs: cmdInputs, proofs: cmdProofs }[cmd];
-  if (!run || !o.run || !o.range) { console.error("usage: nodeproof.mjs calibrate|inputs|proofs --run <id> --range k [--point id] [--attempt a] [--budget-s s]"); process.exit(2); }
+  const run = { calibrate: cmdCalibrate, inputs: cmdInputs, proofs: cmdProofs, reinstall: cmdReinstall }[cmd];
+  if (!run || !o.run || !o.range) { console.error("usage: nodeproof.mjs calibrate|inputs|proofs|reinstall --run <id> --range k [--point id] [--attempt a] [--budget-s s]"); process.exit(2); }
   run(o).catch((e) => { console.error(e.stack ?? e); process.exit(1); });
 }

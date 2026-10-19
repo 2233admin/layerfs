@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { changedPackages, checkNode, commitIdOf, inputsHash, testPoints, treeDelta, treeIdCommand, wholeBuild } from "../nodelanes.mjs";
 import { PRUNE_EMPTY, pointBuild } from "../nodeconfig.mjs";
-import { chooseFiles, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
+import { chooseFiles, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
 import { execTool } from "../run.mjs";
 import { installCommand, STORE_POLICIES } from "../closure.mjs";
 import { sliceRange } from "../slice.mjs";
@@ -187,6 +187,25 @@ test("a dev slice: the range's first mainline steps up to N dsh commits, its che
   const s = sliceRange(range, 3);
   assert.deepEqual([s.steps.length, s.commits, s.checkpoint, s.tree, s.slice.of], [2, 3, "m2", "t2", "m3"]);
   assert.equal(sliceRange(range, 99).checkpoint, "m3");
+});
+
+test("the devcheck's reinstall oracle under Node: the repair's chain and build, then the clean reinstall on top (R1 slice f031-r1-slice-f)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "p3-reinstall-")), repo = join(dir, "r.git"), plan = join(dir, "plan");
+  try {
+    execFileSync("git", ["init", "-q", "--bare", repo]);
+    const tree = execFileSync("git", ["--git-dir", repo, "mktree"], { input: "", encoding: "utf8" }).trim();
+    const commit = execFileSync("git", ["--git-dir", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit-tree", tree, "-m", "c"], { encoding: "utf8" }).trim();
+    mkdirSync(plan); writeFileSync(join(plan, "range-015.json"), JSON.stringify({ lanes: [{ name: "a", areas: ["/"] }, { name: "b", areas: ["docs"] }] }));
+    const run = { manifest: { repo, plan, node: { on: true, inputsRule: "r1" } } };
+    const lane = (laneName, order, root) => ({ lane: laneName, order, root, treeNative: `t-${laneName}${order}`, install: { command: "install" }, tsc: { command: `tsc ${laneName}` } });
+    const m = { plan: { checkpoint: commit }, node: { chain: [{ tree: "t0", command: "lead install" }], points: [{ lane: "lead", root: "/workspaces/1" }, lane("a", 1, "/workspaces/2"), lane("b", 1, "/workspaces/3")] },
+      closure: { rows: [{ kind: "repair-install", command: "repair", root: "/workspaces/4" }, { kind: "build", command: "build", packages: ["p"], root: "/workspaces/4" }] }, p3proofs: { "lead.repair": {} } };
+    const states = reinstallStates(run, m, 15, "clean install");
+    assert.deepEqual(states.map((x) => [x.tree, x.command, x.root ?? null]), [
+      ["t0", "lead install", "/workspaces/1"], ["t-a1", "install", "/workspaces/2"], ["t-a1", "tsc a", "/workspaces/2"],
+      ["t-b1", "tsc b", "/workspaces/3"], [tree, "repair", "/workspaces/4"], [tree, "build", "/workspaces/4"], [tree, "clean install", null]]);
+    assert.throws(() => reinstallStates(run, { ...m, p3proofs: {} }, 15, "clean install"), /repair proof has not run/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 let failed = 0;

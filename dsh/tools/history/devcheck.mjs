@@ -15,6 +15,8 @@ import { installCommand, judgeDevChecks, LISTER_VERSION, playClosure, rebuildCom
 import { expectCall, Mismatch, readTrace, setup } from "./lib.mjs";
 import { pad } from "./steps.mjs";
 import { lsTree } from "./git.mjs";
+import { nodeOf } from "./nodeconfig.mjs";
+import { reinstallOracleFile } from "./nodeproof.mjs";
 
 /** The checks a range's closure calls for: a reinstall after an install, a rebuild after a build. */
 export function devSteps(closure) {
@@ -54,9 +56,15 @@ export async function devcheck(run, k) {
   const rows = await playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, roots });
   let cleanOracle = null;
   if (steps.some((s) => s.kind === "reinstall-check")) {
-    if (!lock || !existsSync(cleanFile)) throw new Mismatch(`range ${k}: no clean node_modules oracle ${cleanFile}`);
-    cleanOracle = JSON.parse(readFileSync(cleanFile, "utf8"));
-    if (cleanOracle.listerVersion !== LISTER_VERSION) throw new Mismatch(`range ${k}: the clean oracle predates lister version ${LISTER_VERSION}`);
+    // Node on: the reinstall runs on the published main with its build output, so its oracle is the native clean
+    // reinstall on top of the repair's chain (nodeproof.mjs reinstall), not a fresh checkout's clean install
+    const onTop = nodeOf(run.manifest).on ? reinstallOracleFile(run.manifest.outputs.metrics, k) : null;
+    const file = onTop ?? cleanFile;
+    if ((!onTop && !lock) || !existsSync(file)) throw new Mismatch(`range ${k}: no ${onTop ? "on-top reinstall" : "clean node_modules"} oracle ${file}${onTop ? " (nodeproof.mjs reinstall first)" : ""}`);
+    cleanOracle = JSON.parse(readFileSync(file, "utf8"));
+    if (cleanOracle.listerVersion !== LISTER_VERSION) throw new Mismatch(`range ${k}: the ${onTop ? "on-top reinstall" : "clean"} oracle predates lister version ${LISTER_VERSION}`);
+    if (cleanOracle.exit !== 0) throw new Mismatch(`range ${k}: the native reinstall exited ${cleanOracle.exit}`);
+    out.reinstallOracle = { kind: onTop ? "on-top" : "clean", file, key: cleanOracle.key ?? null };
   }
   run.traceTo(null);
   const t = readTrace(traceFile, run.sink.log);
