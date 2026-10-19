@@ -23,4 +23,4 @@
 | 016 | 88 | 14,766 | **watch** | Speed | 39.8 MiB | [range-016](ranges/range-016.md) |
 | 017 | 60 | 15,811 | **watch** | Speed | 24.2 MiB | [range-017](ranges/range-017.md) |
 | 018 | 67 | 17,442 | **optimize** | Scaling | 67.4 MiB | [range-018](ranges/range-018.md) |
-| 019 | 81 | 18,401 | **stop** | Node proofs | 27.4 MiB | [range-019](ranges/range-019.md) |
+| 019 | 81 | 18,401 | **optimize** | Scaling | 27.7 MiB | [range-019](ranges/range-019.md) |
