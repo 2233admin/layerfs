@@ -570,6 +570,35 @@ test("store generation: a fetch batch in the ledger changes it (fix 048)", async
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("vitestCommand compact: a big report comes back small and readable, exit kept (r027 a1)", async () => {
+  const { vitestCommand, parseVitestJson } = await import("../unit-tests.mjs");
+  const { vitestMessages } = await import("../nodeconfig.mjs");
+  assert.equal(vitestCommand(["a.ts"], 5), "CI=1 HOME=/tmp timeout 5 ./node_modules/.bin/vitest run --reporter=json 'a.ts'");
+  const dir = mkdtempSync(join(tmpdir(), "vtc-"));
+  try {
+    const big = "x".repeat(4000);
+    const report = { testResults: Array.from({ length: 300 }, (_, i) => ({ name: `/r/f${i}.spec.ts`, status: i === 7 ? "failed" : "passed", message: "", assertionResults: Array.from({ length: 20 }, (_, j) => ({ status: i === 7 && j === 3 ? "failed" : "passed", fullName: `t${j} ${"y".repeat(200)}`, failureMessages: i === 7 && j === 3 ? [`boom ${big}`] : [] })) })) };
+    writeFileSync(join(dir, "full.json"), JSON.stringify(report));
+    assert.ok(readFileSync(join(dir, "full.json")).length > 1 << 20);
+    const bin = join(dir, "node_modules/.bin"); mkdirSync(bin, { recursive: true });
+    // a stand-in vitest: copies the report to --outputFile, prints noise, exits 1
+    writeFileSync(join(bin, "vitest"), `#!/bin/sh
+for a in "$@"; do case "$a" in --outputFile=*) cp ${join(dir, "full.json")} "\${a#--outputFile=}";; esac; done
+echo noise {
+exit 1
+`, { mode: 0o755 });
+    // the replay containers have coreutils timeout; a host may not
+    writeFileSync(join(bin, "timeout"), "#!/bin/sh\nshift\nexec \"$@\"\n", { mode: 0o755 });
+    let out = "", code = 0;
+    try { out = execFileSync("sh", ["-c", vitestCommand(["a.ts"], 5, { compact: true })], { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } }); } catch (e) { out = e.stdout; code = e.status; }
+    assert.equal(code, 1);
+    assert.ok(out.length < 100_000, `compact report ${out.length} bytes`);
+    const r = parseVitestJson(out, "/r");
+    assert.equal(r.size, 300); assert.equal(r.get("f7.spec.ts"), "fail"); assert.equal(r.get("f8.spec.ts"), "pass");
+    assert.match(vitestMessages(out, "/r")["f7.spec.ts"], /^boom x/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try { await fn(); console.log(`ok ${name}`); } catch (e) { failed++; console.log(`FAIL ${name}\n${e.stack}`); }

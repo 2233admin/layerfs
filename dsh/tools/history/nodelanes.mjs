@@ -188,7 +188,7 @@ export async function playPoint(a, k, ctx, pt, { branch, gitDir, files, install,
     }
     if (tests.length) {
       a.label(`${label}.vitest`);
-      const t1 = Date.now(), t = await sh(vitestCommand(tests, 110));
+      const t1 = Date.now(), t = await sh(vitestCommand(tests, 110, { compact: true }));
       let results = null;
       try { results = Object.fromEntries(parseVitestJson(String(t.stdout), rec.root)); } catch (e) { rec.vitestError = String(e.message).slice(0, 200); }
       rec.vitest = { files: tests, exitCode: t.exitCode, ms: Date.now() - t1, results, messages: vitestMessages(String(t.stdout), rec.root) };

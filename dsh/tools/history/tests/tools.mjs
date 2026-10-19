@@ -180,7 +180,7 @@ test("the run keeps native passes, fastest first, within the cap", () => {
 });
 
 test("LayerFS's test results are compared file by file with the native ones", () => {
-  assert.equal(vitestCommand(["a b.spec.ts", "it's.spec.ts"]), "CI=1 timeout 600 ./node_modules/.bin/vitest run --reporter=json 'a b.spec.ts' 'it'\\''s.spec.ts'");
+  assert.equal(vitestCommand(["a b.spec.ts", "it's.spec.ts"]), "CI=1 HOME=/tmp timeout 600 ./node_modules/.bin/vitest run --reporter=json 'a b.spec.ts' 'it'\\''s.spec.ts'");
   const results = parseVitestJson('noise\n{"testResults":[{"name":"/w/x.spec.ts","status":"passed"},{"name":"/w/y.spec.ts","status":"failed"}]}', "/w");
   assert.deepEqual([...results], [["x.spec.ts", "pass"], ["y.spec.ts", "fail"]]);
   assert.deepEqual(compareResults(["x.spec.ts", "y.spec.ts", "z.spec.ts"], results), { run: 3, equal: 1, differ: [

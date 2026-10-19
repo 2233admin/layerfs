@@ -83,10 +83,20 @@ export function chooseRun(native, tier) {
 }
 
 /** The command a range's one-shot Workspace runs: its chosen files, one vitest run, per-file results as JSON. */
-export function vitestCommand(files, timeoutS = 600) {
+export function vitestCommand(files, timeoutS = 600, { compact = false } = {}) {
   const q = (t) => `'${t.replaceAll("'", "'\\''")}'`;
-  return `CI=1 timeout ${timeoutS} ./node_modules/.bin/vitest run --reporter=json ${files.map(q).join(" ")}`;
+  // HOME=/tmp on both sides: the SDK's Sandbox exec sets it (sdk/js/native/src/exec.rs, uid 501 has no
+  // passwd entry), so a native replay under root's /root judged a different environment (r027 a1, fs-sandbox.spec).
+  const run = `CI=1 HOME=/tmp timeout ${timeoutS} ./node_modules/.bin/vitest run --reporter=json`;
+  if (!compact) return `${run} ${files.map(q).join(" ")}`;
+  // r027 a1: the full report of 204 files passed the Sandbox's stdout cap (~1 MiB) and arrived cut.
+  // Written to a file outside the Workspace, it is printed back as only what the readers use.
+  const f = "/tmp/lfs352-vitest-$$.json";
+  return `${run} --outputFile=${f} ${files.map(q).join(" ")} >/dev/null; s=$?; node -e '${COMPACT_REPORT}' ${f}; rm -f ${f}; exit $s`;
 }
+
+/** Prints vitest's JSON report at argv[1] keeping per-file name/status/message and each failed test's first message (pure JS, no quotes). */
+const COMPACT_REPORT = "const r=JSON.parse(require(`fs`).readFileSync(process.argv[1],`utf8`));const cut=(m)=>String(m??``).slice(0,2000);console.log(JSON.stringify({testResults:r.testResults.map((t)=>({name:t.name,status:t.status,message:cut(t.message),assertionResults:(t.assertionResults??[]).filter((x)=>x.status===`failed`).slice(0,3).map((x)=>({status:x.status,fullName:x.fullName,failureMessages:(x.failureMessages??[]).slice(0,1).map(cut)}))}))}))";
 
 /** Per-file results from vitest's JSON reporter: path (relative to `root`) -> pass | fail. */
 export function parseVitestJson(stdout, root) {
