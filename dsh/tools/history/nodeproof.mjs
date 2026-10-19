@@ -741,7 +741,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const run = { calibrate: cmdCalibrate, inputs: cmdInputs, proofs: cmdProofs, reinstall: cmdReinstall, savestate: cmdSavestate }[cmd];
   // QUIET (quiet.mjs): these native replays are part of the attempt; a failure releases it
   const { holdQuiet, releaseQuiet } = await import("./quiet.mjs");
-  if (run && o.run && ["calibrate", "proofs", "savestate"].includes(cmd)) { const q = holdQuiet(o.run, `nodeproof ${cmd}`); if (!q.ok) { console.error(`refused: ${q.why}`); process.exit(5); } process.on("exit", (c) => { if (c && c !== 3 && c !== 4) releaseQuiet(o.run); }); }
+  if (run && o.run && ["calibrate", "proofs", "savestate"].includes(cmd)) { const q = holdQuiet(o.run, `nodeproof ${cmd}`); if (q.overlap) console.error(q.why); process.on("exit", (c) => { if (c && c !== 3 && c !== 4) releaseQuiet(o.run); }); }
   if (!run || !o.run || (!o.range && cmd !== "savestate")) { console.error("usage: nodeproof.mjs calibrate|inputs|proofs|reinstall --run <id> --range k [--point id] [--repair] [--attempt a] [--budget-s s] [--rejudge \"fix NNN\"] | savestate --run <id> [--entries n | --check <oracle file> | --adopt]"); process.exit(2); }
   run(o).catch((e) => { console.error(e.stack ?? e); process.exit(1); });
 }

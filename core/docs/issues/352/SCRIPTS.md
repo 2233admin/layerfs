@@ -545,7 +545,10 @@ each runs under (`perl -e 'alarm N; exec @ARGV'`):
 - **QUIET** is a lock the harness holds (`quiet.mjs`): a play, calibrate,
   proofs or savestate command takes it for its run, a failed command releases
   it, and the control sample releases it at the attempt's end. Another run's
-  QUIET refuses the command.
+  QUIET never refuses a command (owner 2026-10-20: sessions do not queue
+  against each other, and each clones its own Store). The command goes on, the
+  holder is kept, and the overlap is appended to
+  `~/lfs-history/QUIET.overlaps.jsonl` for the measured window's record.
   QUIET means the replay owns timing-sensitive Docker work: other sessions
   may run Docker with -j 2 (one heavy batch at a time) and must not wait for
   it to clear. Their builds use -j 6 only while QUIET is absent; each test

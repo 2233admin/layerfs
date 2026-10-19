@@ -1,5 +1,5 @@
-// The QUIET lock (#352, ranges 16–20 rule; step 4 of ranges 21–30): while
-// ~/lfs-history/QUIET exists, other sessions keep off Docker. The harness
+// The QUIET lock (#352, ranges 16–20 rule; step 4 of ranges 21–30): it records a run's measured window. Since
+// 2026-10-20 (owner) it never blocks another session, which records the overlap and goes on. The harness
 // holds it itself for a whole attempt: every play, calibrate and proofs command
 // takes it (or keeps the one its run holds), a command that fails releases it
 // (the attempt is over), and control.mjs, the attempt's last step, releases it.
@@ -8,7 +8,7 @@
 // the harness files on the host and run.mjs refuses to start inside the
 // container when its view of them differs.
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,13 +21,21 @@ export function quietHolder(file = quietFile()) {
   try { return JSON.parse(readFileSync(file, "utf8")); } catch { return { run: null }; }
 }
 
-/** Takes QUIET for `run` (kept when that run already holds it). Refused when another run holds it. */
+/**
+ * Takes QUIET for `run` (kept when that run already holds it). When another run holds it the command goes on
+ * (owner 2026-10-20: sessions never queue against each other): the holder is kept, and the overlap is appended to
+ * `QUIET.overlaps.jsonl` beside it for the measured window's record, and returned as `overlap`.
+ */
 export function holdQuiet(run, what, file = quietFile()) {
   // the F-057 diagnostic (nodeconfig.mjs diagUnits): a diagnostic run neither waits for QUIET nor takes it; it runs
   // beside the main run as declared load (liaison 2026-10-20)
   try { if (JSON.parse(readFileSync(join(dirname(file), "runs", run, "run.json"), "utf8")).diagUnits) return { ok: true, diagnostic: true }; } catch { /* not a run folder */ }
   const h = quietHolder(file);
-  if (h && h.run && h.run !== run) return { ok: false, why: `QUIET is held by run ${h.run} (${h.what ?? "?"}, since ${h.since ?? "?"})` };
+  if (h && h.run && h.run !== run) {
+    const overlap = { at: new Date().toISOString(), run, what, holder: { run: h.run, what: h.what ?? null, since: h.since ?? null } };
+    appendFileSync(`${file}.overlaps.jsonl`, `${JSON.stringify(overlap)}\n`);
+    return { ok: true, overlap, why: `QUIET is held by run ${h.run} (${h.what ?? "?"}, since ${h.since ?? "?"}); going on, overlap recorded` };
+  }
   writeFileSync(file, JSON.stringify({ run, what, since: h?.since ?? new Date().toISOString(), at: new Date().toISOString(), pid: process.pid }));
   return { ok: true };
 }

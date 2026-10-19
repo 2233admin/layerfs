@@ -526,14 +526,19 @@ test("late stages: a killed step's trace lines are cut back to the save", () => 
     assert.equal(readFileSync(file, "utf8"), "a\nb\n");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
-test("QUIET: a run holds it through its attempt; another run is refused; release only by the holder", () => {
+test("QUIET: a run holds it through its attempt; another run goes on with the overlap recorded; release only by the holder", () => {
   const dir = mkdtempSync(join(tmpdir(), "lfs352-quiet-")), file = join(dir, "QUIET");
   try {
     assert.ok(quiet.holdQuiet("p3-main-q", "play", file).ok);
     const since = quiet.quietHolder(file).since;
     assert.ok(quiet.holdQuiet("p3-main-q", "proofs", file).ok, "the same run keeps it");
     assert.equal(quiet.quietHolder(file).since, since, "held since the first command");
-    assert.match(quiet.holdQuiet("other", "play", file).why, /held by run p3-main-q/);
+    const o = quiet.holdQuiet("other", "play", file);
+    assert.ok(o.ok, "another run is never refused (owner 2026-10-20)");
+    assert.equal(o.overlap.holder.run, "p3-main-q");
+    assert.equal(quiet.quietHolder(file).run, "p3-main-q", "the holder is kept");
+    const logged = readFileSync(`${file}.overlaps.jsonl`, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    assert.deepEqual([logged.length, logged[0].run, logged[0].holder.run], [1, "other", "p3-main-q"]);
     assert.equal(quiet.releaseQuiet("other", file), false);
     assert.equal(quiet.releaseQuiet("p3-main-q", file), true);
     assert.equal(quiet.quietHolder(file), null);

@@ -75,7 +75,7 @@ function main(argv) {
   const run = runOf(args);
   // step 4 (ranges 21–30): a play holds QUIET for its run through the attempt; a failed command releases it
   const quiet = args[0] === "play" && run;
-  if (quiet) { const q = holdQuiet(run, `play ${args.slice(1).join(" ")}`); if (!q.ok) { console.error(`refused: ${q.why}`); return 5; } }
+  if (quiet) { const q = holdQuiet(run, `play ${args.slice(1).join(" ")}`); if (q.overlap) console.error(q.why); }
   process.env.LFS352_HARNESS_SHA = harnessHash();
   const status = spawnSync("docker", runnerArgs({ imageId, hostSocket, args, sdk, gitCommon }), { stdio: "inherit" }).status ?? 1;
   if (quiet && status !== 0 && status !== 3) releaseQuiet(run);
