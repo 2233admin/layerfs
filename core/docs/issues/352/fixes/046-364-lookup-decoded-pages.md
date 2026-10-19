@@ -97,6 +97,7 @@ the cache (the SDK, tests) is unchanged.
   - `forced_unavailable` failed its precondition "the control filesystem must not be mounted here": the shared Docker VM had `fusectl` mounted. It passed in the earlier run, and C touches no FUSE code.
 - **Host at the landed C:** content and workspace tests (93 binaries) pass; Clippy `-D warnings --all-targets` is clean on content, workspace and api.
 - **Build jobs.** Builds ran at `-j 2` while `~/lfs-history/QUIET` existed, otherwise `-j 6`. Each receipt records its QUIET state.
+- **LOC correction.** 6867d2f8b9's LOC line should read 103,930 -> 103,930.
 
 ## Performance, old vs new
 

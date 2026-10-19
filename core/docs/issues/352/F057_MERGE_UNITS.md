@@ -1,8 +1,10 @@
 # F-057 design note: merge units for `branch.merge`
 
 > **Status:** Approved by the owner, 2026-10-20, as drafted, with the proposed
-> answers to the open questions in §10. Not built yet: the build starts once
-> #364 items 3 and 4 have landed.
+> answers to the open questions in §10. Built on branch `f057-merge-units`
+> ([fix record 049](fixes/049-f057-merge-units.md)), which also records the
+> definitions the build fixed (`crossLinks`, the root, a unit directory's own
+> mtime).
 > **Owner decision:** option B. `branch.merge` takes caller-declared unit
 > patterns. When both sides changed a unit, the merge takes the whole unit
 > from the newer side and reports it.
