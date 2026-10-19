@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 // Writes the history replay's plan (#352 SPEC §2) from a bare clone of dsh:
-//   node dsh/tools/history/plan.mjs --repo <dsh.git> --out <dir> [--ref master] [--seed 352] [--from N]
+//   node dsh/tools/history/plan.mjs --repo <dsh.git> --out <dir> [--ref master] [--seed 352] [--from N] [--inputs-rule r1]
 // <out>/range-NNN.json holds one range's plan; <out>/plan.json the summary.
 // The plan only moves forward: --from N rewrites ranges N and later and
 // leaves earlier ranges, whose checkpoints may already be proved, untouched.
 // Each range's closure carries its unit test selection (unit-tests.mjs);
 // calibrate-tests.mjs later writes which of them run, in tests-NNN.json.
+// `--inputs-rule r1` plans ranges N and later under NODE_RULE §3 (b), R1
+// (owner, 2026-10-19); plan.json records the rule and the range it starts at.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BlobCache, blobSizes, diffTrees, git, lsTree, readCommits, topoPositions } from "./git.mjs";
 import { cutRanges, mainlineSteps, RANGE, snapshotPolicy } from "./ranges.mjs";
-import { dirCounts, LIMITS, planRange, replayPlan, stateDiff } from "./plan-range.mjs";
+import { dirCounts, isInput, LIMITS, planRange, replayPlan, stateDiff } from "./plan-range.mjs";
 import { selectTests } from "./unit-tests.mjs";
 
 // 2: unit test selection per range; snapshots planned only for the pilot and milestones (SPEC §7)
@@ -23,6 +25,19 @@ export function apply(state, changes) {
     if (c.mode === "000000") state.delete(c.path); else state.set(c.path, { mode: c.mode, blob: c.blob });
   }
   return state;
+}
+
+/**
+ * R1's input sets for range `range` (plan-range.mjs snapInputs): each commit's
+ * install inputs as git has them, read once per commit that changes one; the
+ * sizes of blobs no commit change carries are added to `sizes`.
+ */
+export function inputsOfRange(repo, range, commits, sizes) {
+  const sets = new Map();
+  for (const s of range.steps) for (const id of s.commits) if (commits.get(id).changes.some((c) => !c.gitlink && isInput(c.path))) sets.set(id, new Map([...lsTree(repo, id).files].filter(([p]) => isInput(p))));
+  const missing = [...new Set([...sets.values()].flatMap((m) => [...m.values()].map((v) => v.blob)))].filter((b) => !sizes.has(b));
+  if (missing.length) for (const [b, n] of blobSizes(repo, missing)) sizes.set(b, n);
+  return (id) => sets.get(id);
 }
 
 /** The numbers SPEC §3b reports for a range, as the plan expects them. */
@@ -53,8 +68,8 @@ export function summarize(plan) {
 async function main() {
   const args = process.argv.slice(2);
   const opt = (n, d) => { const i = args.indexOf(n); return i < 0 ? d : args[i + 1]; };
-  const repo = opt("--repo"), out = opt("--out"), ref = opt("--ref", "master"), seed = opt("--seed", "352"), from = Number(opt("--from", "0"));
-  if (!repo || !out) { console.error("usage: plan.mjs --repo <dsh.git> --out <dir> [--ref master] [--seed 352] [--from N]"); process.exit(2); }
+  const repo = opt("--repo"), out = opt("--out"), ref = opt("--ref", "master"), seed = opt("--seed", "352"), from = Number(opt("--from", "0")), rule = opt("--inputs-rule", "plan");
+  if (!repo || !out || !["plan", "r1"].includes(rule)) { console.error("usage: plan.mjs --repo <dsh.git> --out <dir> [--ref master] [--seed 352] [--from N] [--inputs-rule r1]"); process.exit(2); }
   const t0 = Date.now(), lap = (m) => console.error(`${((Date.now() - t0) / 1000).toFixed(1)} s  ${m}`);
   const head = git(repo, ["rev-parse", ref]).trim();
   const commits = readCommits(repo, head);
@@ -80,7 +95,8 @@ async function main() {
   for (const [i, r] of ranges.entries()) {
     const prev = state, next = apply(new Map(prev), nets[i]);
     if (i >= from) {
-      const plan = planRange({ k: i, range: r, commits, prev, next, prevDirs: dirCounts(prev), sizes, seed, ...policy(i), limits: LIMITS });
+      const inputs = rule === "r1" ? { inputsRule: rule, inputsAt: inputsOfRange(repo, r, commits, sizes) } : {};
+      const plan = planRange({ k: i, range: r, commits, prev, next, prevDirs: dirCounts(prev), sizes, seed, ...policy(i), limits: LIMITS, ...inputs });
       // Static check: the plan alone must reach the checkpoint.
       const played = replayPlan(prev, plan);
       const diff = stateDiff(played.state, next);
@@ -94,8 +110,10 @@ async function main() {
   }
   blobs.close();
   const total = (k) => rows.reduce((n, r) => n + (typeof r[k] === "number" ? r[k] : 0), 0);
+  // the rule this run applied from `from`, or the earlier run's when it started before `from`
+  const inputsRule = rule === "r1" ? { rule, from, decided: "owner 2026-10-19 (NODE_RULE §3 b)" } : old?.inputsRule && old.inputsRule.from < from ? old.inputsRule : undefined;
   const summary = {
-    version: PLAN_VERSION, seed, ref, head, generated: new Date().toISOString(), from,
+    version: PLAN_VERSION, seed, ref, head, generated: new Date().toISOString(), from, ...(inputsRule ? { inputsRule } : {}),
     init: { commit: init.mainline, tree: init.tree, files: initTree.files.size, gitlinks: initTree.gitlinks },
     rules: { range: RANGE, limits: LIMITS },
     totals: {

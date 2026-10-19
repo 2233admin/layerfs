@@ -150,6 +150,39 @@ test("lanes never share a path, and planned conflicts are wired with barriers", 
   assert.ok(planAll().some(({ plan }) => plan.conflicts.length), "some range plans a conflict");
 });
 
+test("NODE_RULE §3 R1: install inputs go to the root lane, set to each dsh commit's full input set", () => {
+  const f = (blob) => ({ mode: "100644", blob });
+  const prev = new Map([["pnpm-lock.yaml", f("L0")], ["packages/a/package.json", f("A0")], ["packages/a/src/x.ts", f("X0")], ["packages/b/package.json", f("B0")], ["packages/b/src/y.ts", f("Y0")]]);
+  const ch = (path, blob, oldMode = "100644") => ({ path, mode: blob ? "100644" : "000000", oldMode, blob: blob ?? "0" });
+  // c1 changes a manifest only; c2 the lockfile and b's manifest, while its tree (a side branch) has a's manifest at A2; c3 no input
+  const commits = new Map([["c1", { changes: [ch("packages/a/package.json", "A1"), ch("packages/a/src/x.ts", "X1")] }],
+    ["c2", { changes: [ch("pnpm-lock.yaml", "L1"), ch("packages/b/package.json", "B1"), ch("packages/b/src/y.ts", "Y1")] }],
+    ["c3", { changes: [ch("packages/b/src/z.ts", "Z1", "000000")] }]]);
+  const sets = { c1: { "pnpm-lock.yaml": "L0", "packages/a/package.json": "A1", "packages/b/package.json": "B0" }, c2: { "pnpm-lock.yaml": "L1", "packages/a/package.json": "A2", "packages/b/package.json": "B1" } };
+  const inputsAt = (id) => new Map(Object.entries(sets[id]).map(([p, b]) => [p, f(b)]));
+  const next = new Map([...prev, ["pnpm-lock.yaml", f("L1")], ["packages/a/package.json", f("A1")], ["packages/a/src/x.ts", f("X1")], ["packages/b/package.json", f("B1")], ["packages/b/src/y.ts", f("Y1")], ["packages/b/src/z.ts", f("Z1")]]);
+  const range = { steps: [{ mainline: "c3", commits: ["c1", "c2", "c3"] }], checkpoint: "c3", tree: "t", commits: 3, oversize: false };
+  const sizes = new Map(["L0", "L1", "A0", "A1", "A2", "B0", "B1", "X0", "X1", "Y0", "Y1", "Z1"].map((b) => [b, 10]));
+  const args = { k: 15, range, commits, prev, next, prevDirs: dirCounts(prev), sizes, seed: "t", milestone: false, snapshot: false };
+  const plan = planRange({ ...args, inputsRule: "r1", inputsAt });
+  assert.equal(plan.inputsRule, "r1");
+  const root = plan.lanes.find((l) => l.areas.includes("/")).name;
+  const writes = plan.steps.flatMap((s) => (s.files ?? []).filter((x) => x.op === "write" || x.op === "rm").map((x) => ({ ...x, lane: s.lane, commit: s.commit })));
+  for (const w of writes.filter((x) => /package\.json$|pnpm-lock\.yaml$/.test(x.path))) assert.equal(w.lane, root, `${w.path} is written by the root lane`);
+  assert.ok(writes.some((x) => x.lane !== root), "other lanes keep their source changes");
+  // c2's step sets a's manifest to c2's tree (A2), which c2 itself did not change
+  assert.deepEqual(writes.filter((x) => x.commit === "c2" && x.path.endsWith("package.json")).map((x) => `${x.path}=${x.blob}`).sort(), ["packages/a/package.json=A2", "packages/b/package.json=B1"]);
+  assert.equal(plan.counts.snapped, 2);
+  const played = replayPlan(prev, plan);
+  assert.deepEqual(played.problems, []);
+  assert.deepEqual(stateDiff(played.state, next), [], "the reconcile still reaches the checkpoint");
+  // the frozen rule keeps b's manifest in b's lane and records no rule
+  const frozen = planRange(args);
+  assert.equal(frozen.inputsRule, undefined);
+  assert.equal(frozen.steps.find((s) => s.files?.some((x) => x.path === "packages/b/package.json")).lane, frozen.steps.find((s) => s.files?.some((x) => x.path === "packages/b/src/y.ts")).lane);
+  assert.throws(() => planRange({ ...args, inputsRule: "travel" }), /plan or r1/);
+});
+
 test("summary and expectations count the plan", () => {
   const { plan } = planAll()[0];
   const s = summarize(plan), e = expectations(plan);

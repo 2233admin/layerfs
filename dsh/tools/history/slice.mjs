@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { BlobCache, blobSizes, diffTrees, git, lsTree, readCommits, topoPositions } from "./git.mjs";
 import { cutRanges, mainlineSteps, snapshotPolicy } from "./ranges.mjs";
 import { dirCounts, LIMITS, planRange, replayPlan, stateDiff } from "./plan-range.mjs";
-import { apply, summarize } from "./plan.mjs";
+import { apply, inputsOfRange, summarize } from "./plan.mjs";
 import { selectTests } from "./unit-tests.mjs";
 import { expectations, expectedTree, IGNORE } from "./oracle.mjs";
 
@@ -41,7 +41,9 @@ async function main() {
   const prev = lsTree(repo, prevPlan.checkpoint).files, net = diffTrees(repo, prevPlan.checkpoint, range.checkpoint), next = apply(new Map(prev), net);
   const sizes = blobSizes(repo, [...range.steps.flatMap((s) => s.commits.flatMap((id) => commits.get(id).changes.map((x) => x.blob))), ...net.map((x) => x.blob)]);
   const policy = snapshotPolicy(ranges.length)(k);
-  const plan = planRange({ k, range, commits, prev, next, prevDirs: dirCounts(prev), sizes, seed: summary.seed, ...policy, limits: LIMITS });
+  // the full plan's NODE_RULE §3 rule for this range (plan.mjs --inputs-rule)
+  const r1 = summary.inputsRule?.rule === "r1" && k >= summary.inputsRule.from;
+  const plan = planRange({ k, range, commits, prev, next, prevDirs: dirCounts(prev), sizes, seed: summary.seed, ...policy, limits: LIMITS, ...(r1 ? { inputsRule: "r1", inputsAt: inputsOfRange(repo, range, commits, sizes) } : {}) });
   const played = replayPlan(prev, plan), diff = stateDiff(played.state, next);
   if (played.problems.length || diff.length) throw new Error(`the slice does not reach its checkpoint: ${[...played.problems, ...diff.slice(0, 5)].join("; ")}`);
   const blobs = new BlobCache(repo);

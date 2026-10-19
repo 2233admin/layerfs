@@ -41,11 +41,15 @@ test("NODE_RULE §4 test points: after the middle and the last writing step; the
   assert.equal(testPoints({ ...plan, steps: plan.steps.filter((s) => s.id !== "t2") }).filter((p) => p.lane === "L2").map((p) => p.point).join(), "end", "one point when mid and end coincide");
 });
 
-test("NODE_RULE §3 and the store policy are switches: only the frozen plan plays; release-age-off is the one override", () => {
+test("NODE_RULE §3 and the store policy are switches: plan and R1 play their own plans; release-age-off is the one override", () => {
   assert.equal(checkNode({ inputsRule: "plan" }), null);
-  assert.match(checkNode({ inputsRule: "travel" }), /pending the owner/);
-  assert.match(checkNode({ inputsRule: "r1" }), /R1, is pending/);
-  assert.match(checkNode({ inputsRule: "x" }), /one of plan, travel, r1/);
+  assert.equal(checkNode({ inputsRule: "r1" }), null);
+  assert.equal(checkNode({ inputsRule: "r1" }, { range: 15, inputsRule: "r1" }), null);
+  assert.equal(checkNode({ inputsRule: "plan" }, { range: 14 }), null);
+  assert.match(checkNode({ inputsRule: "r1" }, { range: 15 }), /planned under inputs rule plan, the run plays r1: re-plan/);
+  assert.match(checkNode({ inputsRule: "plan" }, { range: 15, inputsRule: "r1" }), /planned under inputs rule r1/);
+  assert.match(checkNode({ inputsRule: "travel" }), /was not chosen/);
+  assert.match(checkNode({ inputsRule: "x" }), /one of plan, r1, travel/);
   assert.ok(!installCommand().includes("minimum_release_age") && installCommand({ policy: "release-age-off" }).includes("pnpm_config_minimum_release_age=0 pnpm install"));
   assert.ok(installCommand().endsWith("--fetch-retries=0 --fetch-timeout=3000"));
   assert.throws(() => installCommand({ policy: "nope" }), /store policy/);

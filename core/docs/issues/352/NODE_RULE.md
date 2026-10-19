@@ -1,9 +1,8 @@
 # #352 — Node operation rule from P3
 
 > **Status:** owner-approved 2026-10-19 as the generic Node operation rule from
-> P3, except §3 (plan rule "install inputs travel together"), which is an
-> **owner decision, pending**. Design and harness design only; no product
-> change. It wins over [INSTALLS.md](INSTALLS.md) and SPEC §2 "Ignored files"
+> P3. §3 was decided the same day: option (b), R1. Design and harness design
+> only; no product change. It wins over [INSTALLS.md](INSTALLS.md) and SPEC §2 "Ignored files"
 > where they differ. The pre-build checks of §11 ran natively on 2026-10-19;
 > nothing else here has run.
 
@@ -38,9 +37,24 @@ install on the lead Branch before any lane forks: a clean reinstall, then
 (§6 P1, P2, P4) before lanes fork. Lanes inherit `node_modules` and the build
 outputs from that Commit; no lane starts from an empty `node_modules`.
 
-## 3. Plan rule: install inputs travel together (owner decision, pending)
+## 3. Plan rule: install inputs go to the root lane (R1, approved by the owner 2026-10-19)
 
-**Proposed rule.** For every dsh commit that changes the lockfile or the
+**Decision (owner, 2026-10-19): option (b), R1.** Every install-input change
+goes to the root lane. Each root-lane step that writes one sets all install
+inputs to that dsh commit's full input set; other lanes keep the range base's
+inputs. Option (a) below was not chosen.
+
+**Implemented** in the lane planner (`plan-range.mjs` `snapInputs`, `plan.mjs
+--inputs-rule r1`). The plan records the rule: `inputsRule` in each re-planned
+range, and `{ rule, from }` in plan.json. A run plays it with `run.mjs node
+--inputs-rule r1`, and refuses a range planned under the other rule. Ranges
+15 and later were re-planned into `~/lfs-history/plan-r1/`; the frozen
+`~/lfs-history/plan/` is unchanged. Under R1 the root lane writes every input
+path of such a commit that differs from its own state. Interleaved side-branch
+trees differ in most of their 85 manifests, so range 15's root lane writes 650
+input operations (40 under the frozen plan) across 18 snapped commits.
+
+**Option (a), as first proposed.** For every dsh commit that changes the lockfile or the
 workspace config, all of that commit's changed install inputs go to the one
 step of the lane that owns `/` (the root lane). No other lane writes an
 install input of such a commit.
@@ -254,8 +268,8 @@ throughout.
 
 ## Builder items
 
-- **B1** (after the §3 decision): re-plan ranges 15–20 with the chosen
-  install-input rule.
+- **B1** (done 2026-10-19): ranges 15 and later re-planned under R1 into
+  `~/lfs-history/plan-r1/`.
 - **B2** (after the §11 a decision): fill the store for intermediate lockfiles
   (or apply the policy override) and add `hono-4.12.28.tgz`; rerun §11 a once.
 - **B3:** add `--fetch-retries=0 --fetch-timeout=3000` to closure.mjs

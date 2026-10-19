@@ -1,4 +1,4 @@
-// NODE_RULE.md from P3, played (owner-approved 2026-10-19; §3 pending): the
+// NODE_RULE.md from P3, played (owner-approved 2026-10-19; §3 R1 chosen that day): the
 // lead's first install before the lanes fork (§2), each lane's two test
 // points (§4: after its middle step and at its end) and the facts the proofs
 // (§6, nodeproof.mjs) compare with native on the identical tree. A test point
@@ -24,16 +24,18 @@ import { emittedCommand, nodeOf, parseEmitted, pointBuild, PRUNE_EMPTY, vitestMe
 export { EMITTED, emittedCommand, nodeOf, parseEmitted, pointBuild, wholeBuild } from "./nodeconfig.mjs";
 
 /**
- * NODE_RULE §3 (owner decision pending): `plan` plays the frozen plan as it
- * is; `travel` (install inputs of a lockfile commit go to the root lane) and
- * `r1` (every install-input change goes to the root lane, snapped to the dsh
- * commit's set) need the ranges re-planned by the planner, which waits for the
- * owner. They are named here and refused.
+ * NODE_RULE §3: `plan` plays the frozen plan as it is; `r1` (option b, owner
+ * 2026-10-19: every install-input change goes to the root lane, snapped to the
+ * dsh commit's set) plays a plan made with `plan.mjs --inputs-rule r1`, and
+ * nodeContext refuses a range planned under the other rule. `travel` (option
+ * a) was not chosen and is refused.
  */
-export const INPUTS_RULES = { plan: null, travel: "NODE_RULE §3 (a) is pending the owner: it needs ranges 15+ re-planned", r1: "NODE_RULE §3 (b), R1, is pending the owner: it needs ranges 15+ re-planned" };
-export function checkNode(node) {
+export const INPUTS_RULES = { plan: null, r1: null, travel: "NODE_RULE §3 (a) was not chosen: the owner chose R1 (b) on 2026-10-19" };
+export function checkNode(node, plan = null) {
   if (!(node.inputsRule in INPUTS_RULES)) return `inputs rule ${node.inputsRule}: one of ${Object.keys(INPUTS_RULES).join(", ")}`;
-  return INPUTS_RULES[node.inputsRule];
+  if (INPUTS_RULES[node.inputsRule]) return INPUTS_RULES[node.inputsRule];
+  if (plan && (plan.inputsRule ?? "plan") !== node.inputsRule) return `range ${plan.range} was planned under inputs rule ${plan.inputsRule ?? "plan"}, the run plays ${node.inputsRule}${node.inputsRule === "r1" ? ": re-plan it with plan.mjs --inputs-rule r1" : ""}`;
+  return null;
 }
 
 /** Step kinds that land tracked changes on a lane (a test point follows only these). */
@@ -118,7 +120,7 @@ const commitsOf = (rec) => [rec.install?.kind, rec.tsc?.commit, rec.vitest?.comm
 export function nodeContext(run, plan) {
   const node = nodeOf(run.manifest);
   if (!node.on) return null;
-  const refused = checkNode(node);
+  const refused = checkNode(node, plan);
   if (refused) throw new Mismatch(refused);
   const cal = join(run.planDir, `node-${pad(plan.range)}.json`);
   return { config: node, points: [], lanes: {}, calibration: existsSync(cal) ? JSON.parse(readFileSync(cal, "utf8")) : null, plan: testPoints(plan), done: [] };

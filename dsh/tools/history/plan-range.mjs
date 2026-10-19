@@ -12,6 +12,9 @@ export const LIMITS = {
 const TEXT = /\.(ts|tsx|js|mjs|cjs|jsx|json|md|txt|ya?ml|toml|css|html|sh|py|rs)$/i;
 const READS = ["stat", "read", "list", "grep", "glob", "diff_files"];
 const INSTALL = /(^|\/)(pnpm-lock\.yaml|pnpm-workspace\.yaml)$/;
+/** Install inputs (closure.mjs INSTALL_INPUT): what NODE_RULE §3 R1 moves to the root lane. */
+const INPUT = /(^|\/)(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc)$/;
+export const isInput = (p) => INPUT.test(p) && !p.includes("node_modules/");
 
 /** mulberry32 seeded from a string: the plan's only randomness. */
 export function rng(seed) {
@@ -77,11 +80,38 @@ export function finishes(agents, steps) {
 }
 
 /**
+ * NODE_RULE §3 (b), R1 (owner, 2026-10-19), over the range's commit list in
+ * place: each commit that changes an install input drops its own input changes
+ * and instead sets every install input to that dsh commit's full set
+ * (`inputsAt(id)`: path -> {mode, blob}), against the inputs as the earlier
+ * commits left them. The lanes then route every input path to the root lane.
+ */
+function snapInputs(list, prev, inputsAt, sizes) {
+  const cur = new Map([...prev].filter(([p]) => isInput(p)));
+  let snapped = 0;
+  for (const c of list) {
+    if (!c.files.some((f) => isInput(f.path))) continue;
+    const want = inputsAt(c.id), snap = [];
+    for (const [p, v] of want) {
+      const h = cur.get(p);
+      if (!h || h.blob !== v.blob || h.mode !== v.mode) snap.push({ path: p, op: "write", mode: v.mode, blob: v.blob, size: sizes.get(v.blob) ?? 0, modeChange: !!h && h.mode !== v.mode });
+    }
+    for (const p of cur.keys()) if (!want.has(p)) snap.push({ path: p, op: "rm" });
+    snap.sort((a, b) => (a.path < b.path ? -1 : 1));
+    for (const f of snap) if (f.op === "rm") cur.delete(f.path); else cur.set(f.path, { mode: f.mode, blob: f.blob });
+    c.files = [...c.files.filter((f) => !isInput(f.path)), ...snap];
+    snapped++;
+  }
+  return snapped;
+}
+
+/**
  * Plans range `k`. `range` comes from cutRanges, `commits` from readCommits,
  * `prev`/`next` are the checkpoint states before and after (path -> {mode, blob}),
- * `sizes` maps blob ids to bytes.
+ * `sizes` maps blob ids to bytes. `inputsRule` is NODE_RULE §3's: `plan` (the
+ * frozen plan's rule) or `r1`, which needs `inputsAt` (snapInputs).
  */
-export function planRange({ k, range, commits, prev, next, prevDirs, sizes, seed, milestone, snapshot, limits = LIMITS }) {
+export function planRange({ k, range, commits, prev, next, prevDirs, sizes, seed, milestone, snapshot, limits = LIMITS, inputsRule = "plan", inputsAt = null }) {
   const r = rng(`${seed}:${k}`);
   const counts = { gitlinks: 0, empty: 0, split: 0, dropped: { folder: 0, "file-parent": 0, absent: 0 }, upToDate: 0 };
   // The range's commits with their file operations.
@@ -97,11 +127,16 @@ export function planRange({ k, range, commits, prev, next, prevDirs, sizes, seed
     if (!files.length) { counts.empty++; continue; }
     list.push({ id, group: s.side ? s.mainline : "main", files, order: list.length });
   }
+  if (inputsRule !== "plan" && inputsRule !== "r1") throw new Error(`inputs rule ${inputsRule}: plan or r1`);
+  const r1 = inputsRule === "r1";
+  if (r1) counts.snapped = snapInputs(list, prev, inputsAt, sizes);
+  // under R1 every install input belongs to the root lane's area
+  const laneArea = (p) => (r1 && isInput(p) ? "/" : area(p));
   // Lanes: repository areas packed into 2-4 Branches by file changes. A path's
   // area decides its lane, so lanes never change the same path and merge cleanly;
   // a commit that spans lanes becomes one part per lane.
   const ops = new Map();
-  for (const c of list) for (const f of c.files) ops.set(area(f.path), (ops.get(area(f.path)) || 0) + 1);
+  for (const c of list) for (const f of c.files) ops.set(laneArea(f.path), (ops.get(laneArea(f.path)) || 0) + 1);
   const want = clamp(Math.round(list.length / 20), 2, 4);
   const laneCount = Math.max(1, Math.min(want, ops.size));
   const bins = Array.from({ length: laneCount }, () => ({ areas: [], ops: 0 }));
@@ -115,7 +150,7 @@ export function planRange({ k, range, commits, prev, next, prevDirs, sizes, seed
   const lanes = bins.map((b, i) => ({ name: `r${pad(k)}-${i + 1}-${slug(b.areas[0])}`, areas: b.areas, commits: [] }));
   for (const c of list) {
     const parts = new Map();
-    for (const f of c.files) { const li = laneOfArea.get(area(f.path)); (parts.get(li) || parts.set(li, []).get(li)).push(f); }
+    for (const f of c.files) { const li = laneOfArea.get(laneArea(f.path)); (parts.get(li) || parts.set(li, []).get(li)).push(f); }
     if (parts.size > 1) counts.split++;
     for (const [li, files] of parts) lanes[li].commits.push({ ...c, files });
   }
@@ -283,7 +318,7 @@ export function planRange({ k, range, commits, prev, next, prevDirs, sizes, seed
   steps.sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : 1));
   if (!finishes(agents, steps)) throw new Error(`range ${k}: the plan does not finish`);
   return {
-    range: k, checkpoint: range.checkpoint, tree: range.tree, milestone, snapshot,
+    range: k, checkpoint: range.checkpoint, tree: range.tree, milestone, snapshot, ...(r1 ? { inputsRule } : {}),
     dsh: { commits: range.commits, mainline: range.steps.length, first: range.steps[0].commits[0] ?? range.steps[0].mainline, oversize: range.oversize },
     lanes: lanes.map((l) => ({ name: l.name, areas: l.areas, agents: l.agents, commits: l.commits.length })),
     agents, steps, conflicts, consolidation, closure: { install, tests: null },
