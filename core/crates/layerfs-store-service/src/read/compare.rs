@@ -232,17 +232,15 @@ fn changes(
     let memo = Memo::new(reader);
     let key = (left.root, right.root);
     let plan = match super::plans::find(key) {
-        Some(plan) => Some(plan),
+        Some(kept) => kept,
         None => {
             let made = Plan::make(&memo, &hints, &left.tree, &right.tree);
             if let Some(error) = hints.failure.take() {
                 return Err(args::history(error));
             }
-            made.map_err(args::content)?.map(|plan| {
-                let plan = Arc::new(plan);
-                super::plans::keep(key, plan.clone());
-                plan
-            })
+            let plan = made.map_err(args::content)?.map(Arc::new);
+            super::plans::keep(key, plan.clone());
+            plan
         }
     };
     let first = match &request.cursor {
@@ -251,7 +249,7 @@ fn changes(
     };
     let mut walk = match &plan {
         Some(plan) => ChangeWalk::planned(&memo, &left.tree, &right.tree, plan, first.as_ref()),
-        None => ChangeWalk::full(&memo, &left.tree, &right.tree),
+        None => ChangeWalk::full(&memo, &left.tree, &right.tree, first.as_ref()),
     }
     .map_err(args::content)?;
     emit(reader, &mut walk, &request)

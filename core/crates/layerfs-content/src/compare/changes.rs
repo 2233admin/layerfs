@@ -191,14 +191,16 @@ impl Locator<'_> {
 }
 
 impl<'a> ChangeWalk<'a> {
-    /// The walk of both whole trees.
+    /// The walk of both whole trees. A resumed walk names the first component
+    /// of its resume path as `from`, and the root lists from it.
     pub fn full(
         reader: &'a dyn AuthenticatedObjects,
         left: &'a TreeTable,
         right: &'a TreeTable,
+        from: Option<&PathName>,
     ) -> ContentResult<Self> {
         let mut walk = Self::new(reader, left, right, None);
-        walk.start(None)?;
+        walk.start(from)?;
         Ok(walk)
     }
 
@@ -337,9 +339,10 @@ impl<'a> ChangeWalk<'a> {
         self.enter_from(pair, None)
     }
 
-    /// [`Self::enter`] for a resumed walk: of a planned directory, only the
-    /// names at or after `from` are visited, so a later page does not read the
-    /// entries earlier pages listed.
+    /// [`Self::enter`] for a resumed walk: only the names at or after `from`
+    /// are visited, so a later page does not read the entries earlier pages
+    /// listed. A listed directory starts at `from` itself, found by lookup,
+    /// then lists after it (#364 item 4).
     pub fn enter_from(
         &mut self,
         (path, left, right): &Pair,
@@ -391,18 +394,27 @@ impl<'a> ChangeWalk<'a> {
                 }
             }
             (l, r) => {
-                let listing = |entry: Option<EntryFacts>| {
-                    entry.map(|entry| Listing {
-                        root: entry.value.content_root,
-                        after: None,
+                let mut listings = [None, None];
+                for (listing, entry) in listings.iter_mut().zip([l, r]) {
+                    let Some(entry) = entry else { continue };
+                    let root = entry.value.content_root;
+                    let mut page = VecDeque::new();
+                    if let Some(from) = from {
+                        if let Some(serial) = lookup(self.reader, DirectoryRoot(root), from)? {
+                            page.push_back((from.clone(), serial));
+                        }
+                    }
+                    *listing = Some(Listing {
+                        root,
+                        after: from.cloned(),
                         exhausted: false,
-                        page: VecDeque::new(),
-                    })
-                };
+                        page,
+                    });
+                }
                 Frame {
                     path: path.clone(),
                     ready: VecDeque::new(),
-                    listings: Some([listing(l), listing(r)]),
+                    listings: Some(listings),
                 }
             }
         };
