@@ -961,6 +961,12 @@
   Workspace that installs incrementally on such a merge keeps the stale
   hoisting.
 
+  **Design approved 2026-10-20 (owner, option B):** `branch.merge` takes
+  caller-declared merge units. When both sides changed a unit, the merge
+  takes the whole unit from the side with the latest write and reports it.
+  See [F057_MERGE_UNITS.md](F057_MERGE_UNITS.md). Not built yet; the build
+  follows #364 items 3 and 4.
+
 - **F-058 · the native repair chain ran the lanes on top of each other
   (harness oracle, not a product defect; range 18 a1, `p3-main-g`,
   2026-10-19).**
