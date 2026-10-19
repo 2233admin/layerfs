@@ -236,3 +236,14 @@ with QUIET held by ranges 21–30.
 
 Receipts: this session's scratch `out/f057/m2/`, `out/f057/lx2/`.
 
+## Addendum 2 · the residual cost is accepted (2026-10-20)
+
+A second host profile, release, merges 29 and 35, diagnostics not kept:
+- **Locate and verify.** The remaining cost of classifying one side is locating its changed inodes: verifying each one's recorded binding in its parent directory, mostly cold directory pages. It takes 95 ms for 325 inodes on merge 29 and 449 ms for 6,648 on merge 35. `merge_roots` never reads these pages for a change only one side made.
+- **Sharing the difference saves nothing.** `merge_roots`'s own base → ours inode difference costs 0.1–0.8 ms. The same difference inside classification costs 56–133 ms only because it runs first and pays the cold inode-page reads; repeated warm, 6,648 inodes take 2.3 ms. Sharing would move the cold reads, not remove them.
+- **Unverified bindings were rejected.** Recorded bindings are global across Branches and may be stale or, on older Stores, incomplete. Trusting them could name a path wrongly without notice.
+
+**Decision** (liaison, under owner delegation): accept `74b443672b` as is (median +1.8 ms, max +18.4 ms on merges that decide no unit) and stop optimizing. Units are opt-in, and where they apply they replace a relink and rebuild that cost seconds.
+
+**Possible future change, not planned:** units given as directory paths instead of globs. Membership would then follow from paths the walk already holds, with no naming of one-sided changes.
+
