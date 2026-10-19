@@ -326,7 +326,36 @@ per-daemon growth, not the sum.
 
 ## P3 · Sandbox share
 
-Pending.
+### Ranges 16–20 against range 15 (lead, 2026-10-20)
+
+The baseline is range 15's terminal attempt. Each later range is its terminal attempt, all on daemon `44ac6c91` and addon `77597adb`, with one sample per attempt. Ranges 16 and 17 ended at watch. Ranges 18–20 ended at optimize: they advanced on optimize (#364 item 4), because the only optimize row in each is the checkpoint `diff_commits` scaling. No correctness, Node-proof or storage gate stopped a terminal attempt.
+
+| Range (attempt) | Verdict | LayerFS Commits | New stored | Stored per Commit | Index rows (bytes, total) | Content ratio | Churn ratio | Repair install / build s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 15 (a4) | watch | 2,303 | 164.1 MiB | 60.3 KiB | 30.5 MiB | 0.29× | 0.258 | 26.1 / 7.6 |
+| 16 (a3) | watch | 1,915 | 39.8 MiB | 19.1 KiB | 41.2 MiB | 0.22× | 0.0020 | 35.4 / 7.2 |
+| 17 (a2) | watch | 1,045 | 24.2 MiB | 21.4 KiB | 49.1 MiB | 0.21× | 0.0008 | 36.8 / 7.5 |
+| 18 (a6) | optimize (#364 item 4) | 1,631 | 67.4 MiB | 39.8 KiB | 62.8 MiB | 0.24× | 0.0218 | 40.4 / 12.1 |
+| 19 (a4) | optimize (#364 item 4) | 959 | 27.7 MiB | 26.8 KiB | 72.5 MiB | 0.21× | 0.0009 | 40.1 / 12.2 |
+| 20 (a2) | optimize (#364 item 4) | 921 | 21.5 MiB | 21.5 KiB | 81.5 MiB | 0.18× | 0.0008 | 34.0 / 10.4 |
+
+**Uncontended p50 in ms (calls)**
+
+| Class | r15 | r16 | r17 | r18 | r19 | r20 |
+| --- | --- | --- | --- | --- | --- | --- |
+| fs.write ≤1 KiB | 5.9 (267) | 7.8 (170) | 10.1 (124) | 7.2 (103) | 8.2 (88) | 7.1 (147) |
+| fs.write ≤8 KiB | 6.2 (633) | 8.0 (345) | 9.4 (274) | 7.3 (359) | 8.6 (225) | 7.7 (225) |
+| fs.read ≤8 KiB | 2.0 (28) | 2.5 (49) | 2.9 (35) | 2.5 (36) | 3.2 (26) | 2.4 (17) |
+| sandbox.mount | 9.1 (130) | 10.3 (187) | 11.5 (120) | 9.6 (130) | 11.0 (159) | 10.0 (110) |
+| sandbox.commit | 27.7 (71) | 27.2 (102) | 29.5 (66) | 29.2 (76) | 23.5 (87) | 19.2 (62) |
+| branch.diff_commits >64 entries | 15.0 (258) | 277.0 (261) | 314.9 (258) | 295.8 (318) | 280.3 (315) | 273.2 (316) |
+
+- **Speed.** The only class above r15 by more than the owner's 5 ms floor is the checkpoint `diff_commits`: about 270–315 ms per call from range 16 on, against 15 ms at r15. #364 item 4 owns it. Every other class is at most 4.2 ms slower than r15 (`sandbox.commit` is faster), so it is under the floor and is no regression under the 2026-10-20 rule. The control probe passed at every sample from range 17's diagnostic through range 20 (0.71–1.24×).
+- **Storage per Commit** falls from r15's 60.3 KiB, which was an install-heavy first P3 range, to 19–40 KiB. Range 18 is highest, because its repair rebuilt every package after the F-059 clean. The content ratio drifts down from 0.29× to 0.18×. The churn ratio stays near 0.001 apart from r18 (0.022), whose repair rewrote every package's `lib/`.
+- **Index rows** grow by 8–14 MiB per range: from 30.5 MiB to 81.5 MiB over ranges 16–20. The bytes added per LayerFS Commit rise from 5.9 KiB (r16) to 10.2–10.6 KiB (r19, r20). That is recorded here as a watch fact, not a gate: no Storage gate tripped. It should be compared against the work per Commit before anyone calls it a trend.
+- **Owner-approved workload change (F-059, option A).** From range 18 a6, the lead's repair cleans `lib/` and tsbuildinfo in every package, including orphan folders, and runs the whole build. That costs 2.8–4.6 s per range over r15's build (native 7.7–8.2 s against 6.0 s). Final commands ran 228–256 s against the 295 s alarm. The run killed at the alarm in range 20 was cross-session Docker interference, now serialized by `~/lfs-history/QUIET`.
+- **Harness and oracle fixes along the way:** F-058 (lanes merge as LayerFS does, in write order), F-059 (repair clean and whole build), F-060 (the native chain applies the reconcile), and the Installed-tree row. A chain reset was tried and reverted (fix 043). None is a product change. The open product items stay with #364 and the earlier open F-numbers.
+
 
 ## P4 · Recovery and demo
 
