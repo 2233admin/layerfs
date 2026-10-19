@@ -881,3 +881,31 @@
   One run: pass, `direct.same` Committed and `daemonA.shared` refused
   `Conflict`, 66 reads none refused, integrity ok.
   [fixes/040-f055-locking-oracle-order.md](fixes/040-f055-locking-oracle-order.md).
+
+- **F-056 · a build that rewrites identical outputs is redone after every
+  remount (product, a finding against design 8; R1 slice `f031-r1-slice-h`
+  devcheck, 2026-10-19).**
+  - STORAGE_BATCH_SPEC §4 design 8 (owner, 2026-10-18): an mtime-only change
+    is not a change, and after a remount the committed mtime is seen. Its
+    proof "Builds across a remount" says the second `tsc -b` must report
+    nothing to build, or what a native rerun reports. A difference is a
+    finding against design 8.
+  - Lane step `r015.s0010` edits `tsconfig.base.json` (mtime 1792399609.86).
+    The vendor projects' outputs date from the lead's first build
+    (`vendor/cosmokit/lib/tsconfig.tsbuildinfo` 1792399582.24), so `tsc -b`
+    finds them out of date ("older than input 'tsconfig.base.json'").
+  - The repair build rebuilds them. The bytes are identical, and only mtimes
+    move (in the mount, tsbuildinfo 1792400139.26 and `lib/index.js`
+    1792400143.75). The Commit keeps the base rows, and after a remount the
+    old mtimes are back (probe `utimes.json`: before, after, Commit, remount).
+  - So `tsc -b --verbose` after the remount builds `vendor/cordis`,
+    `cosmokit`, `loader`, `logger-console` and `schemastery` again. A native
+    rerun on the same chain finds 77 of 77 up to date
+    (`devcheck-oracle-015.json` rebuild states). Every later build in a fresh
+    Workspace repeats that work until a real change lands.
+  - Receipts: `~/lfs-history/dev/devcheck-r015-20261019/` (`tsc.json`,
+    `mt.json`, `dry.json`, `utimes.json`) and the run's
+    `metrics/devcheck-015.stop.log`.
+
+  **Status: OPEN, owner decision.** Not fixed: changing design 8 reverses an
+  owner decision.
