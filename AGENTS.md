@@ -176,9 +176,9 @@ call sites broken by #352 F-020 (`ProjectApi` fork and commits,
 `ForkRequest`, a `SandboxCreate` without `connect_host`; listed in the F-020
 fix record) stay broken; a product change never adapts it. Only an
 explicit owner instruction reopens it.
-Root [benchmark/AGENTS.md](benchmark/AGENTS.md) and its
-[Quickstart](benchmark/fs-bench-pro/QUICKSTART.md) are historical: that harness
-built the retired reference and is not runnable at HEAD.
+The root `benchmark/` harness that built and measured the retired reference was
+removed from HEAD; read it at tag `reference-v0.1.6-final`. Released
+fs-bench-pro results (v0.1.4–v0.1.6) are in [data/fs-bench-pro](data/fs-bench-pro/README.md).
 
 ## 1. A warm cache must never credit a measured phase
 
