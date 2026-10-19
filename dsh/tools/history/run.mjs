@@ -926,6 +926,16 @@ export function forkP3State(source, snapState, k) {
   return null;
 }
 
+/**
+ * Range k's storage parts and per-source totals as its metrics recorded them (storageReport): what the run's state
+ * held after range k, which a snapshot's copy (taken before the range's figures) does not.
+ */
+export function partsFromMetrics(m) {
+  const r = m?.storageReport;
+  if (!r?.parts || !r.sources) return null;
+  return { parts: r.parts, bySource: Object.fromEntries(Object.entries(r.sources).filter(([, v]) => v?.content != null).map(([s, v]) => [s, { content: v.content, metadata: v.metadata }])) };
+}
+
 /** A new run from run `from`'s snapshot of range N (SPEC §7, Forking): its file rebuilt into a new volume and home. */
 async function cmdFork(o) {
   const source = new Run(join(HISTORY, "runs", o["from-run"]));
@@ -934,6 +944,14 @@ async function cmdFork(o) {
   if (!manifest.state) throw new Error(`snapshot ${k} carries no runner state`);
   const p3 = forkP3State(source, manifest.state, k);
   if (!p3) throw new Error(`snapshot ${k} of ${source.manifest.run} carries no git/Node state and the run has advanced past it; the fork would replay a fresh git and Node start`);
+  if (p3.from === "snapshot") {
+    // the snapshot's parts are the range before's: range k's come from its latest metrics of this run
+    const dir = source.manifest.outputs.metrics, own = readdirSync(dir).filter((f) => new RegExp(`^range-${pad(k)}\\.a\\d+\\.json$`).test(f))
+      .map((f) => JSON.parse(readFileSync(join(dir, f), "utf8"))).filter((x) => x.run === source.manifest.run).sort((a, b) => a.attempt - b.attempt);
+    const got = partsFromMetrics(own.at(-1));
+    if (!got) throw new Error(`range ${k} of ${source.manifest.run}: no metrics with storage parts; the fork's storage figures would start from range ${k - 1}`);
+    Object.assign(p3.state, got); p3.from = `snapshot; parts from range-${pad(k)}.a${own.at(-1).attempt} metrics`;
+  }
   const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), addon: resolve(o.addon ?? source.manifest.env.LAYERFS_NATIVE ?? ADDON), sdk: resolve(o.sdk ?? source.manifest.env.LAYERFS_SDK_JS ?? SDK_JS), source: { run: source.manifest.run, range: k },
     // a dev slice (slice.mjs): its own plan and oracle folders; never a measured run
     // a full plan (plan.mjs, e.g. plan-r1) for any label; a dev slice's plan and oracle for dev runs only

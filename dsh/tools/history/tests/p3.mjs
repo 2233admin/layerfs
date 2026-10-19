@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { changedPackages, checkNode, commitIdOf, inputsHash, pointsBefore, testPoints, treeDelta, treeIdCommand, wholeBuild } from "../nodelanes.mjs";
 import { PRUNE_EMPTY, pointBuild } from "../nodeconfig.mjs";
 import { chooseFiles, nativeClean, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
-import { execTool, forkP3State, p3StateOf } from "../run.mjs";
+import { execTool, forkP3State, p3StateOf, partsFromMetrics } from "../run.mjs";
 import { installCommand, pointInstall, STORE_POLICIES } from "../closure.mjs";
 import { sliceRange } from "../slice.mjs";
 import { stepSource } from "../storage.mjs";
@@ -275,6 +275,10 @@ test("a fork of a P3 snapshot keeps the git and Node state (r016.a2): from the s
     assert.equal(forkP3State(src(s), { next: 16, installed: true, gitSeeded: 15 }, 15).from, "snapshot");
   }
   assert.deepEqual(forkP3State(src({ next: 9 }, false), {}, 7), { from: "none", state: {} }, "git and Node off: nothing to carry");
+  // a snapshot's parts are the range before's: range k's come from its metrics (storageReport parts and sources)
+  const sr = { storageReport: { parts: { total: 9, content: 5 }, sources: { tracked: { content: 3, metadata: 1, latest: 7 }, git: { content: 2, metadata: 0 } } } };
+  assert.deepEqual(partsFromMetrics(sr), { parts: { total: 9, content: 5 }, bySource: { tracked: { content: 3, metadata: 1 }, git: { content: 2, metadata: 0 } } });
+  assert.equal(partsFromMetrics({ storageReport: { parts: null } }), null);
 });
 
 let failed = 0;
