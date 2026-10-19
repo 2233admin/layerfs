@@ -426,6 +426,16 @@ six-part form.
 | Content ratio | optimize: > 5× | > 2×, or not recorded |
 | Install inputs | reported only, until NODE_RULE §3 is decided | — |
 
+**Absolute time floor (owner 2026-10-20).** `THRESHOLDS.absoluteFloorMs = 5`.
+A time row trips only when its ratio is over the band **and** the extra time
+per call is over 5 ms, at p50 and, for a p95 trip, at p95. This covers Speed
+against the baseline, the time Scaling fits and the chain bound's ms side
+(judged on the whole call; a per-entry fit on its total), time-only trips, and
+the control probe's watch row in "Speed as history grows". Below the floor the
+row passes and reads "under the 5 ms floor (+x ms per call)". Counter gates,
+storage, correctness, Node and wall/budget rows are unchanged. Reports
+recorded before the rule keep their rows (F2).
+
 ### 10.4 Baselines and trends
 
 - **Speed baselines** are already phase-matched (`baselineFor`): a P3 attempt

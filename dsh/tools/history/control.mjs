@@ -18,6 +18,7 @@ import { loadavg } from "node:os";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { THRESHOLDS } from "./gates.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pad = (n) => String(n).padStart(3, "0");
@@ -66,7 +67,8 @@ export function compare(a, b) {
     ratio: a[c]?.p50 && b[c]?.p50 != null ? +(b[c].p50 / a[c].p50).toFixed(3) : null,
     misses: a[c]?.syscr != null && b[c]?.syscr != null ? +(b[c].syscr / Math.max(a[c].syscr, 1)).toFixed(3) : null,
   }]));
-  const fired = CLASSES.filter((c) => per[c].ratio > WATCH.ratio || per[c].misses > WATCH.misses);
+  // owner 2026-10-20: a time ratio counts only when (b) also adds more than the absolute floor per call
+  const fired = CLASSES.filter((c) => (per[c].ratio > WATCH.ratio && b[c].p50 - a[c].p50 > THRESHOLDS.absoluteFloorMs) || per[c].misses > WATCH.misses);
   return { per, watch: fired.length ? "watch" : "pass", fired };
 }
 

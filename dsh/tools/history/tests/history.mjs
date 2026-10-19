@@ -10,7 +10,7 @@ import { cutRanges, mainlineSteps, snapshotPolicy } from "../ranges.mjs";
 import { area, dirCounts, finishes, planRange, replayPlan, rng, stateDiff } from "../plan-range.mjs";
 import { apply, summarize } from "../plan.mjs";
 import { compareTree, expectations } from "../oracle.mjs";
-import { aggregate, buildBaseline, evaluate, exponent, rising, sizeClass } from "../gates.mjs";
+import { aggregate, buildBaseline, evaluate, exponent, rising, sizeClass, underFloor } from "../gates.mjs";
 import { leadNote, renderComment, renderFinding, renderIndex, renderRange, reportRange, LEAD_START } from "../report.mjs";
 import { storedGate } from "../frozen.mjs";
 import { checkReport } from "../reportcheck.mjs";
@@ -220,18 +220,44 @@ test("gates pass a healthy range and stop on a wrong tree or a leak", () => {
 });
 
 test("speed acts only when the ratio is high and still rising", () => {
-  const pilot = [0, 1, 2, 3, 4].map((i) => metrics(i));
+  // times x10 (owner 2026-10-20: under the 5 ms floor a ratio is not slow)
+  const op = (p50, p95) => ({ ops: [{ op: "fs.stat", sizeClass: "—", n: 50, p50, p95, p99: p95, max: p95, slowPhase: "sdk.read" }] });
+  const pilot = [0, 1, 2, 3, 4].map((i) => metrics(i, op(20, 40)));
   const base = buildBaseline(pilot);
-  const slow = (r, p95) => metrics(r, { ops: [{ op: "fs.stat", sizeClass: "—", n: 50, p50: 2, p95, p99: p95, max: p95, slowPhase: "sdk.read" }] });
+  const slow = (r, p95) => metrics(r, op(20, p95 * 10));
   assert.equal(evaluate(slow(5, 5.6), pilot, base).verdict, "watch", "1.4x");
   const hist = [...pilot, slow(5, 6.5), slow(6, 7), slow(7, 7.5)];
   assert.equal(evaluate(slow(8, 8), hist, base).verdict, "optimize", "2x and rising");
   assert.equal(evaluate(slow(8, 6.4), [...pilot, slow(5, 8), slow(6, 7), slow(7, 6.5)], base).verdict, "watch", "1.6x but falling");
 });
 
-test("a probe that grows with depth is a scaling finding even when fast", () => {
+test("the absolute floor (owner 2026-10-20): a time ratio is slow only when it also adds more than 5 ms per call", () => {
+  const op = (p50, p95) => ({ ops: [{ op: "fs.stat", sizeClass: "—", n: 50, p50, p95, p99: p95, max: p95, slowPhase: "sdk.read" }] });
+  const pilot = [0, 1, 2, 3, 4].map((i) => metrics(i, op(2, 4)));
+  const base = buildBaseline(pilot), speed = (g) => g.checks.find((c) => c.name === "Speed");
+  // 4x at p50 and p95, but +6 ms at p50 and +8 at p95 is over: watch (not rising); +3 ms at p50 alone passes
+  const under = speed(evaluate(metrics(5, op(5, 8.5)), pilot, base));
+  assert.equal(under.result, "pass");
+  assert.match(under.value, /under the 5 ms floor \(\+4\.5 ms per call\)/);
+  assert.equal(speed(evaluate(metrics(5, op(8, 9.5)), pilot, base)).result, "watch", "p50 +6 ms trips");
+  // the p95 case: p50 flat, p95 +7 ms (2.75x) trips; p95 +4 ms (2x) does not
+  assert.equal(speed(evaluate(metrics(5, op(2, 11)), pilot, base)).result, "watch");
+  assert.equal(speed(evaluate(metrics(5, op(2, 8)), pilot, base)).result, "pass");
+  // a time fit under the floor passes; the same counters still trip (counter gates unchanged)
   const hist = [0, 1, 2, 3, 4, 5, 6].map((i) => metrics(i, { probes: { "list-small": { ms: 0.1 * (i + 1), counters: { rows: 10 * (i + 1) } } } }));
   const g = evaluate(metrics(7, { probes: { "list-small": { ms: 0.8, counters: { rows: 80 } } } }), hist, buildBaseline(hist.slice(0, 5)));
+  assert.equal(g.checks.find((c) => c.name === "Scaling").result, "pass");
+  assert.match(g.checks.find((c) => c.name === "Scaling").value, /under the 5 ms floor \(\+0\.7 ms per call\)/);
+  assert.equal(g.checks.find((c) => c.name === "Counters").result, "optimize");
+  // a per-entry fit is judged on its calls' totals (per entry × entries): r018's diff_commits, 6.4 s -> 73 s, still trips
+  assert.equal(underFloor({ name: "diff_commits checkpoint ms per entry", e: 10.2, callMs: [6400, 73000] }).result, undefined);
+  assert.equal(underFloor({ name: "x checkpoint ms per entry", e: 10.2, callMs: [1.2, 4.9] }).result, "pass");
+  assert.equal(underFloor({ name: "not judged", e: null, result: "watch", note: "3 of 9 points", callMs: [1, 2] }).result, "watch", "an unjudged fit stays");
+});
+
+test("a probe that grows with depth is a scaling finding once it adds more than the floor", () => {
+  const hist = [0, 1, 2, 3, 4, 5, 6].map((i) => metrics(i, { probes: { "list-small": { ms: 10 * (i + 1), counters: { rows: 10 * (i + 1) } } } }));
+  const g = evaluate(metrics(7, { probes: { "list-small": { ms: 80, counters: { rows: 80 } } } }), hist, buildBaseline(hist.slice(0, 5)));
   assert.equal(g.verdict, "optimize");
   assert.equal(g.checks.find((c) => c.name === "Scaling").result, "optimize");
   assert.equal(g.checks.find((c) => c.name === "Counters").result, "optimize");

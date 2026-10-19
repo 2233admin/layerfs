@@ -186,7 +186,9 @@ Report these by id. A later range that shows them has not regressed.
 - any Correctness or Node proof stop: tree, steps, conflicts, tests, P1–P6, git;
 - a speed class over its act band on **uncontended** calls (SPEC §5: pass
   ≤ 1.2×, watch 1.2–1.5×, act > 1.5×), judged by `gates.mjs` with its minimum
-  call counts, on the same binary;
+  call counts, on the same binary, and adding more than **5 ms per call**
+  (owner 2026-10-20, `THRESHOLDS.absoluteFloorMs`; under it a ratio is not a
+  regression);
 - stored per Commit or index rows growing faster than the work (files changed,
   Commits, tree size), or content ratio / churn ratio moving toward their watch
   bands;

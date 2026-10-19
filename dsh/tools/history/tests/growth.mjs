@@ -36,7 +36,9 @@ test("control probe: (b)/(a) per class; the watch row fires over 1.25× or over 
   assert.deepEqual(a["fs.write ≤1 KiB"], { n: 3, failed: 0, p50: 4, statements: 100, vmSteps: 4000, syscr: 100, rchar: 409600, readBytes: 0 });
   assert.equal(compare(a, summarize(calls(5, 100))).watch, "pass", "1.25× is the line, not over it");
   assert.equal(WATCH.ratio, 1.25);
-  const slow = compare(a, summarize(calls(5.2, 100)));
+  // owner 2026-10-20: 1.3× of 4 ms is +1.2 ms, under the 5 ms floor, so it passes; 1.3× of 40 ms (+12 ms) fires
+  assert.equal(compare(a, summarize(calls(5.2, 100))).watch, "pass");
+  const slow = compare(summarize(calls(40, 100)), summarize(calls(52, 100)));
   assert.equal(slow.watch, "watch");
   assert.deepEqual(slow.fired, ["fs.write ≤1 KiB", "fs.write ≤8 KiB", "fs.read ≤8 KiB"]);
   assert.equal(compare(a, summarize(calls(4, 201))).watch, "watch", "read syscalls over 2× fire on their own");

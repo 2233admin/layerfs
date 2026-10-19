@@ -45,6 +45,8 @@ import { p3Checks } from "./p3.mjs";
 
 export const THRESHOLDS = {
   speed: { watch: 1.2, act: 1.5 },
+  // owner 2026-10-20: a time row is slow only when its ratio trips AND it adds more than this per call ("5ms is nothing")
+  absoluteFloorMs: 5,
   depthExponent: { watch: 0.15, act: 0.7 },
   counterExponent: { watch: 0.05, act: 0.5 },
   directoryShare: { watch: 0.5, act: 0.7 },
@@ -297,14 +299,32 @@ export function splitFits(op, pts, th) {
       if (pts.at(-1)?.perUnit[op][total] == null) continue;
       const against = axis === "depth" ? undefined : axis;
       if (eN == null) { fits.push({ name: `${op} checkpoint ${what}`, against, e: null }); continue; }
-      if (eN <= th.watch) { fits.push({ name: `${op} checkpoint ${what} in total (entries exponent ${eN})`, against, e: exponent(pts.map((x) => [at(x), x.perUnit[op][total]])) }); continue; }
+      if (eN <= th.watch) { fits.push({ name: `${op} checkpoint ${what} in total (entries exponent ${eN})`, against, e: exponent(pts.map((x) => [at(x), x.perUnit[op][total]])), callMs: what === "ms" ? pts.map((x) => x.perUnit[op].ms) : undefined }); continue; }
       const eP = exponent(pts.map((x) => [at(x), x.perUnit[op][per]]));
-      if (band(eP, th) !== "pass") fits.push({ name: `${op} checkpoint ${what} per entry (entries exponent ${eN})`, against, e: eP });
+      const callMs = what === "ms" ? pts.map((x) => x.perUnit[op].ms) : undefined;
+      if (band(eP, th) !== "pass") fits.push({ name: `${op} checkpoint ${what} per entry (entries exponent ${eN})`, against, e: eP, callMs });
       else fits.push({ name: `${op} checkpoint ${what}`, against, e: null, result: "watch",
         note: `entries grow with ${axis} (exponent ${eN}) and ${what} per entry does not rise (${eP}): the fixed and per-entry parts cannot be separated` });
     }
   }
   return fits;
+}
+
+/**
+ * The owner's absolute floor (2026-10-20): a time fit that trips passes when the whole call (a per-entry fit:
+ * per entry × entries, the call's total) adds no more than `absoluteFloorMs` over its reference, the series'
+ * first point. Mutates `f`; counter fits never carry `callMs`.
+ */
+export function underFloor(f, t = THRESHOLDS) {
+  const xs = (f.callMs ?? []).filter((x) => x != null);
+  // a fit not judged (no exponent or bound, or a note) stays as it is
+  if (xs.length < 2 || f.e == null || f.note) return f;
+  const r = f.result ?? band(f.e, f.text ? BOUND.ms : t.depthExponent);
+  const extra = +(xs.at(-1) - xs[0]).toFixed(2);
+  if (r === "pass" || extra > t.absoluteFloorMs) return f;
+  f.text = `${f.text ?? `${f.against ?? "depth"} exponent ${f.e}`}; under the ${t.absoluteFloorMs} ms floor (+${extra} ms per call)`;
+  f.result = "pass";
+  return f;
 }
 
 /** Least-squares slope of log(y) on log(x): how y grows with x (0 flat, 1 linear). */
@@ -411,7 +431,7 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   } else if (baseline && (baseline.daemon ?? null) !== (m.binary?.daemon ?? null)) {
     add("Speed", `baseline measured with daemon ${(baseline.daemon ?? "unknown").slice(0, 12)}; ${insufficient(0)}`, `≤ ${t.speed.watch}×`, "watch");
   } else if (baseline) {
-    let worstRow = null, thin = null;
+    let worstRow = null, thin = null, floored = null;
     // SPEC §5: Speed judges the uncontended series only, against the baseline's own
     // (rows recorded before the split, against a baseline that predates it too, are judged as before)
     const judged = (x) => { const ops = opsOf(x, baseline); return ops.some((r) => r.series) ? uncontended(ops) : baseline.derivation ? [] : ops; };
@@ -419,13 +439,17 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
       const b = baseline.ops[`${r.op}\u0000${r.sizeClass}`];
       if (!b) continue;
       const ratio = +Math.max(r.p50 / b.p50, r.p95 / b.p95).toFixed(2);
+      // owner 2026-10-20: a percentile counts only when it also adds more than the floor per call
+      const over = +Math.max(r.p50 - b.p50 > t.absoluteFloorMs ? r.p50 / b.p50 : 0, r.p95 - b.p95 > t.absoluteFloorMs ? r.p95 / b.p95 : 0).toFixed(2);
+      if (ratio > t.speed.watch && over <= t.speed.watch) { if (!floored || ratio > floored.ratio) floored = { ...r, ratio, extra: +Math.max(r.p50 - b.p50, r.p95 - b.p95).toFixed(2) }; continue; }
       // F-024: a baseline class of fewer than BASELINE_MIN_N calls is not a reference
       if (thinClass(b)) { if (!thin || ratio > thin.ratio) thin = { ...r, ratio, bn: b.perRange ? b.perRange.join("/") : b.n }; continue; }
-      if (!worstRow || ratio > worstRow.ratio) worstRow = { ...r, ratio };
+      const eff = ratio > t.speed.watch ? over : ratio;
+      if (!worstRow || eff > worstRow.ratio) worstRow = { ...r, ratio: eff };
     }
     if (thin && (!worstRow || thin.ratio > worstRow.ratio) && thin.ratio > t.speed.watch) {
       add("Speed", `not judged: ${thin.op} ${thin.sizeClass}: baseline class has ${thin.bn} call${thin.bn === 1 ? "" : "s"} (minimum ${BASELINE_MIN_N} per range); ${thin.ratio}× it`, `≤ ${t.speed.watch}×`, "watch");
-    } else if (worstRow) {
+    } else if (worstRow && !(floored && worstRow.ratio <= t.speed.watch)) {
       const series = history.map((x) => {
         const o = judged(x).find((r) => r.op === worstRow.op && r.sizeClass === worstRow.sizeClass);
         const b = baseline.ops[`${worstRow.op}\u0000${worstRow.sizeClass}`];
@@ -433,6 +457,8 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
       }).concat(worstRow.ratio);
       const v = worstRow.ratio > t.speed.act ? (rising(series) ? "optimize" : "watch") : worstRow.ratio > t.speed.watch ? "watch" : "pass";
       add("Speed", `${worstRow.op} ${worstRow.sizeClass}: ${worstRow.ratio}× baseline (${worstRow.slowPhase ?? "no phase"})`, `≤ ${t.speed.watch}×`, v);
+    } else if (floored) {
+      add("Speed", `${floored.op} ${floored.sizeClass}: ${floored.ratio}× baseline, under the ${t.absoluteFloorMs} ms floor (+${floored.extra} ms per call)`, `≤ ${t.speed.watch}× or ≤ ${t.absoluteFloorMs} ms extra`, "pass");
     } else unjudged("Speed", "no operation comparable to the baseline", `≤ ${t.speed.watch}×`);
   } else unjudged("Speed", "baseline not set (pilot)", `≤ ${t.speed.watch}×`);
   // Scaling: probes must stay flat with depth; counters are judged more strictly.
@@ -452,8 +478,9 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
     if (note) { probeFits.push({ name, e: null, result: "watch", note }); counterFits.push({ name, e: null, result: "watch", note }); continue; }
     // time rows carry their probe and a re-judge on fewer points (timeOnly: the previous range's own verdict)
     const timeAt = (ps) => (CHAIN.has(name) ? chainBound(name, m, ps).probe[0] : { e: exponent(ps.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.ms, true)])) });
-    if (CHAIN.has(name)) { const b = chainBound(name, m, pts); probeFits.push(...b.probe.map((f) => ({ ...f, probe: name, pts, timeAt }))); counterFits.push(...b.counters); continue; }
-    probeFits.push({ name: `${name}${unit(name)}`, probe: name, pts, timeAt, e: exponent(pts.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.ms, true)])) });
+    const callMs = pts.map((x) => x.probes?.[name]?.ms);
+    if (CHAIN.has(name)) { const b = chainBound(name, m, pts); probeFits.push(...b.probe.map((f) => ({ ...f, probe: name, pts, timeAt, callMs }))); counterFits.push(...b.counters); continue; }
+    probeFits.push({ name: `${name}${unit(name)}`, probe: name, pts, timeAt, callMs, e: exponent(pts.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.ms, true)])) });
     for (const k of Object.keys(m.probes[name].counters || {})) {
       counterFits.push({ name: `${name}.${k}${unit(name)}`, e: exponent(pts.map((x) => [x.depth?.after, perInput(name, x, x.probes?.[name]?.counters?.[k], true)])) });
       if (TREE_FLAT.has(name)) counterFits.push({ name: `${name}.${k}`, against: "tree files", e: exponent(pts.map((x) => [treeFiles(x), x.probes?.[name]?.counters?.[k]])) });
@@ -473,7 +500,7 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
     const i = r.reduce((b, x, j) => (RANK[x] > RANK[r[b]] || (RANK[x] === RANK[r[b]] && (fits[j].e ?? -Infinity) > (fits[b].e ?? -Infinity)) ? j : b), 0);
     return { ...fits[i], result: worst(r) };
   };
-  for (const f of probeFits) timeOnly(f, m, t);
+  for (const f of probeFits) { underFloor(f, t); timeOnly(f, m, t); }
   const scale = top(probeFits, t.depthExponent), counter = top(counterFits, t.counterExponent);
   const fit = (f, what) => (fitted < MINIMUM_POINTS ? { value: insufficient(fitted), result: "watch" }
     : !f.name ? { value: `not judged: no ${what}`, result: "watch" }

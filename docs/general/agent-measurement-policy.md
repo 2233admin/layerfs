@@ -214,6 +214,14 @@ exploratory performance-only default below; see
    already-frozen storage gate would force a worse trade, preserve its FAIL and
    freeze a new owner-approved tolerance/profile before another sample; never
    relabel or overwrite the old receipt.
+10. **Absolute time floor (owner, 2026-10-20).** "5ms is nothing." A time
+   comparison counts as slow only when its ratio exceeds its band **and** the
+   extra time over its reference exceeds **5 ms per call**, at p50 (or per unit
+   judged; a per-entry fit is judged on the call's total) and, for a p95 trip,
+   at p95 too. This holds for every LayerFS time comparison, not only #352. A
+   time regression of 5 ms or less per call is not a finding: nobody holds,
+   optimizes or escalates for it. Counter gates (statements, VM steps, full
+   scans), storage, correctness and wall or budget rows are unchanged.
 
 ## 5. Why these rules exist (worked example)
 

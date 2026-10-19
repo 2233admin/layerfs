@@ -488,7 +488,8 @@ test("per-call scratch (lead 2026-10-18): distinct folders; removed on success a
 });
 
 test("time-only trips (owner 2026-10-18): identical counters read watch; a repeat at the next range escalates; counter trips unchanged", () => {
-  const mk = (range, depth, ms, statements = 16) => ({ range, binary: { daemon: "d" }, depth: { after: depth }, checks: {}, probes: { fork: { ms, counters: { statements, vm_steps: 271 } } } });
+  // times x100 (owner 2026-10-20: a time fit adding under 5 ms per call passes, which 013.a2's sub-ms shape now does)
+  const mk = (range, depth, ms, statements = 16) => ({ range, binary: { daemon: "d" }, depth: { after: depth }, checks: {}, probes: { fork: { ms: ms * 100, counters: { statements, vm_steps: 271 } } } });
   const row = (xs, name = "Scaling") => evaluate(xs.at(-1), xs.slice(0, -1)).checks.find((c) => c.name === name);
   // 013.a2's shape: 0.635, 0.477, 0.77 ms over three ranges, every counter identical
   const once = [mk(11, 7783, 0.635), mk(12, 8519, 0.477), mk(13, 9385, 0.77)];
