@@ -25,6 +25,7 @@ import { loadavg, platform } from "node:os";
 import { join, resolve } from "node:path";
 import { HISTORY, PREFIX, REPO } from "./lib.mjs";
 import { options, rebaselineId, STORE_PATH } from "./run.mjs";
+import { harnessHash, holdQuiet, releaseQuiet } from "./quiet.mjs";
 
 export const RUNNER = `${PREFIX}-runner`;
 /** A run's Store volume: the one its manifest names, else the prefix's name for a run not created yet. */
@@ -52,6 +53,7 @@ export function runnerArgs({ imageId, hostSocket, args, run = runOf(args), sdk =
   return ["run", "--rm", "--name", RUNNER, "--init",
     "-v", `${repo}:${repo}`, "-v", `${history}:${history}`, ...store, ...sdkMount, ...gitMount, ...socketMounts,
     "-e", `HOME=${home}`, "-e", `LFS_HISTORY=${history}`, ...(process.env.LFS_RESOURCE_PREFIX ? ["-e", `LFS_RESOURCE_PREFIX=${PREFIX}`] : []), "-e", `PATH=${join(repo, "dsh/tools/history/runner")}:/usr/local/bin:/usr/bin:/bin`,
+    ...(process.env.LFS352_HARNESS_SHA ? ["-e", `LFS352_HARNESS_SHA=${process.env.LFS352_HARNESS_SHA}`] : []),
     "-e", `LAYERFS_STORE_PATH=${STORE_PATH}`, "-e", `LAYERFS_DAEMON_HOST=${DAEMON_HOST}`, "-e", `LAYERFS_RUNNER_IMAGE=${imageId}`, "-e", `LAYERFS_RUNNER=${RUNNER}`,
     "-e", "GIT_CONFIG_COUNT=1", "-e", "GIT_CONFIG_KEY_0=safe.directory", "-e", "GIT_CONFIG_VALUE_0=*",
     "-w", repo, "--entrypoint", "node", imageId, join(repo, "dsh/tools/history/run.mjs"), ...args];
@@ -70,8 +72,13 @@ function main(argv) {
   const gitCommon = resolve(REPO, execFileSync("git", ["-C", REPO, "rev-parse", "--git-common-dir"], { encoding: "utf8" }).trim());
   // the host's 1-min load around the command (owner 2026-10-19: recorded, never waited on; growth.mjs reads it)
   const start = { at: new Date().toISOString(), load: loadavg()[0] };
-  const status = spawnSync("docker", runnerArgs({ imageId, hostSocket, args, sdk, gitCommon }), { stdio: "inherit" }).status ?? 1;
   const run = runOf(args);
+  // step 4 (ranges 21–30): a play holds QUIET for its run through the attempt; a failed command releases it
+  const quiet = args[0] === "play" && run;
+  if (quiet) { const q = holdQuiet(run, `play ${args.slice(1).join(" ")}`); if (!q.ok) { console.error(`refused: ${q.why}`); return 5; } }
+  process.env.LFS352_HARNESS_SHA = harnessHash();
+  const status = spawnSync("docker", runnerArgs({ imageId, hostSocket, args, sdk, gitCommon }), { stdio: "inherit" }).status ?? 1;
+  if (quiet && status !== 0 && status !== 3) releaseQuiet(run);
   if (run && existsSync(join(HISTORY, "runs", run))) appendFileSync(join(HISTORY, "runs", run, "hostload.jsonl"), JSON.stringify(hostLoadLine(args, start, { at: new Date().toISOString(), load: loadavg()[0] }, status)) + "\n");
   return status;
 }

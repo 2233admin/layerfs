@@ -28,6 +28,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, w
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { lsTree } from "./git.mjs";
+import { checkStates, provenRun, restoreCommand, stateMounts } from "./nativestate.mjs";
 import { compareResults, packageOf, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
 import { BUILD_GROUPS, emittedCommand, nodeOf, parseEmitted, PRUNE_EMPTY, repairBuild, wholeBuild } from "./nodeconfig.mjs";
 
@@ -573,11 +574,14 @@ export function nativeInstall({ repo, commit, image, volume, name = "layerfs-iss
  */
 export function nativeSequence({ repo, chain, final, image, volume, name = "layerfs-issue352-oracle", dump = [] }) {
   const steps = [...chain, { ...final, kind: "final" }];
+  checkStates(steps);
   const stage = mkdtempSync(join(tmpdir(), "lfs352-seq-"));
   try {
     const script = [`mkdir ${ORACLE_ROOT} /seq && tar -x -C /seq && cd ${ORACLE_ROOT}`];
     let prev = null;
     steps.forEach((st, i) => {
+      // a snapshot (nativestate.mjs) of the chain's earlier states: extracted, not replayed
+      if (st.state) { script.push(restoreCommand(i, st.state, ORACLE_ROOT)); prev = st.checkpoint; return; }
       if (st.checkpoint !== prev) {
         if (!existsSync(join(stage, `${st.checkpoint}.tar`))) writeFileSync(join(stage, `${st.checkpoint}.tar`), execFileSync("git", ["--git-dir", repo, "archive", st.checkpoint], { maxBuffer: 1 << 30 }));
         script.push(`tar -x -C ${ORACLE_ROOT} -f /seq/${st.checkpoint}.tar`);
@@ -593,8 +597,11 @@ export function nativeSequence({ repo, chain, final, image, volume, name = "laye
     const input = execFileSync("tar", ["-c", "-C", stage, "."], { maxBuffer: 1 << 30 });
     if (process.env.LFS352_SEQ_DEBUG) writeFileSync(process.env.LFS352_SEQ_DEBUG, script.join(";\n"));
     const t0 = Date.now();
-    const r = spawnSync("docker", ["run", "--rm", "-i", "--name", name, "--network", "none", "-v", `${volume}:${STORE_MOUNT}:ro`, "--entrypoint", "sh", image, "-c", script.join("; ")], { input, encoding: "utf8", maxBuffer: 1 << 28 });
+    const r = spawnSync("docker", ["run", "--rm", "-i", "--name", name, "--network", "none", "-v", `${volume}:${STORE_MOUNT}:ro`, ...stateMounts(steps), "--entrypoint", "sh", image, "-c", script.join("; ")], { input, encoding: "utf8", maxBuffer: 1 << 28 });
     if (r.status !== 0) throw new Error(`native sequence container exited ${r.status}: ${String(r.stderr).slice(-300)}`);
+    // fail loud (step 0, ranges 21–30): every chain step and the snapshot proved they ran
+    const restored = steps[0]?.state ? 1 : 0, proven = provenRun(r.stdout, { steps: steps.length - 1 - restored, restored: !!restored });
+    if (proven.missing.length) throw new Error(`native sequence did not prove it ran: ${proven.missing.join("; ")}`);
     const lines = r.stdout.split("\n");
     return {
       steps: lines.filter((l) => l.startsWith("@@step ")).map((l) => { const [, i, kind, exit, ms] = l.split(" "); return { i: Number(i), kind, exit: Number(exit), ms: Number(ms) }; }),

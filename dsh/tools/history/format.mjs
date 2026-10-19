@@ -149,7 +149,7 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
   const store = storeOnDisk(m), amp = spaceAmp(m), prevAmp = spaceAmp(prev);
   const b = m.budget ?? {};
   out.push(`# Range ${pad(plan.range)} · **${g.verdict}** · attempt ${m.attempt}`, "",
-    `**Matches git ${c.tree?.ok ? "✓" : "✗"}** · daemon \`${id12(m.binary?.daemon)}\` · image \`${String(m.binary?.image ?? "?").replace(/^sha256:/, "").slice(0, 8)}\` · plan v${m.plan?.version ?? "?"} · ${start}${m.devAid ? ` · dev aid: ${m.devAid}` : ""}`,
+    `**Matches git ${c.tree?.ok ? "✓" : "✗"}** · daemon \`${id12(m.binary?.daemon)}\` · image \`${String(m.binary?.image ?? "?").replace(/^sha256:/, "").slice(0, 8)}\` · plan v${m.plan?.version ?? "?"} · ${start}${m.devAid ? ` · dev aid: ${m.devAid}` : ""}${m.rejudged?.length ? ` · **re-judged after ${m.rejudged.at(-1).after}** (retained state, not replayed)` : ""}`,
     `dsh \`${plan.dsh.first.slice(0, 9)}\`..\`${plan.checkpoint.slice(0, 9)}\` · **${int(plan.dsh.commits)} commits** (${int(m.dsh?.mainline)} mainline, ${int(m.dsh?.side)} side) · ${m.dsh?.first ?? "?"} → ${m.dsh?.last ?? "?"}`,
     `Areas changed: ${top.map((a) => `\`${a.name}\` ${Math.round(a.share * 100)}%`).join(" · ")}${other > 0.005 ? ` · other ${Math.round(other * 100)}%` : ""}`, ...(isP3(m) ? p3Headline(m) : []), "",
     table(HEADLINE_CELLS, [[

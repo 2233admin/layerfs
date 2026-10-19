@@ -6,7 +6,7 @@
 // saved context, the call log and the tooling laps, and appends to the same
 // trace file. The saved context pins the binaries; a resume under others is
 // refused. A failure in either half leaves the run dirty (no auto-resume).
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync, truncateSync } from "node:fs";
 import { join } from "node:path";
 import { binaries, writeJson } from "./lib.mjs";
 import { pad, Tree } from "./steps.mjs";
@@ -43,9 +43,38 @@ export function ctxFromJson(j, rebuildP2) {
   };
 }
 
+/**
+ * The final command's steps (step 4, ranges 21–30): `--until repair` stops after the consolidation, closure and
+ * publish ("published"), `--until verified` after the checkpoint check ("verified"); `--resume` goes on from either.
+ * A kill inside a later step resumes at that step: the trace is cut back to its length at the save, so the killed
+ * step's lines are dropped, and nothing before the save runs again.
+ */
+export const LATE_STAGES = new Set(["published", "verified"]);
+
+/** Any value as JSON with its Maps, Sets and Trees kept (the context after the consolidation). */
+export const encodeLate = (v) => JSON.parse(JSON.stringify(v, (key, x) => (x instanceof Tree ? { __tree: [...x.files] } : x instanceof Map ? { __map: [...x] } : x instanceof Set ? { __set: [...x] } : x)));
+export const decodeLate = (v) => JSON.parse(JSON.stringify(v), (key, x) => (x && typeof x === "object" && !Array.isArray(x) ? ("__tree" in x ? new Tree(new Map(x.__tree)) : "__map" in x ? new Map(x.__map) : "__set" in x ? new Set(x.__set) : x) : x));
+
+/** The late context back: held Workspaces gone, git's per-lane locks empty, `p2` rebuilt from the plan. */
+export function lateCtxFromJson(j, rebuildP2) {
+  const ctx = decodeLate(j);
+  return { ...ctx, p2: rebuildP2(ctx.base), held: new Map(), ...(ctx.git ? { git: { ...ctx.git, locks: new Map() } } : {}) };
+}
+
 /** Saves the first half: the context, the run's call log and tally, the laps and facts the second half needs. */
 export function saveHalf(run, k, half) {
-  writeJson(halfFile(run, k), { range: k, savedAt: new Date().toISOString(), binary: pinned(run.manifest.env), ...half, ctx: ctxToJson(half.ctx), sink: { seq: run.sink.seq, log: run.sink.log }, calls: run.tally.calls });
+  const late = LATE_STAGES.has(half.stage);
+  if (late && half.ctx.held?.size) throw new Error(`${half.ctx.held.size} held Workspaces are still mounted at ${half.stage}`);
+  const { p2, held, ...ctx } = half.ctx;
+  const traceBytes = half.traceFile && existsSync(half.traceFile) ? statSync(half.traceFile).size : null;
+  writeJson(halfFile(run, k), { range: k, savedAt: new Date().toISOString(), binary: pinned(run.manifest.env), ...half, ...(late ? { published: encodeLate(half.published ?? null), proof: encodeLate(half.proof ?? null) } : {}),
+    ctx: late ? encodeLate(ctx) : ctxToJson(half.ctx), traceBytes, sink: { seq: run.sink.seq, log: run.sink.log }, calls: run.tally.calls });
+}
+
+/** Cuts the trace back to its length at the save (a killed later step's lines go; nothing else changes). */
+export function cutTrace(h) {
+  if (h.traceFile && h.traceBytes != null && existsSync(h.traceFile) && statSync(h.traceFile).size > h.traceBytes) { truncateSync(h.traceFile, h.traceBytes); return true; }
+  return false;
 }
 
 /**

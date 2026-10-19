@@ -424,6 +424,95 @@ test("option 1: two lanes writing one ignored file: the newest writer wins, even
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 
+// ---- step 0 of ranges 21–30: fail loud, native snapshots, late stages, QUIET, harness hash, fix numbers ----
+const ns = await import("../nativestate.mjs");
+const halves = await import("../halves.mjs");
+const quiet = await import("../quiet.mjs");
+const { highest } = await import("../fixno.mjs");
+
+test("provenRun: every marker present is a full run with its counts", () => {
+  const out = ["@@restored 0 4021", "@@step 1 0 10", "@@step 2 0 12", "@@cleaned 3 5", "@@removed 3 2", "@@lanecap 0 7 1", "@@lanecap 1 3 0", "@@twosided 1", "@@exit 0 99", "@@tsc 0 50", "@@vt 0 70", "@@saved abc 123"].join("\n");
+  const p = ns.provenRun(out, { steps: 2, tsc: true, tests: true, restored: true, cleaned: 1, removed: 1, lanes: 2, saved: true });
+  assert.deepEqual(p.missing, []);
+  assert.equal(p.ran.restored, 4021);
+  assert.equal(p.ran.filesCaptured, 11);
+  assert.equal(p.ran.mergesApplied, 1);
+});
+test("provenRun: a missing state, clean, merge or snapshot is reported, never a pass", () => {
+  const p = ns.provenRun(["@@step 1 0 10", "@@cleaned 3 -1", "@@lanecap 0 7 1", "@@exit 0 1"].join("\n"), { steps: 2, tsc: true, restored: true, cleaned: 1, lanes: 2 });
+  assert.deepEqual(p.missing, ["states run 1 of 2", "build 0 of 1", "snapshot restored 0 of 1", "native clean 0 of 1", "lanes captured 1 of 2", "lane merges applied 0 of 1"]);
+  assert.ok(ns.provenRun("@@exit 0 1\n@@restorefail 0 2", { steps: 0 }).missing.some((m) => /extraction failed/.test(m)));
+  assert.ok(ns.provenRun("", { steps: 0 }).missing.includes("final install 0 of 1"), "no final install is a missing run");
+});
+test("native states: a snapshot only begins a chain; its volume is mounted read-only, the save volume writable", () => {
+  const st = { tree: "t", command: "native-state x", state: { volume: "v", file: "f.tar", sha256: "x" } };
+  assert.doesNotThrow(() => ns.checkStates([st, { tree: "u", command: "c" }]));
+  assert.throws(() => ns.checkStates([{ tree: "u", command: "c" }, st, { tree: "u", command: "c" }]), /may only begin/);
+  assert.throws(() => ns.checkStates([st]), /nothing would run/);
+  assert.deepEqual(ns.stateMounts([st, { tree: "u" }], { volume: "w" }), ["-v", "v:/nstate:ro", "-v", "w:/nsave"]);
+  assert.deepEqual(ns.stateMounts([{ tree: "u" }]), []);
+  assert.equal(ns.stateCommand({ sha256: "ab" }), "native-state ab");
+  assert.match(ns.restoreCommand(0, st.state, "/r"), /tar -x -C \/r -f \/nstate\/f\.tar/);
+});
+test("native states: oracle keys differ between the long chain and its snapshot", () => {
+  const long = [{ tree: "a", command: "i1" }, { tree: "a", command: "b1" }, { tree: "c", command: "i2" }];
+  const snap = [{ tree: "a", command: "native-state x", state: { file: "f", sha256: "x" } }, { tree: "c", command: "i2" }];
+  assert.notEqual(oracleKey({ tree: "c", inputs: "i", states: long, tail: {}, image: "img" }), oracleKey({ tree: "c", inputs: "i", states: snap, tail: {}, image: "img" }));
+});
+test("late stages: the context after the consolidation round-trips with its Maps, Sets and Trees", () => {
+  const ctx = { final: "lead-3", mainTree: new Tree(new Map([["a/b.txt", f("1")]])), merged: new Map([["L1", 1]]), published: new Set(["L2"]), base: [["a/b.txt", f("1")]], closure: { rows: [{ kind: "build", ms: 5 }] }, git: { lead: { wallMs: 3 }, locks: new Map([["L1", {}]]) } };
+  const back = halves.lateCtxFromJson(halves.encodeLate(ctx), (base) => ({ rebuilt: base.length }));
+  assert.ok(back.mainTree instanceof Tree);
+  assert.equal(back.mainTree.get("a/b.txt").blob, "1");
+  assert.ok(back.mainTree.isDir("a"));
+  assert.equal(back.merged.get("L1"), 1);
+  assert.ok(back.published.has("L2"));
+  assert.deepEqual(back.p2, { rebuilt: 1 });
+  assert.equal(back.git.locks.size, 0, "locks start empty");
+  assert.equal(back.held.size, 0);
+  assert.deepEqual(back.closure, ctx.closure);
+});
+test("late stages: a killed step's trace lines are cut back to the save", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lfs352-cut-")), file = join(dir, "t.jsonl");
+  try {
+    writeFileSync(file, "a\nb\n");
+    assert.equal(halves.cutTrace({ traceFile: file, traceBytes: 4 }), false, "nothing to cut");
+    writeFileSync(file, "a\nb\nkilled\n");
+    assert.equal(halves.cutTrace({ traceFile: file, traceBytes: 4 }), true);
+    assert.equal(readFileSync(file, "utf8"), "a\nb\n");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test("QUIET: a run holds it through its attempt; another run is refused; release only by the holder", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lfs352-quiet-")), file = join(dir, "QUIET");
+  try {
+    assert.ok(quiet.holdQuiet("p3-main-q", "play", file).ok);
+    const since = quiet.quietHolder(file).since;
+    assert.ok(quiet.holdQuiet("p3-main-q", "proofs", file).ok, "the same run keeps it");
+    assert.equal(quiet.quietHolder(file).since, since, "held since the first command");
+    assert.match(quiet.holdQuiet("other", "play", file).why, /held by run p3-main-q/);
+    assert.equal(quiet.releaseQuiet("other", file), false);
+    assert.equal(quiet.releaseQuiet("p3-main-q", file), true);
+    assert.equal(quiet.quietHolder(file), null);
+    writeFileSync(file, "");
+    assert.ok(quiet.holdQuiet("p3-main-q", "play", file).ok, "an unnamed (older helper) QUIET is taken over");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test("harness hash: any change to a harness file changes it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lfs352-hash-"));
+  try {
+    writeFileSync(join(dir, "a.mjs"), "x"); writeFileSync(join(dir, "notes.txt"), "y");
+    const h = quiet.harnessHash(dir);
+    writeFileSync(join(dir, "notes.txt"), "z");
+    assert.equal(quiet.harnessHash(dir), h, "only .mjs files count");
+    writeFileSync(join(dir, "a.mjs"), "x2");
+    assert.notEqual(quiet.harnessHash(dir), h);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test("fix numbers: the highest record over every listed name", () => {
+  assert.equal(highest(["core/docs/issues/352/fixes/README.md", "core/docs/issues/352/fixes/047-x.md", "c04-y.md", "046-z.md"]), 47);
+  assert.equal(highest(["README.md"]), 0);
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try { await fn(); console.log(`ok ${name}`); } catch (e) { failed++; console.log(`FAIL ${name}\n${e.stack}`); }

@@ -28,7 +28,7 @@ import { fileURLToPath } from "node:url";
 import { BlobCache, lsTree } from "./git.mjs";
 import { compareInstalled, LISTER_VERSION, listerCommand, normalizeOutput, ORACLE_ROOT, parseLister, rootless, STORE_MOUNT, firstDifference } from "./closure.mjs";
 import { emittedCommand, groupsFile, inputsHash, nodeOf, parseEmitted, pointBuild, testPoints, treeDelta, wholeBuild, changedPackages } from "./nodelanes.mjs";
-import { buildCommand, tscStates } from "./closure.mjs";
+import { buildCommand, planClosure, tscStates } from "./closure.mjs";
 import { BUILD_GROUPS, vitestMessages } from "./nodeconfig.mjs";
 export { BUILD_GROUPS };
 import { selectTests, vitestCommand } from "./unit-tests.mjs";
@@ -36,6 +36,7 @@ import { devSteps } from "./devcheck.mjs";
 import { decoyBytes, pad, Tree } from "./steps.mjs";
 import { UNTRACKED_LIST } from "./gitlanes.mjs";
 import { installCommand } from "./closure.mjs";
+import { checkStates, isNativeState, provenRun, restoreCommand, saveCommand, stateCommand, stateMounts, NATIVE_STATES } from "./nativestate.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -135,7 +136,8 @@ export function laneSteps(states, tool = "/seq/lanemerge.mjs", base = "/lanebase
   return { before, reset, after, lanes: stores.length };
 }
 
-export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
+export function nativeChain({ repo, states, tail = {}, image, volume, name, saveState = null }) {
+  checkStates(states);
   const stage = mkdtempSync(join(tmpdir(), "lfs352-chain-"));
   try {
     const script = [`mkdir ${ORACLE_ROOT} /seq && tar -x -C /seq && cd ${ORACLE_ROOT}`];
@@ -149,6 +151,8 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
       earlier.push(at); at = root;
     };
     states.forEach((st, i) => {
+      // a snapshot (nativestate.mjs) stands for the states it was made from: extracted, not replayed
+      if (st.state) { moveTo(st.root); script.push(restoreCommand(i, st.state, at)); prev = st.tree; return; }
       if (lanes.before[i].some((c) => c.includes(" snapshot "))) laneBase = prev;
       script.push(...lanes.before[i]);
       // after a lane's capture and restore (and after the merge) the folder's tracked files are the lanes' base
@@ -159,7 +163,7 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
       // took the folder as a package)
       if (st.remove?.length) {
         writeFileSync(join(stage, `${i}.rm`), `${st.remove.join("\n")}\n`);
-        script.push(`while IFS= read -r f; do rm -f -- "$f"; done < /seq/${i}.rm`);
+        script.push(`while IFS= read -r f; do rm -f -- "$f"; done < /seq/${i}.rm; echo "@@removed ${i} ${st.remove.length}"`);
       }
       if (st.tree !== prev) {
         if (!existsSync(join(stage, `${st.tree}.tar`))) writeFileSync(join(stage, `${st.tree}.tar`), execFileSync("git", ["--git-dir", repo, "archive", st.tree], { maxBuffer: 1 << 30 }));
@@ -187,14 +191,21 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
     moveTo(tail.root);
     if (tail.build) script.push(`t=$(date +%s%N); (${tail.build}) > /tmp/b 2>&1; echo "@@tsc $? $(( ($(date +%s%N) - t) / 1000000 ))"; tail -c ${tail.outputBytes ?? 4000} /tmp/b | sed 's/^/@@tscout /'`, `${emittedCommand(tail.packages ?? [])} | sed 's/^/@@emit /'`);
     if (tail.tests?.length) script.push(`t=$(date +%s%N); (${vitestCommand(tail.tests, tail.vitestTimeoutS ?? 100)}) > /tmp/v 2>/dev/null; echo "@@vt $? $(( ($(date +%s%N) - t) / 1000000 ))"; echo "@@vtjson $(base64 -w0 /tmp/v)"`);
+    if (saveState) script.push(saveCommand(at, saveState.file));
     const input = execFileSync("tar", ["-c", "-C", stage, "."], { maxBuffer: 1 << 30 });
     const t0 = Date.now();
-    const r = spawnSync("docker", ["run", "--rm", "-i", "--name", name, "--network", "none", "-v", `${volume}:${STORE_MOUNT}:ro`, "--entrypoint", "sh", image, "-c", script.join("; ")], { input, encoding: "utf8", maxBuffer: 1 << 28 });
+    const r = spawnSync("docker", ["run", "--rm", "-i", "--name", name, "--network", "none", "-v", `${volume}:${STORE_MOUNT}:ro`, ...stateMounts(states, saveState), "--entrypoint", "sh", image, "-c", script.join("; ")], { input, encoding: "utf8", maxBuffer: 1 << 28 });
     if (r.status !== 0) throw new Error(`native chain container exited ${r.status}: ${String(r.stderr).slice(-300)}`);
     const lines = r.stdout.split("\n"), pick = (p) => lines.filter((l) => l.startsWith(p)).map((l) => l.slice(p.length));
     // option A's merge must have run whole: every lane captured and the merge applied, or no oracle
     if (lanes.lanes && (pick("@@lanefail ").length || pick("@@lanecap ").length !== lanes.lanes || !pick("@@twosided ").length))
       throw new Error(`native chain: the lanes' merge did not complete (${pick("@@lanefail ").join("; ") || `${pick("@@lanecap ").length} of ${lanes.lanes} lanes captured`}): ${pick("@@laneerr ").join(" | ").slice(0, 1200)}`);
+    // fail loud (step 0, ranges 21–30): every state, the snapshot, the cleans, the reconcile and the tail proved they ran
+    const restored = states[0]?.state ? 1 : 0;
+    const proven = provenRun(r.stdout, { steps: states.length - 1 - restored, tsc: !!tail.build, tests: !!tail.tests?.length, restored: !!restored,
+      cleaned: states.filter((st) => st.clean).length, removed: states.filter((st) => st.remove?.length).length, lanes: lanes.lanes, saved: !!saveState });
+    if (proven.missing.length) throw new Error(`native chain did not prove it ran: ${proven.missing.join("; ")}`);
+    const saved = pick("@@saved ")[0]?.split(" ");
     const tsc = pick("@@tsc ")[0]?.split(" ").map(Number), vt = pick("@@vt ")[0]?.split(" ").map(Number);
     let vitest = null;
     if (vt) {
@@ -209,6 +220,7 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
       cleaned: pick("@@cleaned ").map((l) => { const [i, files] = l.split(" ").map(Number); return { i, files }; }),
       ...(lanes.lanes ? { lanes: pick("@@lanecap ").map((l) => { const [n, changed, removed] = l.split(" ").map(Number); return { n, changed, removed }; }),
         twoSided: { n: Number(pick("@@twosided ")[0] ?? NaN), paths: pick("@@twopath ") } } : {}),
+      ran: proven.ran, ...(saved ? { saved: { volume: saveState.volume ?? NATIVE_STATES, file: saveState.file, sha256: saved[0], bytes: Number(saved[1]) } } : {}),
     };
   } finally { rmSync(stage, { recursive: true, force: true }); }
 }
@@ -351,7 +363,7 @@ export function judgeRepair(closure, nativeBuild, { groups = null } = {}) {
  * build does in chain0; R1 slice f031-r1-slice-e r015-1-docs-rfc.end). */
 function chainParts(m) {
   const at = (root) => (root ? { root } : {}), leadRoot = m.node.points.find((q) => q.lane === "lead")?.root ?? null;
-  const chain0 = m.node.chain.map((e) => ({ tree: e.tree, command: e.command, ...at(leadRoot) }));
+  const chain0 = m.node.chain.map((e) => ({ tree: e.tree, command: e.command, ...(e.state ? { state: e.state } : {}), ...at(leadRoot) }));
   const pointStates = (q) => [{ tree: q.treeNative, command: q.install.command, ...at(q.root) }, ...(q.tsc?.command ? [{ tree: q.treeNative, command: q.tsc.command, ...at(q.root) }] : [])];
   return { at, chain0, pointStates };
 }
@@ -444,7 +456,7 @@ function startChain(run, plan) {
     const build = wholeBuild(lsTree(repo, run.state.prevCommit).files), tree = treeOf(run.state.prevCommit);
     return [{ tree, command: installCommand({ clean: !!run.state.installed, policy: node.storePolicy }) }, ...(build.packages.length ? [{ tree, command: build.command }] : [])];
   }
-  return (run.state.closureChain ?? []).map((e) => ({ tree: treeOf(e.checkpoint), command: e.command }));
+  return (run.state.closureChain ?? []).map((e) => ({ tree: treeOf(e.checkpoint), command: e.command, ...(e.state ? { state: e.state } : {}) }));
 }
 
 async function cmdCalibrate(o) {
@@ -455,7 +467,9 @@ async function cmdCalibrate(o) {
   try {
     const base = lsTree(run.manifest.repo, run.state.prevCommit).files, baseTree = git(run.manifest.repo, ["rev-parse", `${run.state.prevCommit}^{tree}`]).trim();
     const points = testPoints(plan), todo = points.filter((p) => (o.point ? p.id === o.point : !have.points.some((h) => h.id === p.id)));
-    if (!todo.length) { console.log(`range ${k}: every point calibrated (${have.points.length})`); return; }
+    if (!todo.length && have.repair && !o.repair) { console.log(`range ${k}: every point calibrated (${have.points.length}) and the native repair ran (${have.repair.verdict})`); return; }
+    if (!todo.length || o.repair) { process.exitCode = await calibrateRepair(run, k, plan, have, file, { repo, base, baseTree, blobs, node }); return; }
+    if (!todo.length) return;
     const pt = todo[0], chain = startChain(run, plan);
     // the lane's earlier points (as the plan builds them) are in the chain before this one
     for (const q of points.filter((p) => p.lane === pt.lane && p.order < pt.order)) chain.push({ tree: await materialize(repo, baseTree, modelDelta(plan, base, q).delta, blobs), command: installCommand({ policy: node.storePolicy }) });
@@ -472,6 +486,97 @@ async function cmdCalibrate(o) {
     writeFileSync(`${file}.tmp`, JSON.stringify(have, null, 1)); renameSync(`${file}.tmp`, file);
     console.log(JSON.stringify({ point: pt.id, tree: treeId.slice(0, 12), candidates: sel.files.length, run: chosen.run.length, skipped: chosen.skipped.length, nativeMs: chosen.nativeMs, chainMs: n?.ms ?? 0, wallMs: Date.now() - t0, left: todo.length - 1 }));
   } finally { blobs.close(); }
+}
+
+/**
+ * Native first (step 2, ranges 21–30): after the points, the range's predicted repair natively, before any LayerFS
+ * attempt: the start chain, each lane's points as calibrated (option A, merged in the plan's merge order; the root
+ * lane's installs, the other lanes' builds, as repairChain), then the repair's clean relink on the checkpoint with
+ * the reconcile's removals, the whole build and the range's tests. A broken reference (an install or build that
+ * fails natively, a calibrated test that fails) is fixed before it costs an attempt. Returns the exit code: 0, or
+ * 4 when the reference is broken. The real oracle is still the proofs' (recorded roots and write order).
+ */
+async function calibrateRepair(run, k, plan, have, file, { repo, base, baseTree, blobs, node }) {
+  const planned = planClosure({ repo: run.manifest.repo, planDir: run.manifest.plan, k, plan, prevCommit: run.state.prevCommit, installed: run.state.installed, checks: false, policy: node.storePolicy, repair: node.on && !!run.state.installed });
+  if (planned.skipped || planned.missing) { console.log(JSON.stringify({ range: k, repair: planned.skipped ?? planned.missing })); return 4; }
+  const inst = planned.steps.find((s) => /install/.test(s.kind)), build = planned.steps.find((s) => s.kind === "build"), test = planned.steps.find((s) => s.kind === "test");
+  const rootLane = node.inputsRule === "r1" ? plan.lanes.find((l) => l.areas.includes("/"))?.name ?? null : null;
+  const order = (plan.consolidation ?? []).filter((c) => c.op === "merge").map((c) => c.lane);
+  const points = testPoints(plan), lanes = [];
+  for (const lane of order) for (const q of points.filter((p) => p.lane === lane)) {
+    const { tree, delta } = modelDelta(plan, base, q), id = await materialize(repo, baseTree, delta, blobs);
+    const packages = changedPackages(tree.files, delta.map((r) => r[0])), b = pointBuild(tree.files, packages).command;
+    const sts = [{ tree: id, command: installCommand({ policy: node.storePolicy }) }, ...(b ? [{ tree: id, command: b }] : [])];
+    lanes.push(...(rootLane && lane !== rootLane ? sts.slice(1) : sts).map((st) => ({ ...st, lane, merge: order.indexOf(lane) })));
+  }
+  const remove = lanes.length ? (plan.consolidation ?? []).filter((c) => c.op === "reconcile").flatMap((c) => c.files.filter((f) => f.op === "rm").map((f) => f.path)) : [];
+  const tree = git(run.manifest.repo, ["rev-parse", `${plan.checkpoint}^{tree}`]).trim();
+  const states = [...startChain(run, plan), ...lanes, { tree, command: inst.command, clean: true, ...(remove.length ? { remove } : {}) }];
+  const tail = { ...(build ? { build: build.command, packages: build.packages } : {}), ...(test ? { tests: test.files, vitestTimeoutS: 90 } : {}) };
+  const t0 = Date.now();
+  let n = null, error = null;
+  try { n = cachedOracle(join(oracleDir(run), "calibration"), { repo, states, tail, inputs: "repair-calibration", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }); } catch (e) { error = String(e.message ?? e).slice(0, 800); }
+  const failedTests = n?.vitest?.results ? Object.entries(n.vitest.results).filter(([, r]) => r !== "pass").map(([f]) => f) : [];
+  const broken = error ? [`did not run: ${error}`] : [...(n.exit !== 0 ? [`repair install exit ${n.exit}`] : []), ...(build && n.tsc?.exit !== 0 ? [`build exit ${n.tsc?.exit}: ${String(n.tsc?.output ?? "").slice(-300)}`] : []),
+    ...(n.steps.filter((s) => s.exit !== 0).map((s) => `state ${s.i} exit ${s.exit}`)), ...(test && !n.vitest?.results ? ["vitest report did not parse"] : []), ...(failedTests.length ? [`${failedTests.length} calibrated test(s) fail natively: ${failedTests.slice(0, 3).join(", ")}`] : [])];
+  have.repair = { verdict: broken.length ? "broken" : "ok", broken, states: states.length, lanes: [...new Set(lanes.map((l) => l.lane))].length, ran: n?.ran ?? null, exit: n?.exit ?? null, tsc: n?.tsc ? { exit: n.tsc.exit, ms: n.tsc.ms } : null,
+    emitted: n?.emitted ? Object.keys(n.emitted).length : null, tests: n?.vitest?.results ? Object.keys(n.vitest.results).length : 0, installMs: n?.installMs ?? null, chainMs: n?.ms ?? null, key: n?.key ?? null };
+  writeFileSync(`${file}.tmp`, JSON.stringify(have, null, 1)); renameSync(`${file}.tmp`, file);
+  console.log(JSON.stringify({ range: k, repair: have.repair.verdict, broken, states: states.length, ran: n?.ran ?? null, chainMs: n?.ms ?? null, wallMs: Date.now() - t0 }));
+  if (broken.length) console.log(`NATIVE REFERENCE BROKEN at range ${k}: fix it before the LayerFS attempt`);
+  return broken.length ? 4 : 0;
+}
+
+/**
+ * Native state snapshots (step 5, ranges 21–30; nativestate.mjs): the run's closure chain (its first `--entries`, or
+ * all of it) replayed once natively and the folder tarred into the snapshot volume, as `native-state-pending.json`.
+ * `--check <oracle file>` replays that cached oracle with its chain prefix replaced by the pending snapshot and
+ * compares every result (equal or exit 4). `--adopt` puts the pending snapshot in the run's chain in place of the
+ * states it stands for (the earlier state.json is kept beside it). Never while a range is halfway.
+ */
+async function cmdSavestate(o) {
+  const run = loadRun(o.run), pending = join(run.dir, "native-state-pending.json");
+  if (run.state.halfway) throw new Error(`run ${o.run} is halfway through range ${run.state.halfway}`);
+  const chain = run.state.closureChain ?? [], treeOf = (c) => git(run.manifest.repo, ["rev-parse", `${c}^{tree}`]).trim();
+  const asState = (e) => ({ tree: treeOf(e.checkpoint), command: e.command, ...(e.state ? { state: e.state } : {}) });
+  const repo = scratchRepo(join(oracleDir(run), "repo.git"), run.manifest.repo), image = run.manifest.env.LAYERFS_IMAGE;
+  if (o.adopt) {
+    const p = JSON.parse(readFileSync(pending, "utf8"));
+    const same = p.of.length <= chain.length && p.of.every((x, i) => x.checkpoint === chain[i].checkpoint && x.command === chain[i].command);
+    if (!same) throw new Error("the pending snapshot is not a prefix of the run's chain");
+    writeFileSync(join(run.dir, `state.pre-savestate-${Date.now()}.json`), JSON.stringify(run.state, null, 1));
+    run.state.closureChain = [p.entry, ...chain.slice(p.of.length)];
+    writeFileSync(join(run.dir, "state.json.tmp"), JSON.stringify(run.state, null, 1)); renameSync(join(run.dir, "state.json.tmp"), join(run.dir, "state.json"));
+    console.log(JSON.stringify({ adopted: p.entry.state.file, replaces: p.of.length, chain: run.state.closureChain.map((e) => `${e.range} ${e.kind}`) }));
+    return;
+  }
+  if (o.check) {
+    const p = JSON.parse(readFileSync(pending, "utf8")), c = JSON.parse(readFileSync(o.check, "utf8"));
+    const prefix = p.of.map(asState);
+    if (!prefix.every((st, i) => c.states[i] && c.states[i].tree === st.tree && c.states[i].command === st.command && !!c.states[i].state === !!st.state)) throw new Error(`${o.check}: its chain does not begin with the snapshot's ${prefix.length} states`);
+    const states = [{ ...p.state, ...(c.states[0].root ? { root: c.states[0].root } : {}) }, ...c.states.slice(prefix.length)];
+    const n = nativeChain({ repo, states, tail: c.tail ?? {}, image: c.image, volume: PNPM_STORE, name: nativeName() });
+    // what the proofs judge: build-output caches out of the groups (BUILD_GROUPS, as judgeP1), results by key
+    const judged = (gs) => (gs ?? []).filter((g) => !BUILD_GROUPS.test(g.g)), sorted = (o) => (o ? Object.fromEntries(Object.entries(o).sort(([a], [b]) => (a < b ? -1 : 1))) : null);
+    const pairs = { exit: [c.exit, n.exit], output: [c.output, n.output], groups: [judged(c.groups), judged(n.groups)], tsc: [c.tsc?.exit ?? null, n.tsc?.exit ?? null], emitted: [sorted(c.emitted), sorted(n.emitted)], vitest: [sorted(c.vitest?.results), sorted(n.vitest?.results)] };
+    const differ = Object.entries(pairs).filter(([, [a, b]]) => JSON.stringify(a) !== JSON.stringify(b)).map(([key]) => key);
+    writeFileSync(join(run.dir, "native-state-check.json"), JSON.stringify({ check: o.check, differ, ...n }));
+    console.log(JSON.stringify({ check: o.check.split("/").pop(), replaced: prefix.length, of: c.states.length, differ, ran: n.ran, ms: n.ms, longMs: c.ms }));
+    if (differ.length) process.exitCode = 4;
+    return;
+  }
+  const take = o.entries ? Number(o.entries) : chain.length, part = chain.slice(0, take);
+  if (part.length < 2 || take > chain.length) throw new Error(`nothing to snapshot (${part.length} of ${chain.length} entries)`);
+  const states = part.map(asState);
+  const file = `state-${oracleKey({ tree: states.at(-1).tree, inputs: "native-state", states, tail: {}, image })}.tar`;
+  execFileSync("docker", ["volume", "create", NATIVE_STATES], { stdio: "ignore" });
+  const n = nativeChain({ repo, states, image, volume: PNPM_STORE, name: nativeName(), saveState: { file } });
+  if (!n.saved?.sha256) throw new Error("the snapshot was not saved");
+  const failed = n.steps.filter((s) => s.exit !== 0).length;
+  const entry = { range: part.at(-1).range, checkpoint: part.at(-1).checkpoint, kind: "native-state", command: stateCommand(n.saved), root: null,
+    state: { ...n.saved, of: part.map((e) => `${e.range} ${e.kind}`), states: states.length, ms: n.ms, at: new Date().toISOString() } };
+  writeFileSync(pending, JSON.stringify({ entry, state: { tree: states.at(-1).tree, command: entry.command, state: entry.state }, of: part.map(({ checkpoint, command, range, kind }) => ({ checkpoint, command, range, kind })) }, null, 1));
+  console.log(JSON.stringify({ pending, file, sha256: n.saved.sha256.slice(0, 12), bytes: n.saved.bytes, states: states.length, failedSteps: failed, ran: n.ran, ms: n.ms }));
 }
 
 /** NODE_RULE §11 b, per range: each lane step's install inputs (plan order, the plan as frozen) through a frozen offline install natively; cached per inputs hash. */
@@ -532,8 +637,20 @@ async function cmdProofs(o) {
   const a = o.attempt ?? Math.max(...files.map((f) => Number(/\.a(\d+)\./.exec(f)[1])));
   const mfile = join(metrics, `range-${pad(k)}.a${a}.json`), m = JSON.parse(readFileSync(mfile, "utf8"));
   if (!m.node?.points?.length) throw new Error(`${mfile}: no Node points recorded`);
+  // step 3 (liaison 2026-10-20): a stop caused only by the oracle, harness or report is re-judged on the attempt's
+  // retained state after the fix (`--rejudge "fix NNN"`, first proofs command only): its proofs are judged again,
+  // nothing is replayed and no timing is measured again; the earlier results are kept beside it
+  if (o.rejudge) {
+    if (typeof o.rejudge !== "string" || !/^fix \d{3}/.test(o.rejudge)) throw new Error('--rejudge takes the fix, as "fix NNN"');
+    if (!m.p3proofs) throw new Error(`${mfile}: no proofs to re-judge`);
+    m.rejudged = [...(m.rejudged ?? []), { after: o.rejudge, at: new Date().toISOString(), proofs: Object.fromEntries(Object.entries(m.p3proofs).map(([id, p]) => [id, Object.fromEntries(Object.entries(p.proofs ?? {}).map(([n, r]) => [n, r.result]))])), gate: m.gate?.verdict ?? m.gateBeforeProofs?.verdict ?? null }];
+    delete m.p3proofs;
+  }
   const node = nodeOf(run.manifest), repo = scratchRepo(join(oracleDir(run), "repo.git"), run.manifest.repo), blobs = new BlobCache(run.manifest.repo);
   const proofs = (m.p3proofs ??= {});
+  // fail loud: a native reference that did not prove it ran leaves its proofs NOT_RUN with the reason, never a fallback
+  const tryNative = (args) => { try { return { native: cachedOracle(oracleDir(run), args), error: null }; } catch (e) { return { native: null, error: String(e.message ?? e).slice(0, 600) }; } };
+  const notRun = (judged, error) => { if (error) for (const r of Object.values(judged)) if (r.result === "NOT_RUN") Object.assign(r, { detail: `native reference did not run: ${error}` }); return judged; };
   let left = 0;
   try {
     const baseTree = m.node.baseTree, { at, chain0, pointStates } = chainParts(m);
@@ -544,24 +661,26 @@ async function cmdProofs(o) {
       const treeOk = !pt.treeLfs || pt.treeLfs === tree;
       const states = pt.lane === "lead" ? [{ tree, command: pt.install.command, ...at(pt.root) }] : [...chain0, ...m.node.points.filter((q) => q.lane === pt.lane && q.order < pt.order).flatMap(pointStates), { tree, command: pt.install.command, ...at(pt.root) }];
       const tail = { build: pt.tsc?.command ?? null, packages: pt.tsc?.packages ?? [], tests: pt.vitest?.files ?? [], vitestTimeoutS: 90 };
-      const native = treeOk ? cachedOracle(oracleDir(run), { repo, states, tail, inputs: pt.inputs, image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : null;
+      const { native, error } = treeOk ? tryNative({ repo, states, tail, inputs: pt.inputs, image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : { native: null, error: null };
       const groups = existsSync(groupsFile(run, k, pt.id)) ? JSON.parse(readFileSync(groupsFile(run, k, pt.id), "utf8")) : null;
       const before = pt.lane === "lead" ? null : [m.node.points.find((q) => q.lane === "lead"), ...m.node.points.filter((q) => q.lane === pt.lane && q.order < pt.order)].filter(Boolean).at(-1);
       const prev = pt.lane === "lead" ? null : before?.inputs ?? m.node.chainInputs ?? null;
       const cal = m.node.calibration?.points?.find((c) => c.id === pt.id) ?? null;
       pt.treeNative = tree;
-      proofs[pt.id] = { tree, treeOk, kind: pt.kind, cached: !!native?.cached, key: native?.key ?? null, nativeMs: native?.ms ?? null, nativeInstallMs: native?.installMs ?? null, nativeTscMs: native?.tsc?.ms ?? null, nativeVitestMs: native?.vitest?.ms ?? null, proofs: judgePoint({ ...pt, tree }, native, { groups, prevInputs: prev, calibration: cal, treeOk }),
-        native: native ? { install: native.exit, tsc: native.tsc?.exit ?? null, vitest: native.vitest?.exit ?? null } : null };
-      console.error(`${pt.id}: ${Object.entries(proofs[pt.id].proofs).map(([id, r]) => `${id} ${r.result}`).join(" · ")} (native ${native?.cached ? "cached" : `${native?.ms ?? 0} ms`})`);
+      proofs[pt.id] = { tree, treeOk, kind: pt.kind, cached: !!native?.cached, key: native?.key ?? null, nativeMs: native?.ms ?? null, nativeInstallMs: native?.installMs ?? null, nativeTscMs: native?.tsc?.ms ?? null, nativeVitestMs: native?.vitest?.ms ?? null, proofs: notRun(judgePoint({ ...pt, tree }, native, { groups, prevInputs: prev, calibration: cal, treeOk }), error),
+        native: native ? { install: native.exit, tsc: native.tsc?.exit ?? null, vitest: native.vitest?.exit ?? null } : null, ran: native?.ran ?? null, ...(error ? { nativeError: error } : {}) };
+      console.error(`${pt.id}: ${Object.entries(proofs[pt.id].proofs).map(([id, r]) => `${id} ${r.result}`).join(" · ")} (native ${error ? `FAILED: ${error}` : native?.cached ? "cached" : `${native?.ms ?? 0} ms`}${native?.ran ? `; ran ${JSON.stringify(native.ran)}` : ""})`);
     }
     // the repair (P6) on top of the chain its merged node_modules carries: the lead's install and build, every lane
     // point's install and build in the order they ran, then the repair install and build on the checkpoint tree
     const inst = m.closure?.rows?.find((r) => /install/.test(r.kind));
     if (inst && !proofs["lead.repair"] && Date.now() - t0 <= budget) {
       const r = repairChain(run, m, k), tree = r.tree;
-      const native = r.complete ? cachedOracle(oracleDir(run), { repo, states: r.states, tail: r.tail, inputs: "repair", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : null;
+      const { native, error } = r.complete ? tryNative({ repo, states: r.states, tail: r.tail, inputs: "repair", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : { native: null, error: null };
       const groups = m.closure.repairGroups && existsSync(m.closure.repairGroups) ? JSON.parse(readFileSync(m.closure.repairGroups, "utf8")) : null;
       proofs["lead.repair"] = judgeRepair({ ...m.closure, tree }, native, { groups, nativeMs: native?.ms ?? null });
+      if (proofs["lead.repair"]) Object.assign(proofs["lead.repair"], { ran: native?.ran ?? null, ...(error ? { nativeError: error } : {}) });
+      if (proofs["lead.repair"] && error) proofs["lead.repair"].proofs.P6 = res("NOT_RUN", `native reference did not run: ${error}`);
       // decision B: the native clean on the checkpoint, beside the lead's (metrics git.lead.cleaned); a failed native clean is a proof not run
       if (proofs["lead.repair"] && native) {
         proofs["lead.repair"].nativeCleaned = native.cleaned ?? null;
@@ -583,7 +702,10 @@ async function cmdProofs(o) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [cmd, ...rest] = process.argv.slice(2), o = {};
   for (let i = 0; i < rest.length; i++) if (rest[i].startsWith("--")) o[rest[i].slice(2)] = rest[i + 1] == null || rest[i + 1].startsWith("--") ? true : rest[++i];
-  const run = { calibrate: cmdCalibrate, inputs: cmdInputs, proofs: cmdProofs, reinstall: cmdReinstall }[cmd];
-  if (!run || !o.run || !o.range) { console.error("usage: nodeproof.mjs calibrate|inputs|proofs|reinstall --run <id> --range k [--point id] [--attempt a] [--budget-s s]"); process.exit(2); }
+  const run = { calibrate: cmdCalibrate, inputs: cmdInputs, proofs: cmdProofs, reinstall: cmdReinstall, savestate: cmdSavestate }[cmd];
+  // QUIET (quiet.mjs): these native replays are part of the attempt; a failure releases it
+  const { holdQuiet, releaseQuiet } = await import("./quiet.mjs");
+  if (run && o.run && ["calibrate", "proofs", "savestate"].includes(cmd)) { const q = holdQuiet(o.run, `nodeproof ${cmd}`); if (!q.ok) { console.error(`refused: ${q.why}`); process.exit(5); } process.on("exit", (c) => { if (c && c !== 3 && c !== 4) releaseQuiet(o.run); }); }
+  if (!run || !o.run || (!o.range && cmd !== "savestate")) { console.error("usage: nodeproof.mjs calibrate|inputs|proofs|reinstall --run <id> --range k [--point id] [--repair] [--attempt a] [--budget-s s] [--rejudge \"fix NNN\"] | savestate --run <id> [--entries n | --check <oracle file> | --adopt]"); process.exit(2); }
   run(o).catch((e) => { console.error(e.stack ?? e); process.exit(1); });
 }

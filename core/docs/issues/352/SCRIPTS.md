@@ -507,3 +507,56 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   - Every stage prints a progress line on stderr
     (`[HH:MM:SS r015 +12.3s] …`), so a command stopped at its ceiling shows
     where the time went.
+
+## 15. A P3 range from range 21 (step 0, 2026-10-20)
+
+Built before range 21 for faster preparation and fewer failed first attempts
+(liaison, under the owner's delegation). Commands, in order, with the alarm
+each runs under (`perl -e 'alarm N; exec @ARGV'`):
+
+| Step | Command | Alarm |
+| --- | --- | --- |
+| Oracle | `closure.mjs oracle --run R --range k …` (host) | 115 s |
+| Native first | `nodeproof.mjs calibrate --run R --range k` until every point is done, then once more: the predicted repair natively; exit 4 and `NATIVE REFERENCE BROKEN` stop the range before any LayerFS attempt | 115 s each |
+| Lead and lanes | `play … --until lead`, `--resume --until lanes --cut N` …, `--resume --until lanes` | 118 s each |
+| Repair | `play … --resume --until repair`: merges, lead git, the closure (repair install, build, tests), publish | 130 s |
+| Verify | `play … --resume --until verified`: the checkpoint check | 115 s |
+| Finish | `play … --resume`: probes, version, metrics, snapshot, report | 50 s |
+| Proofs | `nodeproof.mjs proofs --run R --range k --budget-s 20` until `"left":0` | 115 s each |
+| Control | `control.mjs --run R --range k`; releases QUIET | 118 s |
+| Native state | after a terminal range: `nodeproof.mjs savestate --run R`, then `--adopt` | 115 s |
+
+- **Steps resume.** The repair, verify and finish steps share the old final
+  command's 295 s; a kill inside verify or finish resumes at that step
+  (`halves.mjs` `LATE_STAGES`): the trace is cut back to its length at the
+  save and nothing before it runs again. A kill inside the repair step ends
+  the attempt.
+- **Fail loud.** Every native replay prints a marker per state, snapshot,
+  native clean, reconcile removal, lane capture and merge, build and test
+  run (`nativestate.mjs` `provenRun`). A missing marker makes the replay an
+  error; a point whose native reference did not run has its proofs `NOT_RUN`
+  with the reason, never a fallback. The counts are in each proof's `ran`.
+- **Re-judge on retained state.** A stop caused only by the oracle, harness or
+  report, with LayerFS's recorded state and timings retained, is fixed and the
+  same attempt is judged again: the first proofs command takes
+  `--rejudge "fix NNN"`. The report's headline says `re-judged after fix NNN`;
+  the earlier results stay in the metrics (`rejudged`). A product-caused stop,
+  or lost state, needs a new attempt. Timings are never measured again.
+- **QUIET** is a lock the harness holds (`quiet.mjs`): a play, calibrate,
+  proofs or savestate command takes it for its run, a failed command releases
+  it, and the control sample releases it at the attempt's end. Another run's
+  QUIET refuses the command.
+- **Native state snapshots.** `savestate` replays the run's closure chain once
+  and tars the native folder (node_modules, lib/ and every untracked file) into
+  the Docker volume `layerfs-issue352-native-states`; `--adopt` puts one
+  `native-state` entry in the chain in place of those states. Every native
+  replay extracts it instead (a cache of the same model). Validated once:
+  r15–r19's 17 states as a snapshot against two cached r20 proof oracles
+  (`r020-1-root.end`, `r020-3-docs-rfc.end`): equal installs, groups (build
+  caches out, as P1), builds and 175 test results; 17–18 s against 74–94 s.
+  `--check <oracle file>` repeats that check.
+- **Harness hash.** `runner.mjs` hashes the harness files on the host;
+  `run.mjs` refuses inside the container when its view differs (Docker
+  Desktop's share can be stale).
+- **Fix numbers** come from `fixno.mjs`, which fetches and reads every origin
+  branch, at commit time. Rebase on origin/main before each hand-off.

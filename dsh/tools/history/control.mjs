@@ -185,4 +185,7 @@ async function main(argv) {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main(process.argv.slice(2)).then((c) => process.exit(c ?? 0), (e) => { console.error(e.stack ?? e); process.exit(1); });
+// QUIET (quiet.mjs): the control sample is the attempt's last step; it releases the lock whatever its outcome
+const { releaseQuiet } = await import("./quiet.mjs");
+const quietRun = (argv) => { const i = argv.indexOf("--run"); return i < 0 ? null : argv[i + 1]; };
+if (import.meta.url === `file://${process.argv[1]}`) main(process.argv.slice(2)).then((c) => { if (quietRun(process.argv)) releaseQuiet(quietRun(process.argv)); process.exit(c ?? 0); }, (e) => { console.error(e.stack ?? e); if (quietRun(process.argv)) releaseQuiet(quietRun(process.argv)); process.exit(1); });

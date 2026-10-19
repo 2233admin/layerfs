@@ -303,7 +303,7 @@ export async function startRange(run, k, plan, measured) {
     if (r) run.progress?.(`lead install ${r.install.exitCode} ${r.install.ms} ms, tsc ${r.tsc?.exitCode} ${r.tsc?.ms} ms, point ${r.ms} ms`);
     // the chain every lane point starts from (nodeproof.mjs replays it natively): as trees, with the range base's
     const treeOf = (c) => git(run.repo, ["rev-parse", `${c}^{tree}`]).trim();
-    Object.assign(ctx.node, { baseTree: treeOf(run.state.prevCommit), chainInputs: inputsHash(base), chain: (run.state.closureChain ?? []).map((e) => ({ tree: treeOf(e.checkpoint), command: e.command, kind: e.kind })) });
+    Object.assign(ctx.node, { baseTree: treeOf(run.state.prevCommit), chainInputs: inputsHash(base), chain: (run.state.closureChain ?? []).map((e) => ({ tree: treeOf(e.checkpoint), command: e.command, kind: e.kind, ...(e.state ? { state: e.state } : {}) })) });
   }
   const from = ctx.git?.seed || ctx.node?.points.length ? ctx.lead : "main";
   for (const l of plan.lanes) await expectCall(run, `r${pad(k)} fork ${l.name}`, () => run.lf.branch.fork(l.name, from), "Forked");

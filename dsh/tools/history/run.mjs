@@ -76,7 +76,7 @@ import {
   sandboxHealth, setup, sha256, step, teardown, verify, writeJson,
 } from "./lib.mjs";
 import { addDelta, checkpointDiff, deltaSummary, deltaWork, diskGuard, diskModel, EXIT, nextPhase, oneshotSplit, p2Plan, pad, poolSharing, PHASES, phaseOps, Tree } from "./steps.mjs";
-import { ctxFromJson, dropHalf, loadHalf, saveHalf } from "./halves.mjs";
+import { ctxFromJson, cutTrace, decodeLate, dropHalf, LATE_STAGES, lateCtxFromJson, loadHalf, saveHalf } from "./halves.mjs";
 import { consolidateLanes, playAgents, pool, safeCut, startRange } from "./agents.mjs";
 import { growthByClass } from "./growth.mjs";
 import { gitFacts } from "./gitplay.mjs";
@@ -395,6 +395,8 @@ async function playRange(run, k, mode, half = null, until = null, cut = null) {
   // the second half of a range played in two commands (halves.mjs): its saved first half, checked before anything runs
   const saved = half === "resume" ? loadHalf(run, k) : null;
   if (saved?.refused) { console.error(`range ${k} resume refused: ${saved.refused}`); return EXIT.guard; }
+  const late = !!saved && LATE_STAGES.has(saved.stage);
+  if (late && cutTrace(saved)) console.error(`range ${k}: trace cut back to ${saved.traceBytes} bytes (a killed step after ${saved.stage})`);
   // prepare: binaries, disk, calibration
   const binaryProblem = checkBinaries(run);
   if (binaryProblem) { console.error(`range ${k} refused: ${binaryProblem}`); return EXIT.guard; }
@@ -439,9 +441,12 @@ async function playRange(run, k, mode, half = null, until = null, cut = null) {
     let since = performance.now();
     if (p2) {
       if (!run.state.head) throw new Error("P2 continues a run whose first range wrote the probe fixture (a P1 run, or a fork of one)");
-      const stop = (stage) => { saveHalf(run, k, { stage, ctx, attempt, traceFile, started: m.started, hostLoadStart: m.hostLoad.start, before, depthBefore, wall, elapsedMs: Math.round(performance.now() - t0) }); throw HALFWAY; };
-      if (saved) ctx = ctxFromJson(saved.ctx, (base) => p2Plan(plan, new Set(new Tree(base).dirs.keys())));
+      const stop = (stage, extra = {}) => { saveHalf(run, k, { stage, ctx, attempt, traceFile, started: m.started, hostLoadStart: m.hostLoad.start, before, depthBefore, wall, elapsedMs: Math.round(performance.now() - t0), ...extra }); throw HALFWAY; };
+      const rebuildP2 = (base) => p2Plan(plan, new Set(new Tree(base).dirs.keys()));
+      if (late) { ctx = lateCtxFromJson(saved.ctx, rebuildP2); published = decodeLate(saved.published); branch = ctx.final; ctx.tree = ctx.mainTree; }
+      else if (saved) ctx = ctxFromJson(saved.ctx, rebuildP2);
       else ctx = await startRange(run, k, plan, measured);
+      if (!late) {
       // `--until lead` stops after the fork, the seed and the lead's first install (NODE_RULE §2); playMs then sums both parts
       if (until === "lead" && !saved) { lap("startMs", since); stop("lead"); }
       if (!saved || saved.stage === "lead" || saved.stage === "part") {
@@ -468,6 +473,9 @@ async function playRange(run, k, mode, half = null, until = null, cut = null) {
         run.state.installed = true; run.state.nmGroupsFile = file;
       }
       lap("consolidateMs", since);
+      // step 4: the final command in steps, each under its own alarm (repair, then verify, then the rest)
+      if (until === "repair") stop("published", { published });
+      }
     } else {
       run.label(`r${pad(k)}.fork`);
       await run.lf.branch.fork(branch, "main");
@@ -489,8 +497,12 @@ async function playRange(run, k, mode, half = null, until = null, cut = null) {
     }
     since = performance.now();
     const snapshotDue = measured && (phase.snapshot === "every" || due({ planned: plan.snapshot, verdict: "pass", sinceMs: run.state.sinceMs, lastCostMs: run.state.lastSnapshotMs }).due);
-    proof = await verify(run, k, { prevHead: run.state.head, head: published.source.commit, layer: published.publishedLayer.id, prevCommit: run.state.prevCommit, full: snapshotDue });
-    lap("verifyMs", since);
+    if (saved?.stage === "verified") proof = decodeLate(saved.proof);
+    else {
+      proof = await verify(run, k, { prevHead: run.state.head, head: published.source.commit, layer: published.publishedLayer.id, prevCommit: run.state.prevCommit, full: snapshotDue });
+      lap("verifyMs", since);
+      if (p2 && until === "verified") { saveHalf(run, k, { stage: "verified", ctx, attempt, traceFile, started: m.started, hostLoadStart: m.hostLoad.start, before, depthBefore, wall, elapsedMs: Math.round(performance.now() - t0), published, proof }); throw HALFWAY; }
+    }
     wall.verify = snapshotDue ? "diff_commits + full compareTree" : "diff_commits";
     if (!proof.ok) failure = `the checkpoint differs from git: ${JSON.stringify({ paths: proof.paths, ids: proof.ids, gitStray: proof.gitStray?.slice(0, 5), tree: proof.tree && { missing: proof.tree.missing.slice(0, 5), extra: proof.tree.extra.slice(0, 5), content: proof.tree.content.slice(0, 5), mode: proof.tree.mode.slice(0, 5) } }).slice(0, 1500)}`;
     if (!failure && phase.tests && !phase.closure && measured) { since = performance.now(); tests = await closure(run, k, "tests", { layer: published.publishedLayer.id }); lap("testsMs", since); }
@@ -726,7 +738,7 @@ async function cmdPlay(o) {
   // `--until lead` (after the lead's install), `--until lanes` (after the agents); `--resume` continues from either, and
   // `--resume --until lanes` continues a lead stop to the lanes stop: a range with git and Node on in three commands
   const until = o.until ?? null, half = "resume" in o ? "resume" : until ? "until" : null;
-  if (until && !["lead", "lanes"].includes(until)) return usage();
+  if (until && !["lead", "lanes", "repair", "verified"].includes(until)) return usage();
   // --cut <order> (with --until lanes): the lanes stage stops at that plan order and saves; a later --resume continues it
   const cut = o.cut == null ? null : Number(o.cut);
   if (cut != null) {
@@ -1048,5 +1060,8 @@ async function main() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+  // step 6 (ranges 21–30): the harness the container sees must be the host's (Docker Desktop's share can be stale)
+  const { harnessHash } = await import("./quiet.mjs");
+  if (process.env.LFS352_HARNESS_SHA && process.env.LFS352_HARNESS_SHA !== harnessHash()) { console.error(`refused: the container sees another harness (${harnessHash().slice(0, 12)}) than the host (${process.env.LFS352_HARNESS_SHA.slice(0, 12)}); Docker's file share is stale, wait and run again`); process.exit(EXIT.guard); }
   main().catch((error) => { console.error(error.stack ?? error); process.exit(EXIT.error); });
 }
