@@ -165,7 +165,7 @@ core/                          replacement implementation (in development)
 │                              bridge, sandbox and the SDK
 └── docs/                      architecture, design contracts and run records
 benchmark/                     core harnesses, registrations and proof tools
-data/fs-bench-pro/             released fs-bench-pro results, one folder per release
+└── data/fs-bench-pro/         released fs-bench-pro results, one folder per release
 docs/versioned/0.1.6           v0.1.6 manual
 docs/versioned/0.1.2           previous versioned product manual
 release-notes/                 release records, evidence and limitations
