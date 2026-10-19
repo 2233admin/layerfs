@@ -172,7 +172,7 @@ Report these by id. A later range that shows them has not regressed.
 | **F-057** (BUGS.md) | OPEN, product fix owed | Newest-wins over pnpm's install state lets an incremental repair keep stale hoisting (a3: `@cordisjs/plugin-loader` → `vendor/loader`). Hidden while the repair is a clean relink |
 | Install-state merge question | OPEN design observation (RESULTS) | Same root as F-057: merge install state differently, or always relink |
 | Clean-relink repair and its cost | Owner decision 2026-10-19, workload | Repair exec ~26 s, Commit ~12 s, ~95k inodes rewritten per merged range; the final command is ~23 s longer than an incremental repair |
-| Link-unit gate question | OPEN gate-unit question (RESULTS) | Reinstall growth on link-only or tiny-raw installs reads large (r003 12.51×, r004 266.97× in `rb-p3-…-d`); option (b), absolute stored bytes, is an owner call |
+| Link-unit gate question | **CLOSED**, owner decision 2026-10-19 ("proceed with the fix") | Raw change under 1 MiB is judged by absolute stored bytes (≤ 1 MiB pass, watch over 1 MiB, optimize over 16 MiB); larger reinstalls keep the ratio. r017.a1 (638,855 B for 75,810 B raw) passes in absolute mode |
 | Mount-path refresh cost | OPEN design observation (RESULTS) | A new mount path per mount makes pnpm skip its up-to-date shortcut: LayerFS refresh 1.7–1.8 s against native 0.9 s at a moved path and 0.5 s at a fixed one |
 | Watch: `sandbox.commit — · Committed` | Not judged: baseline class 3/3/3 calls, minimum 5 | p95 is the clean-relink Commit (11,435 ms, 165.79×); p50 51 ms (0.74×) |
 | Watch: thin classes (`branch.publish` 1.54×, merge 3.73× on n = 2, small `fs.glob` classes ~2×) | Not judged below 5 calls per range | Judge them only when a class has 5+ calls in 3 ranges |

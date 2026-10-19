@@ -125,12 +125,17 @@ export const BASELINE_MIN_N = 5;
  * changed package by its absolute new bytes: watch over 1 MiB, optimize over 16 MiB.
  */
 export const REINSTALL_ABSOLUTE = { watch: 1 << 20, act: 16 << 20 };
+/** Under this many raw changed bytes a reinstall is link-only or tiny: judged by REINSTALL_ABSOLUTE (owner 2026-10-19). */
+export const REINSTALL_TINY_RAW = 1 << 20;
 export function reinstallGate(r, t = THRESHOLDS) {
   if (!r) return { value: "not applicable: no node_modules reinstall in this range", result: "pass" };
   if (r.storedNewBytes == null) return { value: "not judged: the install's stored node_modules bytes were not attributed", result: "watch" };
   if (!r.changedPackages) return { value: `no changed packages: ${r.storedNewBytes} new stored bytes`, result: band(r.storedNewBytes, REINSTALL_ABSOLUTE) };
-  const g = +(r.storedNewBytes / r.rawChangedBytes).toFixed(3);
-  return { value: `${g}× the raw bytes of ${r.changedPackages} changed package${r.changedPackages === 1 ? "" : "s"}`, result: band(g, t.reinstallGrowth) };
+  const g = r.rawChangedBytes > 0 ? +(r.storedNewBytes / r.rawChangedBytes).toFixed(3) : null, pk = `${r.changedPackages} changed package${r.changedPackages === 1 ? "" : "s"}`;
+  // owner 2026-10-19 ("proceed with the fix"): a link-only or tiny-raw reinstall (raw change under 1 MiB) is judged
+  // by its absolute stored bytes on the no-package line; a larger one keeps the ratio, unchanged
+  if (!(r.rawChangedBytes >= REINSTALL_TINY_RAW)) return { value: `absolute: ${r.storedNewBytes} new stored bytes for ${r.rawChangedBytes ?? 0} raw changed bytes of ${pk} (${g ?? "—"}×; raw under 1 MiB)`, result: band(r.storedNewBytes, REINSTALL_ABSOLUTE), mode: "absolute" };
+  return { value: `${g}× the raw bytes of ${pk} (ratio: ${r.storedNewBytes} new stored for ${r.rawChangedBytes} raw)`, result: band(g, t.reinstallGrowth), mode: "ratio" };
 }
 
 /**
@@ -487,7 +492,7 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   if (s.directoryShare == null) unjudged("Directory share", "no new bytes measured", `< ${t.directoryShare.watch}`);
   else add("Directory share", s.directoryShare, `< ${t.directoryShare.watch}`, band(s.directoryShare, t.directoryShare));
   const ri = reinstallGate(s.reinstall, t);
-  add("Reinstall growth", ri.value, `≤ ${t.reinstallGrowth.watch}× changed packages; ≤ 1 MiB with none`, ri.result);
+  add("Reinstall growth", ri.value, `≤ ${t.reinstallGrowth.watch}× changed packages; ≤ 1 MiB with none or under 1 MiB raw`, ri.result);
   const measured = [...history, m];
   const eff = measured.map((x) => (x.storage?.changedBytes ? x.storage.newStored / x.storage.changedBytes : null));
   const cap = s.delta?.atCap;

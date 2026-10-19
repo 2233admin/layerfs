@@ -1344,9 +1344,18 @@ snapshots:
     { g: "packages/a/node_modules/@x/b", bytes: 7 }, { g: "node_modules/vitest", bytes: 40 }];
   assert.equal(rawChangedBytes(ch, groups), 6007, "a link counts its link entry only");
   const gate = (r) => reinstallGate(r);
-  assert.deepEqual(gate({ changedPackages: 3, rawChangedBytes: 6007, storedNewBytes: 9000 }), { value: "1.498× the raw bytes of 3 changed packages", result: "pass" });
-  assert.equal(gate({ changedPackages: 3, rawChangedBytes: 6007, storedNewBytes: 18000 }).result, "watch");
-  assert.equal(gate({ changedPackages: 3, rawChangedBytes: 6007, storedNewBytes: 31000 }).result, "optimize");
+  // ratio mode (raw change of 1 MiB or more): the bands are unchanged
+  const raw = 6007 * 1000;
+  assert.deepEqual(gate({ changedPackages: 3, rawChangedBytes: raw, storedNewBytes: 9000 * 1000 }), { value: `1.498× the raw bytes of 3 changed packages (ratio: 9000000 new stored for ${raw} raw)`, result: "pass", mode: "ratio" });
+  assert.equal(gate({ changedPackages: 3, rawChangedBytes: raw, storedNewBytes: 18000 * 1000 }).result, "watch");
+  assert.equal(gate({ changedPackages: 3, rawChangedBytes: raw, storedNewBytes: 31000 * 1000 }).result, "optimize", "a large reinstall over 2× raw still trips by its ratio");
+  // owner 2026-10-19 ("proceed with the fix"): raw change under 1 MiB (link-only or tiny) is judged by absolute stored bytes
+  const rec = { r015: { changedPackages: 152, rawChangedBytes: 17280470, storedNewBytes: 646831 }, r016: { changedPackages: 101, rawChangedBytes: 5953866, storedNewBytes: 633581 }, r017: { changedPackages: 55, rawChangedBytes: 75810, storedNewBytes: 638855 } };
+  assert.deepEqual(Object.values(rec).map((r) => [gate(r).mode, gate(r).result]), [["ratio", "pass"], ["ratio", "pass"], ["absolute", "pass"]], "the recorded r015-r017 relinks pass");
+  assert.match(gate(rec.r017).value, /^absolute: 638855 new stored bytes for 75810 raw changed bytes of 55 changed packages \(8\.427×; raw under 1 MiB\)$/);
+  assert.deepEqual([gate({ changedPackages: 4, rawChangedBytes: 1870, storedNewBytes: 646831 }).result, gate({ changedPackages: 4, rawChangedBytes: 1870, storedNewBytes: 646831 }).mode], ["pass", "absolute"]);
+  assert.equal(gate({ changedPackages: 11, rawChangedBytes: 20000, storedNewBytes: 3 * 2 ** 20 }).result, "watch", "a tiny-raw relink storing 3 MiB trips");
+  assert.equal(gate({ changedPackages: 11, rawChangedBytes: 20000, storedNewBytes: 17 * 2 ** 20 }).result, "optimize");
   assert.deepEqual([0.5, 2, 17].map((mib) => gate({ changedPackages: 0, rawChangedBytes: 0, storedNewBytes: mib * 2 ** 20 }).result), ["pass", "watch", "optimize"]);
   assert.equal(gate(null).result, "pass");
   assert.equal(gate({ changedPackages: 2, rawChangedBytes: 10, storedNewBytes: null }).result, "watch");

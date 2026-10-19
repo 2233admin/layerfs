@@ -688,6 +688,11 @@ for a ~5% storage gain. Report raw deltas for both.
 > entry only): watch over 2×, optimize over 5×. An install with no changed
 > package is judged by its absolute new bytes: watch over 1 MiB, optimize over
 > 16 MiB (`gates.mjs` reinstallGate, `closure.mjs` changedPackages).
+> **Owner decision 2026-10-19 ("proceed with the fix"):** a link-only or
+> tiny-raw reinstall, raw changed bytes under 1 MiB, is judged on the same
+> absolute line (watch over 1 MiB stored new, optimize over 16 MiB). A larger
+> reinstall keeps the ratio, unchanged. The row names the mode and shows both
+> numbers. This closes the link-unit question.
 
 > **Baseline classes (F-024, lead decision 2026-10-18).** Each baseline class
 > records n and its calls per baseline range (`perRange`). A class with fewer
