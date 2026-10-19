@@ -434,6 +434,11 @@ test("install on top (lead 2026-10-18, dev352-p3h r016): the chain and its oracl
   chain = nextChain(chain, 16, "c16", [ex("test", "/workspaces/31")]);
   assert.equal(chain.length, 4);
   assert.deepEqual(nextChain(chain, 17, "c17", [ex("clean-install", "/workspaces/40")]).map((e) => e.kind), ["clean-install"]);
+  // F-059: the repair's build from clean output after its clean relink starts the chain again (r020: 17 native states)
+  const fresh = nextChain(chain, 17, "c17", [ex("repair-install", "/w/1"), { ...ex("build", "/w/2"), fresh: true }, ex("test", "/w/3")]);
+  assert.deepEqual(fresh.map((e) => [e.range, e.kind]), [[17, "repair-install"], [17, "build"], [17, "test"]]);
+  assert.equal(nextChain(chain, 17, "c17", [ex("repair-install", "/w/1"), ex("build", "/w/2")]).length, 6, "a build that did not clean keeps the chain");
+  assert.equal(nextChain(chain, 17, "c17", [ex("incremental-install", "/w/1"), { ...ex("build", "/w/2"), fresh: true }]).length, 6, "nor after an install on top");
   const key = sequenceKey(chain, { checkpoint: "c17", command: "i" });
   assert.equal(key, sequenceKey(JSON.parse(JSON.stringify(chain)).map((e) => ({ ...e, root: "/elsewhere" })), { checkpoint: "c17", command: "i" }), "roots don't change the key");
   assert.notEqual(key, sequenceKey(chain, { checkpoint: "c17", command: "j" }));
@@ -1000,6 +1005,7 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
   // F-059 (owner 2026-10-20, option A): the repair's build first removes lib/ and every tsbuildinfo in every tsconfig package
   const files = new Map(["packages/a/package.json", "packages/a/tsconfig.json", "packages/b/package.json", "packages/b/tsconfig.json", "packages/c/package.json", "tsconfig.json", "tsdown.config.ts"].map((p) => [p, {}]));
   const repairBuildStep = closureSteps({ packages, tsconfigs, run: [], changed: ["packages/a/src/x.ts"], installed: true, milestone: false, repair: true, files }).find((s) => s.kind === "build");
+  assert.equal(repairBuildStep.fresh, true, "the repair's build starts from clean output, so the closure chain starts again after it");
   // then dsh's whole build: tsdown bundles every package from its lib/types (r018 a5: UNRESOLVED_ENTRY after a partial build)
   assert.deepEqual([repairBuildStep.command, repairBuildStep.packages], [`${repairClean(files)} && ./node_modules/.bin/tsc -b 'packages/a' 'packages/b' && ./node_modules/.bin/tsdown`, ["packages/a", "packages/b"]]);
   // every package with a tsconfig, none without (the root's tsconfig is no package), and every packages/<group>/<name>

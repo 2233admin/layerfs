@@ -73,6 +73,33 @@
   emitted files (diagnostic; that chain had no lane states, see fix 044). The test pins the sweep. Recovery: range 19
   attempt 3 from `p3-main-l`'s r018 snapshot.
 
+## The closure chain starts again after the repair (range 20)
+
+- The native chain behind every point oracle, calibration and seq oracle
+  replays the closure chain from the last clean install. In `p3-main-n` that
+  was range 15's first install, plus every range's repair install, build and
+  test since: 17 native states. Range 20's calibration of
+  `r020-2-examples-acp-agent.end` passed the 115 s command alarm. Range 20
+  call 1 used the long chain (90 s); call 2 alarmed and left its container
+  running to completion. Nothing from those calls is used.
+- After fix 043 the repair's build starts from clean output: every
+  `node_modules` removed, every package's `lib/` and tsbuildinfo removed, then
+  the whole build. That state is what a fresh checkout's same install and build
+  leave. So the closure step records `fresh`, and `nextChain` restarts the chain
+  at that range's clean install and the fresh build (`FRESH_INSTALLS`:
+  `clean-install`, `repair-install`). A build that did not clean, or one after
+  an install on top, keeps the chain.
+- `p3-main-n`'s recorded chain was cut the same way at range 19's repair (its
+  build had cleaned). The previous state is kept as
+  `runs/p3-main-n/state.pre-chain-reset.json`. Range 20 was then calibrated
+  again on the short chain: point 1 34 s, point 2 108 s (vitest timed out
+  natively at 90 s, so no tests, as in r15 and r16), point 3 25 s. On the
+  short chain point 1 runs 157 test files where the long chain ran 150 (6
+  against 13 skipped).
+- Test: `tests/p2.mjs` (install on top): a fresh repair build restarts the
+  chain; a build without the clean, or after an install on top, does not. The
+  repair's build step carries `fresh`.
+
 ## Also fixed (report, a stop inside the closure)
 
 - F1: a stop inside the closure lost the Commits of the steps already played.

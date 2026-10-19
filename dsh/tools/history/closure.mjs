@@ -118,7 +118,7 @@ export function closureSteps({ changed, packages, tsconfigs, milestone, installe
   const built = [...new Set(changed.map((p) => packageOf(p, packages)).filter((d) => d && tsconfigs.has(d)))].sort();
   // NODE_RULE (the lead repair, `files` given): its clean of every package's lib/ and tsbuildinfo (F-059), then
   // dsh's whole build, tsc -b of every package then its bundler, after any change to a built package
-  if (built.length) steps.push(files ? { kind: "build", ...repairBuild(files) } : { kind: "build", command: buildCommand(built), packages: built });
+  if (built.length) steps.push(files ? { kind: "build", ...repairBuild(files), fresh: true } : { kind: "build", command: buildCommand(built), packages: built });
   // and the same build again after its Commit, unmount and a fresh mount: it must find nothing to build, or what native finds
   if (checks && built.length) steps.push({ kind: "rebuild", command: rebuildCommand(built), packages: built });
   if (run.length) steps.push({ kind: "test", command: vitestCommand(run), files: run });
@@ -211,11 +211,16 @@ export function nextChain(chain = [], range, checkpoint, executed) {
   for (const e of executed) {
     const entry = { range, checkpoint, kind: e.kind, command: e.command, root: e.root ?? null };
     if (CLEAN_KINDS.has(e.kind)) next = [entry];
+    // a build from clean output (the repair's, F-059) after this range's clean install leaves what a fresh checkout's
+    // install and build leave, so the chain starts again there (r020: 17 native states, calibration past 115 s)
+    else if (e.fresh && next.at(-1)?.range === range && FRESH_INSTALLS.has(next.at(-1).kind)) next = [next.at(-1), entry];
     else next.push(entry);
   }
   return next;
 }
 export const CLEAN_KINDS = new Set(["install", "clean-install", "reinstall-check"]);
+/** The installs that remove every node_modules first: with a fresh build after them the chain starts again. */
+export const FRESH_INSTALLS = new Set(["clean-install", "repair-install"]);
 /** The cache key of an install on top: the chain's checkpoints and commands, then the install's own. */
 export const sequenceKey = (chain, final) => createHash("sha256").update(JSON.stringify({ v: LISTER_VERSION, chain: chain.map((e) => [e.checkpoint, e.command]), final: [final.checkpoint, final.command] })).digest("hex").slice(0, 24);
 
@@ -289,7 +294,7 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
   }
   const rows = await playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, binCheck: checks });
   const out = { steps: steps.map((s) => s.kind), rows: rows.map(({ groups, dump, ...r }) => r), oracleKind: files.kind,
-    executed: steps.map((s, i) => ({ kind: s.kind, command: s.command, root: rows[i]?.root ?? null })) };
+    executed: steps.map((s, i) => ({ kind: s.kind, command: s.command, root: rows[i]?.root ?? null, ...(s.fresh ? { fresh: true } : {}) })) };
   const done = rows.find((r) => /install/.test(r.kind));
   if (done) {
     const oracle = JSON.parse(readFileSync(files.install, "utf8"));
