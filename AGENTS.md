@@ -268,6 +268,9 @@ remain binding; moving them out of this file does not weaken them.
   bounded waits, and a spawned thread's exit must not depend on another thread
   finishing without panicking. This is a ceiling, not a target; the scoped
   measurement and proof budgets in §3 stay stricter.
+- QUIET means the replay owns timing-sensitive Docker work: other sessions
+  may run Docker with -j 2 (one heavy batch at a time) and must not wait for
+  it to clear.
 - Preserve [repository ARM64 build inputs](.cargo/config.toml); explicit
   RUSTFLAGS must repeat the profile. Details are in the core guide.
 - Persistence profiles are scoped to the store. Claim only their guarantees;

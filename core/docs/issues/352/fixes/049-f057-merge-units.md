@@ -130,7 +130,9 @@ only by the two added keys on its two merge lines (checked line by line).
 
   The first 120 binaries ran in QUIET gaps. On the user's instruction the
   rest, Clippy and the measurement ran while the ranges 21–30 run held QUIET,
-  so they overlap its range commands as concurrent load.
+  so they overlap its range commands as concurrent load. Clippy and the
+  release harness build ran at `-j 6` while QUIET existed (about 15 s and
+  41 s), before the rule that builds use `-j 2` under QUIET was set.
 
 ## Performance, without and with units
 

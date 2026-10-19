@@ -546,6 +546,10 @@ each runs under (`perl -e 'alarm N; exec @ARGV'`):
   proofs or savestate command takes it for its run, a failed command releases
   it, and the control sample releases it at the attempt's end. Another run's
   QUIET refuses the command.
+  QUIET means the replay owns timing-sensitive Docker work: other sessions
+  may run Docker with -j 2 (one heavy batch at a time) and must not wait for
+  it to clear. Their builds use -j 6 only while QUIET is absent; each test
+  command stays within 120 s.
 - **Native state snapshots.** `savestate` replays the run's closure chain once
   and tars the native folder (node_modules, lib/ and every untracked file) into
   the Docker volume `layerfs-issue352-native-states`; `--adopt` puts one
