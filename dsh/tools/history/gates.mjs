@@ -508,7 +508,8 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   const b = m.budget || {};
   if (b.diskBudget) add("Disk projection", +(b.diskProjected / b.diskBudget).toFixed(2), `< ${t.disk.watch}`, band(b.diskProjected / b.diskBudget, t.disk, "stop"));
   else unjudged("Disk projection", "no disk budget recorded", `< ${t.disk.watch}`);
-  if (b.wallBudgetMs) add("Wall projection", +(b.wallProjectedMs / b.wallBudgetMs).toFixed(2), `≤ ${t.wall.watch}`, band(b.wallProjectedMs / b.wallBudgetMs, t.wall, "stop"));
+  // against the phase's own budget entry (run.mjs loadBudget; P3's is 300 s per range, owner 2026-10-19)
+  if (b.wallBudgetMs) add("Wall projection", +(b.wallProjectedMs / b.wallBudgetMs).toFixed(2), `≤ ${t.wall.watch}${b.wallBudgetOf && b.wallBudgetOf !== "p1" ? ` (${b.wallBudgetOf} budget)` : ""}`, band(b.wallProjectedMs / b.wallBudgetMs, t.wall, "stop"));
   else unjudged("Wall projection", "no wall budget recorded", `≤ ${t.wall.watch}`);
   // REPORT_FORMAT §8.3: the git rule's and Node rule's gates (P3 on)
   if (m.phase === "p3") rows.push(...p3Checks(m));

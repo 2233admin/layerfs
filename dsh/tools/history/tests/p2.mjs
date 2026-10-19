@@ -22,7 +22,7 @@ import { baselineFor, leadNote, loadBaselines, probeCommitsOf, probeSetupCommits
 import { atHead } from "../frozen.mjs";
 import { laneChanges, mergedTree } from "../agents.mjs";
 import { measure, record } from "../lib.mjs";
-import { checkRunner, loadBudget, wallProjection } from "../run.mjs";
+import { checkRunner, loadBudget, wallBudget, wallProjection } from "../run.mjs";
 import { runnerArgs, runOf } from "../runner.mjs";
 import { demux, parseRun } from "../runner/docker-shim.mjs";
 import {
@@ -189,6 +189,20 @@ test("wall projection: the phase's latest attempts, this one included, × the ra
   assert.equal(loadBudget(file).wallBudgetMs, 24_240_000);
   const g = evaluate({ range: 6, binary: { daemon: "d" }, checks: {}, budget: { wallBudgetMs: 24_240_000, wallProjectedMs: 30_000 * 202 } });
   assert.equal(g.checks.find((c) => c.name === "Wall projection").value, 0.25);
+});
+
+test("P3 is judged against its own budget entry (owner 2026-10-19: 300 s per range); other phases keep the P1 entry", () => {
+  const file = join(dir, "budget-phases.json");
+  writeFileSync(file, JSON.stringify({ wallBudgetMs: 24_240_000, ranges: 202, perRangeMs: 120_000, phases: { p3: { wallBudgetMs: 60_600_000, perRangeMs: 300_000 } } }));
+  assert.deepEqual([loadBudget(file, "p3").wallBudgetMs, loadBudget(file, "p3").ranges, loadBudget(file, "p3").phase], [60_600_000, 202, "p3"]);
+  for (const ph of ["p1", "p2", null]) assert.deepEqual([loadBudget(file, ph).wallBudgetMs, loadBudget(file, ph).phase], [24_240_000, "p1"], String(ph));
+  // the same 203 s range: over the P1 entry (1.69, stop), within P3's own (0.68, pass)
+  const own = { range: 15, totalMs: 203_000 };
+  const p3 = wallBudget(loadBudget(file, "p3"), "p3", [], own), p1 = wallBudget(loadBudget(file, "p2"), "p3", [], own);
+  assert.equal(p3.wallBudgetOf, "p3");
+  const judge = (budget) => evaluate({ range: 15, phase: "p2", binary: { daemon: "d" }, checks: {}, budget }).checks.find((c) => c.name === "Wall projection");
+  assert.deepEqual([judge(p3).value, judge(p3).result, judge(p3).threshold], [0.68, "pass", "≤ 1 (p3 budget)"]);
+  assert.deepEqual([judge(p1).value, judge(p1).result], [1.69, "stop"]);
 });
 
 test("categories: every method the replay calls has one; list_commits is project; an unknown method has none", () => {

@@ -102,12 +102,21 @@ export function outputs(label, dir) {
     : { metrics: join(dir, "metrics"), docs: join(dir, "docs"), snapshots: join(dir, "snapshots") };
 }
 
-/** The wall budget (SPEC §5; decided at P1 close and recorded in budget.json), or null. */
-export function loadBudget(file = join(HISTORY, "budget.json")) {
+/**
+ * The wall budget for `phase` (SPEC §5; budget.json), or null. The file's top
+ * level is the P1-close budget, which every phase without its own entry
+ * uses; `phases.<phase>` is a phase's own entry (P3: owner 2026-10-19).
+ * `phase` names the entry used.
+ */
+export function loadBudget(file = join(HISTORY, "budget.json"), phase = null) {
   if (!existsSync(file)) return null;
-  const b = JSON.parse(readFileSync(file, "utf8"));
-  return Number.isFinite(b.wallBudgetMs) && Number.isInteger(b.ranges) ? b : null;
+  const b = JSON.parse(readFileSync(file, "utf8")), own = phase ? b.phases?.[phase] : null;
+  const e = own ? { ...own, ranges: own.ranges ?? b.ranges } : b;
+  return Number.isFinite(e.wallBudgetMs) && Number.isInteger(e.ranges) ? { ...e, phase: own ? phase : "p1" } : null;
 }
+
+/** The metrics' wall budget fields: the phase's budget entry and the projection gates.mjs judges against it. */
+export const wallBudget = (budget, phase, attempts, own) => ({ wallBudgetMs: budget.wallBudgetMs, wallBudgetOf: budget.phase, ...wallProjection(attempts, phase, own, budget.ranges) });
 
 /**
  * The projected wall time of the whole history (SPEC §5, lead decision at P1
@@ -662,8 +671,8 @@ async function playRange(run, k, mode, half = null, until = null) {
   // REPORT_FORMAT §10.1: the P3 object (proofs NOT_RUN until nodeproof.mjs proofs runs the native oracles)
   if (m.phase === "p3") m.p3 = fillP3(m, { groupsOf: (id) => { try { return JSON.parse(readFileSync(groupsFile(run, k, id), "utf8")); } catch { return null; } } });
   m.wall = { kind: "tooling", totalMs: Math.round(performance.now() - t0), ...wall };
-  const budget = loadBudget();
-  if (budget) Object.assign(m.budget, { wallBudgetMs: budget.wallBudgetMs, ...wallProjection(readAttempts(outputs.metrics), m.phase, { range: k, totalMs: m.wall.totalMs }, budget.ranges) });
+  const budget = loadBudget(undefined, m.phase);
+  if (budget) Object.assign(m.budget, wallBudget(budget, m.phase, readAttempts(outputs.metrics), { range: k, totalMs: m.wall.totalMs }));
   const file = join(outputs.metrics, `range-${pad(k)}.a${attempt}.json`);
   writeJson(file, m);
   if (failure) { run.state.dirty = k; run.save(); }
