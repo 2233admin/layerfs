@@ -376,7 +376,7 @@ Diagnosis pending: `finding-018.a4.json`.
   - **Speed as history grows:** `control-018.a3` (b)/(a) 0.97× / 0.97× / 0.96×, watch row pass. macOS load 8.5–9.8.
   - **Against range 15:** stored per Commit 39.2 KiB (60.3); index rows 8.4 KiB per Commit (9.1); content ratio 0.24× (0.29×); churn 0.02 (0.26). Tooling 321.8 s; the final command took 235 s under the 295 s alarm.
 
-- **a4 (`p3-main-j`, fork of `p3-main-g`'s r017 snapshot, harness `e1ff6b0c1f`, daemon `44ac6c91`, addon `77597adb`): OPTIMIZE, terminal. The only optimize row is the checkpoint `diff_commits` scaling, which the liaison said to leave alone (#364 item 4).** Checkpoint ok, git ✓. Node 17 pass, 0 stop, 0 NOT_RUN over 4 points. Report check F1–F8 PASS.
+- **a4 (`p3-main-j`, fork of `p3-main-g`'s r017 snapshot, harness `e1ff6b0c1f`, daemon `44ac6c91`, addon `77597adb`): OPTIMIZE, terminal: advanced on optimize: #364 item 4. The only optimize row is the checkpoint `diff_commits` scaling, which the liaison said to leave alone (#364 item 4).** Checkpoint ok, git ✓. Node 17 pass, 0 stop, 0 NOT_RUN over 4 points. Report check F1–F8 PASS.
   - **Repair P6 passes:** P1 pass, P4 pass (418 emitted files, exit 0).
     - The native chain merged the lanes in their recorded write order (owner option 1): examples 16:04:20.221, packages-core 16:04:29.883, root 16:04:30.557.
     - Captures were 403 / 311 / 10,276 paths; 19 two-sided paths are listed in the oracle. The chain took 73.9 s.
