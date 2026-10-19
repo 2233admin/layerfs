@@ -156,7 +156,11 @@ The tree and commands are unchanged.
   oracle for this state. In R1 slice `f031-r1-slice-f`, LayerFS linked
   `python/sdk-runtime/node_modules/.bin/dsh-jsonrpc-agent`, whose target is
   `packages/ui/jsonrpc-agent/lib/bin.js`; the fresh checkout has no `lib/`.
-  With Node off, the clean oracle stays.
+  With Node off, the clean oracle stays. The same oracle then runs the
+  rebuild check's `tsc -b --verbose` natively, keeping its whole output, and
+  a rebuild that finds work is judged against those per-project states
+  (design 8's native rerun). In `f031-r1-slice-h`, the rebuild after the
+  reinstall built `vendor/*`, and there was no native rerun to compare with.
 
 The underlying product property is that a Workspace's path is new on every
 mount (F-029, by design). Tools that cache absolute paths therefore redo

@@ -16,7 +16,7 @@
 //     points left over the budget wait for the next command
 //   node dsh/tools/history/nodeproof.mjs reinstall --run <id> --range k [--attempt a]
 //     after the proofs, before run.mjs devcheck: the clean reinstall natively on top of the repair's chain
-//     (metrics/devcheck-oracle-k.json), the devcheck's oracle when Node is on
+//     and the rebuild check's native rerun after it (metrics/devcheck-oracle-k.json), the devcheck's oracle when Node is on
 // The trees are rebuilt in a scratch repository whose objects borrow dsh.git's
 // (alternates): dsh blobs by id, decoys from their base and marker.
 import { execFileSync, spawnSync } from "node:child_process";
@@ -27,7 +27,7 @@ import { join } from "node:path";
 import { BlobCache, lsTree } from "./git.mjs";
 import { compareInstalled, LISTER_VERSION, listerCommand, normalizeOutput, ORACLE_ROOT, parseLister, rootless, STORE_MOUNT, firstDifference } from "./closure.mjs";
 import { emittedCommand, groupsFile, inputsHash, nodeOf, parseEmitted, pointBuild, testPoints, treeDelta, wholeBuild, changedPackages } from "./nodelanes.mjs";
-import { buildCommand } from "./closure.mjs";
+import { buildCommand, tscStates } from "./closure.mjs";
 import { BUILD_GROUPS, vitestMessages } from "./nodeconfig.mjs";
 export { BUILD_GROUPS };
 import { selectTests, vitestCommand } from "./unit-tests.mjs";
@@ -120,7 +120,7 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
         : `t=$(date +%s%N); (${st.command}) > /tmp/o 2>&1; echo "@@exit $? $(( ($(date +%s%N) - t) / 1000000 ))"; sed 's/^/@@out /' /tmp/o; ${listerCommand([], { roots: [...new Set(earlier)] })}`);
     });
     moveTo(tail.root);
-    if (tail.build) script.push(`t=$(date +%s%N); (${tail.build}) > /tmp/b 2>&1; echo "@@tsc $? $(( ($(date +%s%N) - t) / 1000000 ))"; tail -c 4000 /tmp/b | sed 's/^/@@tscout /'`, `${emittedCommand(tail.packages ?? [])} | sed 's/^/@@emit /'`);
+    if (tail.build) script.push(`t=$(date +%s%N); (${tail.build}) > /tmp/b 2>&1; echo "@@tsc $? $(( ($(date +%s%N) - t) / 1000000 ))"; tail -c ${tail.outputBytes ?? 4000} /tmp/b | sed 's/^/@@tscout /'`, `${emittedCommand(tail.packages ?? [])} | sed 's/^/@@emit /'`);
     if (tail.tests?.length) script.push(`t=$(date +%s%N); (${vitestCommand(tail.tests, tail.vitestTimeoutS ?? 100)}) > /tmp/v 2>/dev/null; echo "@@vt $? $(( ($(date +%s%N) - t) / 1000000 ))"; echo "@@vtjson $(base64 -w0 /tmp/v)"`);
     const input = execFileSync("tar", ["-c", "-C", stage, "."], { maxBuffer: 1 << 30 });
     const t0 = Date.now();
@@ -403,12 +403,15 @@ async function cmdReinstall(o) {
   const files = readdirSync(metrics).filter((f) => new RegExp(`^range-${pad(k)}\\.a(\\d+)\\.json$`).test(f));
   const a = o.attempt ?? Math.max(...files.map((f) => Number(/\.a(\d+)\./.exec(f)[1])));
   const m = JSON.parse(readFileSync(join(metrics, `range-${pad(k)}.a${a}.json`), "utf8"));
-  const step = devSteps(m.closure).find((s) => s.kind === "reinstall-check");
+  const steps = devSteps(m.closure), step = steps.find((s) => s.kind === "reinstall-check"), rebuild = steps.find((s) => s.kind === "rebuild");
   if (!step) { console.log(JSON.stringify({ range: k, attempt: a, reinstall: false })); return; }
   const repo = scratchRepo(join(oracleDir(run), "repo.git"), run.manifest.repo);
-  const n = cachedOracle(oracleDir(run), { repo, states: reinstallStates(run, m, k, step.command), tail: {}, inputs: "reinstall-check", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() });
+  // the rebuild check's native rerun (design 8) after the reinstall, its whole --verbose output for the states
+  const tail = rebuild ? { build: rebuild.command, packages: rebuild.packages, outputBytes: 1 << 20 } : {};
+  const n = cachedOracle(oracleDir(run), { repo, states: reinstallStates(run, m, k, step.command), tail, inputs: "reinstall-check", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() });
   const file = reinstallOracleFile(metrics, k);
-  writeFileSync(`${file}.tmp`, JSON.stringify({ range: k, attempt: a, kind: "on-top", key: n.key, cached: n.cached, command: step.command, exit: n.exit, root: n.root, listerVersion: LISTER_VERSION, groups: n.groups, normalized: n.normalized, ms: n.ms }, null, 1));
+  writeFileSync(`${file}.tmp`, JSON.stringify({ range: k, attempt: a, kind: "on-top", key: n.key, cached: n.cached, command: step.command, exit: n.exit, root: n.root, listerVersion: LISTER_VERSION, groups: n.groups, normalized: n.normalized,
+    rebuild: rebuild && n.tsc ? { command: rebuild.command, exit: n.tsc.exit, ms: n.tsc.ms, states: tscStates(n.tsc.output, n.root) } : null, ms: n.ms }, null, 1));
   renameSync(`${file}.tmp`, file);
   console.log(JSON.stringify({ range: k, attempt: a, file, exit: n.exit, groups: n.groups.length, cached: n.cached, ms: n.ms }));
 }

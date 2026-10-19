@@ -69,7 +69,9 @@ export async function devcheck(run, k) {
   run.traceTo(null);
   const t = readTrace(traceFile, run.sink.log);
   const sizes = (kind) => t.all.find((l) => l.method === "sandbox.commit" && l.step === `r${pad(k)}.${kind}`)?.sizes ?? null;
-  Object.assign(out, judgeDevChecks(k, rows, { cleanOracle, Mismatch }));
+  // Node on: the rebuild check's native rerun ran in the on-top oracle, after the same reinstall (design 8)
+  const nativeRun = cleanOracle?.kind === "on-top" && cleanOracle.rebuild ? () => ({ states: cleanOracle.rebuild.states }) : null;
+  Object.assign(out, judgeDevChecks(k, rows, { cleanOracle, Mismatch, nativeRun }));
   if (out.reinstallCheck) Object.assign(out.reinstallCheck, { newMetadata: sizes("reinstall-check")?.newMetadata ?? null, newStored: sizes("reinstall-check")?.newStored ?? null });
   mkdirSync(run.manifest.outputs.metrics, { recursive: true });
   writeFileSync(join(run.manifest.outputs.metrics, `devcheck-${pad(k)}.json`), `${JSON.stringify(out, null, 1)}\n`);
