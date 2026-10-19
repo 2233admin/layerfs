@@ -105,7 +105,7 @@ fn write_cost() {
             let length = 1024 + (at as usize * 7_919) % (7 * 1024);
             write(
                 &service,
-                &format!("/w364/small-{at:03}.bin"),
+                &format!("/w364-small-{at:03}.bin"),
                 bytes(at, length),
             )
         })
@@ -115,7 +115,7 @@ fn write_cost() {
         "WRITE_SMALL n=200 p50_ms={:.2} p90_ms={:.2} max_ms={:.2}",
         small[100], small[180], small[199]
     );
-    let big = write(&service, "/w364/big.bin", bytes(999, 64 << 20));
+    let big = write(&service, "/w364-big.bin", bytes(999, 64 << 20));
     println!("WRITE_BIG bytes={} ms={big:.1}", 64u64 << 20);
     drop(service);
     owner.stop().unwrap();
