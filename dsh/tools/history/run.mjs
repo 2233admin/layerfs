@@ -3,6 +3,7 @@
 //   node dsh/tools/history/run.mjs new  --run <id> --phase p1 [--label measured|baseline|dev|control] [--policy default|control] [--daemon <path>]
 //   node dsh/tools/history/run.mjs play --run <id> --from N --to M [--mode measured|fast]
 //   node dsh/tools/history/run.mjs fork --run <new id> --from-run <id> --range N [--label …] [--daemon <path>] [--addon <path>] [--sdk <dir>]
+//     [--pnpm-store <volume>] [--native-states <volume>]   (the fork's own copies; its chain's native states move there)
 //   node dsh/tools/history/run.mjs rebaseline --phase p2 --daemon <path> [--addon <path>] [--from-run <id>] [--run <id>]
 //   node dsh/tools/history/run.mjs rebaseline --prepare --phase p3 --git --daemon <path> --addon <path> [--plan <dir>] [--run <id>]
 //     then play ranges 2-4 one at a time (… --until lead, --resume --until lanes, --resume), then
@@ -78,6 +79,7 @@ import {
 import { addDelta, checkpointDiff, deltaSummary, deltaWork, diskGuard, diskModel, EXIT, nextPhase, oneshotSplit, p2Plan, pad, poolSharing, PHASES, phaseOps, Tree } from "./steps.mjs";
 import { ctxFromJson, cutTrace, decodeLate, dropHalf, LATE_STAGES, lateCtxFromJson, loadHalf, saveHalf } from "./halves.mjs";
 import { consolidateLanes, playAgents, pool, safeCut, startRange } from "./agents.mjs";
+import { NATIVE_STATES } from "./nativestate.mjs";
 import { growthByClass } from "./growth.mjs";
 import { gitFacts } from "./gitplay.mjs";
 import { checkNode, groupsFile, nodeOf } from "./nodelanes.mjs";
@@ -264,7 +266,7 @@ export function nextAttempt(metrics, k) {
   return 1 + Math.max(0, ...readdirSync(metrics).map((f) => Number(re.exec(f)?.[1] ?? 0)));
 }
 
-function create({ id, phase, label, policy, image, daemon, addon = ADDON, sdk = SDK_JS, source, plan = null, oracle = null }) {
+function create({ id, phase, label, policy, image, daemon, addon = ADDON, sdk = SDK_JS, source, plan = null, oracle = null, pnpmStore = null, nativeStates = null }) {
   if (!RUN_ID.test(id)) throw new Error(`run id ${id}: lowercase letters, digits and -`);
   if (!PHASES[phase]) throw new Error(`phase ${phase} has no player yet (built: ${Object.keys(PHASES).join(", ")})`);
   const dir = join(HISTORY, "runs", id);
@@ -275,6 +277,8 @@ function create({ id, phase, label, policy, image, daemon, addon = ADDON, sdk = 
     LAYERFS_HOME: join(dir, "home"), LAYERFS_DOCKER: host.replace(/^unix:\/\//, ""), LAYERFS_IMAGE: image, LAYERFS_VOLUME: volume,
     LAYERFS_DAEMON: daemon, LAYERFS_NATIVE: addon, LAYERFS_CONTAINER_PREFIX: `${PREFIX}-${id}-`,
     LAYERFS_CONSTRUCTION_WORKERS: "1", LAYERFS_STORE_PATH: STORE_PATH, LAYERFS_SDK_JS: sdk,
+    // the run's own pnpm store and native-state volume (--pnpm-store, --native-states; owner 2026-10-20)
+    ...(pnpmStore ? { LAYERFS_PNPM_STORE: pnpmStore } : {}), ...(nativeStates ? { LFS_NATIVE_STATES: nativeStates } : {}),
   };
   return { dir, volume, env, manifest: {
     run: id, phase, label, policyName: policy, policy: POLICIES[policy], project: "dsh", volume, env,
@@ -968,7 +972,7 @@ async function cmdFork(o) {
     if (!got) throw new Error(`range ${k} of ${source.manifest.run}: no metrics with storage parts; the fork's storage figures would start from range ${k - 1}`);
     Object.assign(p3.state, got); p3.from = `snapshot; parts from range-${pad(k)}.a${own.at(-1).attempt} metrics`;
   }
-  const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), addon: resolve(o.addon ?? source.manifest.env.LAYERFS_NATIVE ?? ADDON), sdk: resolve(o.sdk ?? source.manifest.env.LAYERFS_SDK_JS ?? SDK_JS), source: { run: source.manifest.run, range: k },
+  const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), addon: resolve(o.addon ?? source.manifest.env.LAYERFS_NATIVE ?? ADDON), sdk: resolve(o.sdk ?? source.manifest.env.LAYERFS_SDK_JS ?? SDK_JS), source: { run: source.manifest.run, range: k }, pnpmStore: o["pnpm-store"] ?? source.manifest.env.LAYERFS_PNPM_STORE ?? null, nativeStates: o["native-states"] ?? source.manifest.env.LFS_NATIVE_STATES ?? null,
     // a dev slice (slice.mjs): its own plan and oracle folders; never a measured run
     // a full plan (plan.mjs, e.g. plan-r1) for any label; a dev slice's plan and oracle for dev runs only
     ...(o.plan || o.oracle ? forkPlan(o) : {}) });
@@ -992,6 +996,16 @@ async function cmdFork(o) {
   execFileSync("chmod", ["700", env.LAYERFS_HOME]);
   execFileSync("cp", ["-p", record, join(env.LAYERFS_HOME, runManifest.project, "project.record")]);
   run.state = { ...manifest.state, ...p3.state, heads: {}, layers: {}, dirty: null, sinceMs: [], lastSnapshotMs: null, growth: [], storeBytes: manifest.size, probeFixture: true, forkedFrom: { run: source.manifest.run, range: k, sha256: manifest.sha256, p3StateFrom: p3.from } };
+  // the fork's own native-state volume (--native-states): the chain's snapshot tars are copied there, one cp each
+  const own = env.LFS_NATIVE_STATES;
+  if (own) for (const e of run.state.closureChain ?? []) {
+    const from = e.state?.volume ?? (e.state ? NATIVE_STATES : null);
+    if (!from || from === own) continue;
+    docker(["volume", "create", own]);
+    docker(["run", "--rm", "--network", "none", "--user", "0", "-v", `${from}:/a:ro`, "-v", `${own}:/b`, "--entrypoint", "cp", env.LAYERFS_IMAGE, `/a/${e.state.file}`, `/b/${e.state.file}`]);
+    run.note({ kind: "native-state copy", name: `${from}/${e.state.file} -> ${own}` });
+    e.state = { ...e.state, volume: own };
+  }
   run.save();
   // inspect.mjs reads the fork through this: its project, SDK, environment and rebuilt file
   writeJson(join(dir, "store.json"), { project: runManifest.project, sdk: join(env.LAYERFS_SDK_JS, "src/index.js"), env, file: restored, range: k, fork: o.run });

@@ -49,7 +49,7 @@ const pad = (n) => String(n).padStart(3, "0");
  * name makes a second container refuse to start while a killed run's one is
  * still there, instead of two writing the tree.
  */
-export function dockerArgs({ image, tree, store, network = "none", command, name = "layerfs-issue352-calibrate" }) {
+export function dockerArgs({ image, tree, store, network = "none", command, name = `${process.env.LFS_RESOURCE_PREFIX ?? "layerfs-issue352"}-calibrate` }) {
   const mount = store ? ["-v", `${store}:${STORE_MOUNT}${network === "none" ? ":ro" : ""}`] : [];
   return ["run", "--rm", "--name", name, "--network", network, "-v", `${tree}:/w`, "-v", `${here}:/t:ro`, ...mount, "-w", "/w", "--entrypoint", "sh", image, "-c", command];
 }

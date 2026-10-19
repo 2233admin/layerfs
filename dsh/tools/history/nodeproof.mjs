@@ -473,6 +473,9 @@ function loadRun(id) {
 const oracleDir = (run) => join(run.manifest.oracle, "node-points");
 const nativeName = () => `${process.env.LFS_RESOURCE_PREFIX ?? "layerfs-issue352"}-node-oracle`;
 const PNPM_STORE = "layerfs-issue352-pnpm-store";
+// a run's own pnpm store and native-state volume (owner 2026-10-20: sessions share nothing they write), else the shared ones
+const pnpmStore = (run) => run.manifest.env.LAYERFS_PNPM_STORE ?? PNPM_STORE;
+const nativeStates = (run) => run.manifest.env.LFS_NATIVE_STATES ?? NATIVE_STATES;
 
 /** The chain the range's lane points start from: the lead's install this range (§2), else the run's recorded chain. */
 function startChain(run, plan) {
@@ -505,7 +508,7 @@ async function cmdCalibrate(o) {
     const sel = await selectTests({ state: tree.files, changed, milestone: false, read });
     const states = [...chain, { tree: treeId, command: installCommand({ policy: node.storePolicy }) }];
     const tail = { build: pointBuild(tree.files, packages).command, packages, tests: sel.files, vitestTimeoutS: 90 };
-    const t0 = Date.now(), n = sel.files.length ? cachedOracle(join(oracleDir(run), "calibration"), { repo, states, tail, inputs: inputsHash(tree.files), image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : null;
+    const t0 = Date.now(), n = sel.files.length ? cachedOracle(join(oracleDir(run), "calibration"), { repo, states, tail, inputs: inputsHash(tree.files), image: run.manifest.env.LAYERFS_IMAGE, volume: pnpmStore(run), name: nativeName() }) : null;
     const chosen = n?.vitest?.results ? chooseFiles(n.vitest.results, n.vitest.durations, node.vitestCapMs) : { run: [], skipped: sel.files.map((file) => ({ file, reason: n ? "vitest report did not parse" : "no candidate" })), nativeMs: 0 };
     have.points = [...have.points.filter((h) => h.id !== pt.id), { id: pt.id, lane: pt.lane, point: pt.point, step: pt.step, tree: treeId, inputs: inputsHash(tree.files), packages, candidates: sel.files.length, dropped: sel.dropped,
       install: n ? { exit: n.exit } : null, tsc: n?.tsc ? { exit: n.tsc.exit, ms: n.tsc.ms } : null, vitestExit: n?.vitest?.exit ?? null, ...chosen, nativeChainMs: n?.ms ?? 0, image: run.manifest.env.LAYERFS_IMAGE }];
@@ -541,7 +544,7 @@ async function calibrateRepair(run, k, plan, have, file, { repo, base, baseTree,
   const tail = { ...(build ? { build: build.command, packages: build.packages } : {}), ...(test ? { tests: test.files, vitestTimeoutS: 90 } : {}) };
   const t0 = Date.now();
   let n = null, error = null;
-  try { n = cachedOracle(join(oracleDir(run), "calibration"), { repo, states, tail, inputs: "repair-calibration", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }); } catch (e) { error = String(e.message ?? e).slice(0, 800); }
+  try { n = cachedOracle(join(oracleDir(run), "calibration"), { repo, states, tail, inputs: "repair-calibration", image: run.manifest.env.LAYERFS_IMAGE, volume: pnpmStore(run), name: nativeName() }); } catch (e) { error = String(e.message ?? e).slice(0, 800); }
   const failedTests = n?.vitest?.results ? Object.entries(n.vitest.results).filter(([, r]) => r !== "pass").map(([f]) => f) : [];
   const broken = error ? [`did not run: ${error}`] : [...(n.exit !== 0 ? [`repair install exit ${n.exit}`] : []), ...(build && n.tsc?.exit !== 0 ? [`build exit ${n.tsc?.exit}: ${String(n.tsc?.output ?? "").slice(-300)}`] : []),
     ...(test && !n.vitest?.results ? ["vitest report did not parse"] : []), ...(failedTests.length ? [`${failedTests.length} calibrated test(s) fail natively: ${failedTests.slice(0, 3).join(", ")}`] : [])];
@@ -584,7 +587,7 @@ async function cmdSavestate(o) {
     const prefix = p.of.map(asState);
     if (!prefix.every((st, i) => c.states[i] && c.states[i].tree === st.tree && c.states[i].command === st.command && !!c.states[i].state === !!st.state)) throw new Error(`${o.check}: its chain does not begin with the snapshot's ${prefix.length} states`);
     const states = [{ ...p.state, ...(c.states[0].root ? { root: c.states[0].root } : {}) }, ...c.states.slice(prefix.length)];
-    const n = nativeChain({ repo, states, tail: c.tail ?? {}, image: c.image, volume: PNPM_STORE, name: nativeName() });
+    const n = nativeChain({ repo, states, tail: c.tail ?? {}, image: c.image, volume: pnpmStore(run), name: nativeName() });
     // what the proofs judge: build-output caches out of the groups (BUILD_GROUPS, as judgeP1), results by key
     const judged = (gs) => (gs ?? []).filter((g) => !BUILD_GROUPS.test(g.g)), sorted = (o) => (o ? Object.fromEntries(Object.entries(o).sort(([a], [b]) => (a < b ? -1 : 1))) : null);
     const pairs = { exit: [c.exit, n.exit], output: [c.output, n.output], groups: [judged(c.groups), judged(n.groups)], tsc: [c.tsc?.exit ?? null, n.tsc?.exit ?? null], emitted: [sorted(c.emitted), sorted(n.emitted)], vitest: [sorted(c.vitest?.results), sorted(n.vitest?.results)] };
@@ -598,8 +601,8 @@ async function cmdSavestate(o) {
   if (part.length < 2 || take > chain.length) throw new Error(`nothing to snapshot (${part.length} of ${chain.length} entries)`);
   const states = part.map(asState);
   const file = `state-${oracleKey({ tree: states.at(-1).tree, inputs: "native-state", states, tail: {}, image })}.tar`;
-  execFileSync("docker", ["volume", "create", NATIVE_STATES], { stdio: "ignore" });
-  const n = nativeChain({ repo, states, image, volume: PNPM_STORE, name: nativeName(), saveState: { file } });
+  execFileSync("docker", ["volume", "create", nativeStates(run)], { stdio: "ignore" });
+  const n = nativeChain({ repo, states, image, volume: pnpmStore(run), name: nativeName(), saveState: { file, volume: nativeStates(run) } });
   if (!n.saved?.sha256) throw new Error("the snapshot was not saved");
   const failed = n.steps.filter((s) => s.exit !== 0).length;
   const entry = { range: part.at(-1).range, checkpoint: part.at(-1).checkpoint, kind: "native-state", command: stateCommand(n.saved), root: null,
@@ -625,7 +628,7 @@ async function cmdInputs(o) {
           const id = await materialize(repo, baseTree, only, blobs), file = join(oracleDir(run), "inputs", `${inputs}.${node.storePolicy}.json`);
           let r = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
           if (!r) {
-            const n = nativeChain({ repo, states: [{ tree: id, command: installCommand({ policy: node.storePolicy }) }], image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() });
+            const n = nativeChain({ repo, states: [{ tree: id, command: installCommand({ policy: node.storePolicy }) }], image: run.manifest.env.LAYERFS_IMAGE, volume: pnpmStore(run), name: nativeName() });
             r = { inputs, exit: n.exit, outdated: /ERR_PNPM_OUTDATED_LOCKFILE/.test(n.output), policy: /ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION/.test(n.output), ms: n.ms };
             mkdirSync(join(oracleDir(run), "inputs"), { recursive: true }); writeFileSync(file, JSON.stringify(r));
           }
@@ -651,7 +654,7 @@ async function cmdReinstall(o) {
   const repo = scratchRepo(join(oracleDir(run), "repo.git"), run.manifest.repo);
   // the rebuild check's native rerun (design 8) after the reinstall, its whole --verbose output for the states
   const tail = rebuild ? { build: rebuild.command, packages: rebuild.packages, outputBytes: 1 << 20 } : {};
-  const n = cachedOracle(oracleDir(run), { repo, states: reinstallStates(run, m, k, step.command), tail, inputs: "reinstall-check", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() });
+  const n = cachedOracle(oracleDir(run), { repo, states: reinstallStates(run, m, k, step.command), tail, inputs: "reinstall-check", image: run.manifest.env.LAYERFS_IMAGE, volume: pnpmStore(run), name: nativeName() });
   const file = reinstallOracleFile(metrics, k);
   writeFileSync(`${file}.tmp`, JSON.stringify({ range: k, attempt: a, kind: "on-top", key: n.key, cached: n.cached, command: step.command, exit: n.exit, root: n.root, listerVersion: LISTER_VERSION, groups: n.groups, normalized: n.normalized,
     rebuild: rebuild && n.tsc ? { command: rebuild.command, exit: n.tsc.exit, ms: n.tsc.ms, states: tscStates(n.tsc.output, n.root) } : null, ms: n.ms }, null, 1));
@@ -697,7 +700,7 @@ async function cmdProofs(o) {
       const treeOk = !pt.treeLfs || pt.treeLfs === tree;
       const states = pt.lane === "lead" ? [{ tree, command: pt.install.command, ...at(pt.root) }] : [...chain0, ...m.node.points.filter((q) => q.lane === pt.lane && q.order < pt.order).flatMap(pointStates), { tree, command: pt.install.command, ...at(pt.root) }];
       const tail = { build: pt.tsc?.command ?? null, packages: pt.tsc?.packages ?? [], tests: pt.vitest?.files ?? [], vitestTimeoutS: 90 };
-      const { native, error } = treeOk ? tryNative({ repo, states, tail, inputs: pt.inputs, image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : { native: null, error: null };
+      const { native, error } = treeOk ? tryNative({ repo, states, tail, inputs: pt.inputs, image: run.manifest.env.LAYERFS_IMAGE, volume: pnpmStore(run), name: nativeName() }) : { native: null, error: null };
       const groups = existsSync(groupsFile(run, k, pt.id)) ? JSON.parse(readFileSync(groupsFile(run, k, pt.id), "utf8")) : null;
       const before = pt.lane === "lead" ? null : [m.node.points.find((q) => q.lane === "lead"), ...m.node.points.filter((q) => q.lane === pt.lane && q.order < pt.order)].filter(Boolean).at(-1);
       const prev = pt.lane === "lead" ? null : before?.inputs ?? m.node.chainInputs ?? null;
@@ -712,7 +715,7 @@ async function cmdProofs(o) {
     const inst = m.closure?.rows?.find((r) => /install/.test(r.kind));
     if (inst && !proofs["lead.repair"] && Date.now() - t0 <= budget) {
       const r = repairChain(run, m, k), tree = r.tree;
-      const { native, error } = r.complete ? tryNative({ repo, states: r.states, tail: r.tail, inputs: "repair", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : { native: null, error: null };
+      const { native, error } = r.complete ? tryNative({ repo, states: r.states, tail: r.tail, inputs: "repair", image: run.manifest.env.LAYERFS_IMAGE, volume: pnpmStore(run), name: nativeName() }) : { native: null, error: null };
       const groups = m.closure.repairGroups && existsSync(m.closure.repairGroups) ? JSON.parse(readFileSync(m.closure.repairGroups, "utf8")) : null;
       proofs["lead.repair"] = judgeRepair({ ...m.closure, tree }, native, { groups, nativeMs: native?.ms ?? null });
       if (proofs["lead.repair"]) Object.assign(proofs["lead.repair"], { ran: native?.ran ?? null, ...(error ? { nativeError: error } : {}) });

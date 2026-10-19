@@ -549,7 +549,7 @@ export function checkPlan(repo, planDir) {
 }
 
 /** The native install of one checkpoint's tree in the image (network off, read-only store): exit, output, lister groups. */
-export function nativeInstall({ repo, commit, image, volume, name = "layerfs-issue352-oracle", policy = "verified" }) {
+export function nativeInstall({ repo, commit, image, volume, name = `${process.env.LFS_RESOURCE_PREFIX ?? "layerfs-issue352"}-oracle`, policy = "verified" }) {
   const script = `mkdir ${ORACLE_ROOT} && tar -x -C ${ORACLE_ROOT} && cd ${ORACLE_ROOT} && (${installCommand({ policy })}) > /tmp/o 2>&1; echo "@@exit $?"; sed 's/^/@@out /' /tmp/o; ${listerCommand()}`;
   const archive = execFileSync("git", ["--git-dir", repo, "archive", commit], { maxBuffer: 1 << 30 });
   const t0 = Date.now();
@@ -573,7 +573,7 @@ export function nativeInstall({ repo, commit, image, volume, name = "layerfs-iss
  * final install's exit, output and lister groups are the oracle; each step's
  * exit is kept.
  */
-export function nativeSequence({ repo, chain, final, image, volume, name = "layerfs-issue352-oracle", dump = [] }) {
+export function nativeSequence({ repo, chain, final, image, volume, name = `${process.env.LFS_RESOURCE_PREFIX ?? "layerfs-issue352"}-oracle`, dump = [] }) {
   const steps = [...chain, { ...final, kind: "final" }];
   checkStates(steps);
   const stage = mkdtempSync(join(tmpdir(), "lfs352-seq-"));
@@ -622,7 +622,7 @@ export function nativeSequence({ repo, chain, final, image, volume, name = "laye
  * the image, network off, installed, built with `tsc -b`, then built again
  * with --verbose; the second run's project states (tscStates).
  */
-export function nativeRebuild({ repo, commit, image, volume, packages, name = "layerfs-issue352-oracle" }) {
+export function nativeRebuild({ repo, commit, image, volume, packages, name = `${process.env.LFS_RESOURCE_PREFIX ?? "layerfs-issue352"}-oracle` }) {
   const script = `mkdir /w && tar -x -C /w && cd /w && (${installCommand()}) > /dev/null 2>&1 && ${buildCommand(packages)} > /dev/null 2>&1; ${rebuildCommand(packages)} > /tmp/o 2>&1; echo "@@exit $?"; sed 's/^/@@out /' /tmp/o`;
   const archive = execFileSync("git", ["--git-dir", repo, "archive", commit], { maxBuffer: 1 << 30 });
   const r = spawnSync("docker", ["run", "--rm", "-i", "--name", name, "--network", "none", "-v", `${volume}:${STORE_MOUNT}:ro`, "--entrypoint", "sh", image, "-c", script], { input: archive, encoding: "utf8", maxBuffer: 1 << 28 });

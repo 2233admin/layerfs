@@ -26,7 +26,7 @@ import { dirname, join } from "node:path";
 import { FETCH } from "./calibrate-tests.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
-const NAME = "layerfs-issue352-fetch", PENDING = join(process.env.HOME, "lfs-history", "fetch", "pending.json");
+const NAME = `${process.env.LFS_RESOURCE_PREFIX ?? "layerfs-issue352"}-fetch`, PENDING = join(process.env.HOME, "lfs-history", "fetch", "pending.json");
 const LEDGER = join(process.env.HOME, "lfs-history", "ledger", "ledger.jsonl");
 const FILES = ["pnpm-lock.yaml", "pnpm-workspace.yaml", "package.json", ".npmrc"];
 
