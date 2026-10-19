@@ -63,6 +63,10 @@ pub struct CapturedNamespaceWork {
     /// Kept-base (mtime-only) inodes whose live row was carried past the
     /// install (STORAGE_BATCH_SPEC §4.8).
     pub live_rows_kept: u64,
+    /// Fresh files whose whole-content digest was recorded in the Store.
+    pub digests_recorded: u64,
+    /// Fresh files that reused a saved root with the same bytes (#364).
+    pub files_reused: u64,
     /// Record jobs of this adapter's normalization and cursor: a point the
     /// cursor answers from its retained window is not a job. Content's own
     /// state jobs in the same scope are in the records custody.

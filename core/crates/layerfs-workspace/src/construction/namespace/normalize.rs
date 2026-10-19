@@ -6,11 +6,14 @@ use super::{
     },
 };
 use crate::construction::outcome::nanos;
-use crate::{OverlayCapturedNamespace, OverlayOperationRecords, WorkspaceResult};
+use crate::{
+    FileDigestRow, OverlayCapturedNamespace, OverlayOperationRecords, WorkspaceResult,
+    FILE_DIGEST_WINDOW,
+};
 use layerfs_content::{
     filesystem::{FilesystemRead, PathName},
     object::inode_leaf::encode_inode_value,
-    ContentError, ContentResult, EditRecordChange, EditRecordExpected, FinalizedConsumer,
+    ContentError, ContentResult, EditRecordChange, EditRecordExpected, FinalizedConsumer, ObjectId,
 };
 use layerfs_overlay::{DirectoryEntry, Inode, InodeKind, PAGE_ROWS};
 use layerfs_telemetry::timer::{Active, TimingScope};
@@ -194,6 +197,23 @@ fn stored(facts: Facts, inode: &Inode) -> bool {
     inode.serial == facts.root_serial
         || (inode.nlink != 0 && !facts.reader.created_above(inode.born))
 }
+/// Records the pending fresh files' digests in the Store, one window.
+fn record_digests<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized>(
+    builder: &Builder<'_, '_, P>,
+    pending: &mut Vec<FileDigestRow>,
+) -> ContentResult<()> {
+    if let (Some(digests), false) = (builder.digests, pending.is_empty()) {
+        digests
+            .record_file_digests(pending)
+            .map_err(|original| builder.shared.borrow_mut().original(original))?;
+        add(
+            &mut builder.shared.borrow_mut().work.digests_recorded,
+            pending.len() as u64,
+        );
+    }
+    pending.clear();
+    Ok(())
+}
 /// One pass over every captured inode in serial order. A page's base records
 /// are one grouped demand; one file is under construction at a time.
 pub(crate) fn values<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized>(
@@ -210,6 +230,7 @@ pub(crate) fn values<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Si
         ..Totals::default()
     };
     let mut writer = Writer::default();
+    let mut pending = Vec::with_capacity(FILE_DIGEST_WINDOW);
     let mut after = 0_u64;
     loop {
         shared.borrow().ready()?;
@@ -233,6 +254,51 @@ pub(crate) fn values<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Si
             add(&mut shared.borrow_mut().work.base_lookups, 1);
             base.lookup_inodes(&demanded)?
         };
+        // The overlay's digests of this page's fresh files, one demand.
+        let followed: Vec<u64> = match builder.digests {
+            None => Vec::new(),
+            Some(_) => rows
+                .iter()
+                .filter(|inode| {
+                    inode.kind == InodeKind::File
+                        && inode.nlink != 0
+                        && inode.serial != facts.root_serial
+                        && facts.reader.created_above(inode.born)
+                })
+                .map(|inode| inode.serial)
+                .collect(),
+        };
+        let digests = if followed.is_empty() {
+            Vec::new()
+        } else {
+            provider
+                .captured_digests(facts.reader, &followed)
+                .map_err(|original| shared.borrow_mut().original(original))?
+        };
+        if digests.len() != followed.len() {
+            return Err(ContentError::InvalidRecord("captured digest page"));
+        }
+        // The saved roots that already hold those bytes, one Store demand
+        // per window.
+        let contents: Vec<([u8; 32], u64)> = digests
+            .iter()
+            .flatten()
+            .map(|captured| (captured.digest, captured.length))
+            .collect();
+        let mut saved = Vec::with_capacity(contents.len());
+        if let Some(store) = builder.digests {
+            for window in contents.chunks(FILE_DIGEST_WINDOW) {
+                let roots = store
+                    .file_roots(window)
+                    .map_err(|original| shared.borrow_mut().original(original))?;
+                if roots.len() != window.len() {
+                    return Err(ContentError::InvalidRecord("saved file root page"));
+                }
+                saved.extend(roots);
+            }
+        }
+        let mut saved = saved.into_iter();
+        let mut digests = followed.into_iter().zip(digests).peekable();
         add(&mut shared.borrow_mut().work.inode_page_ns, nanos(started));
         let mut bases = demanded.iter().copied().zip(records);
         for inode in &rows {
@@ -253,7 +319,29 @@ pub(crate) fn values<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Si
                     _ => return Err(ContentError::InvalidRecord("captured base inode demand")),
                 }
             };
-            let value = builder.value(inode, record, fresh, consumer, timing)?;
+            let captured = digests
+                .next_if(|(serial, _)| *serial == inode.serial)
+                .and_then(|(_, captured)| captured);
+            let reuse = match captured {
+                Some(_) => saved
+                    .next()
+                    .ok_or(ContentError::InvalidRecord("saved file root page"))?
+                    .map(|root| ObjectId::from_bytes(&root))
+                    .transpose()?,
+                None => None,
+            };
+            let value = builder.value(inode, record, fresh, reuse, consumer, timing)?;
+            // A root built from all of this file's bytes is recorded.
+            if let (Some(captured), None) = (captured, reuse) {
+                pending.push(FileDigestRow {
+                    root: value.content_root.to_bytes(),
+                    length: captured.length,
+                    digest: captured.digest,
+                });
+                if pending.len() == FILE_DIGEST_WINDOW {
+                    record_digests(builder, &mut pending)?;
+                }
+            }
             writer.reserve(shared, 3)?;
             if fresh {
                 // A fresh directory nobody named still needs its empty page.
@@ -285,5 +373,6 @@ pub(crate) fn values<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Si
             break;
         }
     }
+    record_digests(builder, &mut pending)?;
     Ok(totals)
 }

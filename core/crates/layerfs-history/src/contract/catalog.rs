@@ -178,6 +178,19 @@ pub trait HistoryCatalog: Send + Sync {
         Ok(Vec::new())
     }
 
+    /// Records whole-content digests of saved file roots (#364). Known
+    /// content keeps its first root. A provider that keeps none drops them.
+    fn record_file_digests(&self, _rows: &[crate::records::FileDigest]) -> HistoryResult<()> {
+        Ok(())
+    }
+
+    /// The recorded root of each of at most
+    /// [`crate::records::FILE_DIGEST_WINDOW`] (digest, length) pairs, in the
+    /// order asked; `None` where none is recorded.
+    fn file_roots(&self, contents: &[([u8; 32], u64)]) -> HistoryResult<Vec<Option<[u8; 32]>>> {
+        Ok(vec![None; contents.len()])
+    }
+
     /// Creates the genesis Layer and the stack atomically.
     fn initialize_layerstack(
         &self,

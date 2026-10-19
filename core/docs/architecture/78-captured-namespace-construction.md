@@ -183,6 +183,41 @@ records: `0x434E_0000` context, `0x434E_0001` header, `0x434E_0002` value,
 rows. `FilesystemResources` are Content's defaults; no Store-derived source
 exists.
 
+### Whole-file digests and object reuse (#364)
+
+Owner decision 2026-10-19 (#364 item 2): reuse the object only. A fresh
+file whose write-path digest and length match a saved file root reuses
+that object instead of being read and chunked again; it keeps its own
+serial, row and metadata, and design 8 is unchanged.
+
+- **Write path (Overlay).** A fresh regular file is followed with a BLAKE3
+  state while every byte it gains is an exact append; any other write, a
+  cell change, a size other than the followed length, a second link or a
+  non-file ends it for good. The state lives in the journaled open state,
+  never the bytes. With no descriptor open, the digest is written to
+  `fs_digest` pinned to the row's content sequence. A job that changes no
+  byte (a mode or time change at the same size) moves the pin; any other
+  row write leaves it behind. One slot resumes the last file finished
+  without a descriptor (chunked SDK writes), and an empty file still the
+  row it was created as resumes from no bytes.
+  [payload/digest.rs](../../crates/layerfs-overlay/src/payload/digest.rs).
+- **Store.** `file_digest(digest, length, root)`, keyed by digest and
+  length; known content keeps its first root. Older Stores gain the empty
+  table at open, so they match from their second Commit of the same bytes.
+  Init records none. Rows exist only for roots built from all their bytes.
+- **Inodes pass.** Per captured inode page, one overlay job reads the
+  fresh files' digests (`captured_digests`; a file open at that moment has
+  none) and one Store read per 64 of them returns any saved root with the
+  same digest and length (`FileDigests::file_roots`). A file with such a
+  root takes it as its content root; its metadata is built from its own
+  row as for any fresh file. Every other followed file is built in full,
+  and its `(root, length, digest)` is recorded, 64 rows per write, before
+  the publication lane. Names play no part: a copy at any path matches.
+
+The reused root is the one a fresh build of the same bytes under the
+Store's policy gives, and Save's reference check still refuses a missing
+object.
+
 ### Custody
 
 `construct` returns `CapturedNamespaceAttempt { result, custody }` and releases

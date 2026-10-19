@@ -9,6 +9,7 @@ use support::*;
 const HISTORY: &str = include_str!("../sql/sqlite/history.sql");
 const LINEAGE: &str = include_str!("../sql/sqlite/lineage.sql");
 const SCRATCH: &str = include_str!("../sql/sqlite/merge_scratch.sql");
+const DIGESTS: &str = include_str!("../sql/sqlite/file_digest.sql");
 
 /// The table's definition as the history schema writes it, with its trailing
 /// blank line: the text an old Store's recorded schema source lacks.
@@ -38,7 +39,7 @@ fn make_old(path: &std::path::Path) {
     sql.execute_batch(
         "DROP TABLE binding_hint; DROP TABLE layer_lineage; DROP TABLE commit_lineage; \
          DROP TABLE absorbed; DROP TABLE reach; DROP TABLE merge_operation; \
-         DROP TABLE merge_record;",
+         DROP TABLE merge_record; DROP TABLE file_digest;",
     )
     .unwrap();
     let source: String = sql
@@ -47,7 +48,8 @@ fn make_old(path: &std::path::Path) {
     let old = source
         .replacen(&hint_table(), "", 1)
         .replacen(LINEAGE, "", 1)
-        .replacen(SCRATCH, "", 1);
+        .replacen(SCRATCH, "", 1)
+        .replacen(DIGESTS, "", 1);
     assert_ne!(old, source, "the history schema holds the table");
     sql.execute(
         "UPDATE history_meta SET schema_source=?1, schema_definition=?2",

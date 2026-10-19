@@ -66,6 +66,7 @@ pub use operations::kernel_visit::{
     KernelInput, KernelMutationVisit, KernelReadVisit, KernelVisitRequest,
 };
 pub use port::OverlayCapturedNamespace;
+pub use port::{FileDigestRow, FileDigests, FILE_DIGEST_WINDOW};
 pub use port::{FileLengths, OverlayCapturedRuns, OverlayFileRead, OverlayJobs, OverlayRead};
 pub use port::{
     OperationRecordApply, OperationRecordCopies, OperationRecordInputRefusal,

@@ -16,6 +16,12 @@ impl HistoryCatalog for HistoryProvider {
     fn bindings_of(&self, child: u64) -> HistoryResult<Vec<BindingHint>> {
         self.read(|tx| hints::of(tx, child))
     }
+    fn record_file_digests(&self, rows: &[layerfs_history::FileDigest]) -> HistoryResult<()> {
+        self.write(|tx| super::digests::record(tx, rows))
+    }
+    fn file_roots(&self, contents: &[([u8; 32], u64)]) -> HistoryResult<Vec<Option<[u8; 32]>>> {
+        self.read(|tx| super::digests::roots(tx, contents))
+    }
     fn catalog_id(&self) -> CatalogId {
         self.catalog_id
     }

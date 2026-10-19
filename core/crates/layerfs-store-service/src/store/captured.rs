@@ -137,9 +137,11 @@ impl BoundWorkspace {
             sink: save.sink(),
             constructed,
         };
+        let digests = super::digests::StoreDigests(&*self.store.history);
         let attempt = crate::telemetry::timed("captured.namespace", |scope| {
             Ok::<_, std::convert::Infallible>(
                 CapturedNamespace::new(operation.workspace(), operation.overlay(), reader, owner)
+                    .with_digests(&digests)
                     .construct(
                         policy,
                         &policy.capacities(),

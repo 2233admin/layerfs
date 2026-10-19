@@ -44,6 +44,16 @@ pub trait OverlayCapturedNamespace: OverlayCapturedRuns {
     /// one write, and none when the active generation already has a row
     /// (STORAGE_BATCH_SPEC §4.8). True when a row was written.
     fn keep_live_row(&self, reader: CapturedReader, serial: u64) -> WorkspaceResult<bool>;
+    /// Each serial's whole-content digest of its captured bytes, when the
+    /// overlay followed them from creation (#364); at most PAGE_ROWS
+    /// serials. A provider that keeps none answers None for each.
+    fn captured_digests(
+        &self,
+        _reader: CapturedReader,
+        serials: &[u64],
+    ) -> WorkspaceResult<Vec<Option<layerfs_overlay::CapturedDigest>>> {
+        Ok(vec![None; serials.len()])
+    }
 }
 
 impl OverlayCapturedNamespace for layerfs_overlay::Overlay {
@@ -95,5 +105,12 @@ impl OverlayCapturedNamespace for layerfs_overlay::Overlay {
 
     fn keep_live_row(&self, reader: CapturedReader, serial: u64) -> WorkspaceResult<bool> {
         layerfs_overlay::Overlay::keep_live_row(self, reader, serial).map_err(Into::into)
+    }
+    fn captured_digests(
+        &self,
+        reader: CapturedReader,
+        serials: &[u64],
+    ) -> WorkspaceResult<Vec<Option<layerfs_overlay::CapturedDigest>>> {
+        layerfs_overlay::Overlay::captured_digests(self, reader, serials).map_err(Into::into)
     }
 }

@@ -7,8 +7,8 @@ use super::outcome::{
 };
 use crate::Route;
 use crate::{
-    BaseView, IndexedConstructionRecords, OverlayCapturedNamespace, OverlayOperationRecords,
-    Workspace, WorkspaceResult,
+    BaseView, FileDigests, IndexedConstructionRecords, OverlayCapturedNamespace,
+    OverlayOperationRecords, Workspace, WorkspaceResult,
 };
 use layerfs_content::{
     filesystem::{
@@ -58,6 +58,7 @@ pub struct CapturedNamespace<'a, P: OverlayCapturedNamespace + OverlayOperationR
     base: WorkspaceResult<BaseView>,
     reader: CapturedReader,
     operation: OperationOwner,
+    digests: Option<&'a dyn FileDigests>,
 }
 /// The borrowed inputs of the single running attempt.
 struct Attempt<'s, 'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> {
@@ -69,6 +70,7 @@ struct Attempt<'s, 'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?
     policy: ConstructionPolicy,
     capacities: &'s ConstructionCapacities,
     objects: &'s dyn AuthenticatedObjects,
+    digests: Option<&'a dyn FileDigests>,
 }
 impl<'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> CapturedNamespace<'a, P> {
     /// Binds exact inputs. Performs no I/O: the Workspace's selected binding
@@ -100,7 +102,14 @@ impl<'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Capture
             base: workspace.base(),
             reader,
             operation,
+            digests: None,
         }
+    }
+    /// Records each fresh file's whole-content digest, when the overlay
+    /// kept one, in the Store through `digests` (#364).
+    pub fn with_digests(mut self, digests: &'a dyn FileDigests) -> Self {
+        self.digests = Some(digests);
+        self
     }
     /// One attempt: normalize, construct changed files and metadata, then the
     /// canonical update, with the caller's actual Store-derived file policy and
@@ -121,6 +130,7 @@ impl<'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Capture
             base,
             reader,
             operation,
+            digests,
         } = self;
         let attempt = Attempt {
             provider,
@@ -131,6 +141,7 @@ impl<'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Capture
             policy,
             capacities,
             objects,
+            digests,
         };
         let result = scope.run(|timing| attempt.run(base, consumer, timing));
         if let Err(original) = &result {
@@ -232,6 +243,7 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Attempt<'_,
             policy: self.policy,
             capacities: self.capacities,
             objects: self.objects,
+            digests: self.digests,
         };
         let started = Instant::now();
         let mut timed = Timed { consumer, ns: 0 };

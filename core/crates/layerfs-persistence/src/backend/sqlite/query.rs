@@ -26,6 +26,12 @@ pub(crate) fn history(key: &str) -> Result<&'static str, BackendError> {
         "hint_bindings_of" => Ok(include_str!(
             "../../../sql/sqlite/queries/history/hint_bindings_of.sql"
         )),
+        "digest_insert" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/digest_insert.sql"
+        )),
+        "digest_of" => Ok(include_str!(
+            "../../../sql/sqlite/queries/history/digest_of.sql"
+        )),
         "branch_branch_by_id" => Ok(include_str!(
             "../../../sql/sqlite/queries/history/branch_branch_by_id.sql"
         )),

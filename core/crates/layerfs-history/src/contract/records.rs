@@ -580,6 +580,23 @@ pub struct StoreStatistics {
     pub init: Option<InitStatistics>,
 }
 
+/// Contents one `file_roots` demand asks about.
+pub const FILE_DIGEST_WINDOW: usize = 64;
+
+/// The whole-content digest of one saved regular-file root (#364): BLAKE3
+/// of its `length` bytes, recorded by the Commit that built the root from
+/// exactly those bytes. A file with the same digest and length has the same
+/// bytes, so that root serves it without reading or building it again.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FileDigest {
+    /// The file root's object identity bytes.
+    pub root: [u8; 32],
+    /// The file's logical length.
+    pub length: u64,
+    /// BLAKE3 of the file's bytes.
+    pub digest: [u8; 32],
+}
+
 /// One name binding a saved tree holds: `name` in directory `parent` names
 /// inode `child`. A recorded binding is a hint, not a fact of any one tree:
 /// a reader checks it against the tree it asks about before using it.

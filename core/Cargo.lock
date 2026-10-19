@@ -581,6 +581,7 @@ dependencies = [
 name = "layerfs-daemon"
 version = "0.1.7"
 dependencies = [
+ "blake3",
  "layerfs-api",
  "layerfs-bridge",
  "layerfs-content",

@@ -83,4 +83,17 @@ impl OverlayCapturedNamespace for OwnerClient {
             })
         })
     }
+
+    fn captured_digests(
+        &self,
+        reader: CapturedReader,
+        serials: &[u64],
+    ) -> WorkspaceResult<Vec<Option<layerfs_overlay::CapturedDigest>>> {
+        let serials = serials.to_vec();
+        self.captured_namespace_job(|job_client: &crate::OwnerClient, route| {
+            job_client.call(route, crate::ServiceClass::General, None, move |db| {
+                db.captured_digests(reader, &serials)
+            })
+        })
+    }
 }

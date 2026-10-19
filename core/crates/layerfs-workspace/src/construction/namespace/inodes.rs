@@ -2,7 +2,8 @@
 use super::records::{add, key, read_number, Facts, Shared, HEADER};
 use crate::construction::outcome::nanos;
 use crate::{
-    BaseView, CapturedFileEdits, OverlayCapturedNamespace, OverlayOperationRecords, Workspace,
+    BaseView, CapturedFileEdits, FileDigests, OverlayCapturedNamespace, OverlayOperationRecords,
+    Workspace,
 };
 use layerfs_content::{
     filesystem::{
@@ -34,6 +35,8 @@ pub(crate) struct Builder<'s, 'a, P: OverlayCapturedNamespace + OverlayOperation
     pub policy: ConstructionPolicy,
     pub capacities: &'s ConstructionCapacities,
     pub objects: &'s dyn AuthenticatedObjects,
+    /// Where fresh files' digests are recorded; None records nothing.
+    pub digests: Option<&'a dyn FileDigests>,
 }
 fn canonical(kind: InodeKind) -> CanonicalKind {
     match kind {
@@ -44,13 +47,15 @@ fn canonical(kind: InodeKind) -> CanonicalKind {
 }
 impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_, '_, P> {
     /// `stored` is the immutable base record of a live base inode and None for
-    /// a fresh one. Base roots are kept except a file's constructed content and
+    /// a fresh one; `reuse` is a saved root holding a fresh file's exact
+    /// bytes. Base roots are kept except a file's constructed content and
     /// the patched metadata; the supplied count is derived again by Content.
     pub fn value(
         &self,
         inode: &Inode,
         stored: Option<InodeValue>,
         fresh: bool,
+        reuse: Option<ObjectId>,
         consumer: &mut dyn FinalizedConsumer,
         timing: &TimingScope<'_, Active>,
     ) -> ContentResult<InodeValue> {
@@ -69,13 +74,21 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
                 ))
             }
         };
-        let content_root = match (inode.kind, stored) {
-            (InodeKind::File, _) => self.file(inode.serial, stored.is_none(), consumer, timing)?,
-            (InodeKind::Symlink, None) => self.symlink(inode.serial, consumer)?,
+        let content_root = match (inode.kind, stored, reuse) {
+            // A fresh file whose bytes a saved root already holds reuses
+            // that object: neither read nor built again (#364).
+            (InodeKind::File, None, Some(root)) => {
+                add(&mut self.shared.borrow_mut().work.files_reused, 1);
+                root
+            }
+            (InodeKind::File, _, _) => {
+                self.file(inode.serial, stored.is_none(), consumer, timing)?
+            }
+            (InodeKind::Symlink, None, _) => self.symlink(inode.serial, consumer)?,
             // Content builds a fresh directory's page from its header and
             // replaces this root; the zero identity names no object.
-            (InodeKind::Directory, None) => ObjectId::from_bytes(&[0; 32])?,
-            (_, Some(stored)) => stored.content_root,
+            (InodeKind::Directory, None, _) => ObjectId::from_bytes(&[0; 32])?,
+            (_, Some(stored), _) => stored.content_root,
         };
         let live = PortableMetadata {
             mode: u32::from(inode.mode),
