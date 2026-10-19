@@ -14,8 +14,13 @@ export const nodeOf = (manifest) => ({ on: !!manifest?.node?.on, inputsRule: man
  */
 export const F057_UNITS = [{ name: "install", patterns: ["node_modules", "packages/*/*/node_modules"] }, { name: "build", patterns: ["packages/*/*/lib", "**/tsconfig.tsbuildinfo"] }];
 export const diagUnits = (manifest) => (manifest?.diagUnits ? F057_UNITS : null);
-/** Emitted JavaScript and declarations under the packages' lib/ and dist/, as `blob path` lines (P4). */
-export const EMITTED = `const fs=require("fs"),c=require("crypto"),re=/\\.(js|mjs|cjs|d\\.ts|d\\.mts|d\\.cts)$/;const walk=(d)=>{let es;try{es=fs.readdirSync(d,{withFileTypes:true})}catch{return}for(const e of es){const p=d+"/"+e.name;if(e.isDirectory()){if(e.name!=="node_modules")walk(p)}else if(e.isFile()&&re.test(e.name)){const b=fs.readFileSync(p);process.stdout.write(c.createHash("sha1").update("blob "+b.length+"\\0").update(b).digest("hex")+" "+p+"\\n")}}};for(const k of process.argv.slice(1))for(const o of ["lib","dist"])walk(k==="."?o:k+"/"+o)`;
+/**
+ * Emitted JavaScript and declarations under the packages' lib/ and dist/, as `blob path` lines (P4). A file with a
+ * run of two or more `"key": "value"` lines is hashed with each run sorted and its commas dropped: tsdown emits a
+ * CSS module's class map in no fixed order, so two native builds of one tree differ there (r028 a1, fix 053).
+ * Every other file's id is its git blob id.
+ */
+export const EMITTED = `const fs=require("fs"),c=require("crypto"),re=/\\.(js|mjs|cjs|d\\.ts|d\\.mts|d\\.cts)$/,kv=/^\\s*"[^"]*": "[^"]*",?$/;const norm=(b)=>{const L=b.toString("utf8").split("\\n"),o=[];let r=[],runs=0;const f=()=>{if(r.length>1){runs++;o.push(...r.map((l)=>l.replace(/,$/,"")).sort())}else o.push(...r);r=[]};for(const l of L){if(kv.test(l))r.push(l);else{f();o.push(l)}}f();return runs?Buffer.from(o.join("\\n")):b};const walk=(d)=>{let es;try{es=fs.readdirSync(d,{withFileTypes:true})}catch{return}for(const e of es){const p=d+"/"+e.name;if(e.isDirectory()){if(e.name!=="node_modules")walk(p)}else if(e.isFile()&&re.test(e.name)){const b=norm(fs.readFileSync(p));process.stdout.write(c.createHash("sha1").update("blob "+b.length+"\\0").update(b).digest("hex")+" "+p+"\\n")}}};for(const k of process.argv.slice(1))for(const o of ["lib","dist"])walk(k==="."?o:k+"/"+o)`;
 export const emittedCommand = (packages) => `node -e ${quote(EMITTED)} ${packages.map(quote).join(" ")}`;
 export const parseEmitted = (stdout) => Object.fromEntries(String(stdout).split("\n").filter(Boolean).map((l) => { const at = l.indexOf(" "); return [l.slice(at + 1), l.slice(0, at)]; }));
 

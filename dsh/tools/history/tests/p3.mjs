@@ -599,6 +599,32 @@ exit 1
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("emitted ids: a CSS-module class map in another order hashes the same; a plain file keeps its git blob id (r028 a1)", async () => {
+  const { emittedCommand } = await import("../nodeconfig.mjs");
+  const dir = mkdtempSync(join(tmpdir(), "emit-"));
+  try {
+    const map = (keys) => `const s = {\n${keys.map((k, i) => `\t"${k}": "x_${k}"${i < keys.length - 1 ? "," : ""}`).join("\n")}\n};\nexport default s;\n`;
+    for (const [side, keys] of [["a", ["one", "two", "three"]], ["b", ["three", "one", "two"]], ["c", ["one", "two", "four"]]]) {
+      mkdirSync(join(dir, side, "p/lib"), { recursive: true });
+      writeFileSync(join(dir, side, "p/lib/client.js"), map(keys));
+      writeFileSync(join(dir, side, "p/lib/plain.js"), "export const a = 1;\n");
+    }
+    const ids = (side) => Object.fromEntries(execFileSync("sh", ["-c", emittedCommand(["p"])], { cwd: join(dir, side), encoding: "utf8" }).trim().split("\n").map((l) => l.split(" ").reverse()));
+    const a = ids("a"), b = ids("b"), c = ids("c");
+    assert.equal(a["p/lib/client.js"], b["p/lib/client.js"]);
+    assert.notEqual(a["p/lib/client.js"], c["p/lib/client.js"]);
+    assert.equal(a["p/lib/plain.js"], execFileSync("git", ["hash-object", join(dir, "a", "p/lib/plain.js")], { encoding: "utf8" }).trim());
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("oracleKey: a tail with a build or tests carries the harness's emitted-id and vitest commands; a snapshot key does not (fix 053)", () => {
+  const st = { tree: "t", command: "c" };
+  const k = (tail) => oracleKey({ tree: "t", states: [st], tail });
+  assert.notEqual(k({ build: "b" }), k({}));
+  assert.notEqual(k({ tests: ["x"] }), k({ tests: [] }));
+  assert.equal(k({}), oracleKey({ tree: "t", states: [st], tail: {} }));
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try { await fn(); console.log(`ok ${name}`); } catch (e) { failed++; console.log(`FAIL ${name}\n${e.stack}`); }

@@ -29,7 +29,7 @@ import { BlobCache, lsTree } from "./git.mjs";
 import { compareInstalled, LISTER_VERSION, listerCommand, normalizeOutput, ORACLE_ROOT, parseLister, rootless, STORE_MOUNT, firstDifference } from "./closure.mjs";
 import { emittedCommand, groupsFile, inputsHash, nodeOf, parseEmitted, pointBuild, testPoints, treeDelta, wholeBuild, changedPackages } from "./nodelanes.mjs";
 import { buildCommand, planClosure, tscStates } from "./closure.mjs";
-import { BUILD_GROUPS, diagUnits, vitestMessages } from "./nodeconfig.mjs";
+import { BUILD_GROUPS, diagUnits, EMITTED, vitestMessages } from "./nodeconfig.mjs";
 export { BUILD_GROUPS };
 import { selectTests, vitestCommand } from "./unit-tests.mjs";
 import { devSteps } from "./devcheck.mjs";
@@ -245,7 +245,10 @@ export const CHAIN_VERSION = 2;
 /** The lanes' merge (fix 042) in the key of a chain with lane states only: 2 after the a2 silent-failure fix. */
 export const LANE_MERGE_VERSION = 3;
 export const oracleKey = ({ tree, inputs, states, tail, image }) => createHash("sha256").update(JSON.stringify({ v: LISTER_VERSION, chain: CHAIN_VERSION, tree, inputs, states, tail, image,
-  laneMerge: states?.some((st) => st.lane) ? LANE_MERGE_VERSION : undefined })).digest("hex").slice(0, 24);
+  laneMerge: states?.some((st) => st.lane) ? LANE_MERGE_VERSION : undefined,
+  // the tail's own commands (r028 a1, fix 053): an oracle built with an older emitted-id or vitest command is not reused
+  tailCommands: tail?.build || tail?.tests?.length ? tailCommands() : undefined })).digest("hex").slice(0, 24);
+const tailCommands = () => createHash("sha256").update(`${EMITTED}\0${vitestCommand(["f"], 1)}`).digest("hex").slice(0, 16);
 
 /**
  * The pnpm store's generation: its fetch batches in the ledger (fix 048, r021 a1). A fetch changes what an offline
