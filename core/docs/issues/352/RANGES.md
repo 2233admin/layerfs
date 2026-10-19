@@ -29,3 +29,4 @@
 | 022 | 63 | 23,062 | **stop** | Disk projection | 40.5 MiB | [range-022](ranges/range-022.md) |
 | 023 | 63 | 24,522 | **watch** | Speed | 67.8 MiB | [range-023](ranges/range-023.md) |
 | 024 | 61 | 25,762 | **watch** | Speed | 30.5 MiB | [range-024](ranges/range-024.md) |
+| 025 | 64 | 27,563 | **optimize** | Counters | 97.3 MiB | [range-025](ranges/range-025.md) |
