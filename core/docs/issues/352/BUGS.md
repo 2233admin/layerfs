@@ -1039,7 +1039,7 @@
   - With fix 043's clean, tsdown took `packages/ui/stdio-agent` as a package
     without `lib/types` natively: `UNRESOLVED_ENTRY`, native exit 1 against
     LayerFS 0. The repair's P6 stopped: "P4 stop (tsc exit 0, native 1)".
-  - Fix (fix 044): `repairChain` gives the repair state the reconcile's `rm`
+  - Fix (fix 045): `repairChain` gives the repair state the reconcile's `rm`
     paths (`remove`), and `nativeChain` removes them before the state.
     `LANE_MERGE_VERSION` 3 re-keys the chains. Natively r19 a3's repair build
     then exits 0 with 721 emitted files, all equal to LayerFS's (diagnostic). No

@@ -55,7 +55,7 @@
   (exit 1). Natively it failed the same way.
 - The repair now runs the whole build after its clean (`repairBuild(files)` =
   clean + `wholeBuild`). Natively that build of r18 exits 0 in 7.7 s with 719
-  emitted files (diagnostic without lane states, see fix 044; r18 a6's proof,
+  emitted files (diagnostic without lane states, see fix 045; r18 a6's proof,
   with lanes, then passed P6). The test pins the whole build. Recovery: range 18
   attempt 6 from the r017 snapshot, then range 19 attempt 2.
 
@@ -70,7 +70,7 @@
   `packages/`, then prunes empty folders (`PRUNE_EMPTY`). The repair install
   already removed their `node_modules`, so the orphan folders go, as on a fresh
   checkout. Natively the r19 repair build then exits 0 in 7.5 s with 721
-  emitted files (diagnostic; that chain had no lane states, see fix 044). The test pins the sweep. Recovery: range 19
+  emitted files (diagnostic; that chain had no lane states, see fix 045). The test pins the sweep. Recovery: range 19
   attempt 3 from `p3-main-l`'s r018 snapshot.
 
 ## A closure chain reset, tried and reverted (range 20)
