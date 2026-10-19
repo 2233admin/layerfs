@@ -6,7 +6,7 @@ use layerfs_content::{
     file::mapping::FILE_STATE_CANONICAL_BYTES, policy::WHOLE_FILE_CANONICAL_OVERHEAD,
 };
 use layerfs_storage::policy::READ_CANONICAL_BYTES_LIMIT;
-use layerfs_store_service::sdk::cached::{batches, root_bound, ROOTS, ROOT_BYTES};
+use layerfs_store_service::read::cached::{batches, root_bound, ROOTS, ROOT_BYTES};
 
 // The batch bound is well inside the storage reader's demand limit.
 const _: () = assert!(ROOT_BYTES <= READ_CANONICAL_BYTES_LIMIT / 8);

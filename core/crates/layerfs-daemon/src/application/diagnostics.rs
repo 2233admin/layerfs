@@ -142,12 +142,7 @@ pub(super) type Observed = (
     Option<SdkValue>,
 );
 impl Application {
-    pub(super) fn observed_control(
-        &self,
-        call: &Call,
-        slot: usize,
-        bodies: &mut crate::sdk::Bodies<'_>,
-    ) -> Observed {
+    pub(super) fn observed_control(&self, call: &Call, slot: usize) -> Observed {
         let operation = match call.request.without_observation() {
             Ok(operation) => operation,
             Err(_) => {
@@ -200,7 +195,7 @@ impl Application {
         let saves_before = saves.as_ref().map(|store| store.save_counters());
         let observed_before = observing.elapsed();
         let recording = traced.then(crate::telemetry::Recording::start);
-        let outcome = self.control_operation(operation, slot, bodies);
+        let outcome = self.control_operation(operation, slot);
         let reports = recording.map(crate::telemetry::Recording::finish);
         let observed_after = std::time::Instant::now();
         let sql = sessions

@@ -1,4 +1,5 @@
 //! Operator Store calls: Store and file statistics and the read model.
+pub mod args;
 pub mod files;
 pub mod inspect;
 pub mod store;

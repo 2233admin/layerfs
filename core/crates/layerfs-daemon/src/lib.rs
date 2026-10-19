@@ -16,7 +16,6 @@ mod operator;
 mod service;
 pub use service::{request as mount_request, Mounted};
 pub mod telemetry;
-pub(crate) use layerfs_store_service::sdk;
 pub use layerfs_store_service::{bootstrap, store};
 
 pub use layerfs_store_service::{

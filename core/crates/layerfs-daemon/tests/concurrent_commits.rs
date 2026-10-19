@@ -4,18 +4,18 @@
 //! start the Commits together and every wait is bounded by the test ceiling.
 //! Workspace Commits go through the daemon; the SDK calls that set up and read
 //! back run in-process over the same Store (#352 F-020).
-#[path = "../../layerfs-store-service/tests/support/installed_store.rs"]
+#[path = "../../layerfs-api/tests/support/installed_store.rs"]
 #[allow(dead_code)]
 mod installed;
-#[path = "../../layerfs-store-service/tests/support/sdk.rs"]
+#[path = "../../layerfs-api/tests/support/sdk.rs"]
 #[allow(dead_code)]
 mod support;
 
 use layerfs_bridge::control::{CommitControl, Reply, Request, SdkValue, UnmountControl};
 use layerfs_content::filesystem::PathName;
+use layerfs_daemon::control::Service;
 use layerfs_history::{BranchId, HistoryName, LayerStackId, WorkspaceId};
 use layerfs_workspace::{Operation, Outcome, Position, Time};
-use layerfs_daemon::control::Service;
 use std::{fs, sync::Barrier};
 
 const LANE: &str = "lane";

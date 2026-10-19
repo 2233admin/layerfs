@@ -1,8 +1,9 @@
 //! Publication counters and Init's recorded totals; diagnostics never scan the object catalog.
+use super::args::{paging, project, text};
 use crate::{
-    sdk::{
-        args::{self, Answer},
+    history::{
         branch,
+        lookup::{self as args, Answer},
     },
     store::Store,
 };
@@ -46,7 +47,10 @@ pub fn stats(store: &Arc<Store>) -> Answer {
 }
 
 pub fn commits(store: &Arc<Store>, args: &SdkValue) -> Answer {
-    let value = branch::list_commits(store, args)?;
+    let stack = project(store, args)?;
+    let named = args::branch(store, &stack, text(args, "branch")?)?;
+    let (limit, pos) = paging(args)?;
+    let value = branch::list_commits(store, &named, limit, pos)?;
     let items = match value.get("items") {
         Some(SdkValue::List(items)) => items
             .iter()
@@ -87,12 +91,12 @@ pub fn commits(store: &Arc<Store>, args: &SdkValue) -> Answer {
 /// `operator.store.overwritten({ layer, pageSize?, pagePos? })`: the Layers a
 /// publication overwrote, newest first, one page.
 pub fn overwritten(store: &Arc<Store>, args: &SdkValue) -> Answer {
-    args::project(store, args)?;
-    let layer = match args::node(args::text(args, "layer")?)? {
+    project(store, args)?;
+    let layer = match args::node(text(args, "layer")?)? {
         NodeId::Layer(layer) => layer,
         NodeId::Commit(_) => return Err(args::invalid("overwritten takes a Layer")),
     };
-    let (limit, pos) = args::paging(args)?;
+    let (limit, pos) = paging(args)?;
     let (items, more) = branch::overwritten(store, layer, pos, limit)?;
     let next = args::next_page(pos, items.len(), more);
     Ok(SdkValue::map([

@@ -549,11 +549,15 @@ dependencies = [
  "layerfs-bridge",
  "layerfs-content",
  "layerfs-history",
+ "layerfs-overlay",
  "layerfs-persistence",
  "layerfs-project",
  "layerfs-sandbox",
  "layerfs-storage",
+ "layerfs-store-service",
  "layerfs-telemetry",
+ "layerfs-workspace",
+ "rusqlite",
 ]
 
 [[package]]
@@ -689,12 +693,10 @@ dependencies = [
  "layerfs-history",
  "layerfs-overlay",
  "layerfs-persistence",
- "layerfs-project",
  "layerfs-storage",
  "layerfs-telemetry",
  "layerfs-workspace",
  "nix",
- "rusqlite",
 ]
 
 [[package]]

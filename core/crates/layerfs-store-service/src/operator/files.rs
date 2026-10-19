@@ -1,11 +1,10 @@
 //! File revisions from persisted first-parent facts. No reconstructed UI history.
+use super::args::{paging, text};
 use crate::{
-    sdk::{
-        args::{self, Answer},
-        files::path as checked,
-        snapshot,
-    },
+    history::lookup::{self as args, Answer},
+    read::snapshot,
     store::{Store, StorePorts},
+    write::files::path as checked,
 };
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use layerfs_content::{
@@ -58,9 +57,9 @@ pub fn entry(
 }
 
 pub fn history(store: &Arc<Store>, args: &SdkValue) -> Answer {
-    let (_, reader, snap) = snapshot::open(store, args)?;
-    let path = checked(args::text(args, "path")?)?;
-    let (limit, pos) = args::paging(args)?;
+    let (_, reader, snap) = super::args::snapshot(store, args)?;
+    let path = checked(text(args, "path")?)?;
+    let (limit, pos) = paging(args)?;
     let (mut next, mut seen, mut items, mut spent, mut more) =
         (Some(snap.node), 0u64, Vec::new(), 0, false);
     while let Some(node) = next {
@@ -86,7 +85,7 @@ pub fn history(store: &Arc<Store>, args: &SdkValue) -> Answer {
             continue;
         }
         let cost = record.get_text("message").map_or(0, str::len) + 1024;
-        if items.len() == limit || spent + cost > crate::sdk::window::BYTES {
+        if items.len() == limit || spent + cost > crate::read::window::BYTES {
             more = true;
             break;
         }
@@ -130,8 +129,8 @@ pub fn history(store: &Arc<Store>, args: &SdkValue) -> Answer {
 }
 
 pub fn stats(store: &Arc<Store>, args: &SdkValue) -> Answer {
-    let (_, reader, snap) = snapshot::open(store, args)?;
-    let path = checked(args::text(args, "path")?)?;
+    let (_, reader, snap) = super::args::snapshot(store, args)?;
+    let path = checked(text(args, "path")?)?;
     let current = snapshot::entry(&reader, &snap.tree, &path)?;
     let size = current
         .map(|entry| snapshot::size(&reader, &entry))

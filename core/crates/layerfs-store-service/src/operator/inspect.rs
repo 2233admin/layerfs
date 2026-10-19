@@ -7,8 +7,8 @@
 //! says older Layers were left out. `version` is a digest of the answer, so a
 //! caller polling with `since` gets `unchanged` until something it shows
 //! changes: a Commit, merge, publish, fork, mount, unmount or Workspace write.
-use crate::sdk::args::{self, commit_value, hex, layer_value, Answer};
-use crate::sdk::branch::MAIN;
+use crate::history::lookup::{self as args, commit_value, hex, layer_value, Answer};
+use crate::history::MAIN;
 use crate::store::Store;
 use layerfs_bridge::control::SdkValue;
 use layerfs_history::{
@@ -110,7 +110,7 @@ fn workspace_value(
 
 /// The snapshot answer, or `unchanged` when `since` names its version.
 pub fn snapshot(store: &Arc<Store>, args: &SdkValue, views: &[WorkspaceView]) -> Answer {
-    let stack = args::project(store, args)?;
+    let stack = super::args::project(store, args)?;
     let page = store
         .history()
         .branches(

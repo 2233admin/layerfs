@@ -1,5 +1,8 @@
-//! Shared authenticated control and original failure custody.
+//! Shared authenticated control, original failure custody, and the public
+//! Store method table with its argument readers.
+pub(crate) mod args;
 pub(crate) mod control;
+pub(crate) mod dispatch;
 pub(crate) mod failure;
 pub(crate) mod install;
 pub(crate) mod install_types;

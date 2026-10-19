@@ -180,7 +180,9 @@ impl StoreService {
             detail: SdkValue::map([
                 (
                     "workspace",
-                    SdkValue::text(crate::sdk::hex(&workspace.identity().to_bytes())),
+                    SdkValue::text(crate::history::lookup::hex(
+                        &workspace.identity().to_bytes(),
+                    )),
                 ),
                 ("namespace", SdkValue::Int(workspace.route().namespace())),
             ]),
