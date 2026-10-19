@@ -658,7 +658,7 @@ async function playRange(run, k, mode, half = null, until = null, cut = null) {
       since = performance.now();
       m.snapshot = snapshot(run, k, { run: run.manifest.run, dsh: plan.checkpoint, tree: plan.tree, head, layer, depth: m.depth.after, daemon: run.manifest.binary.daemon,
         sdk: run.manifest.binary.sdk, planVersion: run.manifest.planVersion, policy: run.manifest.policy ?? "default", pageSize: 4096, ...sealed,
-        state: { next: k + 1, layer, head, prevCommit: plan.checkpoint, depth: { ...run.state.depth, commits: m.depth.after }, deltaTotal } });
+        state: { next: k + 1, layer, head, prevCommit: plan.checkpoint, depth: { ...run.state.depth, commits: m.depth.after }, deltaTotal, ...p3StateOf(run.state) } });
       lap("snapshotMs", since);
     } catch (error) { failure = `snapshot: ${error.message}`; m.failure = failure; m.checks.history.ok = false; }
   }
@@ -904,18 +904,44 @@ export function forkPlan(o) {
   return { plan, oracle: resolve(o.oracle ?? join(HISTORY, "oracle")) };
 }
 
+/**
+ * The runner state a P3 range needs from the ranges before it (the git seed, the installed chain, /.lww, the
+ * storage parts). Snapshots before r016.a2 carried none of it, so a fork of a P3 snapshot replayed as a fresh
+ * git and Node start. `parts`/`bySource` are a range's after its snapshot, so a snapshot's copy is the range before.
+ */
+export const P3_STATE_KEYS = ["gitSeeded", "installed", "closureChain", "lwwSha", "nmGroupsFile", "parts", "bySource"];
+export const p3StateOf = (s) => Object.fromEntries(P3_STATE_KEYS.filter((key) => s?.[key] != null).map((key) => [key, s[key]]));
+/**
+ * Where a fork of range k's snapshot takes that state from: the source run's own state while it never advanced past
+ * range k (it stands at k + 1, dirty or not, nothing of k + 1 saved), else the snapshot's. Null when the source has
+ * git or Node on and neither holds it: the fork is refused rather than replayed as a different workload.
+ */
+export function forkP3State(source, snapState, k) {
+  const on = !!(source.manifest.git?.on || source.manifest.node?.on);
+  if (!on) return { from: "none", state: {} };
+  // a stopped k + 1 that got past its closure has moved the chain on: then the source state is not range k's
+  const movedOn = (s) => (s.closureChain ?? []).some((c) => c.range > k) || Number(/groups-(\d+)\.json$/.exec(s.nmGroupsFile ?? "")?.[1] ?? -1) > k;
+  if (source.state?.next === k + 1 && source.state.halfway == null && !movedOn(source.state)) return { from: "source run state (never advanced past the snapshot)", state: p3StateOf(source.state) };
+  if (P3_STATE_KEYS.slice(0, 5).some((key) => snapState?.[key] != null)) return { from: "snapshot", state: p3StateOf(snapState) };
+  return null;
+}
+
 /** A new run from run `from`'s snapshot of range N (SPEC §7, Forking): its file rebuilt into a new volume and home. */
 async function cmdFork(o) {
   const source = new Run(join(HISTORY, "runs", o["from-run"]));
   const k = Number(o.range);
   const manifest = JSON.parse(readFileSync(manifestPath(source.manifest.outputs.snapshots, k, source.manifest.run), "utf8"));
   if (!manifest.state) throw new Error(`snapshot ${k} carries no runner state`);
+  const p3 = forkP3State(source, manifest.state, k);
+  if (!p3) throw new Error(`snapshot ${k} of ${source.manifest.run} carries no git/Node state and the run has advanced past it; the fork would replay a fresh git and Node start`);
   const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), addon: resolve(o.addon ?? source.manifest.env.LAYERFS_NATIVE ?? ADDON), sdk: resolve(o.sdk ?? source.manifest.env.LAYERFS_SDK_JS ?? SDK_JS), source: { run: source.manifest.run, range: k },
     // a dev slice (slice.mjs): its own plan and oracle folders; never a measured run
     // a full plan (plan.mjs, e.g. plan-r1) for any label; a dev slice's plan and oracle for dev runs only
     ...(o.plan || o.oracle ? forkPlan(o) : {}) });
   runManifest.binary = binaries(env);
   runManifest.planVersion = source.manifest.planVersion;
+  // git and Node stay as the source run played them (F-031, NODE_RULE), with their original atRange
+  for (const key of ["git", "node"]) if (source.manifest[key]) runManifest[key] = source.manifest[key];
   mkdirSync(dir, { recursive: true });
   writeJson(join(dir, "run.json"), runManifest);
   const run = new Run(dir);
@@ -931,7 +957,7 @@ async function cmdFork(o) {
   mkdirSync(join(env.LAYERFS_HOME, runManifest.project), { recursive: true, mode: 0o700 });
   execFileSync("chmod", ["700", env.LAYERFS_HOME]);
   execFileSync("cp", ["-p", record, join(env.LAYERFS_HOME, runManifest.project, "project.record")]);
-  run.state = { ...manifest.state, heads: {}, layers: {}, dirty: null, sinceMs: [], lastSnapshotMs: null, growth: [], storeBytes: manifest.size, probeFixture: true, forkedFrom: { run: source.manifest.run, range: k, sha256: manifest.sha256 } };
+  run.state = { ...manifest.state, ...p3.state, heads: {}, layers: {}, dirty: null, sinceMs: [], lastSnapshotMs: null, growth: [], storeBytes: manifest.size, probeFixture: true, forkedFrom: { run: source.manifest.run, range: k, sha256: manifest.sha256, p3StateFrom: p3.from } };
   run.save();
   // inspect.mjs reads the fork through this: its project, SDK, environment and rebuilt file
   writeJson(join(dir, "store.json"), { project: runManifest.project, sdk: join(env.LAYERFS_SDK_JS, "src/index.js"), env, file: restored, range: k, fork: o.run });

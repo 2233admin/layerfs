@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { changedPackages, checkNode, commitIdOf, inputsHash, pointsBefore, testPoints, treeDelta, treeIdCommand, wholeBuild } from "../nodelanes.mjs";
 import { PRUNE_EMPTY, pointBuild } from "../nodeconfig.mjs";
 import { chooseFiles, nativeClean, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
-import { execTool } from "../run.mjs";
+import { execTool, forkP3State, p3StateOf } from "../run.mjs";
 import { installCommand, pointInstall, STORE_POLICIES } from "../closure.mjs";
 import { sliceRange } from "../slice.mjs";
 import { stepSource } from "../storage.mjs";
@@ -255,6 +255,20 @@ test("decision B: the lead's git clean removes untracked, unignored files only; 
     assert.match(sh(nat, nativeClean(1, join(dir, "0.idx"), dir)), /^@@cleaned 1 0$/m, "natively clean: nothing to remove");
     assert.match(sh(nat, nativeClean(2, join(dir, "missing.idx"), dir)), /^@@cleaned 2 -1$/m, "a failed native clean says so");
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a fork of a P3 snapshot keeps the git and Node state (r016.a2): from the source run while it never advanced, else the snapshot, else refused", () => {
+  const st = { next: 16, halfway: null, dirty: 16, gitSeeded: 15, installed: true, closureChain: [{ range: 15, kind: "install" }], lwwSha: "s", nmGroupsFile: "/r/closure/groups-015.json", parts: { total: 1 }, bySource: { a: 1 }, heads: { 15: "h" } };
+  const src = (state, on = true) => ({ manifest: { git: { on }, node: { on } }, state });
+  assert.deepEqual(forkP3State(src(st), { next: 16 }, 15), { from: "source run state (never advanced past the snapshot)", state: p3StateOf(st) });
+  assert.deepEqual(Object.keys(p3StateOf(st)), ["gitSeeded", "installed", "closureChain", "lwwSha", "nmGroupsFile", "parts", "bySource"]);
+  assert.equal(forkP3State(src({ ...st, nmGroupsFile: "/r/closure/groups-013.json" }), {}, 15).from, "source run state (never advanced past the snapshot)", "an earlier range's install is still range 15's state");
+  // the run went on, or k + 1 got past its closure: the snapshot's own state, or a refusal
+  for (const s of [{ ...st, next: 17 }, { ...st, closureChain: [{ range: 16 }] }, { ...st, nmGroupsFile: "/r/closure/groups-016.json" }, { ...st, halfway: 16 }]) {
+    assert.equal(forkP3State(src(s), { next: 16 }, 15), null);
+    assert.equal(forkP3State(src(s), { next: 16, installed: true, gitSeeded: 15 }, 15).from, "snapshot");
+  }
+  assert.deepEqual(forkP3State(src({ next: 9 }, false), {}, 7), { from: "none", state: {} }, "git and Node off: nothing to carry");
 });
 
 let failed = 0;
