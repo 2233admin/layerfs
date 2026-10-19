@@ -21,13 +21,13 @@
 | 012 | `6d467539` (line p2-main-d) | a1 | 15.7 | 253.6 | 964 | 350 | 18 | 3 | 1 | 1,336 | 15,748 | 736 | 8,518 | 4 | 6 | 3 / 3 | 129 | 14,820,335 | 5,049,254 | 50,061,219 |
 | 013 | `6d467539` (line p2-main-e) | a2 | 22.9 | 276.5 | 1,212 | 540 | 19 | 3 | 1 | 1,775 | 17,523 | 866 | 9,384 | 4 | 5 | 2 / 2 | 196 | 21,527,865 | 6,038,238 | 56,099,457 |
 | 014 | `57141b57` (line p2-main-f) | a2 | 26.8 | 303.3 | 1,661 | 740 | 42 | 7 | 1 | 2,451 | 19,974 | 1,163 | 10,547 | 5 | 10 | 4 / 4 | 288 | 14,685,752 | 8,208,810 | 64,308,267 |
-| 015 | `44ac6c91` (line p3-main-c) | a3 | 240.1 | 543.4 | 2,452 | 1,392 | 319 | 9 | 1 | 4,173 | 24,147 | 2,303 | 12,850 | 4 | 8 | 3 / 3 | 162 | 39,247,321 | 164,933,658 | 229,241,925 |
+| 015 | `44ac6c91` (line p3-main-d) | a4 | 253.7 | 556.9 | 2,452 | 1,392 | 316 | 9 | 1 | 4,170 | 24,144 | 2,303 | 12,850 | 4 | 8 | 3 / 3 | 162 | 39,251,790 | 172,081,252 | 236,389,519 |
 
 ## Cumulative
 
 | Ranges | Time s | fs | sandbox | branch | project | operator | Calls | Commits | Branches | Agents (sum per range) | Conflicts hit / planned | Steps | Bytes written (since the Overview) | New stored |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 16 | 543.4 | 16,825 | 6,679 | 584 | 43 | 16 | 24,147 | 12,850 | 56 | 92 | 33 / 33 | 2,688 | 156,932,341 ‡ | 229,241,925 |
+| 16 | 556.9 | 16,825 | 6,679 | 581 | 43 | 16 | 24,144 | 12,850 | 56 | 92 | 33 / 33 | 2,688 | 156,936,810 ‡ | 236,389,519 |
 
 ## Conflicts per range
 
@@ -55,12 +55,12 @@
 | Method | Category | Calls | Bytes in | Bytes out |
 | --- | --- | --- | --- | --- |
 | branch.diff_branches | branch | 18 | 0 | 976,669 |
-| branch.diff_commits | branch | 336 | 0 ‡ | 14,656,569 ‡ |
+| branch.diff_commits | branch | 333 | 0 ‡ | 14,525,605 ‡ |
 | branch.fork | branch | 158 | 0 ‡ | 0 ‡ |
-| branch.list_commits | project | 43 | 0 | 268,909 |
+| branch.list_commits | project | 43 | 0 | 268,937 |
 | branch.merge | branch | 54 | 0 | 0 |
 | branch.publish | branch | 18 | 0 ‡ | 0 ‡ |
-| fs.apply | fs | 780 | 16,301,326 ‡ | 0 ‡ |
+| fs.apply | fs | 780 | 16,305,733 ‡ | 0 ‡ |
 | fs.diff_files | fs | 721 | 0 ‡ | 4,777,965 ‡ |
 | fs.glob | fs | 759 | 0 ‡ | 362,669 ‡ |
 | fs.grep | fs | 767 | 0 ‡ | 1,847,031 ‡ |
@@ -72,7 +72,7 @@
 | operator.store.stats | operator | 16 | 0 ‡ | 0 ‡ |
 | sandbox.commit | sandbox | 1,215 | 0 ‡ | 0 ‡ |
 | sandbox.create | sandbox | 5 | — | — |
-| sandbox.exec | sandbox | 2,909 | 18,416,156 ‡ | 5,739,415 ‡ |
+| sandbox.exec | sandbox | 2,909 | 18,416,218 ‡ | 5,734,614 ‡ |
 | sandbox.mount | sandbox | 1,267 | 0 ‡ | 0 ‡ |
 | sandbox.service | sandbox | 11 | 0 ‡ | 0 ‡ |
 | sandbox.status | sandbox | 5 | 0 | 0 |
