@@ -100,6 +100,13 @@ pub const CHAIN_ENCODED_LIMIT: u64 = 256 * 1024;
 /// bounded by READ_OBJECT_LIMIT. Released bytes are acquired again when needed;
 /// the bound costs work and never correctness.
 pub const DEPENDENCY_PACK_CACHE_BYTES: usize = 2 * 1024 * 1024;
+/// Canonical bytes one Save keeps of the objects it resolved (#364).
+///
+/// Owner: one Save. Bound: this many canonical bytes plus a small charge per
+/// value. Live multiplicity: one per open Save. Lifetime: the Save. Release:
+/// least recently read first, and everything with the Save. A released value is
+/// resolved again from the Store, so the bound costs work and never correctness.
+pub const SAVE_RESOLVED_CACHE_BYTES: usize = 4 * 1024 * 1024;
 /// Decoded values one pooled reader may retain across one wave.
 ///
 /// Owner: one pooled reader. Bound: this many canonical decoded value bytes. Live

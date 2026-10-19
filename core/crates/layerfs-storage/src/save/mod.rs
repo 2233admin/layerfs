@@ -4,6 +4,7 @@ mod pooled;
 mod provider;
 mod publication;
 mod reservation;
+mod resolved;
 mod seal;
 mod select;
 mod source;

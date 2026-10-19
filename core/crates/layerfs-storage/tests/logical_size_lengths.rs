@@ -1,19 +1,18 @@
-//! A Commit's logical size from catalogue lengths equals the payload route
-//! (#352 record 034, O1-a).
+//! A Commit's or merge's logical size from catalogue lengths equals the after
+//! tree counted from its file roots (#352 record 034, O1-a; #364).
 //!
-//! `logical_size_after` opens each changed file's root, which reads a
-//! whole-file root's payload; `logical_size_after_with` asks
-//! `Reader::file_lengths` a window at a time. On real constructed files of
-//! every representation (empty, a few bytes, whole-file, chunked), a hard link,
-//! a deleted file and a replaced one, both routes give the same size, and that
-//! size is the after tree counted from scratch. More changed files than
-//! `LENGTH_WINDOW` are asked in several demands.
+//! `logical_size_after_with` asks `Reader::file_lengths` a window at a time;
+//! `logical_size` opens every file's root. On real constructed files of every
+//! representation (empty, a few bytes, whole-file, chunked), a hard link, a
+//! deleted file and a replaced one, both give the same size. More changed
+//! files than `LENGTH_WINDOW` are asked in several demands. (The per-file
+//! payload route `logical_size_after` was removed by #364.)
 #[path = "support/memory_metadata.rs"]
 mod metadata;
 
 use layerfs_content::filesystem::attributes::portable::PortableMetadata;
 use layerfs_content::filesystem::statistics::{
-    logical_size, logical_size_after, logical_size_after_with, LENGTH_WINDOW,
+    logical_size, logical_size_after_with, LENGTH_WINDOW,
 };
 use layerfs_content::filesystem::{
     build_filesystem, scope_for_seed, update_filesystem, DirectoryUpdate, FilesystemInput,
@@ -117,13 +116,11 @@ fn apply(
     root
 }
 
-/// The payload route, the lengths route (and its demand count) and the after
-/// tree counted whole.
-fn sizes(storage: &Storage, before: ObjectId, after: ObjectId) -> (u64, u64, u64, usize) {
+/// The lengths route (and its demand count) and the after tree counted whole.
+fn sizes(storage: &Storage, before: ObjectId, after: ObjectId) -> (u64, u64, usize) {
     let reader = storage.reader().unwrap();
     let known = logical_size(&reader, FilesystemRootId(before)).unwrap();
     let (before, after) = (FilesystemRootId(before), FilesystemRootId(after));
-    let payload = logical_size_after(&reader, before, after, known).unwrap();
     let mut demands = 0;
     let lengths = logical_size_after_with(&reader, before, after, known, &mut |roots| {
         assert!(roots.len() <= LENGTH_WINDOW);
@@ -132,7 +129,7 @@ fn sizes(storage: &Storage, before: ObjectId, after: ObjectId) -> (u64, u64, u64
     })
     .unwrap();
     let whole = logical_size(&reader, after).unwrap();
-    (payload, lengths, whole, demands)
+    (lengths, whole, demands)
 }
 
 fn storage() -> Storage {
@@ -225,15 +222,14 @@ fn catalogue_lengths_give_the_payload_route_size_for_every_representation() {
         &[9, 10, 11, 12],
     );
 
-    let (payload, lengths, whole, demands) = sizes(&storage, before, after);
+    let (lengths, whole, demands) = sizes(&storage, before, after);
     let expected = 5 + 100_000 + 300_000 + 70_000 + 4_000 + 7 + 90_000 + 400_000;
     assert_eq!(whole, expected, "the after tree counted whole");
-    assert_eq!(payload, whole, "payload route");
-    assert_eq!(lengths, payload, "catalogue lengths route");
+    assert_eq!(lengths, whole, "catalogue lengths route");
     assert_eq!(demands, 1);
     // And back: the same change undone.
-    let (payload, lengths, whole, _) = sizes(&storage, after, before);
-    assert_eq!((payload, lengths), (whole, whole));
+    let (lengths, whole, _) = sizes(&storage, after, before);
+    assert_eq!(lengths, whole);
     assert_eq!(whole, counted);
 }
 
@@ -281,9 +277,9 @@ fn more_changed_files_than_one_window_are_asked_in_several_demands() {
         &inodes,
         &new,
     );
-    let (payload, lengths, whole, demands) = sizes(&storage, before, after);
+    let (lengths, whole, demands) = sizes(&storage, before, after);
     let expected: u64 = (2..files + 2).map(|serial| 1 + serial % 97).sum();
-    assert_eq!((payload, lengths, whole), (expected, expected, expected));
+    assert_eq!((lengths, whole), (expected, expected));
     assert_eq!(
         demands, 3,
         "{files} changed files in windows of {LENGTH_WINDOW}"

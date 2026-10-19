@@ -141,6 +141,8 @@ pub(super) struct State<'a> {
     pub(super) groups: GroupCache,
     pub(super) packs: crate::encoding::PackCache,
     pub(super) pool: PoolReader,
+    /// Canonical bytes this Save resolved, within a byte bound.
+    pub(super) resolved: super::resolved::Resolved,
     /// Values this Save assigned and has not published yet, by ordinal.
     pub(super) values: BTreeMap<u32, [u8; INODE_VALUE_BYTES]>,
     /// Fingerprint of each value this Save assigned and the ordinal it got.
@@ -178,6 +180,7 @@ impl<'a> State<'a> {
             groups: GroupCache::new(),
             packs: crate::encoding::PackCache::new(),
             pool: PoolReader::new(),
+            resolved: Default::default(),
             values: BTreeMap::new(),
             value_memo: BTreeMap::new(),
             pool_stats: crate::save::PoolCounters::default(),

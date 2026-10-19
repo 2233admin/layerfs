@@ -449,13 +449,25 @@ pub fn merge(
     store.note_save(&saved);
     // Counted over finished, reference-closed objects, as a Commit counts.
     let reader = storage.reader().map_err(args::failed)?;
-    let logical = layerfs_content::filesystem::statistics::logical_size_after(
+    // File lengths from the Store catalogue a window at a time, as a Commit
+    // counts them, never from each changed file's root (#364).
+    let mut refused = None;
+    let logical = layerfs_content::filesystem::statistics::logical_size_after_with(
         &reader,
         input.ours,
         merged.root,
         known,
+        &mut |roots| {
+            reader.file_lengths(roots).map_err(|error| {
+                refused = Some(error);
+                layerfs_content::ContentError::OutputRejected
+            })
+        },
     )
-    .map_err(args::content)?;
+    .map_err(|error| match refused.take() {
+        Some(error) => args::failed(error),
+        None => args::content(error),
+    })?;
     crate::store::record_new_bindings(&reader, catalog, Some(input.ours), merged.root).map_err(
         |error| match error {
             CommitError::History(error) => history(error),

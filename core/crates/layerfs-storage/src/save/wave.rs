@@ -127,6 +127,9 @@ impl State<'_> {
         Ok(())
     }
     pub(super) fn resolve(&mut self, id: ObjectId) -> StorageResult<Vec<u8>> {
+        if let Some(value) = self.resolved.get(id) {
+            return Ok(value);
+        }
         let view = WaveSource {
             fetch: &self.storage.source,
             packer: &self.packer,
@@ -134,7 +137,7 @@ impl State<'_> {
             values: &self.values,
         };
         let capacities = self.storage.capacities();
-        Resolver::new(
+        let value = Resolver::new(
             &view,
             i64::MAX,
             &capacities,
@@ -147,6 +150,8 @@ impl State<'_> {
             &mut self.chain,
         )
         .resolve(id)
-        .map(|v| v.0)
+        .map(|v| v.0)?;
+        self.resolved.keep(id, &value);
+        Ok(value)
     }
 }

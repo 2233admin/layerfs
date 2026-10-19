@@ -49,37 +49,13 @@ pub fn logical_size(
 /// Changed file roots one length demand carries: a bounded resident window.
 pub const LENGTH_WINDOW: usize = 1024;
 
-/// Updates known logical size by page-skipping inode differences, including hardlink count changes.
-///
-/// Each file's length comes from opening its root, which reads a whole-file
-/// root's complete payload. [`logical_size_after_with`] asks a caller's
-/// batched length source instead.
-pub fn logical_size_after(
-    reader: &dyn AuthenticatedObjects,
-    before: FilesystemRootId,
-    after: FilesystemRootId,
-    known: u64,
-) -> ContentResult<u64> {
-    logical_size_after_with(reader, before, after, known, &mut |roots| {
-        roots
-            .iter()
-            .map(|root| {
-                Timing::disabled("filesystem.logical", |timing| {
-                    FileView::open(reader, *root, timing.child("length"))
-                        .map(|view| view.logical_len())
-                })
-                .0
-            })
-            .collect()
-    })
-}
-
-/// [`logical_size_after`] with file lengths from `lengths`, which answers a
+/// Updates known logical size by page-skipping inode differences, including
+/// hardlink count changes, with file lengths from `lengths`, which answers a
 /// window of at most [`LENGTH_WINDOW`] regular-file content roots in order.
 ///
-/// The changed rows are walked as before; the lengths of the regular files
-/// they name are asked a window at a time, so a Store can answer them from its
-/// catalogue in one demand instead of one payload read per file.
+/// The lengths of the regular files the changed rows name are asked a window
+/// at a time, so a Store answers them from its catalogue in one demand instead
+/// of one payload read per file.
 pub fn logical_size_after_with(
     reader: &dyn AuthenticatedObjects,
     before: FilesystemRootId,

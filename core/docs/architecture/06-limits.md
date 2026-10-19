@@ -482,6 +482,7 @@ slice (`04-filesystem.md` §5.8).
 | pooled index entries | 131,072 | `METADATA_INDEX_VALUES` |
 | pooled value cache | 512 KiB | `POOLED_VALUE_CACHE_BYTES` |
 | dependency pack cache | 2 MiB | `DEPENDENCY_PACK_CACHE_BYTES` |
+| canonical bytes one Save keeps of objects it resolved (#364) | 4 MiB | `SAVE_RESOLVED_CACHE_BYTES` |
 | values per metadata group | retired; not in source at `efcb6d880` | `VALUES_PER_GROUP` |
 | pooled leaf rows | 100 | `inode_leaf::MAXIMUM_LEAF_ROWS` |
 | private save slots | retired; not in source at `efcb6d880`; one writer at a time (architecture 83) | `MAX_CONCURRENT_WRITES_LIMIT` |
@@ -528,7 +529,8 @@ changed serials, not candidate paths:
 | changed serials per merge | none | a run and point records in `merge_record` |
 | merge state held in memory before it spills | 8 MiB | `merge/spill.rs` `HELD_BYTES` |
 | run chunk | 60 KiB | `CHUNK_BYTES` |
-| record write-back buffer | 256 KiB | `storage/merge_records.rs` `BUFFER_BYTES` |
+| merge records held resident before any is written to the file (#364) | 8 MiB | `storage/merge_records.rs` `RESIDENT_BYTES` |
+| record write-back buffer, once past the resident bound | 256 KiB | `storage/merge_records.rs` `BUFFER_BYTES` |
 | changed serials the in-lane Commit step decides | 1,024; more refuses the Commit `LaneMerge` | `LANE_MERGE_PATHS` |
 | written paths a conflicted Commit lists | 4,096, `truncated` when cut | `WRITTEN_PATHS` |
 

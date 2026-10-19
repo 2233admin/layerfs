@@ -3,7 +3,11 @@
 //! A merge registers an owner row with a random token; its records carry the
 //! owner's number. Every job checks the owner and token in the same statement
 //! or transaction, so records of a removed owner are never read as absent.
-//! Guarded batches apply to a write-back buffer of at most [`BUFFER_BYTES`];
+//! A merge's records start resident: while they take at most
+//! [`RESIDENT_BYTES`], every record is in memory and none is in the file, so
+//! reads, guards and key windows run no statement (#364). Past that bound
+//! they are written to the file in one write transaction, and from then on
+//! guarded batches apply to a write-back buffer of at most [`BUFFER_BYTES`];
 //! a full buffer, and every key enumeration, flushes it in one write
 //! transaction, so writes are few short jobs through the Store's one writer.
 //! Reads answer from the buffer first, and a key window from the file in one
@@ -35,18 +39,21 @@ const REMOVE_ROWS: i64 = 4096;
 /// Bytes of buffered changes, keys and values, after which a batch flushes.
 /// It bounds both the buffer's memory and one flush's writer hold.
 pub const BUFFER_BYTES: usize = 256 * 1024;
+/// Bytes of records, keys and values, a merge keeps resident before it writes
+/// them to the file: the bound a merge's own held state has (#355).
+pub const RESIDENT_BYTES: usize = 8 << 20;
 /// Buffer bytes one change is charged besides its value.
 const CHANGE_BYTES: usize = 48;
 
 const OWNER: &str = "SELECT 1 FROM merge_operation WHERE operation=?1 AND token=?2";
-const KEYS_AFTER: &str = "SELECT r.key FROM merge_operation o LEFT JOIN
-    (SELECT key FROM merge_record WHERE operation=?1 AND kind=?3 AND key>?4
-     ORDER BY key LIMIT 64) r
-    WHERE o.operation=?1 AND o.token=?2 ORDER BY r.key";
-const KEYS_EXCLUDING: &str = "SELECT r.key FROM merge_operation o LEFT JOIN
-    (SELECT key FROM merge_record WHERE operation=?1 AND kind=?3 AND key<>?4
-     ORDER BY key LIMIT 64) r
-    WHERE o.operation=?1 AND o.token=?2 ORDER BY r.key";
+// The owner row joins the record keys directly, so the window is a range read
+// of the primary key: no keys answer one NULL row, no owner answers none (#364).
+const KEYS_AFTER: &str = "SELECT r.key FROM merge_operation o LEFT JOIN merge_record r
+    ON r.operation=o.operation AND r.kind=?3 AND r.key>?4
+    WHERE o.operation=?1 AND o.token=?2 ORDER BY r.key LIMIT 64";
+const KEYS_EXCLUDING: &str = "SELECT r.key FROM merge_operation o LEFT JOIN merge_record r
+    ON r.operation=o.operation AND r.kind=?3 AND r.key<>?4
+    WHERE o.operation=?1 AND o.token=?2 ORDER BY r.key LIMIT 64";
 const PUT: &str = "INSERT INTO merge_record(operation,kind,key,value) VALUES(?1,?2,?3,?4)
     ON CONFLICT(operation,kind,key) DO UPDATE SET value=excluded.value";
 const DELETE: &str = "DELETE FROM merge_record WHERE operation=?1 AND kind=?2 AND key=?3";
@@ -143,6 +150,7 @@ impl MergeScratch {
             work,
             pending: BTreeMap::new(),
             pending_bytes: 0,
+            resident: true,
         })
     }
 }
@@ -159,6 +167,9 @@ pub struct MergeRecords {
     /// Changes not yet in the file: a value, or `None` for a deletion.
     pending: BTreeMap<EditRecordKey, Option<Vec<u8>>>,
     pending_bytes: usize,
+    /// True while no record was written to the file: `pending` then holds
+    /// every record, and a key it lacks is absent.
+    resident: bool,
 }
 
 impl MergeRecords {
@@ -315,6 +326,9 @@ impl MergeRecords {
         }
         self.work.keys_read += keys.len() as u64;
         self.work.buffer_hits += (keys.len() - missed.len()) as u64;
+        if self.resident {
+            return Ok(out);
+        }
         let asked: Vec<EditRecordKey> = missed.iter().map(|index| keys[*index]).collect();
         for (index, value) in missed.into_iter().zip(self.stored(&asked)?) {
             out[index] = value;
@@ -328,6 +342,21 @@ impl MergeRecords {
         kind: u32,
         bound: &[u8],
     ) -> Result<Vec<[u8; 32]>, PersistenceError> {
+        if self.resident {
+            // The window the statement would answer, from the records held.
+            let first = EditRecordKey { kind, key: [0; 32] };
+            return Ok(self
+                .pending
+                .range(first..)
+                .take_while(|(key, _)| key.kind == kind)
+                .map(|(key, _)| key.key)
+                .filter(|key| match sql {
+                    KEYS_EXCLUDING => key.as_slice() != bound,
+                    _ => key.as_slice() > bound,
+                })
+                .take(WINDOW)
+                .collect());
+        }
         self.flush()?;
         self.owned_rows(sql, &[&i64::from(kind), &bound])?
             .into_iter()
@@ -365,12 +394,25 @@ impl MergeRecords {
         }
         for change in changes {
             let bytes = CHANGE_BYTES + change.value.as_ref().map_or(0, Vec::len);
-            if let Some(old) = self.pending.insert(change.key, change.value) {
+            let old = if self.resident && change.value.is_none() {
+                // Nothing is in the file to delete: the record just goes.
+                self.pending.remove(&change.key)
+            } else {
+                self.pending_bytes += bytes;
+                self.pending.insert(change.key, change.value)
+            };
+            if let Some(old) = old {
                 self.pending_bytes -= CHANGE_BYTES + old.map_or(0, |value| value.len());
             }
-            self.pending_bytes += bytes;
         }
-        if self.pending_bytes >= BUFFER_BYTES {
+        if self.pending_bytes
+            >= if self.resident {
+                RESIDENT_BYTES
+            } else {
+                BUFFER_BYTES
+            }
+        {
+            self.resident = false;
             self.flush()?;
         }
         Ok(EditRecordApply::Applied)

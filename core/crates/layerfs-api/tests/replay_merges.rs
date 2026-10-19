@@ -80,7 +80,15 @@ fn recorded_branch_merges_merge_again() {
                 Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
             })
             .unwrap();
-        rows.map(Result::unwrap).collect()
+        let only = std::env::var("LAYERFS_355_REPLAY_ONLY").unwrap_or_default();
+        rows.map(Result::unwrap)
+            .filter(|(commit, ..): &Recorded| {
+                only.is_empty()
+                    || only
+                        .split(',')
+                        .any(|prefix| hex(commit).starts_with(&prefix.to_lowercase()))
+            })
+            .collect()
     };
     let config =
         PersistenceConfig::sqlite(&path).with_sqlite_profile(SqlitePersistenceProfile::Disposable);
@@ -121,6 +129,8 @@ fn recorded_branch_merges_merge_again() {
             )
             .unwrap();
         }
+        let before = service.opened.diagnostics().unwrap().writer;
+        let started = std::time::Instant::now();
         let merged = call(
             &service,
             "branch.merge",
@@ -129,6 +139,15 @@ fn recorded_branch_merges_merge_again() {
                 ("with", SdkValue::text(&right)),
                 ("name", SdkValue::text(format!("replay-m{index}"))),
             ],
+        );
+        let ms = started.elapsed().as_secs_f64() * 1e3;
+        let after = service.opened.diagnostics().unwrap().writer;
+        println!(
+            "REPLAY_WORK {index} ms={ms:.1} statements={} vm_steps={} fullscan_steps={} sorts={}",
+            after.statements - before.statements,
+            after.vm_steps - before.vm_steps,
+            after.fullscan_steps - before.fullscan_steps,
+            after.sorts - before.sorts
         );
         let result = match &merged {
             Ok(reply) => {
