@@ -118,6 +118,27 @@ content root, outside the byte allowance described below and under the same
 lock; see [effective view](29-effective-base-view.md). `ClientWork` gains
 `directory_counts` and `directory_count_scans`.
 
+#364 item 3 update, 2026-10-20 (owner option C; option B was built,
+measured and dropped: it saved nothing on the refresh):
+
+- **Decoded pages.** The cache owner also keeps decoded inode and
+  directory pages (`layerfs-content` `filesystem/decoded.rs`), by object
+  identity, within `DECODED_PAGE_BYTES` (16 MiB) of charged bytes and never
+  more than the canonical allowance, so an allowance of zero keeps none.
+  The charge is each row's inline width plus its name bytes, plus 128 bytes
+  per page: accounting of the stored rows, not a measured allocation. The
+  least recently used page is released first. `CanonicalClient` offers the
+  cache through `AuthenticatedObjects::decoded_pages`. Content's inode and
+  directory reads take a kept page instead of copying and decoding the
+  canonical bytes again. The page-intrinsic checks (size ceiling, decode)
+  ran when it was decoded. Every check that depends on where a read found
+  the page runs on every use: the fill rule off the root, the level and
+  largest key the parent recorded, the left sibling's key, a value in every
+  leaf row and a child in every branch row. A kept page answers only a read
+  of its own grammar. `ClientWork.decoded` reports hits, misses, evictions,
+  pages and charge. No read needs a kept page; an evicted one is read and
+  decoded again.
+
 For E admitted immutable entries and B demanded bytes, cache lookup/recency work
 remains O(log E) per ID plus actual bytes and eviction work. A hit clones that
 entry's canonical Vec into the caller result. Each successfully admitted distinct

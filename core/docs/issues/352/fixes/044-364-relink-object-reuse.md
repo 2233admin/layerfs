@@ -1,7 +1,7 @@
 # #364 hot spot 2 · a relinked file reuses the object that holds its bytes
 
-> **Status:** Current fix record, 2026-10-20, held for the owner's trade-off decision. Branch `issue364-item2`, on
-> origin/main `f99b47bf2c` (measured on `029db0950f`). Overlay schema 37 → 38; the Store gains one table
+> **Status:** Current fix record, 2026-10-20, landed on main at `e009823a48` (owner: fs.write extra latency under 5 ms is
+> ignored). Branch `issue364-item2`, on origin/main `f99b47bf2c` (measured on `029db0950f`). Overlay schema 37 → 38; the Store gains one table
 > (`file_digest`), added empty to older Stores at open.
 
 | | |
