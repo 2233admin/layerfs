@@ -26,6 +26,8 @@ import { dirname, join } from "node:path";
 import { aggregate, BASELINE_MIN_N, buildBaseline, evaluate, exponent, MINIMUM_POINTS, reinstallGate, sameBinary, thinClass } from "./gates.mjs";
 import { categoryOf, derivedOverview, renderOverview, renderStats } from "./stats.mjs";
 import { FINDINGS, loadIssues, renderFormat } from "./format.mjs";
+import { growthSection } from "./growth.mjs";
+import { isP3 } from "./p3.mjs";
 import { change, closedWithoutChange, EVIDENCE_COLUMNS, evidenceRow, kindText, loadFindings } from "./findings.mjs";
 import { changedDirs, oneshotSplit, withDirs } from "./steps.mjs";
 import { diffTrees } from "./git.mjs";
@@ -565,7 +567,7 @@ export function reportRange({ metricsDir, planDir, docs, oracleDir, range }) {
   const latest = xs.at(-1);
   writeFileSync(file, latest.version && latest.overview && latest.calls
     ? renderFormat({ plan, summary: summaries.get(range), attempts: xs, gates, lead: leadNote(old), findings: own, history, baseline, issues: loadIssues(docs),
-      latencyRows: (m, h, b) => table(LATENCY_HEAD, latencyRows(m, h, b)), stageLine })
+      latencyRows: (m, h, b) => table(LATENCY_HEAD, latencyRows(m, h, b)), stageLine, growth: growthOf(range, latest, attempts, metricsDir) })
     : renderRange({ plan, summary: summaries.get(range), attempts: xs, gates, lead: leadNote(old), findings: own, history, baseline }));
   writeStats(attempts, docs);
   const comment = join(metricsDir, `comment-${pad(range)}.md`);
@@ -708,5 +710,22 @@ async function main() {
   console.log(`range ${pad(range)} report ${r.file}; verdict: ${r.verdict}; issue comment ${r.comment}`);
   process.exit({ pass: 0, watch: 0, optimize: 3, stop: 4 }[r.verdict]);
 }
+
+/**
+ * "Speed as history grows" (growth.mjs) for a P3 range from 18 on: the terminal metrics of ranges 15..range, every
+ * control sample of those ranges, and the run's host load lines. Null before range 18 (frozen reports stay as they are).
+ */
+export function growthOf(range, latest, attempts, metricsDir) {
+  if (range < GROWTH_FROM || !isP3(latest)) return null;
+  const points = [];
+  for (let k = 15; k < range; k++) { const xs = attempts.get(k); if (xs?.length) points.push(xs.at(-1)); }
+  points.push(latest);
+  const controls = Object.fromEntries(readdirSync(metricsDir).filter((f) => /^control-\d{3}(\..+)?\.json$/.test(f) && Number(f.slice(8, 11)) >= 15 && Number(f.slice(8, 11)) <= range)
+    .map((f) => [f.replace(/\.json$/, ""), JSON.parse(readFileSync(join(metricsDir, f), "utf8"))]));
+  const hostFile = join(dirname(metricsDir), "runs", latest.run, "hostload.jsonl");
+  const hostLines = existsSync(hostFile) ? readFileSync(hostFile, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
+  return growthSection(points, controls, hostLines);
+}
+export const GROWTH_FROM = 18;
 
 if (import.meta.url === `file://${process.argv[1]}`) main();

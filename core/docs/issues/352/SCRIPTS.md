@@ -377,6 +377,18 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   setup (forks, fixture writes, the stats that size its input) runs untimed
   under `probe-setup:<name>`; only the probed call is timed and counted under
   `probe:<name>`. `report.mjs regate --metrics <dir>` is the gates' dry run.
+- **Speed as history grows** (owner 2026-10-19; watch only; REPORT_FORMAT
+  §3.4):
+  - `node dsh/tools/history/control.mjs --run <id> --range N [--b live|snapshot:<range>[:<run>]] [--label <name>]`,
+    run after a range's proofs, one command (about 3 s), one sample per arm.
+  - It clones the range 15 terminal Store and the range's Store into two fresh
+    volumes, runs the same 45 Store calls in each, writes
+    `metrics/control-NNN.a<attempt>.json` (or `.<label>.json` for a
+    diagnostic), and removes the volumes (both recorded in the run's ledger).
+  - `record()` adds each call's `/proc/self/io` delta and WAL size to
+    `calls.jsonl`, and the play's metrics gain `growth`.
+  - `runner.mjs` appends the host's 1-min load around each command to
+    `runs/<id>/hostload.jsonl`.
 - **The runner container** (DIRECT_STORE_IMPL.md step 4, builder
   2026-10-18; one route since F-020): `node dsh/tools/history/runner.mjs --
   <run.mjs arguments>` runs `run.mjs` in `layerfs-issue352-runner` from

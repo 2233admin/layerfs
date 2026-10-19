@@ -139,7 +139,7 @@ function insideRows(m) {
  * measurements. `history` holds earlier ranges' latest attempts (oldest
  * first), `issues` the open findings (openIssues).
  */
-export function renderFormat({ plan, summary, attempts, gates, lead, findings = [], history = [], baseline = null, issues = [], latencyRows = null, stageLine = null }) {
+export function renderFormat({ plan, summary, attempts, gates, lead, findings = [], history = [], baseline = null, issues = [], latencyRows = null, stageLine = null, growth = null }) {
   const m = attempts.at(-1), g = gates.at(-1), prev = history.at(-1) ?? null, s = m.storage ?? {}, o = m.overview, w = m.work ?? {};
   const c = m.checks ?? {}, v = m.version, out = [];
   const totalMs = [...history, m].reduce((n, x) => n + (x.wall?.totalMs ?? 0), 0);
@@ -230,6 +230,8 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
     `**Scaling:** ${fits.judged ? `${fits.flat} of ${fits.judged} probes flat${fits.rising.length ? ` · ${fits.rising.map((f) => `\`${f.name}\` ${num(f.e)}`).join(" · ")}` : ""}` : `not judged: fewer than 3 same-binary ranges (${fits.total} probes)`}`, "",
     ...(isP3(m) ? [`**Git and Node** (LayerFS ÷ native on the identical tree; ×base compares only with the P3 re-baseline${baseline ? "" : ", none recorded yet: not judged"})`, "", p3Speed(m), ""] : []),
     `**Health:** ${int(h.workspacesOpen)} Workspaces open · ${h.overlaysLeft == null ? "overlay files not measured" : `${int(h.overlaysLeft)} overlay files left`} · daemons ${h.daemonRssMb == null ? "—" : `${num(h.daemonRssMb, 0)} MB`}${prev?.health?.daemonRssMb != null && h.daemonRssMb != null ? ` (${signed(h.daemonRssMb - prev.health.daemonRssMb, (x) => `${num(x, 0)} MB`)})` : ""} over ${h.sandboxes ?? "?"} Sandboxes · ${int(h.openFiles)} open files · WAL ${m.snapshot ? `before seal ${bytes(m.snapshot.walBytes)}` : `${bytes(m.storeDisk?.wal)} (live)`}`, ...(isP3(m) ? [p3Health(m)] : []), "");
+  // owner 2026-10-19, from range 18: speed against the Store's and history's growth (a watch row, not a gate)
+  if (growth?.length) out.push(...growth, "");
   // 5. Findings and action
   out.push(FINDINGS, "");
   const tripped = attempts.map((a, i) => [a, gates[i]]).filter(([, x]) => x.verdict === "optimize" || x.verdict === "stop");

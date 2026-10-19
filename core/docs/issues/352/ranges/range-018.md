@@ -216,6 +216,30 @@ Daemon `44ac6c91abf6` · p50 / p95 · ratio to baseline (dominant size class) in
 **Health:** 0 Workspaces open · 0 overlay files left · daemons 2 MB (+0 MB) over 5 of 5 Sandboxes · 15 open files · WAL 4.0 MiB (live)
 **Resilience:** Busy 0 · EAGAIN 0 · refused unmount 0 · writer wait — · lane hold — per Commit (p50 / p95) · daemon RSS max 2 MB, median 2 MB over 1 daemons · overlay max — · unmount 11.3 ms / 23.9 ms
 
+### Speed as history grows
+
+Range 15 is the reference (owner 2026-10-19; a watch row, not a gate). Uncontended calls; read syscalls per solo in-process call stand in for SQLite page-cache misses (no hit/miss counter is reported by the binary); Workspace calls read in the daemon's process, so they have none here.
+
+| Range | Commits | Store MiB | fs.write ≤1 KiB p50 ms (×r15) · VM steps · reads/call | fs.write ≤8 KiB p50 ms (×r15) · VM steps · reads/call | fs.write ≤64 KiB p50 ms (×r15) · VM steps · reads/call | fs.read ≤8 KiB p50 ms (×r15) · VM steps · reads/call | sandbox.mount p50 ms (×r15) · VM steps · reads/call | sandbox.commit 1 file (Committed) p50 ms (×r15) · VM steps · reads/call | branch.merge p50 ms (×r15) · VM steps · reads/call |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 015.a4 | 12851 | 207.8 | 5.90 (1.00×) · 6031 · not recorded | 6.21 (1.00×) · 6202 · not recorded | 7.29 (1.00×) · 6942 · not recorded | 1.99 (1.00×) · 3468 · not recorded | 9.12 (1.00×) · 1391 · not recorded | 8.34 (1.00×) · 5058 · not recorded | not split by class (before range 18) |
+| 016.a3 | 14766 | 243.7 | 7.83 (1.33×) · 6936 · not recorded | 8.02 (1.29×) · 6716 · not recorded | 8.79 (1.21×) · 6961 · not recorded | 2.52 (1.26×) · 3468 · not recorded | 10.30 (1.13×) · 1337 · not recorded | 9.16 (1.10×) · 4389 · not recorded | not split by class (before range 18) |
+| 017.a2 | 15811 | 265.7 | 10.12 (1.71×) · 6649 · not recorded | 9.42 (1.52×) · 6674 · not recorded | 10.07 (1.38×) · 7505 · not recorded | 2.91 (1.46×) · 3610 · not recorded | 11.52 (1.26×) · 1337 · not recorded | 10.18 (1.22×) · 5108 · not recorded | not split by class (before range 18) |
+| 018.a1 | 17442 | 332.3 | 7.94 (1.35×) · 7071 · not recorded | 7.92 (1.27×) · 6639 · not recorded | 9.15 (1.25×) · 7319 · not recorded | 2.64 (1.32×) · 3551 · not recorded | 11.10 (1.22×) · 1337 · not recorded | 10.20 (1.22×) · 5238 · not recorded | not split by class (before range 18) |
+
+**WAL across each class this range:** not recorded
+**Host load (1-min, recorded, not waited on):** macOS not recorded (before 2026-10-19) · Docker VM 2.42 → 2.24
+
+**Control probe** (one sample per arm, same window and binaries; (a) the range 15 Store, (b) the range's):
+
+| Sample | (a) Commits · MiB | (b) Commits · MiB | fs.write ≤1 KiB: (a) / (b) p50 ms · (b)/(a) · reads/call (a)/(b) | fs.write ≤8 KiB: (a) / (b) p50 ms · (b)/(a) · reads/call (a)/(b) | fs.read ≤8 KiB: (a) / (b) p50 ms · (b)/(a) · reads/call (a)/(b) | Host load (macOS) | Watch |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| control-017.diag-15v17 | 12851 · 207.8 | 15811 · 265.7 | failed: (a) 0 of ? calls ok, (b) 0 ok | failed: (a) 0 of ? calls ok, (b) 0 ok | 2.79 (1.00× first) / 2.43 · 0.87× · 73/57 | 9.15 → 9.53 | not judged (failed calls) |
+| control-017.diag-15v17-2 | 12851 · 207.8 | 15811 · 265.7 | 6.21 (1.00× first) / 6.63 · 1.07× · 114/112 | 6.39 (1.00× first) / 6.40 · 1.00× · 109/110 | 2.59 (0.93× first) / 2.32 · 0.89× · 73/57 | 11.39 → 10.96 | pass |
+| control-018.a1 | 12851 · 207.8 | 17442 · 328.3 | 6.63 (1.07× first) / 7.01 · 1.06× · 113/112 | 6.46 (1.01× first) / 6.41 · 0.99× · 108/108 | 2.74 (0.98× first) / 2.53 · 0.92× · 73/70 | 10.05 → 10.05 | pass |
+
+**Watch row** (control (b)/(a) p50 over 1.25×, or (b)'s reads per call over 2× (a)'s): pass (sample control-018.a1)
+
 ## 5. Findings and action
 
 ### Finding 018.a1 · stop
@@ -281,6 +305,10 @@ Diagnosis pending: `finding-018.a1.json`.
   - Content ratio 0.24× (0.29×); churn 0.02 (27.8 MiB stored for 1.27 GiB rewritten; r015 0.26).
   - Index rows aren't split this range (live Store; index rows + waste + other 86.5 MiB).
   - Tooling 367.9 s; the final command took 244 s under the 295 s alarm. Lanes ran in 3 commands (cuts 16 and 56; 16, 32 and 81 s).
+- **Speed as history grows (added after a1, owner request; watch row only).** a1 was played before the per-call counters existed, so its classes show "not recorded"; its control sample was taken afterwards on the live Store (`control-018.a1`, macOS load 10.0).
+  - The r018 Store (17,442 Commits, 328 MiB) against r015's (12,851 Commits, 208 MiB): (b)/(a) p50 1.06× write ≤1 KiB, 0.99× write ≤8 KiB, 0.92× read ≤8 KiB, with read syscalls per call equal (112/113, 108/108, 70/73). Watch row pass.
+  - In the play's traces, the p50 rise since r015 is mostly outside SQLite (write ≤1 KiB: 4.89 → 6.35 ms outside, 0.98 → 1.43 ms inside). History growth does not explain it.
+- **Installed tree row (correction, liaison question):** the row now reads the on-top chain the repair's P1 judges (equal to native). The lead-only chain's two `.bin` differences are each one shim whose target a lane's build makes; LayerFS equals the on-top chain byte for byte (`examples/node_modules/.bin` 3 files, 2,838 B, `1123c550…`; `python/sdk-runtime/node_modules/.bin` 3 files, 2,778 B, `d785f42d…`).
 
 
 ## Appendix

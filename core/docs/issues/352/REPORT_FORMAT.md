@@ -122,6 +122,37 @@ input size. Scaling: probes flat out of total, and every non-flat one by name.
 **Health:** Workspaces open, overlay files left, daemon memory (change), open
 files, WAL before seal.
 
+**Speed as history grows** (owner 2026-10-19, ranges 18 on, P3; a watch row,
+never a gate, workload, timeout or cache change; `growth.mjs`). Range 15 is the
+reference.
+- **Trend:** one row per range from 15, with Commits and Store MiB. For each
+  tracked uncontended class (`fs.write` ≤1/≤8/≤64 KiB, `fs.read` ≤8 KiB,
+  `sandbox.mount`, `sandbox.commit` 1 file Committed, `branch.merge`) it shows
+  p50 (× range 15), VM steps and read syscalls per solo call.
+- **Read syscalls stand in for page-cache misses.** The binary reports no
+  SQLite page-cache hit/miss counter, but SQLite reads a missing page with one
+  `pread`. A call's `/proc/self/io` delta (`syscr`, `rchar`, `read_bytes`)
+  belongs to the call only when no other recorded call overlapped it ("solo").
+  Workspace calls read in the daemon's process, so they show none.
+  Ranges 15–17 have no counters ("not recorded").
+- **WAL:** its size at each class's first and last call this range.
+- **Host load:** macOS 1-min load from `runs/<id>/hostload.jsonl`, which
+  `runner.mjs` writes around each command, and the Docker VM's.
+- **Control probe** (`control.mjs`, `metrics/control-NNN.a<attempt>.json`):
+  - One sample per arm, in one command, with the same binaries.
+  - Each arm runs 15 `fs.write` ≤1 KiB, 15 `fs.write` ≤8 KiB and 15 `fs.read`
+    ≤8 KiB calls in its own fresh volume:
+    - (a) a clone of the range 15 terminal Store;
+    - (b) a clone of the range's Store.
+  - The table shows each arm's p50, (b)/(a), (a) against its first completed
+    sample, and read syscalls per call.
+  - If both arms slow together, the host is the cause; if only (b) slows,
+    history growth is.
+- **Watch row:** fires when this attempt's control (b)/(a) p50 is over 1.25×,
+  or (b)'s read syscalls per call are over 2× (a)'s. A sample with failed calls
+  is listed but not judged. Labelled samples, such as
+  `control-017.diag-15v17-2`, are diagnostics.
+
 ### 5. Findings and action
 
 - **No problem found:** one line, `**Optimization:** none — no problems found.`,

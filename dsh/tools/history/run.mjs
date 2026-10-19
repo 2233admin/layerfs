@@ -78,6 +78,7 @@ import {
 import { addDelta, checkpointDiff, deltaSummary, deltaWork, diskGuard, diskModel, EXIT, nextPhase, oneshotSplit, p2Plan, pad, poolSharing, PHASES, phaseOps, Tree } from "./steps.mjs";
 import { ctxFromJson, dropHalf, loadHalf, saveHalf } from "./halves.mjs";
 import { consolidateLanes, playAgents, pool, safeCut, startRange } from "./agents.mjs";
+import { growthByClass } from "./growth.mjs";
 import { gitFacts } from "./gitplay.mjs";
 import { checkNode, groupsFile, nodeOf } from "./nodelanes.mjs";
 import { fillP3, p3Raw } from "./p3record.mjs";
@@ -565,8 +566,10 @@ async function playRange(run, k, mode, half = null, until = null, cut = null) {
   }
   m.ops = aggregate(t.calls);
   m.opsTrace = aggregate(t.callsTrace);
+  // owner 2026-10-19: per tracked class, read counters and the WAL beside p50 and SQL work (growth.mjs; watch only)
+  m.growth = growthByClass(t.all, run.sink.log);
   // the call records beside the trace, so a later re-derivation keeps the size classes (SPEC §5)
-  if (traceFile) writeFileSync(traceFile.replace(/\.jsonl$/, ".calls.jsonl"), run.sink.log.map((e) => JSON.stringify({ seq: e.seq, method: e.method, size: e.size ?? null, kind: e.kind ?? null, ...(e.newCommit ? { newCommit: true } : {}) })).join("\n") + "\n");
+  if (traceFile) writeFileSync(traceFile.replace(/\.jsonl$/, ".calls.jsonl"), run.sink.log.map((e) => JSON.stringify({ seq: e.seq, method: e.method, size: e.size ?? null, kind: e.kind ?? null, ...(e.newCommit ? { newCommit: true } : {}), ...(e.io ? { io: e.io } : {}), ...(e.wal ? { wal: e.wal } : {}) })).join("\n") + "\n");
   // every call by method (SPEC §3b), and the checkpoint diff's cost per entry it lists (SPEC §4)
   m.calls = callTable(t.all, run.sink.log);
   const diff = checkpointDiff(t.all, run.sink.log, `r${pad(k)}.verify`, proof?.changedDirs ?? null);

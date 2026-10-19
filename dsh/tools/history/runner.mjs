@@ -20,7 +20,8 @@
 // daemon, addon and Sandbox image ids. A run played here needs a Linux addon
 // (`--addon` on new/fork); the binary guard refuses any other.
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { loadavg, platform } from "node:os";
 import { join, resolve } from "node:path";
 import { HISTORY, PREFIX, REPO } from "./lib.mjs";
 import { options, rebaselineId, STORE_PATH } from "./run.mjs";
@@ -67,7 +68,15 @@ function main(argv) {
   const imageId = execFileSync("docker", ["image", "inspect", "--format", "{{.Id}}", RUNNER_IMAGE], { encoding: "utf8" }).trim();
   const hostSocket = execFileSync("docker", ["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"], { encoding: "utf8" }).trim().replace(/^unix:\/\//, "");
   const gitCommon = resolve(REPO, execFileSync("git", ["-C", REPO, "rev-parse", "--git-common-dir"], { encoding: "utf8" }).trim());
-  return spawnSync("docker", runnerArgs({ imageId, hostSocket, args, sdk, gitCommon }), { stdio: "inherit" }).status ?? 1;
+  // the host's 1-min load around the command (owner 2026-10-19: recorded, never waited on; growth.mjs reads it)
+  const start = { at: new Date().toISOString(), load: loadavg()[0] };
+  const status = spawnSync("docker", runnerArgs({ imageId, hostSocket, args, sdk, gitCommon }), { stdio: "inherit" }).status ?? 1;
+  const run = runOf(args);
+  if (run && existsSync(join(HISTORY, "runs", run))) appendFileSync(join(HISTORY, "runs", run, "hostload.jsonl"), JSON.stringify(hostLoadLine(args, start, { at: new Date().toISOString(), load: loadavg()[0] }, status)) + "\n");
+  return status;
 }
+
+/** One command's host load line (runs/<id>/hostload.jsonl): where it ran, its arguments, the load at both ends. */
+export const hostLoadLine = (args, start, end, status) => ({ where: `host (${platform()})`, args, start, end, status });
 
 if (import.meta.url === `file://${process.argv[1]}`) process.exit(main(process.argv.slice(2)));

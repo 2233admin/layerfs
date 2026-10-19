@@ -23,6 +23,7 @@ import { GIT_ALLOWED } from "./gitlanes.mjs";
 import { compareResults, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
 import { INSTALL } from "./calibrate-tests.mjs";
 import { CLOSURE_OUTPUT, sandboxVolumes } from "./closure.mjs";
+import { startIo } from "./growth.mjs";
 import {
   abs, attributeFuse, callOf, changedDirs, compareIds, comparePaths, idBatches, pad, parseTreePage, PHASES, phaseOps, PROBE_DIR, quote,
   deltaWork, markContention, placeEntries, route, sameAsTree, sandboxCommands, sandboxExpect, sqlCounters, traceLines, Tree, TREE_IDS, TREE_PAGE,
@@ -188,6 +189,9 @@ export function measure(method, args, value, tree, size) {
   return out;
 }
 
+/** Awaits `work` and always runs `done` after it (a synchronous throw too). */
+const finishing = async (done, work) => { try { return await work(); } finally { done(); } };
+
 /**
  * The run's SDK client with every call recorded (seq, method, actor, step
  * label, outcome, measure()) in `sink.log`. Each call's trace label is
@@ -200,8 +204,10 @@ export function record(raw, rec, sink) {
     raw.options.traceStep = `${rec.label ?? ""}#${seq}`;
     const entry = { seq, method, label: rec.label ?? null, agent: rec.agent };
     sink.log.push(entry);
+    // read counters and the WAL around the call, outside its traced time (growth.mjs)
+    const io = startIo(entry, sink, method);
     try {
-      const value = await fn(...args);
+      const value = await finishing(io, () => fn(...args));
       Object.assign(entry, { kind: value?.kind ?? "ok", ...(value?.fastForward === false ? { newCommit: true } : {}) }, measure(method, args, value, rec.tree, size));
       return value;
     } catch (error) {

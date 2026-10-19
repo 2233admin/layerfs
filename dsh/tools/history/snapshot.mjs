@@ -4,6 +4,7 @@
 //   node dsh/tools/history/snapshot.mjs verify --range N --dir <snapshots> [--run <id>]
 //   node dsh/tools/history/snapshot.mjs fork --range N --dir <snapshots> --work <dir> --project <name> [--volume <name>] [--run <id>]
 //   node dsh/tools/history/snapshot.mjs orphans --dir <snapshots>
+//   node dsh/tools/history/snapshot.mjs rebuild --manifest <file> --blocks <dir> --out <file>
 // A snapshot is the global Store's SQLite file at a checkpoint, kept as
 // range-NNN.json (a manifest of block hashes; range-NNN.<run>.json for a run
 // that reruns a range another line already snapped) over <snapshots>/blocks/, which
@@ -203,6 +204,9 @@ function main() {
     if (!r.ok) process.exit(1);
   } else if (cmd === "fork" && range !== null && dir && opt("--work") && opt("--project")) {
     console.log(JSON.stringify(fork({ range, dir, work: opt("--work"), project: opt("--project"), volume: opt("--volume"), run: opt("--run") }), null, 2));
+  } else if (cmd === "rebuild" && opt("--manifest") && opt("--blocks") && opt("--out")) {
+    // a snapshot's file rebuilt where its reader runs (control.mjs: a clone in a fresh volume)
+    console.log(rebuild(JSON.parse(readFileSync(opt("--manifest"), "utf8")), opt("--blocks"), opt("--out")));
   } else if (cmd === "orphans" && dir) {
     for (const path of orphans(dir)) console.log(path);
   } else {
