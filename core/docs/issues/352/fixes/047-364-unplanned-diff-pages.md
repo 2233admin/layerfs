@@ -103,6 +103,64 @@ Linux, pinned image, one sample per arm, Disposable/WAL/OFF,
 - **Planned difference:** the same statements in both arms (87,215), as expected. The fix does not touch it.
 - **Range estimate.** For range 20's verify (316 pages, about 70 s), the same per-page drop would give about 6 s (18 ms a page on average). This is an estimate, not a range run.
 
+### The real checkpoint diffs (lead, 2026-10-20)
+
+This replaces the range estimate above with a replay of the run Stores' own
+verify diffs. The Stores:
+- r015: `p3-main-f` restore (14→15).
+- r016: `p3-main-g` restore (15→16).
+- r020: `p3-main-p`'s volume after range 20 a2 (19→20).
+
+Method:
+- `layerfs-api/tests/diff_replay.rs` (ignored) pages each diff as verify does
+  (page size 1000, no hunks, resumed by cursor).
+- Each run is on a fresh copy of the Store; the time is the sum of the calls.
+- One sample per arm, macOS host, release, `LAYERFS_CONSTRUCTION_WORKERS=1`,
+  each under a 115 s alarm; 1-minute load 6.8–10.8, no QUIET.
+- Old arm: main `3bdc9d3efc`. It is split into two processes at a recorded
+  cursor for r016 and r020, to stay under the 120 s ceiling; every old page
+  pays the failed plan, so the split does not change its cost.
+- New arm: this fix at `6867d2f8b9`.
+
+**Byte-identical answers.** SHA-256 of every page's `items`, old and new:
+r015 `5c1237cdba6b12a3`, r016 `0d6f0271cfd939b0`, r020 `aa56f553126bbc7e`.
+
+| Diff | Arm | Pages | Entries | Total ms | ms / entry | Statements / entry | VM steps / entry | p50 page >64 entries (ms) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| r015 | old | 257 | 49,010 | 6,390 | 0.130 | 4.93 | 211 | 14.4 |
+| | new | 257 | 49,010 | 5,989 | 0.122 | 4.76 | 172 | — |
+| r016 | old | 259 | 49,205 | 70,375 | 1.430 | 18.89 | 2,973 | 265.1 |
+| | new | 259 | 49,205 | **6,065** | **0.123** | **1.72** | **187** | — |
+| r020 | old | 313 | 59,545 | 82,870 | 1.392 | 18.25 | 2,902 | 260.2 |
+| | new | 313 | 59,545 | **8,020** | **0.135** | **1.75** | **206** | — |
+
+- Ranges 16 and 20 are back at range 15's cost per entry. A
+  build-equivalent variant (the same two changes, sampled at its own commit
+  on a quieter host) gave 0.117 and 0.123 ms an entry, with a p50 page above
+  64 entries of 19.3 and 20.9 ms against r015's 11.5.
+- That page p50 stays 8–9 ms above r015's, just over the 5 ms floor:
+  - r015's planned walk pays its plan on page one (2.5 s, with the hint
+    lookups);
+  - the full walk spreads the reads over the pages;
+  - the totals agree.
+- Getting the root cause on these Stores took one constant per page, the
+  failed plan. Before the fix it was about 540k VM steps and 28.5 MB of
+  object reads per r016 page, whatever the page listed. The delta-chain
+  hypothesis did not hold.
+- **Edge test** `layerfs-api/tests/diff_resume.rs` builds these cases:
+  - a name on one side only (a file, a tree, a directory);
+  - the same bytes in a new inode;
+  - another mode;
+  - a time-only change, which is not committed and not listed;
+  - a directory's mode alone; a write in place;
+  - moved and unchanged symlinks;
+  - a recreated directory.
+
+  For four differences (both directions), the full walk resumed after every
+  path yields exactly the whole walk's later pairs, and paging at 1, 2 and 3
+  equals one page of 1000. Run at `6867d2f8b9` on the host and in the pinned
+  image; Clippy `--tests -D warnings` on layerfs-api is clean.
+
 ## Limits
 
 - The kept answer lives in the process that serves the pages, as plans already did (F-012). A verify whose pages are served by separate processes would pay the failed plan on every page.
