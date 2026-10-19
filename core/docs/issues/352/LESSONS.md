@@ -1,14 +1,19 @@
 # #352 — Lessons: troubleshooting and speed
 
-> **Status:** Current, 2026-10-18, from P0–P1 up to range 2's fix. Kept by the
-> lead; add a lesson when a range or a fix teaches one. Rules in HANDOFF.md,
-> ROLES.md and AGENTS.md win over anything here.
+> **Status:** Current, 2026-10-19, from P0–P1 up to range 15's terminal attempt
+> (P3: git and Node on, a4 `p3-main-d`, the new baseline in
+> [BASELINE_R15.md](BASELINE_R15.md)). Kept by the lead; add a lesson when a
+> range or a fix teaches one. Rules in HANDOFF.md, ROLES.md and AGENTS.md win
+> over anything here.
 
 ## 1. Speed
 
 Where the time went so far: a range plays in ~12–16 s (play ~10 s, seal ~3 s,
 verify ~1 s); a fix took 50–65 min of fixer time; the first builder tasks took
 15–55 min each. **The fixer and the builder are the bottleneck, not the replay.**
+In P3 (range 15) measured attempts started ~23 min apart (a3 12:30, a4 12:53 UTC): lanes 128 s, the final
+command 98–121 s, then report, check and comment; the time went to the four
+attempts and the decisions between them, not to the replay.
 
 | # | Lesson | Evidence |
 | --- | --- | --- |
@@ -24,6 +29,11 @@ verify ~1 s); a fix took 50–65 min of fixer time; the first builder tasks took
 | S10 | **Rebuilds: keep the old daemon by id.** The old binary is needed for old-vs-new tables; copy it to `core/target/issue352/daemon-<id>/` before rebuilding | The fixer kept `daemon-0ef24121/` and could measure old against new |
 | S11 | **Validate gates and probes offline before a measured run.** Dry-run gates.mjs over recorded metrics (seconds, no replay) and check every probe's input is fixed (SPEC §3c; the input size is recorded and a changed input is refused) before any re-baseline | Three re-baselines on daemons `71001f65`/`361bb09e` tripped on tooling: per-entry normalisation (F-012/F-013), a fixed cost spread over entries (F-013), a drifting probe input (F-014) |
 | S12 | **Build only what changed, warm.** Iterate with `-p <crate>` (and `--test <name>`) in the long-lived checkout's warm target. In Linux, use a named Docker volume for `CARGO_TARGET_DIR` (no macOS bind mount). Never use `--workspace --all-targets` mid-fix (it pulls in fs-bench-pro, frozen, and every test/bench). A fresh worktree gets its target cloned (`cp -c`) from the main checkout. A whole-workspace Linux check runs once, before acceptance, at most 5 min | F-020: the Linux `cargo build --workspace --all-targets` took 15 m 25 s, cold target in a new worktree on a bind mount, `-j 4`, and included fs-bench-pro repair. Warm `-p` builds in the same fix took 10–90 s |
+| S13 | **Dev slices before every measured P3 attempt.** Play one range on a `--label dev` fork (`f031-r1-slice-*`), fix what it shows, play the next slice. Each slice cost minutes; each measured attempt about 25 min with its report | Range 15 slices: d stop 1 (mount-path refresh cost); e js-yaml / empty folders (`r015-1-docs-rfc.mid`, PRUNE_EMPTY `55b584ec2d`); f devcheck reinstall shim (`cb3e20eb7e`); g racy git index (`--renormalize`, `153a1f6e30`); h F-056; i the zsh word-split bug; k confirmed lister v6; l confirmed the clean relink (Reinstall growth 62.8× on 11 packages, the link-unit question) |
+| S14 | **Prove only at quiet points.** A proof that runs while a lane still writes compares a moving tree. End-only test points (one per lane end, plus the lead) cost fewer proofs and cannot race | a2 (`p3-main-b`) stopped on a lane point that raced a later write; `pointsBefore` (`1aea36058f`) holds a lane's later steps, then the owner chose end-only points (`b966ddb720`). a4: 5 points, 20 pass |
+| S15 | **Split long stages under the 2-minute rule; declare any exception up front.** Lanes are cut into commands under 118 s (`--to` cut points); only range 15's final command got a declared 295 s alarm, and its expected time was stated before the run | a4 lanes: cuts at 20 and 41.1, played 128 s. Final command projected 100–120 s, measured 98 s (a3) and 121 s (a4) |
+| S16 | **Ask for the decision before changing a gate, an oracle or the workload.** A stop that needs a different comparison or workload goes to the owner with options and their cost; one attempt later the decision is settled, not argued in a report | Lister v6 and end-only points (owner "proceed", after a2); the clean relink (owner's words recorded in NODE_RULE §4, after a3). Each decision cost one message and saved an attempt |
+| S17 | **Measure what a decision costs, against the attempt before it.** Put the before/after table in the report the moment the decision lands | Clean relink vs a3's incremental repair: exec 26.1 s vs 1.57 s, Commit 11.8 s vs 58 ms, new stored 646,831 vs 22,038 B, final command 121 s vs 98 s (range-015 lead's note) |
 
 ## 2. Lead bookkeeping
 
@@ -44,6 +54,15 @@ verify ~1 s); a fix took 50–65 min of fixer time; the first builder tasks took
 - To amend an earlier report (lead annotations only, never recorded values),
   commit it on its own before checking the next range: F2 compares earlier
   reports with HEAD.
+- **One issue comment per attempt that has a report**, rendered from the
+  attempt's stored gates and finding (`report.mjs`), in attempt order. Before
+  saying an attempt has no report, check `~/lfs-history/metrics/range-NNN.aK.json`
+  and the report's Attempts table: range 15's a1 and a2 had both and were
+  wrongly called report-less; their comments went out late, and rendering a3
+  the same way reproduced its comment byte for byte.
+- **Record an owner decision verbatim** (RESULTS decision log, the rule file it
+  changes, the report's lead's note) and name who relayed it ("liaison under
+  owner delegation 2026-10-19").
 
 ## 3. Troubleshooting
 
@@ -89,6 +108,18 @@ verify ~1 s); a fix took 50–65 min of fixer time; the first builder tasks took
 | Range 0 | A yarn project: no offline install, all 27 test candidates skipped | Expected; tests start at range 1 |
 | Evidence of an unaccepted result cleaned up (F-017, 2026-10-18) | The fixer ran `run.mjs cleanup` on the old-vs-new diag runs before the lead accepted the result. The traces needed to attribute a p95 regression were gone, and the analysis cost a second pair of plays | Never clean up evidence of a result that has not been accepted: keep the diag run folders (traces, metrics, CPU samples) until the lead accepts, then clean up |
 | A traced call reads SQL counters (F-018) | Before daemon `c25119ac`, reading a session's counters queued for the writer's admission, so every traced call waited for any Commit holding the publication lane. The replay always traces, so its latencies carried this wait | Fixed: counters are read under the state lock alone. Per-call SQL counters are still process-wide deltas: under concurrency they include other calls' work |
+| The native oracle differs from LayerFS's environment | A proof stops on a difference the product did not make: the oracle ran at another path, from other roots, or with another command string | The native replay copies LayerFS's *environment* (mount path, lane roots, the exact recorded command, empty-folder pruning), never its internals. a1: no seq oracle without PRUNE_EMPTY (`e373fd3acb`); rb-p3 `-c`: oracle command string (`1249112f90`); a2: the repair lister did not know the lane roots; the mount-path refresh cost is only fair against native at a moved path |
+| Comparing pnpm bookkeeping | `.modules.yaml`, `.pnpm/lock.yaml` and `.pnpm-workspace-state*.json` record paths and times; they differ even when the installed packages are equal | Compare installed results (lister v6, NODE_RULE §6): package files by blob id, links by realpath, shims by target, the `pnpm ls` set; state files counted only (a2 → `b966ddb720`) |
+| Lane ordering race | A point's proof read a tree a later step of the same lane was already writing | `pointsBefore` holds later steps until the point settles; points are end-only (a2, `1aea36058f`) |
+| Stale git index entries | A file rewritten within the index's mtime granularity stays "clean" in `git status` with the old blob (racy git), so the lane commit misses it | Run `git add --renormalize` in the lane's add step (slice g, `153a1f6e30`) |
+| Empty folders taken for packages | dsh history leaves empty package folders that git does not track; tsdown and the workspace glob treat them as packages and the build differs from native | Prune empty directories in both replays, PRUNE_EMPTY (slice e: js-yaml, `r015-1-docs-rfc.mid`, `55b584ec2d`) |
+| First install against no lockfile | The first range-2 install had no earlier installed tree; the growth comparison divided by ~0 (935479×) | Judge a first install as a first install (rb-p3 `-b`, `6b65d86e6f`); keep the dirty run as evidence |
+| Link-unit denominators | Reinstall growth divides stored bytes by the raw bytes of changed packages; a link-only or tiny install has almost none, so the ratio is huge while the bytes are small | Read the absolute bytes; r003 12.51×, r004 266.97× (rb-p3 `-d`), slice l 62.8× on 11 packages. The gate-unit question (option (b), absolute bytes) is the owner's, not the lead's |
+| Incremental repair after a newest-wins merge (F-057) | The merge keeps the newest pnpm state file, so a frozen install on top keeps stale hoisting (a3: `@cordisjs/plugin-loader` → `vendor/loader`) | Repair is a clean relink, LayerFS and native (`4b725d5229`); F-057 stays open for the product fix |
+| Docker tag drift after a restart | After the 2026-10-19 reboot, `docker image inspect layerfs-352-runtime:node24` sometimes fails although the image is present | Re-tag by id before each command: `docker tag sha256:d3773b4e… layerfs-352-runtime:node24` (same image, the run pins the id) |
+| Another agent's disk cleanup deletes volumes | A Codex agent's cleanup (aiming for 500 GB free) deleted Docker volumes it thought unused, including `layerfs-issue359-prep` | Before every run, `docker volume inspect` every volume the run needs (pnpm store, the run's and snapshot's volumes); a missing one is a guard, not a rerun. Record each needed volume in the run ledger |
+| The lead's own session drops (ECONNRESET) | The lead's API connection dropped 7 times on 2026-10-19; the turn restarts without knowing whether its last command finished | After a restart, read the runner state first (`play.log`, the run ledger, `metrics/range-NNN.aK.json`, `git log`) and continue from it. Never replay a step or post a comment blind; one attempt stays one attempt |
+| Shell quoting in helper commands | zsh does not word-split an unquoted `$args`, so slice i played its whole range in one command; a sed put `${ALARM}` inside single quotes, so three commands ran without an alarm | Write run helpers as bash scripts (`play.sh`) with arrays; test a new alarm with a 2 s alarm before relying on it |
 
 ### Diagnosis shortcuts (SPEC §6)
 
