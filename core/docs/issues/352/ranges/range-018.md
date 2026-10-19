@@ -24,7 +24,7 @@ Areas changed: `examples/acp-agent` 30% · `packages/core` 11% · `/` 6% · othe
 | Steps | 2,864 / 2,864 outcomes as planned |
 | Conflicts | **3 / 3 planned hit · 0 unplanned** |
 | Unit tests | **30 / 30 equal to native** |
-| Installed tree | against the native replay of its chain · **differs**: 0 missing, 0 extra, 2 differ · not byte-compared: 3 pnpm state file(s) · by target: 292 bin shims, 3174 links · output root ×0, verification age ×1 |
+| Installed tree | against the native replay of the on-top chain (lead, lane points, repair): **equal to native** (the repair's P1) · the lead's chain alone (context; without the lane points' installs and builds): 0 missing, 0 extra, 2 differ (`examples/node_modules/.bin`, `python/sdk-runtime/node_modules/.bin`) · not byte-compared: 3 pnpm state file(s) · by target: 292 bin shims, 3174 links · output root ×0, verification age ×1 |
 | Last-writer-wins (`/.lww`) | written (31 lines from 1 .gitignore files) · **170 picks** in 3 merges (162 under node_modules) · re-installed after the merge |
 | Ignored files | — (installs not played in P3) |
 | Milestone | — |
