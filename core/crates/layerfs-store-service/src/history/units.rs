@@ -46,11 +46,17 @@ pub(crate) fn decide(
         Some(failure) => history(failure),
         None => args::content(error),
     };
+    // Ours first: when ours changed no unit, no unit can be two-sided, so
+    // theirs is not classified at all.
     let (ours, theirs) = timing.child("units.classify").run(|_| {
-        Ok::<_, SdkRefusal>((
-            unit_changes(save, Some(hints), sides.base, sides.ours, units).map_err(content)?,
-            unit_changes(save, Some(hints), sides.base, sides.theirs, units).map_err(content)?,
-        ))
+        let ours =
+            unit_changes(save, Some(hints), sides.base, sides.ours, units).map_err(content)?;
+        let theirs = if ours.iter().any(|unit| unit.changed > 0) {
+            unit_changes(save, Some(hints), sides.base, sides.theirs, units).map_err(content)?
+        } else {
+            vec![Default::default(); units.len()]
+        };
+        Ok::<_, SdkRefusal>((ours, theirs))
     })?;
     let mut reports = decide_units(units, &ours, &theirs);
     let mut roots = [sides.ours, sides.theirs];

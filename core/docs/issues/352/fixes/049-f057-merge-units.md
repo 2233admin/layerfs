@@ -184,3 +184,55 @@ Linux test summaries `out/f057/lx/sum-g-*.txt`, Clippy `out/f057/lx/clippy.txt`.
 - **Full walks.** Classify and revert each walk the whole trees when a side changed more than `MAXIMUM_CHANGED` (65,536) inodes or bindings are missing. A relink of a large `node_modules` is that case, and costs one full walk per side.
 - **Restored beside the move.** A directory the losing side moved out of a lost unit is restored under a fresh serial beside the move. The moved copy stays outside the unit, so the merge keeps both.
 - **Classification costs every merge that names units.** A merge that names units classifies both sides even when it decides nothing. On the recorded merges that costs a median of 4.9 ms and up to 27 ms (below).
+
+## Addendum 1 · cutting the units step (2026-10-20)
+
+The liaison asked to cut the units step before the #352 switch-over:
+- a merge with units that decides nothing should cost under 5 ms more;
+- the `node_modules` merges should come down as far as cheaply possible.
+
+**Where the time goes.** Host release run of merges 29, 35 and 36, with diagnostics not kept:
+
+| Part | Share or size |
+| --- | --- |
+| Building each side's change plan (`Plan::make`) | 80–95% of classification |
+| — the inode-table difference | about half of the plan |
+| — verifying each changed inode's recorded bindings against the tree (directory lookups) | most of the rest |
+| — the catalog hint queries | small |
+| The walk and the unit pattern match | 1–35 ms |
+| mtime reads | ≤ 0.2 ms, even over 5,480 changed paths |
+
+The liaison's three items, against that profile:
+1. **mtimes only for two-sided units:** would save at most 0.2 ms. Not built.
+2. **Ours first:** built. Ours is classified first. When ours changed no unit, no unit can be two-sided, so theirs is not classified at all. Theirs is still classified whenever ours changed a unit, because its latest write decides.
+3. **Revert only where needed:** already true. Only a side that lost a two-sided unit is reverted, only inside those units. A merge with no two-sided unit writes no reverted tree: its stored bytes equalled main's on all 40 such merges in both samples.
+
+**Measurement.** Linux, pinned image, release `replay_merges` (SHA-256
+`f83eac3c…`, built at `-j 2` under QUIET), one sample per arm on a fresh copy
+of the r015 Store, the same 42 merges and units. 1-minute load 13.9–14.2,
+with QUIET held by ranges 21–30.
+
+| | Before (first sample) | After |
+| --- | --- | --- |
+| Extra ms on the 40 merges that decide nothing: median / max | 4.9 / 27.1 | **1.8 / 18.4** |
+| Of those, above 5 ms | 20 | **15** |
+| Extra statements on those 40 | 25–2,232 | 12–1,692 |
+| Median classification ms on those 40 | 14.2 | 5.8 |
+| Merge 35, without → with units (ms) | 442 → 761 | 409 → 837 |
+| Merge 36, without → with units (ms) | 498 → 972 | 457 → 942 |
+| Total, 42 merges, without → with units (ms) | 1,566 → 2,657 | 1,419 → 2,502 |
+
+- Merges 35 and 36 change `node_modules` on both sides, so both sides are classified as before: classify 463 / 424 ms, revert 193 / 112 ms.
+- **Not met:** under 5 ms on every merge that decides nothing. The 15 that still exceed it are merges where ours changed a unit (theirs is then classified too), or where ours alone has enough changed inodes.
+
+**What remaining cuts need.** Each needs a decision before it is built:
+- **Name changed inodes from recorded bindings without verifying them.** Bindings are recorded for every saved tree and never removed, so an inode none of whose recorded ancestries touches a unit cannot be in one. This holds only where every binding of both trees was recorded, which a Store older than the binding table may not satisfy.
+- **Share the base → ours difference with `merge_roots`,** which already computes it.
+
+**Checks.**
+- Host: the api merge suites (`merge_units`, `sdk_method_golden`, `merge_by_serial`, `merge_root_oracle`, `merge_metadata_only`, `merge_mixed_forms`, `sdk_merge_paths`) pass, and Clippy on store-service and api is clean.
+- Linux, `-j 2` under QUIET: the 46 test binaries of store-service and api pass, and Clippy is clean.
+- No test added: skipping theirs changes no result, only the work.
+
+Receipts: this session's scratch `out/f057/m2/`, `out/f057/lx2/`.
+
