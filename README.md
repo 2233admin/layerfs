@@ -22,11 +22,6 @@
 > crash or power-loss durability. Read the [release record](release-notes/0.1.7/README.md)
 > and its waivers before relying on it.
 
-<p align="center">
-  <img src="docs/assets/readme/demo.gif" alt="A LayerFS project at work: agents fork Branches, mount Workspaces in Sandboxes, commit, merge and publish to main, while the history tree grows" width="100%">
-</p>
-<p align="center"><sub>Agents fork Branches, work in Workspaces inside Sandboxes, commit, merge and publish to <code>main</code>. The history grows as they go.</sub></p>
-
 ## Core ideas
 
 <table>
@@ -74,6 +69,13 @@
 | <img src="docs/assets/readme/icon-immutable.svg" width="16" height="16" alt=""> | **08 · Append-only Objects** | Saved objects are never rewritten. The Store only grows. |
 | <img src="docs/assets/readme/icon-lww.svg" width="16" height="16" alt=""> | **09 · Conflict Rules (`.lww`)** | Name the files that should never conflict. The newest edit wins. |
 | <img src="docs/assets/readme/icon-bigfile.svg" width="16" height="16" alt=""> | **10 · Big File, Small Edit** | An edit costs the size of the edit, not the size of the file. |
+
+## See it run
+
+<p align="center">
+  <img src="docs/assets/readme/demo.gif" alt="A LayerFS project at work: agents fork Branches, mount Workspaces in Sandboxes, commit, merge and publish to main, while the history tree grows" width="100%">
+</p>
+<p align="center"><sub>Agents fork Branches, work in Workspaces inside Sandboxes, commit, merge and publish to <code>main</code>. The history grows as they go.</sub></p>
 
 ## Get started
 
