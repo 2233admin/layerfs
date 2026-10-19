@@ -9,6 +9,11 @@
 //! deterministic on equal copies, so two builds' lines compare exactly; the
 //! recorded root differs only where the merge took fresh serials, whose
 //! allocator has moved since.
+//!
+//! With `LAYERFS_352_REPLAY_UNITS=1` each merge passes the F-057 units
+//! `node_modules` and `build` (`packages/*/*/lib`, `**/tsconfig.tsbuildinfo`)
+//! and prints one `REPLAY_UNITS` line: the units step's time (classify and
+//! revert), each decided unit, and the merge Commit's stored bytes.
 #[path = "support/installed_store.rs"]
 #[allow(dead_code)]
 mod installed;
@@ -115,6 +120,21 @@ fn recorded_branch_merges_merge_again() {
     let viewer = views
         .as_ref()
         .map(|_| view::Viewer::open(&path, &binding, installed::CURSOR));
+    let units = std::env::var_os("LAYERFS_352_REPLAY_UNITS").map(|_| {
+        let group = |name: &str, patterns: &[&str]| {
+            SdkValue::map([
+                ("name", SdkValue::text(name)),
+                (
+                    "patterns",
+                    SdkValue::List(patterns.iter().map(|p| SdkValue::text(*p)).collect()),
+                ),
+            ])
+        };
+        SdkValue::List(vec![
+            group("node_modules", &["node_modules"]),
+            group("build", &["packages/*/*/lib", "**/tsconfig.tsbuildinfo"]),
+        ])
+    });
     let (mut same, mut merged_count) = (0, 0);
     for (index, (commit, parent, second, recorded)) in merges.iter().enumerate() {
         let (left, right) = (format!("replay-l{index}"), format!("replay-r{index}"));
@@ -130,17 +150,73 @@ fn recorded_branch_merges_merge_again() {
             .unwrap();
         }
         let before = service.opened.diagnostics().unwrap().writer;
+        let mut fields = vec![
+            ("branch", SdkValue::text(&left)),
+            ("with", SdkValue::text(&right)),
+            ("name", SdkValue::text(format!("replay-m{index}"))),
+        ];
+        if let Some(units) = &units {
+            fields.push(("units", units.clone()));
+        }
+        let recording = layerfs_store_service::telemetry::Recording::start();
         let started = std::time::Instant::now();
-        let merged = call(
-            &service,
-            "branch.merge",
-            vec![
-                ("branch", SdkValue::text(&left)),
-                ("with", SdkValue::text(&right)),
-                ("name", SdkValue::text(format!("replay-m{index}"))),
-            ],
-        );
+        let merged = call(&service, "branch.merge", fields);
         let ms = started.elapsed().as_secs_f64() * 1e3;
+        let reports = recording.finish();
+        let root_ms = |name: &str| {
+            reports
+                .iter()
+                .filter_map(|report| report.root())
+                .filter(|node| node.name() == name)
+                .map(|node| node.elapsed().as_secs_f64() * 1e3)
+                .sum::<f64>()
+        };
+        let stored = merged
+            .as_ref()
+            .ok()
+            .filter(|reply| reply.get("fastForward") == Some(&SdkValue::Bool(false)))
+            .map(|_| {
+                let commits = call(
+                    &service,
+                    "branch.list_commits",
+                    vec![("branch", SdkValue::text(format!("replay-m{index}")))],
+                )
+                .unwrap();
+                let Some(SdkValue::List(items)) = commits.get("items") else {
+                    return "none".to_owned();
+                };
+                let int = |name| match items[0].get(name) {
+                    Some(SdkValue::Int(n)) => *n,
+                    _ => -1,
+                };
+                format!(
+                    "{}/{}/{}",
+                    int("newCanonical"),
+                    int("newStored"),
+                    int("newMetadata")
+                )
+            })
+            .unwrap_or_else(|| "none".to_owned());
+        let decided = match &merged {
+            Ok(reply) => reply.get("units").cloned(),
+            Err(refusal) => refusal.detail.get("units").cloned(),
+        };
+        let step_ms = |name: &str| {
+            reports
+                .iter()
+                .filter_map(|report| report.root())
+                .flat_map(|node| node.children())
+                .filter(|node| node.name() == name)
+                .map(|node| node.elapsed().as_secs_f64() * 1e3)
+                .sum::<f64>()
+        };
+        println!(
+            "REPLAY_UNITS {index} units_ms={:.1} classify_ms={:.1} revert_ms={:.1} merge_ms={:.1} stored={stored} decided={decided:?}",
+            root_ms("branch.merge.units"),
+            step_ms("units.classify"),
+            step_ms("units.revert"),
+            root_ms("branch.merge"),
+        );
         let after = service.opened.diagnostics().unwrap().writer;
         println!(
             "REPLAY_WORK {index} ms={ms:.1} statements={} vm_steps={} fullscan_steps={} sorts={}",

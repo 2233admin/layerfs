@@ -46,9 +46,12 @@ pub(crate) fn decide(
         Some(failure) => history(failure),
         None => args::content(error),
     };
-    let ours = unit_changes(save, Some(hints), sides.base, sides.ours, units).map_err(content)?;
-    let theirs =
-        unit_changes(save, Some(hints), sides.base, sides.theirs, units).map_err(content)?;
+    let (ours, theirs) = timing.child("units.classify").run(|_| {
+        Ok::<_, SdkRefusal>((
+            unit_changes(save, Some(hints), sides.base, sides.ours, units).map_err(content)?,
+            unit_changes(save, Some(hints), sides.base, sides.theirs, units).map_err(content)?,
+        ))
+    })?;
     let mut reports = decide_units(units, &ours, &theirs);
     let mut roots = [sides.ours, sides.theirs];
     for (index, this) in [Side::Ours, Side::Theirs].into_iter().enumerate() {
@@ -68,9 +71,12 @@ pub(crate) fn decide(
             policy: sides.policy,
             capacities: sides.capacities,
         };
-        let (reverted, scratch) = store
-            .merge_records(|records| {
-                revert_units(save, &mut save.sink(), &input, fresh, Some(records), timing)
+        let (reverted, scratch) = timing
+            .child("units.revert")
+            .run(|timing| {
+                store.merge_records(|records| {
+                    revert_units(save, &mut save.sink(), &input, fresh, Some(records), timing)
+                })
             })
             .map_err(args::failed)?;
         let reverted = reverted.map_err(|error| match (hints.failure.take(), scratch) {
