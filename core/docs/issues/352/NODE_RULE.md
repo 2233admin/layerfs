@@ -136,6 +136,18 @@ its own, the repair's install and build at theirs. The folder is moved there
 first. The native lister normalizes the earlier roots, as LayerFS's does.
 The tree and commands are unchanged.
 
+**What a chain replays.**
+- **A lane point's native chain:** the lead's install and build, then each
+  earlier point of the same lane as it ran (its install, then its build,
+  whose `lib/` output stays in the lane's tree), then the point itself.
+- **The repair's chain:** the same for every lane, in the order the points
+  ran. Under R1 only the root lane changes install inputs, so only its
+  installs change the installed packages. The other lanes contribute their
+  builds, not their installs: replayed in one native folder, their refresh of
+  the base inputs would remove what the root lane added, which the LayerFS
+  merge keeps. P1 at each of their points judges what their refresh
+  rewrote.
+
 The underlying product property is that a Workspace's path is new on every
 mount (F-029, by design). Tools that cache absolute paths therefore redo
 work on LayerFS that a fixed checkout skips. It is recorded here, not

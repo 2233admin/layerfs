@@ -358,12 +358,15 @@ async function cmdProofs(o) {
     // each state at the mount path LayerFS ran it at (nativeChain): the lead's install and build at the lead's
     const at = (root) => (root ? { root } : {}), leadRoot = m.node.points.find((q) => q.lane === "lead")?.root ?? null;
     const chain0 = m.node.chain.map((e) => ({ tree: e.tree, command: e.command, ...at(leadRoot) }));
+    // an earlier point as the lane ran it: its install, then its build (its lib/ output stays in the lane's tree,
+    // as the lead's build does in chain0; R1 slice f031-r1-slice-e r015-1-docs-rfc.end)
+    const pointStates = (q) => [{ tree: q.treeNative, command: q.install.command, ...at(q.root) }, ...(q.tsc?.command ? [{ tree: q.treeNative, command: q.tsc.command, ...at(q.root) }] : [])];
     for (const pt of m.node.points) {
       if (proofs[pt.id]) continue;
       if (Date.now() - t0 > budget) { left++; continue; }
       const tree = pt.lane === "lead" ? pt.tree : await materialize(repo, baseTree, pt.delta, blobs);
       const treeOk = !pt.treeLfs || pt.treeLfs === tree;
-      const states = pt.lane === "lead" ? [{ tree, command: pt.install.command, ...at(pt.root) }] : [...chain0, ...m.node.points.filter((q) => q.lane === pt.lane && q.order < pt.order).map((q) => ({ tree: q.treeNative, command: q.install.command, ...at(q.root) })), { tree, command: pt.install.command, ...at(pt.root) }];
+      const states = pt.lane === "lead" ? [{ tree, command: pt.install.command, ...at(pt.root) }] : [...chain0, ...m.node.points.filter((q) => q.lane === pt.lane && q.order < pt.order).flatMap(pointStates), { tree, command: pt.install.command, ...at(pt.root) }];
       const tail = { build: pt.tsc?.command ?? null, packages: pt.tsc?.packages ?? [], tests: pt.vitest?.files ?? [], vitestTimeoutS: 90 };
       const native = treeOk ? cachedOracle(oracleDir(run), { repo, states, tail, inputs: pt.inputs, image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : null;
       const groups = existsSync(groupsFile(run, k, pt.id)) ? JSON.parse(readFileSync(groupsFile(run, k, pt.id), "utf8")) : null;
@@ -376,13 +379,20 @@ async function cmdProofs(o) {
       console.error(`${pt.id}: ${Object.entries(proofs[pt.id].proofs).map(([id, r]) => `${id} ${r.result}`).join(" · ")} (native ${native?.cached ? "cached" : `${native?.ms ?? 0} ms`})`);
     }
     // the repair (P6) on top of the chain its merged node_modules carries: the lead's install and build, every lane
-    // point's install in the order they ran, then the repair install and build on the checkpoint tree
+    // point's install and build in the order they ran, then the repair install and build on the checkpoint tree
     const inst = m.closure?.rows?.find((r) => /install/.test(r.kind));
     if (inst && !proofs["lead.repair"] && Date.now() - t0 <= budget) {
       const build = m.closure.rows.find((r) => r.kind === "build"), tree = git(run.manifest.repo, ["rev-parse", `${m.plan.checkpoint}^{tree}`]).trim();
-      const lanes = m.node.points.filter((q) => q.lane !== "lead" && q.install?.command && q.treeNative).map((q) => ({ tree: q.treeNative, command: q.install.command, ...at(q.root) }));
+      // NODE_RULE §3 R1: only the root lane changes install inputs, so only its installs change the installed
+      // packages; another lane's install is a refresh of the range base's inputs (P1 at its point judges what it
+      // rewrites). Replayed in one native folder, that refresh would remove what the root lane added, which the
+      // merge keeps (R1 slice f031-r1-slice-e: js-yaml), so only those lanes' builds are in the chain
+      const plan = JSON.parse(readFileSync(join(run.manifest.plan, `range-${pad(k)}.json`), "utf8"));
+      const rootLane = node.inputsRule === "r1" ? plan.lanes.find((l) => l.areas.includes("/"))?.name ?? null : null;
+      const ran = m.node.points.filter((q) => q.lane !== "lead" && q.install?.command && q.treeNative);
+      const lanes = ran.flatMap((q) => (rootLane && q.lane !== rootLane ? pointStates(q).slice(1) : pointStates(q)));
       const states = [...chain0, ...lanes, { tree, command: inst.command ?? installCommand({ policy: node.storePolicy }), ...at(inst.root) }];
-      const native = lanes.length === m.node.points.filter((q) => q.lane !== "lead").length
+      const native = ran.length === m.node.points.filter((q) => q.lane !== "lead").length
         ? cachedOracle(oracleDir(run), { repo, states, tail: build ? { build: build.command ?? buildCommand(build.packages), packages: build.packages, ...at(build.root) } : {}, inputs: "repair", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : null;
       const groups = m.closure.repairGroups && existsSync(m.closure.repairGroups) ? JSON.parse(readFileSync(m.closure.repairGroups, "utf8")) : null;
       proofs["lead.repair"] = judgeRepair({ ...m.closure, tree }, native, { groups, nativeMs: native?.ms ?? null });
