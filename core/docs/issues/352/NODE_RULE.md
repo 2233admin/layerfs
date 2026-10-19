@@ -214,10 +214,13 @@ native repair chain is unchanged.
 native repair chain merges the lanes as LayerFS does.
 - Each lane point's states run from the state the lanes forked from.
 - Their changes are captured (created, removed, or rewritten with other bytes),
-  the folder is restored, and the changes are applied in the plan's
-  consolidation merge order before the repair (`lanemerge.mjs`).
-- A path two lanes both changed takes the later-merged lane's version and is
-  listed (`twoSided` in the oracle).
+  the folder is restored, and the changes are applied before the repair
+  (`lanemerge.mjs`).
+- The order is the lanes' recorded write order (owner option 1, after range 18
+  a3): each lane's last exec end at its Node points, from the trace.
+- A path two lanes both changed takes the newest writer's version, as `/.lww`
+  does; on a tie the earlier-merged lane wins. Every such path is listed
+  (`twoSided` in the oracle).
 - No gate, proof scope or workload changed.
 
 ## 7. Resilience checks per range

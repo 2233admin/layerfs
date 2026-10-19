@@ -102,8 +102,9 @@ export const nativeClean = (i, idx, scratch = "/tmp") => `if rm -rf ${scratch}/c
 
 /**
  * Option A (owner 2026-10-19, fix 042): the lane points' states (`lane`, `merge` = the lane's place in the
- * consolidation's merge order) each run from the state the lanes forked from, as LayerFS's lanes do; their changes
- * are captured, the folder restored, and the changes applied in merge order before the next state (lanemerge.mjs).
+ * lanes' recorded write order, laneWriteOrder) each run from the state the lanes forked from, as LayerFS's lanes
+ * do; their changes are captured, the folder restored, and the changes applied in that order before the next
+ * state (lanemerge.mjs), so the newest writer wins a two-sided path as `/.lww` does.
  * Returns, per state index, the commands to run before it, whether `prev` (the tree the folder holds) goes back to
  * the lanes' base before it, and the commands after the last state.
  */
@@ -348,6 +349,30 @@ function chainParts(m) {
   return { at, chain0, pointStates };
 }
 
+/** The play's trace lines of attempt `m` (runs/<run>/trace/range-NNN.aK.jsonl), ended calls only. */
+export function traceOf(run, m) {
+  const file = join(run.dir, "trace", `range-${pad(m.range)}.a${m.attempt}.jsonl`);
+  if (!existsSync(file)) throw new Error(`range ${m.range}: no trace of attempt ${m.attempt} (${file}): the lanes' write order is not recorded`);
+  return readFileSync(file, "utf8").split("\n").filter((l) => l.includes('"phase":"end"')).map((l) => JSON.parse(l));
+}
+
+/**
+ * The lanes in the order of their last recorded write (owner option 1, 2026-10-19): each lane's latest end of a
+ * `sandbox.exec` at one of its Node points (`<lane>.<point>.<step>#seq`, start + ms). LayerFS's `/.lww` keeps the
+ * newer write and ours on a tie; ours (main) holds the earlier-merged lane, so on a tie the earlier-merged lane
+ * is applied last. A lane with no recorded point exec, or one the consolidation does not merge, has no order.
+ */
+export function laneWriteOrder(lines, points, mergeOrder, k) {
+  const lanes = [...new Set(points.map((q) => q.lane))];
+  const rank = (lane) => { const r = mergeOrder.indexOf(lane); if (r < 0) throw new Error(`range ${k}: lane ${lane} is not merged in the plan's consolidation`); return r; };
+  return lanes.map((lane) => {
+    const prefixes = points.filter((q) => q.lane === lane).map((q) => `${lane}.${q.point}.`);
+    const ends = lines.filter((l) => l.method === "sandbox.exec" && prefixes.some((p) => String(l.step ?? "").startsWith(p))).map((l) => Date.parse(l.start) + l.ms);
+    if (!ends.length) throw new Error(`range ${k}: lane ${lane} has no recorded exec at its points: its write order is unknown`);
+    return { lane, end: new Date(Math.max(...ends)).toISOString(), merge: rank(lane) };
+  }).sort((a, b) => Date.parse(a.end) - Date.parse(b.end) || b.merge - a.merge);
+}
+
 /**
  * The chain the lead's merged node_modules carries at the repair: the lead's install and build, every lane point's
  * install and build in the order they ran, then the repair install on the checkpoint tree (its build is the tail).
@@ -364,12 +389,12 @@ export function repairChain(run, m, k) {
   const plan = JSON.parse(readFileSync(join(run.manifest.plan, `range-${pad(k)}.json`), "utf8"));
   const rootLane = node.inputsRule === "r1" ? plan.lanes.find((l) => l.areas.includes("/"))?.name ?? null : null;
   const ran = m.node.points.filter((q) => q.lane !== "lead" && q.install?.command && q.treeNative);
-  // option A (fix 042): each lane's states run from the lanes' base and merge in the consolidation's order
+  // option A (fix 042): each lane's states run from the lanes' base; their captures apply in the lanes' recorded
+  // write order (owner option 1, range 18 a3), so the newest writer wins a two-sided path as `/.lww` does
   const order = (plan.consolidation ?? []).filter((c) => c.op === "merge").map((c) => c.lane);
-  const rank = (lane) => { const r = order.indexOf(lane); if (r < 0) throw new Error(`range ${k}: lane ${lane} is not merged in the plan's consolidation`); return r; };
-  const byLane = [...new Set(ran.map((q) => q.lane))].sort((a, b) => rank(a) - rank(b));
-  const lanes = byLane.flatMap((lane) => ran.filter((q) => q.lane === lane).flatMap((q) => (rootLane && q.lane !== rootLane ? pointStates(q).slice(1) : pointStates(q)))
-    .map((st) => ({ ...st, lane, merge: rank(lane) })));
+  const wrote = laneWriteOrder(traceOf(run, m), ran, order, k);
+  const lanes = wrote.flatMap(({ lane, end }, rank) => ran.filter((q) => q.lane === lane).flatMap((q) => (rootLane && q.lane !== rootLane ? pointStates(q).slice(1) : pointStates(q)))
+    .map((st) => ({ ...st, lane, merge: rank, wrote: end })));
   const states = [...chain0, ...lanes, { tree, command: inst.command ?? installCommand({ policy: node.storePolicy }), ...at(inst.root), clean: true }];
   const buildState = build ? { tree, command: build.command ?? buildCommand(build.packages), ...at(build.root) } : null;
   return { tree, states, buildState, tail: build ? { build: buildState.command, packages: build.packages, ...at(build.root) } : {},

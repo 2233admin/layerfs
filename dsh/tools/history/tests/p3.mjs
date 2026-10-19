@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { changedPackages, checkNode, commitIdOf, inputsHash, pointsBefore, testPoints, treeDelta, treeIdCommand, wholeBuild } from "../nodelanes.mjs";
 import { PRUNE_EMPTY, pointBuild } from "../nodeconfig.mjs";
-import { chooseFiles, laneSteps, nativeClean, oracleKey, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
+import { chooseFiles, laneSteps, laneWriteOrder, nativeClean, oracleKey, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
 import { execTool, forkP3State, p3StateOf, partsFromMetrics } from "../run.mjs";
 import { installCommand, pointInstall, STORE_POLICIES } from "../closure.mjs";
 import { sliceRange } from "../slice.mjs";
@@ -205,18 +205,24 @@ test("the devcheck's reinstall oracle under Node: the repair's chain and build, 
     const tree = execFileSync("git", ["--git-dir", repo, "mktree"], { input: "", encoding: "utf8" }).trim();
     const commit = execFileSync("git", ["--git-dir", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit-tree", tree, "-m", "c"], { encoding: "utf8" }).trim();
     mkdirSync(plan); writeFileSync(join(plan, "range-015.json"), JSON.stringify({ lanes: [{ name: "a", areas: ["/"] }, { name: "b", areas: ["docs"] }], consolidation: [{ op: "merge", lane: "b" }, { op: "merge", lane: "a" }, { op: "reconcile", files: [] }] }));
-    const run = { manifest: { repo, plan, node: { on: true, inputsRule: "r1" } } };
-    const lane = (laneName, order, root) => ({ lane: laneName, order, root, treeNative: `t-${laneName}${order}`, install: { command: "install" }, tsc: { command: `tsc ${laneName}` } });
-    const m = { plan: { checkpoint: commit }, node: { chain: [{ tree: "t0", command: "lead install" }], points: [{ lane: "lead", root: "/workspaces/1" }, lane("a", 1, "/workspaces/2"), lane("b", 1, "/workspaces/3")] },
+    const run = { dir, manifest: { repo, plan, node: { on: true, inputsRule: "r1" } } };
+    // the lanes' recorded writes (owner option 1): a's point finished after b's
+    mkdirSync(join(dir, "trace"));
+    const exec = (step, start, ms) => JSON.stringify({ method: "sandbox.exec", phase: "end", step, start, ms });
+    writeFileSync(join(dir, "trace", "range-015.a1.jsonl"), [exec("a.1.tsc#9", "2026-10-19T10:00:05.000Z", 1000), exec("b.1.tsc#8", "2026-10-19T10:00:00.000Z", 2000), exec("a.lane-step#3", "2026-10-19T11:00:00.000Z", 1)].join("\n") + "\n");
+    const lane = (laneName, order, root) => ({ lane: laneName, point: String(order), order, root, treeNative: `t-${laneName}${order}`, install: { command: "install" }, tsc: { command: `tsc ${laneName}` } });
+    const m = { range: 15, attempt: 1, plan: { checkpoint: commit }, node: { chain: [{ tree: "t0", command: "lead install" }], points: [{ lane: "lead", root: "/workspaces/1" }, lane("a", 1, "/workspaces/2"), lane("b", 1, "/workspaces/3")] },
       closure: { rows: [{ kind: "repair-install", command: "repair", root: "/workspaces/4" }, { kind: "build", command: "build", packages: ["p"], root: "/workspaces/4" }] }, p3proofs: { "lead.repair": {} } };
     const states = reinstallStates(run, m, 15, "clean install");
-    // option A (fix 042): lanes in merge order (b, then a), each tagged with its lane and merge rank
-    assert.deepEqual(states.map((x) => [x.tree, x.command, x.root ?? null, x.lane ?? null, x.merge ?? null]), [
-      ["t0", "lead install", "/workspaces/1", null, null], ["t-b1", "tsc b", "/workspaces/3", "b", 0],
-      ["t-a1", "install", "/workspaces/2", "a", 1], ["t-a1", "tsc a", "/workspaces/2", "a", 1],
-      [tree, "repair", "/workspaces/4", null, null], [tree, "build", "/workspaces/4", null, null], [tree, "clean install", null, null, null]]);
+    // option A (fix 042), owner option 1: lanes in their recorded write order (b ended 10:00:02, a 10:00:06; a lane
+    // step outside its points does not count), each tagged with its lane, its place and its last write
+    assert.deepEqual(states.map((x) => [x.tree, x.command, x.root ?? null, x.lane ?? null, x.merge ?? null, x.wrote ?? null]), [
+      ["t0", "lead install", "/workspaces/1", null, null, null], ["t-b1", "tsc b", "/workspaces/3", "b", 0, "2026-10-19T10:00:02.000Z"],
+      ["t-a1", "install", "/workspaces/2", "a", 1, "2026-10-19T10:00:06.000Z"], ["t-a1", "tsc a", "/workspaces/2", "a", 1, "2026-10-19T10:00:06.000Z"],
+      [tree, "repair", "/workspaces/4", null, null, null], [tree, "build", "/workspaces/4", null, null, null], [tree, "clean install", null, null, null, null]]);
     writeFileSync(join(plan, "range-015.json"), JSON.stringify({ lanes: [{ name: "a", areas: ["/"] }, { name: "b", areas: ["docs"] }], consolidation: [{ op: "merge", lane: "a" }] }));
     assert.throws(() => reinstallStates(run, m, 15, "clean install"), /lane b is not merged/);
+    assert.throws(() => reinstallStates(run, { ...m, attempt: 2 }, 15, "clean install"), /no trace of attempt 2/);
     assert.throws(() => reinstallStates(run, { ...m, p3proofs: {} }, 15, "clean install"), /repair proof has not run/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -392,12 +398,26 @@ test("option A: links are copied as links, never followed (r018.a2: pnpm links a
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 
-test("option A: two lanes writing one ignored file follow the merge order, and the path is listed as two-sided", () => {
-  const f = folder({ "dist/out.js": "base" });
+test("option 1: two lanes writing one ignored file: the newest writer wins, even out of merge order; the path is listed", () => {
+  // r018.a3's recorded ends: examples first, then root, then packages-core; merge order root, packages-core, examples
+  const exec = (step, start, ms) => ({ method: "sandbox.exec", step, start, ms });
+  const lines = [exec("r018-3-examples-acp-agent.end.tsc", "2026-10-19T15:50:10.887Z", 5240), exec("r018-1-root.end.tsc", "2026-10-19T15:50:16.684Z", 3726),
+    exec("r018-2-packages-core.end.tsc", "2026-10-19T15:50:15.189Z", 5259), exec("r018-3-examples-acp-agent.s0100.git", "2026-10-19T15:59:00.000Z", 1)];
+  const points = ["r018-3-examples-acp-agent", "r018-2-packages-core", "r018-1-root"].map((lane) => ({ lane, point: "end" }));
+  const merged = ["r018-1-root", "r018-2-packages-core", "r018-3-examples-acp-agent"];
+  const order = laneWriteOrder(lines, points, merged, 18);
+  assert.deepEqual(order.map((x) => x.lane), ["r018-3-examples-acp-agent", "r018-1-root", "r018-2-packages-core"], "by last write, not merge order; a lane step is not a point write");
+  assert.equal(order[2].end, "2026-10-19T15:50:20.448Z");
+  // a tie keeps ours (main): the earlier-merged lane is applied last
+  const tie = laneWriteOrder([exec("x.end.tsc", "2026-10-19T10:00:00.000Z", 5), exec("y.end.tsc", "2026-10-19T10:00:00.000Z", 5)], [{ lane: "x", point: "end" }, { lane: "y", point: "end" }], ["x", "y"], 18);
+  assert.deepEqual(tie.map((x) => x.lane), ["y", "x"]);
+  assert.throws(() => laneWriteOrder([], points, merged, 18), /has no recorded exec/);
+  // applied in that order: packages-core's tsbuildinfo wins over the later-merged examples lane's, as /.lww kept it
+  const f = folder({ "packages/bash/tool-bash/lib/tsconfig.tsbuildinfo": "base" });
   try {
-    const two = playLanes(f, [["first", { "dist/out.js": "from first" }], ["second", { "dist/out.js": "from second" }]], ["second", "first"]);
-    assert.equal(f.read("dist/out.js"), "from first", "merged last, written last");
-    assert.deepEqual(two, ["dist/out.js"]);
+    const two = playLanes(f, [["examples", { "packages/bash/tool-bash/lib/tsconfig.tsbuildinfo": "examples' build" }], ["core", { "packages/bash/tool-bash/lib/tsconfig.tsbuildinfo": "core's build" }]], ["examples", "core"]);
+    assert.equal(f.read("packages/bash/tool-bash/lib/tsconfig.tsbuildinfo"), "core's build", "written last in the play, applied last");
+    assert.deepEqual(two, ["packages/bash/tool-bash/lib/tsconfig.tsbuildinfo"], "the two-sided path stays listed");
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 

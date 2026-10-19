@@ -9,7 +9,7 @@
 | Kind | none: a harness oracle fix; the daemon, addon and Store format are unchanged |
 | Binaries | daemon `44ac6c91` and addon `77597adb` unchanged |
 | Commits | fix and tests in this commit: `dsh/tools/history/lanemerge.mjs`, `nodeproof.mjs` (`laneSteps`, `nativeChain`, `repairChain`), tests in `tests/p3.mjs` |
-| Recovery | fork of snapshot `range-017` (`p3-main-g`'s), rerun as range 18 attempt 2; after the a2 correction below, attempt 3 |
+| Recovery | fork of snapshot `range-017` (`p3-main-g`'s), rerun as range 18 attempt 2; after the a2 correction, attempt 3; after the owner's write-order rule (option 1), attempt 4 |
 | Decision | owner, 2026-10-19, via the liaison: option A; B (proof scope) and C (workload) are out |
 
 ## Old design
@@ -109,6 +109,41 @@
   `tool-pairing.d.ts` `c233d58c…` and `.js` `042b06c9…`, equal to LayerFS. It
   took 64 s. Lanes captured 10,276, 311 and 403 changed paths. 19 paths are
   two-sided: 18 `tsconfig.tsbuildinfo` and `vendor/cordis/bin.js`.
+
+## Two-sided paths: the newest writer wins (owner option 1, after a3)
+
+- **a3:** the merge ran whole and the `tool-pairing` difference was gone. P4
+  then stopped on tsc's exit (LayerFS 0, native 2, `TS2694` in
+  `agent-spine-demo`).
+  - 19 paths were two-sided: 18 `tsconfig.tsbuildinfo` and
+    `vendor/cordis/bin.js`.
+  - The merge-order rule took the examples lane's
+    `packages/bash/tool-bash/lib/tsconfig.tsbuildinfo` (merge rank 2).
+  - LayerFS's `/.lww` keeps the newer write. In the play the lanes' end builds
+    finished examples 15:50:16.1, root 15:50:20.409, packages-core
+    15:50:20.447, so LayerFS kept packages-core's.
+- **Decision:** owner, 2026-10-19, via the liaison: option 1 replaces the
+  merge-order rule.
+- **The change:**
+  - `laneWriteOrder` orders the lanes by their last recorded write: each lane's
+    latest `sandbox.exec` end at its Node points, read from the attempt's trace
+    (`traceOf`).
+  - The captures apply in that order, so the newest writer wins every
+    two-sided path. On a tie the earlier-merged lane is applied last (`/.lww`
+    keeps ours on a tie).
+  - A lane with no recorded point exec, or a missing trace, stops the proof:
+    no order, no oracle.
+  - States carry `merge` (the place in that order) and `wrote` (the lane's
+    last write), so the oracle key changes. Two-sided paths stay listed.
+- **Tests:**
+  - test 3 is now "the newest writer wins, even out of merge order": r018.a3's
+    recorded ends order the lanes examples, root, packages-core against merge
+    order root, packages-core, examples. A lane step outside its points does
+    not count, a tie keeps the earlier-merged lane, a lane with no exec has no
+    order, and packages-core's tsbuildinfo wins and stays listed;
+  - the devcheck reinstall test orders by recorded writes and refuses a
+    missing trace;
+  - `tests/p3.mjs` 20/20.
 
 ## Performance
 

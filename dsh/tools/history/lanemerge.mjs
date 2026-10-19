@@ -1,18 +1,18 @@
 // The native model of the lanes' merge for the repair's oracle (owner decision 2026-10-19, option A; fix 042):
 // each lane point runs on the state the lanes forked from, its changes (tracked, ignored and untracked, any file
 // or symlink it wrote with new content, any path it created or removed) are captured, the folder goes back to that
-// state, and the captured changes are applied in the consolidation's merge order, as LayerFS merges each lane's
-// Branch into main. Before this the native chain ran the lane points one on top of another in one folder, so a
-// later lane's build could rewrite what an earlier lane changed (r018.a1: `core/session/lib/types/tool-pairing.*`).
-// A path two lanes both changed takes the later-merged lane's version (the liaison's rule); the product's `/.lww`
-// rule picks the newer modification time, which a sequential native run cannot reproduce, so every such path is
-// counted and listed in the oracle (`twoSided`), never hidden.
+// state, and the captured changes are applied in the lanes' recorded write order (owner option 1, after range 18
+// a3: each lane's last exec end in the play), so a path two lanes both changed takes the newest writer's version,
+// as the product's `/.lww` does (`layerfs-content/src/merge/lww.rs`: newer modification time, ours on a tie).
+// Before this the native chain ran the lane points one on top of another in one folder, so a later lane's build
+// could rewrite what an earlier lane changed (r018.a1: `core/session/lib/types/tool-pairing.*`). Every two-sided
+// path is counted and listed in the oracle (`twoSided`).
 // Runs inside the native chain's container (node, the folder at $PWD):
 //   node lanemerge.mjs snapshot <dir> <base>          the lanes' starting state, copied with modes, links, times
 //   node lanemerge.mjs mark <store>                     before a lane's states: the time its writes are newer than
 //   node lanemerge.mjs capture <dir> <base> <store>     after them: its changes into <store>
 //   node lanemerge.mjs restore <dir> <base> <store>     the folder back to <base> on the paths <store> names
-//   node lanemerge.mjs apply <dir> <store>...           the captured changes in the order given (merge order)
+//   node lanemerge.mjs apply <dir> <store>...           the captured changes in the order given (write order)
 import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, cpSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";

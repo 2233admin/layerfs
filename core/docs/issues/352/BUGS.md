@@ -989,5 +989,7 @@
   - The product's `/.lww` takes the newer write, so packages-core's copies,
     because its build finished last in the play.
   - The native repair build then failed `TS2694` (exit 2, LayerFS 0).
-  - Which rule the native merge should follow for two-sided paths is with the
-    liaison.
+  - Owner decision 2026-10-19 (option 1): the native merge applies the
+    lanes' captures in their recorded write order, so the newest writer wins
+    as `/.lww` does; two-sided paths stay listed (fix 042). Range 18 a4 plays
+    with it.
