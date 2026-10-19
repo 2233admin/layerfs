@@ -24,14 +24,14 @@
 | 015 | `44ac6c91` (line p3-main-d) | a4 | 253.7 | 556.9 | 2,452 | 1,392 | 316 | 9 | 1 | 4,170 | 24,144 | 2,303 | 12,850 | 4 | 8 | 3 / 3 | 162 | 39,251,790 | 172,081,252 | 236,389,519 |
 | 016 | `44ac6c91` (line p3-main-f) | a3 | 317.5 | 874.5 | 2,162 | 1,930 | 321 | 10 | 1 | 4,424 | 28,568 | 1,915 | 14,765 | 5 | 10 | 3 / 3 | 266 | 22,784,352 | 41,681,629 | 278,071,148 |
 | 017 | `44ac6c91` (line p3-main-g) | a2 | 317.2 | 1191.7 | 1,216 | 1,089 | 307 | 9 | 1 | 2,622 | 31,190 | 1,045 | 15,810 | 4 | 8 | 3 / 3 | 142 | 14,804,087 | 25,371,026 | 303,442,174 |
-| 018 | `44ac6c91` (line p3-main-k) | a5 | 215.4 | 1407.0 | 1,768 | 1,290 | 26 | 2 | 1 | 3,087 | 34,277 | 1,629 | 17,439 | 4 | 8 | 3 / 3 | 167 | 26,075,191 | 69,344,904 | 372,787,078 |
-| 019 | `44ac6c91` (line p3-main-j) | a1 | 199.1 | 1606.2 | 956 | 1,313 | 27 | 3 | 1 | 2,300 | 36,577 | 959 | 18,398 | 5 | 10 | 4 / 4 | 189 | 14,316,318 | 27,908,154 | 400,695,232 |
+| 018 | `44ac6c91` (line p3-main-l) | a6 | 357.3 | 1548.9 | 1,830 | 1,343 | 370 | 9 | 1 | 3,553 | 34,743 | 1,631 | 17,441 | 4 | 8 | 3 / 3 | 168 | 26,136,707 | 70,651,381 | 374,093,555 |
+| 019 | `44ac6c91` (line p3-main-j) | a1 | 199.1 | 1748.1 | 956 | 1,313 | 27 | 3 | 1 | 2,300 | 37,043 | 959 | 18,400 | 5 | 10 | 4 / 4 | 189 | 14,316,318 | 27,908,154 | 402,001,709 |
 
 ## Cumulative
 
 | Ranges | Time s | fs | sandbox | branch | project | operator | Calls | Commits | Branches | Agents (sum per range) | Conflicts hit / planned | Steps | Bytes written (since the Overview) | New stored |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 20 | 1606.2 | 22,927 | 12,301 | 1,262 | 67 | 20 | 36,577 | 18,398 | 74 | 128 | 46 / 46 | 3,452 | 234,916,758 ‡ | 400,695,232 |
+| 20 | 1748.1 | 22,989 | 12,354 | 1,606 | 74 | 20 | 37,043 | 18,400 | 74 | 128 | 46 / 46 | 3,453 | 234,978,274 ‡ | 402,001,709 |
 
 ## Conflicts per range
 
@@ -62,28 +62,28 @@
 
 | Method | Category | Calls | Bytes in | Bytes out |
 | --- | --- | --- | --- | --- |
-| branch.diff_branches | branch | 71 | 0 | 3,851,301 |
-| branch.diff_commits | branch | 878 | 0 ‡ | 45,279,125 ‡ |
-| branch.fork | branch | 214 | 0 ‡ | 0 ‡ |
-| branch.list_commits | project | 67 | 0 | 511,762 |
-| branch.merge | branch | 78 | 0 | 0 |
-| branch.publish | branch | 21 | 0 ‡ | 0 ‡ |
-| fs.apply | fs | 1,088 | 26,208,015 ‡ | 0 ‡ |
-| fs.diff_files | fs | 922 | 0 ‡ | 6,863,267 ‡ |
-| fs.glob | fs | 976 | 0 ‡ | 512,533 ‡ |
-| fs.grep | fs | 991 | 0 ‡ | 2,559,532 ‡ |
-| fs.list | fs | 997 | 0 ‡ | 1,175,565 ‡ |
-| fs.read | fs | 957 | 0 ‡ | 2,922,203 ‡ |
+| branch.diff_branches | branch | 71 | 0 | 3,851,391 |
+| branch.diff_commits | branch | 1,197 | 0 ‡ | 63,351,137 ‡ |
+| branch.fork | branch | 233 | 0 ‡ | 0 ‡ |
+| branch.list_commits | project | 74 | 0 | 574,851 |
+| branch.merge | branch | 83 | 0 | 0 |
+| branch.publish | branch | 22 | 0 ‡ | 0 ‡ |
+| fs.apply | fs | 1,100 | 26,229,540 ‡ | 0 ‡ |
+| fs.diff_files | fs | 927 | 0 ‡ | 6,939,782 ‡ |
+| fs.glob | fs | 986 | 0 ‡ | 524,603 ‡ |
+| fs.grep | fs | 1,001 | 0 ‡ | 2,588,677 ‡ |
+| fs.list | fs | 1,009 | 0 ‡ | 1,207,776 ‡ |
+| fs.read | fs | 962 | 0 ‡ | 2,933,073 ‡ |
 | fs.rm | fs | 1,046 | 0 ‡ | 0 ‡ |
-| fs.stat | fs | 952 | 0 ‡ | 168,826 ‡ |
+| fs.stat | fs | 960 | 0 ‡ | 170,300 ‡ |
 | fs.write | fs | 14,998 | 179,243,414 ‡ | 0 ‡ |
 | operator.store.stats | operator | 20 | 0 ‡ | 0 ‡ |
-| sandbox.commit | sandbox | 2,189 | 0 ‡ | 0 ‡ |
+| sandbox.commit | sandbox | 2,196 | 0 ‡ | 0 ‡ |
 | sandbox.create | sandbox | 5 | — | — |
-| sandbox.exec | sandbox | 5,599 | 29,465,329 ‡ | 17,307,170 ‡ |
-| sandbox.mount | sandbox | 2,237 | 0 ‡ | 0 ‡ |
+| sandbox.exec | sandbox | 5,617 | 29,505,320 ‡ | 18,591,517 ‡ |
+| sandbox.mount | sandbox | 2,251 | 0 ‡ | 0 ‡ |
 | sandbox.service | sandbox | 11 | 0 ‡ | 0 ‡ |
 | sandbox.status | sandbox | 23 | 0 | 0 |
-| sandbox.unmount | sandbox | 2,237 | 0 ‡ | 0 ‡ |
+| sandbox.unmount | sandbox | 2,251 | 0 ‡ | 0 ‡ |
 
 — no byte data: every range of the row is derived (†). ‡ bytes of the measured ranges only; the derived ranges' bytes are unknown.
