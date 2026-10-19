@@ -124,10 +124,10 @@ alone leaves tsdown without the others' `lib/types`, range 18 a5). The clean
 also sweeps `packages/*/*/lib` and every tsbuildinfo under `packages/`, then
 prunes empty folders, so a package folder the checkpoint deleted goes (range 19
 a2: tsdown bundled an orphan's `lib/`)
-Since that state is what a fresh checkout's same install and build leave, the
-closure chain behind the native oracles starts again at the repair's install
-and build (`nextChain`, `fresh`), so it no longer grows with every range (range
-20: 17 native states, calibration past the 115 s alarm).
+The closure chain behind the native oracles still runs from the last clean
+install. A restart at the repair is not exact: pnpm links a workspace bin only
+when its target exists, and the repair's install runs before its clean (range
+20 a1, fix 043).
 (`repairClean`, `repairBuild` in `nodeconfig.mjs`). The native repair chain
 replays the same command. This is an owner-approved workload change (owner
 decision 2026-10-20, option A, liaison relay; F-059, [fix 043](fixes/043-r019-a1-repair-build-clean.md)).
