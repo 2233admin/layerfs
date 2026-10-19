@@ -178,8 +178,8 @@ pub trait HistoryCatalog: Send + Sync {
         Ok(Vec::new())
     }
 
-    /// Records whole-content digests of saved file roots (#364). Known
-    /// content keeps its first root. A provider that keeps none drops them.
+    /// Records whole-content digests of saved file roots (#364). Recorded
+    /// content takes the newer root. A provider that keeps none drops them.
     fn record_file_digests(&self, _rows: &[crate::records::FileDigest]) -> HistoryResult<()> {
         Ok(())
     }

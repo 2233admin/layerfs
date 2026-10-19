@@ -315,3 +315,33 @@ fn a_relinked_file_with_saved_bytes_reuses_the_object() {
     drop((first, second));
     s.finish();
 }
+
+/// A row left by a Commit that never finished names a root the Store does
+/// not hold: the file is built in full and the row takes the new root.
+#[test]
+fn a_recorded_root_the_store_does_not_hold_is_not_reused() {
+    let s = setup("file-digests-missing");
+    let data = bytes(9, 40_000);
+    let digest = *blake3::hash(&data).as_bytes();
+    s.store
+        .history()
+        .record_file_digests(&[layerfs_history::FileDigest {
+            root: [0xAB; 32],
+            length: data.len() as u64,
+            digest,
+        }])
+        .unwrap();
+    put(&s.workspace, "lost", 0o644, &data);
+    let (done, work) = commit(&s.workspace);
+    assert_eq!((work.files_reused, work.digests_recorded), (0, 1));
+    let root = committed(&s.store, &s.workspace, "lost").1.content_root;
+    assert_eq!(content(&s.workspace, "lost", data.len()), data);
+    let rows = s
+        .store
+        .history()
+        .file_roots(&[(digest, data.len() as u64)])
+        .unwrap();
+    assert_eq!(rows[0], Some(root.to_bytes()));
+    drop(done);
+    s.finish();
+}

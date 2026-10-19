@@ -202,7 +202,7 @@ serial, row and metadata, and design 8 is unchanged.
   row it was created as resumes from no bytes.
   [payload/digest.rs](../../crates/layerfs-overlay/src/payload/digest.rs).
 - **Store.** `file_digest(digest, length, root)`, keyed by digest and
-  length; known content keeps its first root. Older Stores gain the empty
+  length; recorded content takes the newer root. Older Stores gain the empty
   table at open, so they match from their second Commit of the same bytes.
   Init records none. Rows exist only for roots built from all their bytes.
 - **Inodes pass.** Per captured inode page, one overlay job reads the
@@ -215,8 +215,11 @@ serial, row and metadata, and design 8 is unchanged.
   the publication lane. Names play no part: a copy at any path matches.
 
 The reused root is the one a fresh build of the same bytes under the
-Store's policy gives, and Save's reference check still refuses a missing
-object.
+Store's policy gives. Rows are written before the Save finishes, so a
+Commit that fails can leave a row whose root was never saved: the lookup
+answers only roots in `object_location`, so such a file takes the full
+path and its row takes the new root. A root saved earlier in the same,
+unfinished Commit is not reused either.
 
 ### Custody
 

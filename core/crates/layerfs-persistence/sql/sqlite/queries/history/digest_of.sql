@@ -1,1 +1,1 @@
-SELECT root FROM file_digest WHERE digest = $1 AND length = $2;
+SELECT f.root FROM file_digest f JOIN object_location o ON o.object_id = f.root WHERE f.digest = $1 AND f.length = $2;

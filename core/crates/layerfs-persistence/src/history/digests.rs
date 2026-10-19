@@ -12,7 +12,8 @@ fn length(value: u64) -> HistoryResult<i64> {
     i64::try_from(value).map_err(|_| HistoryError::Integrity("file digest length"))
 }
 
-/// Records each content once; known content keeps its first root.
+/// Records the root built for each content; a recorded content takes the
+/// newer root, so a row whose root the Store lost is replaced.
 pub(crate) fn record(tx: &Transaction<'_>, rows: &[FileDigest]) -> HistoryResult<()> {
     for row in rows {
         tx.execute(
@@ -24,7 +25,9 @@ pub(crate) fn record(tx: &Transaction<'_>, rows: &[FileDigest]) -> HistoryResult
     Ok(())
 }
 
-/// The recorded root of each (digest, length), in the order asked.
+/// The recorded root of each (digest, length), in the order asked, when the
+/// Store holds that root's object: a row left by a Commit that never
+/// finished names none.
 pub(crate) fn roots(
     tx: &Transaction<'_>,
     contents: &[([u8; 32], u64)],
