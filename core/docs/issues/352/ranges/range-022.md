@@ -307,7 +307,7 @@ Diagnosis pending: `finding-022.a1.json`.
 
 ### Lead's note (written by the lead; never empty unless the verdict is pass)
 
-- **a1 (`p3-main-r`, live after r21 a2, harness `46d282762b` with fix 049, daemon `44ac6c91`, addon `77597adb`): STOP verdict, terminal under the liaison's ruling (2026-10-20): advanced on optimize: #364 item 4; disk projection (environment: issue364 cargo target) and counters recorded.** Checkpoint ok, git ✓, Node 21 pass, 0 stop, 0 NOT_RUN over 4 points; repair P6 pass (769 emitted). Control `control-022.a1` passes.
+- **a1 (`p3-main-r`, live after r21 a2, harness `46d282762b` with fix 049, daemon `44ac6c91`, addon `77597adb`): STOP verdict, terminal under the liaison's ruling (2026-10-20): advanced on optimize: #364 item 4; disk projection (environment: issue364 cargo target) and counters recorded.** Checkpoint ok, git ✓, Node 17 pass, 0 stop, 0 NOT_RUN over 4 points; repair P6 pass (769 emitted). Control `control-022.a1` passes.
   - The stop row is Disk projection 1.4: the Docker VM's free space fell 16 GB since r21, because `layerfs-issue364-cargo-target` grew to 78 GB (another session's build target; this run's data is about 3 GB). The optimize rows are `diff_commits` scaling (#364 item 4) and Counters `oneshot_mount_unmount.vm_steps` (depth exponent 0.695). In fast mode, disk-projection and counter rows are recorded, not stops.
   - The native-first check caught fix 049 before the attempt: the repair clean left cli-demo's `.typecheck/` tsbuildinfo, so the whole build failed natively.
   - Played on the range-15 binaries. The owner's switch to main's binaries (3ef00d32e5, 2026-10-20) arrived after this attempt and takes effect from range 23.

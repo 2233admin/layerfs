@@ -301,7 +301,7 @@ Range 15 is the reference (owner 2026-10-19; a watch row, not a gate). Uncontend
 
 ### Lead's note (written by the lead; never empty unless the verdict is pass)
 
-- **a1 (`p3-main-r`, live after r23 a1, daemon `45a196ef`, addon `4668012e`; binaries from main 3ef00d32e5, owner 2026-10-20): WATCH, terminal.** Checkpoint ok, git ✓. Node: 17 pass, 0 stop, 0 NOT_RUN over 3 points. Repair P6 pass (803 emitted). Control `control-024.a1` passes. The watch rows are a baseline not set for this binary (fast mode, no re-baseline) and 2 of 3 same-binary points. Final steps: repair 110 s at host load 14, verify 13 s, finish 35 s. Repair build 14.5 s, install 33.6 s. From range 25 the step alarms are rebalanced within the same 295 s: repair 160, verify 70, finish 65.
+- **a1 (`p3-main-r`, live after r23 a1, daemon `45a196ef`, addon `4668012e`; binaries from main 3ef00d32e5, owner 2026-10-20): WATCH, terminal.** Checkpoint ok, git ✓. Node: 17 pass, 0 stop, 0 NOT_RUN over 4 points. Repair P6 pass (803 emitted). Control `control-024.a1` passes. The watch rows are a baseline not set for this binary (fast mode, no re-baseline) and 2 of 3 same-binary points. Final steps: repair 110 s at host load 14, verify 13 s, finish 35 s. Repair build 14.5 s, install 33.6 s. From range 25 the step alarms are rebalanced within the same 295 s: repair 160, verify 70, finish 65.
 
 
 ## Appendix

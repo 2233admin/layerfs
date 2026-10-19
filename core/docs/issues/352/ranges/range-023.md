@@ -302,7 +302,7 @@ Range 15 is the reference (owner 2026-10-19; a watch row, not a gate). Uncontend
 ### Lead's note (written by the lead; never empty unless the verdict is pass)
 
 - **a1 (`p3-main-r`, live after r22 a1, harness `79758e8c12`): WATCH, terminal.** First range on binaries from main 3ef00d32e5, owner 2026-10-20: daemon `45a196ef`, addon `4668012e`, built at `79758e8c12` (release, offline, -j 6, image `layerfs-307-fuser-patch-clippy:1.85.1`); SDK JS `be717af4` (main's `sdk/js`; unchanged), image `d3773b4e` unchanged. Switched in place on the run at the 22/23 boundary (`run.pre-switch-r23.json` kept). The old SDK JS folder (`f031-build` worktree) had been deleted.
-  - Checkpoint ok, git ✓. Node: 16 pass, 0 stop, 0 NOT_RUN over 4 points. Repair P6 pass (771 emitted). Control `control-023.a1` passes.
+  - Checkpoint ok, git ✓. Node: 17 pass, 0 stop, 0 NOT_RUN over 4 points. Repair P6 pass (771 emitted). Control `control-023.a1` passes.
   - The `diff_commits` optimize row is gone (#364 item 4). Verify took 9.9 s, against 91–96 s in r21–r22.
   - Speed, Scaling and Counters are watch rows: the speed baseline is r15's binary, and the new daemon has only 1 of 3 points. Accepted in fast mode, so no re-baseline.
   - Final steps: repair 95 s, verify 13 s, finish 41 s. Repair build 12.5 s, install 30.6 s.
