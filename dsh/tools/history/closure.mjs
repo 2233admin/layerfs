@@ -258,7 +258,7 @@ export function oracleFiles(oracleDir, { lock, steps, chain = [], checkpoint, po
   };
 }
 
-export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir, checks = false, lwwPicked = false, dumpTo = null }) {
+export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Mismatch, oracleDir, checks = false, lwwPicked = false, laneRoots = [], dumpTo = null }) {
   const git = (args) => execFileSync("git", ["--git-dir", run.repo, ...args], { encoding: "utf8", maxBuffer: 1 << 28 });
   // the development checks run after the publish, on a fork (devcheck.mjs; SCRIPTS.md, 120 s rule)
   const node = nodeOf(run.manifest);
@@ -276,8 +276,10 @@ export async function rangeClosure(run, k, plan, branch, { sb, expectCall, Misma
     const sameCommand = o.install === want || (steps.some((s) => s.kind === "clean-install") && want.replace(`${CLEAN_REMOVE} && `, "") === o.install);
     if (files.kind === "clean" && want && !sameCommand) throw new Mismatch(`range ${k}: the node_modules oracle ${f.split("/").at(-1)} was made with another install command; rerun closure.mjs oracle --range ${k}`);
   }
-  // the recorded mount roots of this chain's earlier steps: listed substitutions (INSTALLS §4, F-034)
-  const roots = [...new Set([...chain.map((e) => e.root), ...(run.state.closureRoots ?? [])].filter(Boolean))];
+  // the recorded mount roots of this chain's earlier steps: listed substitutions (INSTALLS §4, F-034); with Node on,
+  // the lane points' too: the merge brings their shims into the lead, and the native repair chain lists their roots
+  // as earlier roots (#352 p3-main-b r015.a2 lead.repair: shims written at /workspaces/15 hashed raw here only)
+  const roots = [...new Set([...chain.map((e) => e.root), ...(run.state.closureRoots ?? []), ...laneRoots].filter(Boolean))];
   const rows = await playClosure(run, k, steps, { sb, branch, expectCall, Mismatch, roots, binCheck: checks });
   const out = { steps: steps.map((s) => s.kind), rows: rows.map(({ groups, dump, ...r }) => r), oracleKind: files.kind,
     executed: steps.map((s, i) => ({ kind: s.kind, command: s.command, root: rows[i]?.root ?? null })) };

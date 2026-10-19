@@ -31,7 +31,7 @@ import {
 import { sandboxVolumes } from "./closure.mjs";
 import { generateLww, gitignores } from "./lww.mjs";
 import { gitContext, laneGit, laneGuard, laneLock, leadGit, seedGit } from "./gitplay.mjs";
-import { afterStep, inputsHash, leadInstall, nodeContext } from "./nodelanes.mjs";
+import { afterStep, inputsHash, leadInstall, nodeContext, pointsBefore } from "./nodelanes.mjs";
 import { createHash } from "node:crypto";
 import { abs, consolidationSteps, decoyBytes, p2Plan, pad, PHASES, quote, route, sandboxExpect, STEP_KINDS, Tree } from "./steps.mjs";
 
@@ -203,10 +203,17 @@ export async function playAgents(run, k, ctx, { cut = null } = {}) {
     done.set(s.id, new Promise((resolve, reject) => settle.set(s.id, { resolve, reject })));
     done.get(s.id).catch(() => {});
   }
+  // a lane's test point, settled when its step's agent finished it (NODE_RULE §4; pointsBefore)
+  const points = ctx.node?.plan ?? [], pointDone = new Map(), pointSettle = new Map();
+  for (const p of points) {
+    pointDone.set(p.id, new Promise((resolve, reject) => pointSettle.set(p.id, { resolve, reject })));
+    pointDone.get(p.id).catch(() => {});
+  }
   let failure = null;
   const fail = (error) => {
     failure ??= error;
     for (const [, x] of settle) x.reject(failure);
+    for (const [, x] of pointSettle) x.reject(failure);
   };
   const views = new Map();
   for (const agent of ctx.p2.agents.keys()) {
@@ -215,12 +222,16 @@ export async function playAgents(run, k, ctx, { cut = null } = {}) {
   }
   // a continued lanes stage (an earlier --cut) keeps each agent's played count; its played steps are settled, not replayed
   ctx.steps = new Map([...ctx.p2.agents.keys()].map((a) => [a, ctx.steps?.get(a) ?? 0]));
-  for (const [agent, list] of ctx.p2.agents) for (const s of list.slice(0, ctx.steps.get(agent))) settle.get(s.id).resolve();
+  for (const [agent, list] of ctx.p2.agents) for (const s of list.slice(0, ctx.steps.get(agent))) {
+    settle.get(s.id).resolve();
+    for (const p of points) if (p.step === s.id) pointSettle.get(p.id).resolve();
+  }
   const task = async (agent) => {
     const a = views.get(agent);
     for (const s of ctx.p2.agents.get(agent).slice(ctx.steps.get(agent))) {
       if (cut != null && s.order >= cut) return;
       for (const id of s.after) if (done.has(id)) await done.get(id);
+      for (const id of pointsBefore(points, s)) await pointDone.get(id);
       if (failure) return;
       await playStep(a, k, s, ctx);
       ctx.steps.set(agent, ctx.steps.get(agent) + 1);
@@ -228,7 +239,10 @@ export async function playAgents(run, k, ctx, { cut = null } = {}) {
       by[STEP_KINDS[s.kind]]++;
       settle.get(s.id).resolve();
       // NODE_RULE §4: a lane's test point after its middle and last step, once its earlier steps landed (the plan's order respects every barrier)
-      if (ctx.node) await afterStep(a, k, s, ctx, { lock: laneLock, waitFor: (id) => (id === s.id ? null : done.get(id)), plan: run.plan(k) });
+      if (ctx.node) {
+        await afterStep(a, k, s, ctx, { lock: laneLock, waitFor: (id) => (id === s.id ? null : done.get(id)), plan: run.plan(k) });
+        for (const p of points) if (p.step === s.id) pointSettle.get(p.id).resolve();
+      }
     }
   };
   await Promise.all([...ctx.p2.agents.keys()].map((agent) => task(agent).catch(fail)));

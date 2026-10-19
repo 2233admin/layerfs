@@ -455,7 +455,7 @@ async function playRange(run, k, mode, half = null, until = null, cut = null) {
       if (until === "lanes" && (saved?.stage === "lead" || saved?.stage === "part")) stop("lanes");
       else if (until === "lanes" && !saved) stop("lanes");
       since = performance.now();
-      const beforePublish = phase.closure ? async (cur) => rangeClosure(run, k, plan, cur, { sb: await setup(run), expectCall, Mismatch, oracleDir: run.manifest.oracle, checks: run.manifest.label === "dev", lwwPicked: !!ctx.lww?.picks.some((p) => p.picks > 0), dumpTo: run.manifest.label === "dev" ? (mkdirSync(join(run.dir, "closure"), { recursive: true }), join(run.dir, "closure", `dump-${pad(k)}.json`)) : null }) : null;
+      const beforePublish = phase.closure ? async (cur) => rangeClosure(run, k, plan, cur, { sb: await setup(run), expectCall, Mismatch, oracleDir: run.manifest.oracle, checks: run.manifest.label === "dev", lwwPicked: !!ctx.lww?.picks.some((p) => p.picks > 0), laneRoots: (ctx.node?.points ?? []).map((p) => p.root), dumpTo: run.manifest.label === "dev" ? (mkdirSync(join(run.dir, "closure"), { recursive: true }), join(run.dir, "closure", `dump-${pad(k)}.json`)) : null }) : null;
       published = await consolidateLanes(run, k, plan, ctx, { beforePublish });
       branch = ctx.final;
       ctx.tree = ctx.mainTree;

@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { changedPackages, checkNode, commitIdOf, inputsHash, testPoints, treeDelta, treeIdCommand, wholeBuild } from "../nodelanes.mjs";
+import { changedPackages, checkNode, commitIdOf, inputsHash, pointsBefore, testPoints, treeDelta, treeIdCommand, wholeBuild } from "../nodelanes.mjs";
 import { PRUNE_EMPTY, pointBuild } from "../nodeconfig.mjs";
 import { chooseFiles, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
 import { execTool } from "../run.mjs";
@@ -211,6 +211,15 @@ test("the devcheck's reinstall oracle under Node: the repair's chain and build, 
 test("the oracle tool predicts the lead's install as the run records it (p3-main-a r015.a1: a seq oracle keyed without PRUNE_EMPTY)", () => {
   assert.equal(pointInstall({ policy: "verified" }), `${PRUNE_EMPTY} && ${installCommand({ policy: "verified" })}`);
   assert.equal(pointInstall({ clean: true }), `${PRUNE_EMPTY} && ${installCommand({ clean: true })}`);
+});
+
+test("a lane's later steps wait for its earlier test points, never another lane's (#352 r015.a2: s0073 landed during docs-rfc.mid)", () => {
+  const pts = testPoints(plan), at = (id) => plan.steps.find((s) => s.id === id);
+  assert.deepEqual(pointsBefore(pts, at("s1")), []);
+  assert.deepEqual(pointsBefore(pts, at("s2")), [], "a point's own step does not wait for it");
+  assert.deepEqual(pointsBefore(pts, at("s3")), ["L1.mid"], "a non-writing step waits too: no step after a point runs during it");
+  assert.deepEqual(pointsBefore(pts, at("s4")), ["L1.mid"]);
+  assert.deepEqual(pointsBefore(pts, at("t2")), ["L2.mid"]);
 });
 
 let failed = 0;

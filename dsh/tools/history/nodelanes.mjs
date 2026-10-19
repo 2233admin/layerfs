@@ -65,6 +65,15 @@ export function testPoints(plan) {
   return out;
 }
 
+/**
+ * The test points step `s` waits for: its lane's points at an earlier plan order. A point compiles and tests
+ * its own tree, and its Workspace's view follows the lane's head, so no later step may land on the lane until
+ * the point is done (#352 r015.a2: s0073's fs.write landed during r015-2-docs-rfc.mid, whose tsc built it).
+ */
+export function pointsBefore(points, s) {
+  return points.filter((p) => p.lane === s.lane && p.order < s.order).map((p) => p.id);
+}
+
 /** The hash of a tree's install inputs (path and blob), the oracle's second key (NODE_RULE §6). */
 export function inputsHash(files) {
   const rows = [...files].filter(([p]) => INSTALL_INPUT.test(p) && !p.includes("node_modules/")).map(([p, v]) => `${v.mode} ${v.blob} ${p}`).sort();
