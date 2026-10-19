@@ -21,4 +21,4 @@
 | 014 | 79 | 10,548 | **watch** | Speed | 7.8 MiB | [range-014](ranges/range-014.md) |
 | 015 | 67 | 12,851 | **watch** | Speed | 164.1 MiB | [range-015](ranges/range-015.md) |
 | 016 | 88 | 14,766 | **watch** | Speed | 39.8 MiB | [range-016](ranges/range-016.md) |
-| 017 | 60 | 15,811 | **optimize** | Scaling | 24.1 MiB | [range-017](ranges/range-017.md) |
+| 017 | 60 | 15,811 | **watch** | Speed | 24.2 MiB | [range-017](ranges/range-017.md) |
