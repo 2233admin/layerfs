@@ -99,7 +99,11 @@ Each lane has **two test points**: after its middle step and at lane end.
 | `tsc -b` | Every lane | At each test point, the lane's changed packages (`./node_modules/.bin/tsc -b`) |
 | vitest | Every lane | At each test point, the selected test files of packages the lane changed, capped at **20 s native per point**, calibrated natively on the lane's own tree |
 
-At most one install (incremental or refresh) per test point. After all lane
+At most one install (incremental or refresh) per test point. Like the lead's
+first install, each point's install first removes empty folders outside
+`.git` and `node_modules`. A replayed removal can leave one, which git and
+the native tree never have, and the bundler takes every `packages/*/*` folder
+as a package (R1 dev slice, `r015-1-docs-rfc.mid`). Natively this is a no-op. After all lane
 merges, the **lead repair**: one install on the merged tree, then `tsc -b`,
 then the range build and tests, capped at **60 s native** (5 min at
 milestones).
@@ -120,11 +124,28 @@ Each proof runs the same command natively on the same tree: the F-031 lane
 commit tree ids for lane points, the checkpoint trees for the lead. The
 native oracle is cached per (tree id, install-inputs hash) and computed once.
 
+**Same mount paths (2026-10-19, from the R1 dev slice).** Each LayerFS mount
+gets a new path (`/workspaces/N`), and pnpm records absolute paths: its
+workspace state keys projects by them, and its bin shims embed them. At a
+new path pnpm skips its "Already up to date" shortcut, runs its full check
+and rewrites those files; in a fixed native folder it does not.
+
+So each native state of a proof's chain runs at the path LayerFS ran that
+step at: the lead's install and build at the lead's mount, each lane point at
+its own, the repair's install and build at theirs. The folder is moved there
+first. The native lister normalizes the earlier roots, as LayerFS's does.
+The tree and commands are unchanged.
+
+The underlying product property is that a Workspace's path is new on every
+mount (F-029, by design). Tools that cache absolute paths therefore redo
+work on LayerFS that a fixed checkout skips. It is recorded here, not
+compared away.
+
 | Id | Proof | Stop on |
 | --- | --- | --- |
 | P1 | The installed tree equals native file by file (path, mode, blob id). Only roots and timestamps are normalized (INSTALLS §4 table), and each normalized file is counted | Any other difference |
 | P2 | pnpm exit status and output equal native (roots normalized) | Any difference |
-| P3 | A no-op refresh changes only pnpm state files | Any other changed path |
+| P3 | A no-op refresh changes only pnpm state files. When its mount path moved from the previous install's, any path inside `node_modules` (the shims and links that carry the path), which P1 judges against native | A changed path outside `node_modules`; with an unmoved path, any non-state path |
 | P4 | `tsc -b` exit equal native; emitted `.js` and `.d.ts` equal native by blob id | Any difference |
 | P5 | Each test file's result equals native. Files failing natively are skip-listed at calibration only | Pass natively, fail on LayerFS |
 | P6 | After-merge repair: P1 and P4 on the merged tree, plus the repair's rewritten-file count | P1 or P4 |

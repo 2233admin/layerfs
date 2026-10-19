@@ -156,8 +156,12 @@ export async function playPoint(a, k, ctx, pt, { branch, gitDir, files, install,
     rec.install = { command: install, exitCode: r.exitCode, ms: Date.now() - t0, output: normalizeOutput(`${r.stdout ?? ""}${r.stderr ?? ""}`), base: st?.base ?? null };
     const v = await expectCall(a, `${label} commit`, () => a.lf.sandbox.commit(sb, ws, `${label}.${pt.kind}`), "Committed|UpToDate");
     rec.install.commit = commitIdOf(v); rec.install.kind = v?.kind ?? null;
-    // P3: the paths a no-op refresh changed (UpToDate: none)
-    if (pt.kind === "refresh") rec.install.changed = v?.kind === "Committed" && rec.install.base ? await changedPaths(a, rec.install.base, rec.install.commit) : [];
+    // P3: the paths a no-op refresh changed (UpToDate: none), from the head its Commit landed on: other agents'
+    // Commits to the lane during the mount are not its own (a merged Commit's parent is the head it merged with)
+    if (pt.kind === "refresh" && v?.kind === "Committed" && rec.install.base) {
+      rec.install.parent = (await parentOf(a, branch, rec.install.commit)) ?? rec.install.base;
+      rec.install.changed = await changedPaths(a, rec.install.parent, rec.install.commit);
+    } else if (pt.kind === "refresh") rec.install.changed = [];
     a.label(`${label}.${pt.kind}`);
     const l = parseLister((await sh(listerCommand([], { roots }))).stdout);
     rec.lister = { groups: l.groups.length, entries: l.groups.reduce((n, g) => n + g.n, 0), normalized: l.normalized };
@@ -183,6 +187,12 @@ export async function playPoint(a, k, ctx, pt, { branch, gitDir, files, install,
   }
   rec.ms = Date.now() - Date.parse(rec.started);
   return rec;
+}
+
+/** A Commit's parent, from its Branch's latest Commits (null when it is not among them). */
+async function parentOf(a, branch, id) {
+  const page = await a.lf.branch.list_commits(branch, 20, 0);
+  return page.items?.find((c) => c.id === id)?.parent ?? null;
 }
 
 async function changedPaths(a, from, to) {
@@ -243,7 +253,9 @@ export async function afterStep(a, k, s, ctx, { lock, waitFor, plan, blobs }) {
     const cal = ctx.node.calibration?.points?.find((c) => c.id === pt.id) ?? null;
     const rec = await playPoint(a, k, ctx, { ...pt, delta, inputs: inputsHash(tree.files), tree: null, calibration: cal ? { tree: cal.tree, files: cal.run?.length ?? 0 } : null }, {
       branch: pt.lane, gitDir: ctx.git ? laneGitDir(pt.lane) : null, files: tree.files,
-      install: installCommand({ policy: node.storePolicy }), build: lanePackages(tree.files, changed),
+      // empty folders first, as the lead's install (a replayed removal can leave one; git and the native tree
+      // have none, and the bundler takes every packages/*/* folder as a package: #352 R1 slice, r015-1-docs-rfc.mid)
+      install: `${PRUNE_EMPTY} && ${installCommand({ policy: node.storePolicy })}`, build: lanePackages(tree.files, changed),
       // every earlier mount root of this node_modules chain: the lead's install and the lane's earlier points (F-034)
       tests: cal?.run ?? [], roots: [...new Set([...(a.state.closureRoots ?? []), ...ctx.node.points.filter((p) => p.lane === pt.lane).map((p) => p.root)])] });
     void blobs;

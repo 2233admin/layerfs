@@ -113,6 +113,14 @@ test("P1–P5 judges: pass, stop, n/a and NOT_RUN; build-output caches are not i
   assert.equal(judgeP3({ kind: "refresh", inputs: "b" }, "a").result, "n/a");
   assert.equal(judgeP3({ kind: "refresh", inputs: "a", install: { changed: ["node_modules/.modules.yaml", "packages/x/node_modules/.pnpm-workspace-state-v1.json"] } }, "a").result, "pass");
   assert.equal(judgeP3({ kind: "refresh", inputs: "a", install: { changed: ["node_modules/a/index.js"] } }, "a").result, "stop");
+  // R1 slice r015-2-packages-core: a new mount path makes pnpm rewrite its root-carrying shims and links
+  const shims = { kind: "refresh", inputs: "a", root: "/workspaces/20", install: { changed: ["node_modules/.modules.yaml", "node_modules/.bin/tsc", "node_modules/.pnpm/node_modules/cosmokit", "packages/x/node_modules/.bin/cordis"] } };
+  assert.equal(judgeP3(shims, "a").result, "stop", "the same root: only state files");
+  assert.equal(judgeP3(shims, "a", "/workspaces/20").result, "stop");
+  assert.deepEqual([judgeP3(shims, "a", "/workspaces/2").result, judgeP3(shims, "a", "/workspaces/2").detail], ["pass", "4 path(s) in node_modules, root moved"]);
+  assert.equal(judgeP3({ ...shims, install: { changed: [...shims.install.changed, "examples/acp-agent/README.md"] } }, "a", "/workspaces/2").result, "stop", "a path outside node_modules still stops");
+  // P2 strips native's own root when it ran at LayerFS's path (nativeChain `root`)
+  assert.equal(judgeP2({ exit: 0, output: "/workspaces/20/x ok", root: "/workspaces/20" }, { exitCode: 0, output: "/workspaces/20/x ok" }, "/workspaces/20").result, "pass");
   assert.ok(STATE_FILES.test("node_modules/.pnpm/lock.yaml") && !STATE_FILES.test("node_modules/.pnpm/a@1/node_modules/a/index.js"));
   assert.equal(judgeP4(native, null).result, "n/a");
   assert.equal(judgeP4(native, { exitCode: 0, emitted: { "packages/a/lib/i.js": "e1" } }).result, "pass");

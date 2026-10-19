@@ -77,22 +77,35 @@ export function modelDelta(plan, base, pt) {
 /**
  * The native run of a chain of states (a tree and its install command, as the
  * replay ran them, in order) and a tail on the last state: the lister, the
- * build and its emitted files, vitest. One container at ORACLE_ROOT, network
- * off, the store read-only; between states the tree is set to the next
- * (archive over it, git's deletions removed; untracked output stays).
+ * build and its emitted files, vitest. One container, network off, the store
+ * read-only; between states the tree is set to the next (archive over it,
+ * git's deletions removed; untracked output stays). It starts at ORACLE_ROOT.
+ * A state's (or the tail's) `root` is the LayerFS mount path that step ran
+ * at: the folder is moved there first, so tools that record absolute paths
+ * (pnpm's workspace state, its bin shims) see the same paths on both sides.
+ * Each mount gets a new path in LayerFS, so pnpm's up-to-date shortcut is
+ * skipped there (#352 R1 slice, r015-2-packages-core). The final lister
+ * normalizes the earlier roots, as the LayerFS lister does.
  */
 export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
   const stage = mkdtempSync(join(tmpdir(), "lfs352-chain-"));
   try {
     const script = [`mkdir ${ORACLE_ROOT} /seq && tar -x -C /seq && cd ${ORACLE_ROOT}`];
-    let prev = null;
+    let prev = null, at = ORACLE_ROOT;
+    const earlier = [], moveTo = (root) => {
+      if (!root || root === at) return;
+      if (!/^\/[\w./-]+$/.test(root) || root.split("/").includes("..")) throw new Error(`native chain: root ${root} is not a plain absolute path`);
+      script.push(`mkdir -p ${root.slice(0, root.lastIndexOf("/")) || "/"} && mv ${at} ${root} && cd ${root}`);
+      earlier.push(at); at = root;
+    };
     states.forEach((st, i) => {
+      moveTo(st.root);
       if (st.tree !== prev) {
         if (!existsSync(join(stage, `${st.tree}.tar`))) writeFileSync(join(stage, `${st.tree}.tar`), execFileSync("git", ["--git-dir", repo, "archive", st.tree], { maxBuffer: 1 << 30 }));
         // -m: the files get the time of the extraction, as a checkout's (and a LayerFS step's) writes do; with the
         // archive's commit times tsc -b and pnpm take changed sources as older than their outputs and skip them
         // (f031-slice-f r015: native "Already up to date" and tsc exit 0 where LayerFS rebuilt and failed)
-        script.push(`tar -x -m -C ${ORACLE_ROOT} -f /seq/${st.tree}.tar`);
+        script.push(`tar -x -m -C ${at} -f /seq/${st.tree}.tar`);
         if (prev) {
           writeFileSync(join(stage, `${i}.del`), git(repo, ["diff", "--no-renames", "--name-only", "--diff-filter=D", prev, st.tree]));
           script.push(`while IFS= read -r f; do rm -f -- "$f"; done < /seq/${i}.del`);
@@ -100,8 +113,9 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
         prev = st.tree;
       }
       script.push(i < states.length - 1 ? `t=$(date +%s%N); (${st.command}) > /tmp/s${i} 2>&1; e=$?; echo "@@step ${i} $e $(( ($(date +%s%N) - t) / 1000000 ))"`
-        : `t=$(date +%s%N); (${st.command}) > /tmp/o 2>&1; echo "@@exit $? $(( ($(date +%s%N) - t) / 1000000 ))"; sed 's/^/@@out /' /tmp/o; ${listerCommand()}`);
+        : `t=$(date +%s%N); (${st.command}) > /tmp/o 2>&1; echo "@@exit $? $(( ($(date +%s%N) - t) / 1000000 ))"; sed 's/^/@@out /' /tmp/o; ${listerCommand([], { roots: [...new Set(earlier)] })}`);
     });
+    moveTo(tail.root);
     if (tail.build) script.push(`t=$(date +%s%N); (${tail.build}) > /tmp/b 2>&1; echo "@@tsc $? $(( ($(date +%s%N) - t) / 1000000 ))"; tail -c 4000 /tmp/b | sed 's/^/@@tscout /'`, `${emittedCommand(tail.packages ?? [])} | sed 's/^/@@emit /'`);
     if (tail.tests?.length) script.push(`t=$(date +%s%N); (${vitestCommand(tail.tests, tail.vitestTimeoutS ?? 100)}) > /tmp/v 2>/dev/null; echo "@@vt $? $(( ($(date +%s%N) - t) / 1000000 ))"; echo "@@vtjson $(base64 -w0 /tmp/v)"`);
     const input = execFileSync("tar", ["-c", "-C", stage, "."], { maxBuffer: 1 << 30 });
@@ -113,13 +127,13 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
     let vitest = null;
     if (vt) {
       const json = Buffer.from(pick("@@vtjson ")[0] ?? "", "base64").toString("utf8");
-      vitest = { exit: vt[0], ms: vt[1], ...vitestReport(json, ORACLE_ROOT) };
+      vitest = { exit: vt[0], ms: vt[1], ...vitestReport(json, at) };
     }
     return {
       steps: pick("@@step ").map((l) => { const [i, exit, ms] = l.split(" ").map(Number); return { i, exit, ms }; }),
       exit: Number(String(pick("@@exit ")[0] ?? "NaN").split(" ")[0]), installMs: Number(String(pick("@@exit ")[0] ?? "").split(" ")[1] ?? NaN), output: normalizeOutput(pick("@@out ").join("\n")), ...parseLister(r.stdout),
       tsc: tsc ? { exit: tsc[0], ms: tsc[1], output: pick("@@tscout ").join("\n") } : null,
-      emitted: tail.build ? parseEmitted(pick("@@emit ").join("\n")) : null, vitest, ms: Date.now() - t0,
+      emitted: tail.build ? parseEmitted(pick("@@emit ").join("\n")) : null, vitest, ms: Date.now() - t0, root: at,
     };
   } finally { rmSync(stage, { recursive: true, force: true }); }
 }
@@ -147,7 +161,7 @@ export function cachedOracle(dir, args) {
   if (existsSync(file)) return { ...JSON.parse(readFileSync(file, "utf8")), cached: true, key };
   const n = nativeChain(args);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(`${file}.tmp`, JSON.stringify({ key, tree: args.states.at(-1).tree, inputs: args.inputs, states: args.states, tail: args.tail, image: args.image, listerVersion: LISTER_VERSION, root: ORACLE_ROOT, ...n }));
+  writeFileSync(`${file}.tmp`, JSON.stringify({ key, tree: args.states.at(-1).tree, inputs: args.inputs, states: args.states, tail: args.tail, image: args.image, listerVersion: LISTER_VERSION, ...n, root: n.root ?? ORACLE_ROOT }));
   renameSync(`${file}.tmp`, file);
   return { ...n, cached: false, key };
 }
@@ -179,17 +193,26 @@ export function judgeP1(native, groups, normalized) {
 export function judgeP2(native, install, root) {
   if (!native || !install) return res("NOT_RUN", "no install on one side");
   if (native.exit !== install.exitCode) return res("stop", `exit ${install.exitCode}, native ${native.exit}`);
-  const a = rootless(install.output, root), b = rootless(native.output, ORACLE_ROOT);
+  const a = rootless(install.output, root), b = rootless(native.output, native.root ?? ORACLE_ROOT);
   return a === b ? res("pass", `exit ${native.exit}`) : res("stop", firstDifference(b, a));
 }
-/** P3: a no-op refresh (install inputs unchanged since the chain's last install) changes only pnpm's state files. */
-export function judgeP3(pt, prevInputs) {
+/**
+ * P3: a no-op refresh (install inputs unchanged since the chain's last install) changes only pnpm's state files.
+ * When its mount root moved from the previous install's (`prevRoot`; every LayerFS mount gets a new path),
+ * pnpm skips its up-to-date shortcut (its workspace state keys projects by absolute path) and rewrites what
+ * carries the root (bin shims, hoisted links): any path inside node_modules is then allowed, and P1 judges
+ * those files against native run at the same roots. A path outside node_modules is a stop either way.
+ */
+export function judgeP3(pt, prevInputs, prevRoot = null) {
   if (pt.kind !== "refresh") return res("n/a", "an install, not a refresh");
   if (prevInputs != null && prevInputs !== pt.inputs) return res("n/a", "install inputs changed: not a no-op");
   const changed = pt.install?.changed;
   if (!Array.isArray(changed)) return res("NOT_RUN", "changed paths not recorded");
-  const other = changed.filter((p) => !STATE_FILES.test(p));
-  return other.length ? res("stop", `${other.length} non-state path(s): ${other.slice(0, 3).join(", ")}`) : res("pass", `${changed.length} state file(s)`);
+  const moved = prevRoot != null && pt.root != null && prevRoot !== pt.root;
+  const other = changed.filter((p) => !STATE_FILES.test(p) && !(moved && /(^|\/)node_modules\//.test(p)));
+  const kept = changed.length - other.length;
+  return other.length ? res("stop", `${other.length} non-state path(s): ${other.slice(0, 3).join(", ")}`)
+    : res("pass", moved ? `${kept} path(s) in node_modules, root moved` : `${kept} state file(s)`);
 }
 /** P4: tsc's exit equal native and every emitted .js/.d.ts equal by blob id. */
 export function judgeP4(native, tsc) {
@@ -213,12 +236,12 @@ export function judgeP5(native, vitest, calibration) {
 }
 
 /** All six for one recorded point and its native oracle (or null: NOT_RUN for the native ones). */
-export function judgePoint(pt, native, { groups, prevInputs, calibration, treeOk }) {
+export function judgePoint(pt, native, { groups, prevInputs, prevRoot = null, calibration, treeOk }) {
   if (!treeOk) {
     const why = `tree differs: LayerFS ${String(pt.treeLfs ?? "none").slice(0, 12)}, native ${String(pt.tree ?? "none").slice(0, 12)}`;
     return Object.fromEntries(PROOFS.map((id) => [id, id === "P6" ? res("n/a", "not a repair") : res("NOT_RUN", why)]));
   }
-  return { P1: judgeP1(native, groups, pt.lister?.normalized), P2: judgeP2(native, pt.install, pt.root), P3: pt.lane === "lead" ? res("n/a", "the lead's first install") : judgeP3(pt, prevInputs),
+  return { P1: judgeP1(native, groups, pt.lister?.normalized), P2: judgeP2(native, pt.install, pt.root), P3: pt.lane === "lead" ? res("n/a", "the lead's first install") : judgeP3(pt, prevInputs, prevRoot),
     P4: judgeP4(native, pt.tsc), P5: pt.lane === "lead" ? res("n/a", "no tests at the first install") : judgeP5(native, pt.vitest, calibration), P6: res("n/a", "not a repair") };
 }
 
@@ -332,20 +355,23 @@ async function cmdProofs(o) {
   let left = 0;
   try {
     const baseTree = m.node.baseTree;
-    const chain0 = m.node.chain.map((e) => ({ tree: e.tree, command: e.command }));
+    // each state at the mount path LayerFS ran it at (nativeChain): the lead's install and build at the lead's
+    const at = (root) => (root ? { root } : {}), leadRoot = m.node.points.find((q) => q.lane === "lead")?.root ?? null;
+    const chain0 = m.node.chain.map((e) => ({ tree: e.tree, command: e.command, ...at(leadRoot) }));
     for (const pt of m.node.points) {
       if (proofs[pt.id]) continue;
       if (Date.now() - t0 > budget) { left++; continue; }
       const tree = pt.lane === "lead" ? pt.tree : await materialize(repo, baseTree, pt.delta, blobs);
       const treeOk = !pt.treeLfs || pt.treeLfs === tree;
-      const states = pt.lane === "lead" ? [{ tree, command: pt.install.command }] : [...chain0, ...m.node.points.filter((q) => q.lane === pt.lane && q.order < pt.order).map((q) => ({ tree: q.treeNative, command: q.install.command })), { tree, command: pt.install.command }];
+      const states = pt.lane === "lead" ? [{ tree, command: pt.install.command, ...at(pt.root) }] : [...chain0, ...m.node.points.filter((q) => q.lane === pt.lane && q.order < pt.order).map((q) => ({ tree: q.treeNative, command: q.install.command, ...at(q.root) })), { tree, command: pt.install.command, ...at(pt.root) }];
       const tail = { build: pt.tsc?.command ?? null, packages: pt.tsc?.packages ?? [], tests: pt.vitest?.files ?? [], vitestTimeoutS: 90 };
       const native = treeOk ? cachedOracle(oracleDir(run), { repo, states, tail, inputs: pt.inputs, image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : null;
       const groups = existsSync(groupsFile(run, k, pt.id)) ? JSON.parse(readFileSync(groupsFile(run, k, pt.id), "utf8")) : null;
-      const prev = pt.lane === "lead" ? null : [m.node.points.find((q) => q.lane === "lead"), ...m.node.points.filter((q) => q.lane === pt.lane && q.order < pt.order)].filter(Boolean).at(-1)?.inputs ?? m.node.chainInputs ?? null;
+      const before = pt.lane === "lead" ? null : [m.node.points.find((q) => q.lane === "lead"), ...m.node.points.filter((q) => q.lane === pt.lane && q.order < pt.order)].filter(Boolean).at(-1);
+      const prev = pt.lane === "lead" ? null : before?.inputs ?? m.node.chainInputs ?? null;
       const cal = m.node.calibration?.points?.find((c) => c.id === pt.id) ?? null;
       pt.treeNative = tree;
-      proofs[pt.id] = { tree, treeOk, kind: pt.kind, cached: !!native?.cached, key: native?.key ?? null, nativeMs: native?.ms ?? null, nativeInstallMs: native?.installMs ?? null, nativeTscMs: native?.tsc?.ms ?? null, nativeVitestMs: native?.vitest?.ms ?? null, proofs: judgePoint({ ...pt, tree }, native, { groups, prevInputs: prev, calibration: cal, treeOk }),
+      proofs[pt.id] = { tree, treeOk, kind: pt.kind, cached: !!native?.cached, key: native?.key ?? null, nativeMs: native?.ms ?? null, nativeInstallMs: native?.installMs ?? null, nativeTscMs: native?.tsc?.ms ?? null, nativeVitestMs: native?.vitest?.ms ?? null, proofs: judgePoint({ ...pt, tree }, native, { groups, prevInputs: prev, prevRoot: before?.root ?? null, calibration: cal, treeOk }),
         native: native ? { install: native.exit, tsc: native.tsc?.exit ?? null, vitest: native.vitest?.exit ?? null } : null };
       console.error(`${pt.id}: ${Object.entries(proofs[pt.id].proofs).map(([id, r]) => `${id} ${r.result}`).join(" · ")} (native ${native?.cached ? "cached" : `${native?.ms ?? 0} ms`})`);
     }
@@ -354,10 +380,10 @@ async function cmdProofs(o) {
     const inst = m.closure?.rows?.find((r) => /install/.test(r.kind));
     if (inst && !proofs["lead.repair"] && Date.now() - t0 <= budget) {
       const build = m.closure.rows.find((r) => r.kind === "build"), tree = git(run.manifest.repo, ["rev-parse", `${m.plan.checkpoint}^{tree}`]).trim();
-      const lanes = m.node.points.filter((q) => q.lane !== "lead" && q.install?.command && q.treeNative).map((q) => ({ tree: q.treeNative, command: q.install.command }));
-      const states = [...chain0, ...lanes, { tree, command: inst.command ?? installCommand({ policy: node.storePolicy }) }];
+      const lanes = m.node.points.filter((q) => q.lane !== "lead" && q.install?.command && q.treeNative).map((q) => ({ tree: q.treeNative, command: q.install.command, ...at(q.root) }));
+      const states = [...chain0, ...lanes, { tree, command: inst.command ?? installCommand({ policy: node.storePolicy }), ...at(inst.root) }];
       const native = lanes.length === m.node.points.filter((q) => q.lane !== "lead").length
-        ? cachedOracle(oracleDir(run), { repo, states, tail: build ? { build: build.command ?? buildCommand(build.packages), packages: build.packages } : {}, inputs: "repair", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : null;
+        ? cachedOracle(oracleDir(run), { repo, states, tail: build ? { build: build.command ?? buildCommand(build.packages), packages: build.packages, ...at(build.root) } : {}, inputs: "repair", image: run.manifest.env.LAYERFS_IMAGE, volume: PNPM_STORE, name: nativeName() }) : null;
       const groups = m.closure.repairGroups && existsSync(m.closure.repairGroups) ? JSON.parse(readFileSync(m.closure.repairGroups, "utf8")) : null;
       proofs["lead.repair"] = judgeRepair({ ...m.closure, tree }, native, { groups, nativeMs: native?.ms ?? null });
     } else if (inst && !proofs["lead.repair"]) left++;
