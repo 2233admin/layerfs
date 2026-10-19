@@ -5,6 +5,7 @@ mod discovery;
 mod dispatch;
 mod exec;
 mod job;
+mod output;
 mod pool;
 mod project;
 mod registry;
@@ -19,6 +20,15 @@ use napi_derive::napi;
 #[napi]
 pub fn call(op: String, args: JsUnknown) -> napi::Result<AsyncTask<Job>> {
     dispatch::call(op, args)
+}
+
+/// Fills `page` with one page of a spooled exec output.
+#[napi]
+pub fn exec_output(
+    args: JsUnknown,
+    page: napi::bindgen_prelude::Buffer,
+) -> napi::Result<AsyncTask<Job>> {
+    dispatch::exec_output(args, page)
 }
 
 /// One more client of the Store at `args.storePath` in this process.

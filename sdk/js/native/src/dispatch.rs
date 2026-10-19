@@ -1,6 +1,6 @@
 //! Native argument conversion and disjoint public/operator method tables.
 use crate::job::{refused, Job, Outcome};
-use crate::{convert, direct, exec, job, project, registry, sandbox};
+use crate::{convert, direct, exec, job, output, project, registry, sandbox};
 use layerfs_bridge::control::SdkValue;
 use napi::{bindgen_prelude::AsyncTask, JsUnknown};
 
@@ -39,6 +39,7 @@ fn dispatch(op: &str, args: SdkValue) -> Outcome {
             "background launch requires the operator process table",
         )),
         "sandbox.exec" => exec::exec(&args),
+        "sandbox.exec_release" => output::release(&args),
         _ if op.starts_with("operator.") => Err(refused(
             "UnknownMethod",
             "operator methods require operatorCall",
@@ -71,6 +72,15 @@ fn daemon_operator(op: &str, args: SdkValue) -> Outcome {
         }
         layerfs_api::SdkError::Mount(failure) => job::failed(failure),
     })
+}
+
+/// Fills the caller's page with spooled exec output; see [`output::page`].
+pub(crate) fn exec_output(
+    args: JsUnknown,
+    page: napi::bindgen_prelude::Buffer,
+) -> napi::Result<AsyncTask<Job>> {
+    let args = convert::from_js(args)?;
+    Ok(AsyncTask::new(Job::new(move || output::page(&args, page))))
 }
 
 /// Opens or releases a Store of this process.

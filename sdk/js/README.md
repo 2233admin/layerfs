@@ -126,13 +126,30 @@ Close refuses mounted Workspaces. Background process ownership is in the native
 executor, including persisted process identity; the filesystem daemon launches
 and supervises no commands.
 
+`exec` returns `{ kind, exitCode, stdout, stderr, message, truncated }` when the
+command ends, and no output is cut at any size (`truncated` is always false).
+Each stream is kept inline up to 1 MiB; a result whose streams fit is exactly
+the one older releases returned. A larger stream is spooled by the binding to
+an unlinked file in the host temp directory, read back into one reused 1 MiB
+page, then released; the result then also carries `stdoutBytes` and
+`stderrBytes`. Text is decoded as UTF-8 (invalid bytes become U+FFFD), so a
+text result is bounded only by V8's longest string (2^29−24 UTF-16 units). For
+bounded memory pass Writable sinks as the fifth argument: their streams' raw
+bytes are written to them a page at a time, each after the sink's callback for
+the last, so the call holds one page however long the output is; their result
+fields are null. A sink must not keep a chunk after its write callback (file,
+socket and hash streams do not) and is not ended. The Sandbox runtime reads the
+command's output only as fast as the spool takes it (an 8 KiB window), and a
+spool is bounded by free disk space. Page reads are not traced; the call's
+trace line covers the command's run.
+
 | Group | Positional methods |
 | --- | --- |
 | project (2) | `init(sourcePath)`, `list_branches(pageSize?, pagePos?)` |
 | fs reads (7) | `read(ref, path, startLine?, endLine?)`, `list(ref, path?, pageSize?, pagePos?)`, `stat(ref, path)`, `grep(ref, pattern, path?, pageSize?, pagePos?)`, `glob(ref, pattern, path?, pageSize?, pagePos?)`, `diff_files(leftRef, leftPath, rightRef, rightPath)`, `blame(ref, path, fromLine?)` |
 | fs writes (7) | `write(branch, path, content, message?)`, `edit(branch, path, oldText, newText, message?)`, `apply(branch, changes, message?)`, `mkdir(branch, path, message?)`, `rm(branch, path, message?)`, `cp(branch, from, to, message?)`, `mv(branch, from, to, message?)` |
 | branch (6) | `fork(name, fromRef?)`, `list_commits(branch, pageSize?, pagePos?)`, `diff_commits(from, to, pageSize?, pagePos?, { cursor?, hunks? }?)`, `diff_branches(from, to, pageSize?, pagePos?, { cursor?, hunks? }?)`, `merge(a, b, name, message?, units?)`, `publish(branch, commit?)` |
-| sandbox (7) | `create(name, project, image, { volumes }?)`, `mount(id, branch)` → path, `exec(id, path, command, message?)`, `status(id, path)`, `commit(id, path, message?, force?)`, `unmount(id, path, discard?)`, `close(id)` |
+| sandbox (7) | `create(name, project, image, { volumes }?)`, `mount(id, branch)` → path, `exec(id, path, command, message?, { stdout?, stderr? }?)`, `status(id, path)`, `commit(id, path, message?, force?)`, `unmount(id, path, discard?)`, `close(id)` |
 
 Every grouped method returns a Promise and takes positional arguments only; no
 method takes an options object. A ref is `main`, a Branch name, a Commit

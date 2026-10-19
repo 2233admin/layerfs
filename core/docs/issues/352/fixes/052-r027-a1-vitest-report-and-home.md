@@ -39,11 +39,23 @@
 - Tests: the compact report of a 1.3 MiB report (300 files) comes back under
   100 KB, parses, keeps the failing file's message and the exit status.
 
-## Owner decision (2026-10-20)
+## Owner decisions (2026-10-20)
 
-The Sandbox exec's stdout limit (about 1 MiB) is intentional and stays. The
-owner: "1mib output limit should not be removed. i would rather to skip the
-test than changing that part of code". When a replay command's output would
-pass the limit, the harness uses a compact report (as `nodelanes.mjs` now
-does for vitest) or skips that test, records which, and never changes the
-product.
+First: the Sandbox exec's stdout limit (about 1 MiB) is intentional and
+stays ("1mib output limit should not be removed. i would rather to skip the
+test than changing that part of code").
+
+Reversed later the same day: "if it is working, then take the change of 1
+mib". [Fix 056](056-exec-stdout-pages.md) removes the cap: large output is
+spooled and read back in 1 MiB pages. Its evidence:
+
+- this point's 204-file report, rerun on a fork of range 027 with the full
+  report on stdout, is cut at 1,048,576 bytes by the old addon ("Unterminated
+  string in JSON at position 1047152");
+- with the new addon it arrives whole (1,185,213 bytes), and its 204 results
+  equal a2's;
+- 128 MiB of output through sinks grows the client by 2.4 MiB.
+
+The harness keeps the compact report above until the replay runs an addon
+with fix 056; until then a replay command whose output would pass 1 MiB
+still uses a compact report or skips that test, recorded as such.

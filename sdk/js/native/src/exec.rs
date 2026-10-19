@@ -7,45 +7,26 @@
 //! Engine offers no per-exec cancel, so `cancel` signals the process group
 //! from a second command and waits (bounded) until it is gone.
 use crate::job::{failed, refused, Outcome};
+use crate::output::Spool;
 use crate::registry::{lock, sandbox, sandbox_refreshed, text, Process, SandboxState};
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
-use std::io::Write;
 use std::time::Duration;
 
 /// Home of the command identity, which has no account in the image.
 const HOME: &str = "HOME=/tmp";
-/// Output bytes kept per stream; the rest is counted.
-const KEPT: usize = 1 << 20;
 /// Checks that a cancelled process group is gone.
 const GONE_CHECKS: u32 = 50;
 /// Pause between those checks.
 const GONE_PAUSE: Duration = Duration::from_millis(100);
 
-/// Keeps the first [`KEPT`] bytes and counts every byte.
-#[derive(Default)]
-struct Kept {
-    bytes: Vec<u8>,
-    total: usize,
-}
-
-impl Write for Kept {
-    fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
-        let room = KEPT.saturating_sub(self.bytes.len());
-        self.bytes.extend_from_slice(&data[..room.min(data.len())]);
-        self.total += data.len();
-        Ok(data.len())
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-/// One command to its end: exit code, stdout, stderr.
+/// One command to its end: exit code, stdout, stderr. `spool` sends every
+/// non-empty stream to its file instead of keeping it inline.
 fn run(
     state: &SandboxState,
     directory: &str,
     arguments: Vec<String>,
-) -> Result<(i32, Kept, Kept), SdkRefusal> {
+    spool: bool,
+) -> Result<(i32, Spool, Spool), SdkRefusal> {
     let created = layerfs_api::internal::exec(
         &state.runtime,
         state.identity,
@@ -57,7 +38,7 @@ fn run(
     .map_err(failed)?;
     let attached = created.start().map_err(failed)?;
     let (_input, output, handle) = attached.into_parts().map_err(failed)?;
-    let (mut stdout, mut stderr) = (Kept::default(), Kept::default());
+    let (mut stdout, mut stderr) = (Spool::new(spool), Spool::new(spool));
     output.copy_to(&mut stdout, &mut stderr).map_err(failed)?;
     let inspected = handle.inspect().map_err(failed)?;
     let code = inspected
@@ -66,11 +47,14 @@ fn run(
     Ok((code, stdout, stderr))
 }
 
-fn shown(kept: &Kept) -> SdkValue {
-    SdkValue::Text(String::from_utf8_lossy(&kept.bytes).into_owned())
-}
-
-/// `sandbox.exec(sandbox, path, command, { background? })`.
+/// `sandbox.exec(sandbox, path, command, { background?, spool? })`.
+///
+/// A foreground result is `kind`, `exitCode`, `stdout`, `stderr`, `message`
+/// and `truncated` (always false: no output is cut). A stream over the
+/// inline window (1 MiB), or any non-empty stream with `spool`, is null
+/// here and spooled; the result then also names its `output`, read with
+/// `sandbox.exec_output` and closed with `sandbox.exec_release`, and the
+/// `stdoutBytes` and `stderrBytes` sizes.
 pub(crate) fn exec(args: &SdkValue) -> Outcome {
     let state = sandbox(args)?;
     let path = text(args, "path")?;
@@ -81,18 +65,23 @@ pub(crate) fn exec(args: &SdkValue) -> Outcome {
             &state,
             &directory,
             vec!["bash".into(), "-c".into(), command.into()],
+            args.get_bool("spool"),
         )?;
-        return Ok(SdkValue::map([
+        let mut streams = crate::output::fields(stdout, stderr)?.into_iter();
+        let mut result = vec![
             ("kind", SdkValue::Text(format!("exit:{code}"))),
             ("exitCode", SdkValue::Int(i64::from(code))),
-            ("stdout", shown(&stdout)),
-            ("stderr", shown(&stderr)),
-            ("message", SdkValue::opt_text(args.get_text("message"))),
-            (
-                "truncated",
-                SdkValue::Bool(stdout.total > KEPT || stderr.total > KEPT),
-            ),
-        ]));
+        ];
+        result.extend(streams.by_ref().take(2));
+        result.push(("message", SdkValue::opt_text(args.get_text("message"))));
+        result.push(("truncated", SdkValue::Bool(false)));
+        result.extend(streams);
+        return Ok(SdkValue::Map(
+            result
+                .into_iter()
+                .map(|(name, value)| (name.to_owned(), value))
+                .collect(),
+        ));
     }
     let _guard = crate::discovery::guard(&state.directory)?;
     let id = format!(
@@ -104,8 +93,9 @@ pub(crate) fn exec(args: &SdkValue) -> Outcome {
         &state,
         &directory,
         vec!["bash".into(), "-c".into(), script, command.into()],
+        false,
     )?;
-    let pid = String::from_utf8_lossy(&stdout.bytes)
+    let pid = String::from_utf8_lossy(stdout.kept())
         .trim()
         .parse::<u32>()
         .map_err(|_| {
@@ -113,7 +103,7 @@ pub(crate) fn exec(args: &SdkValue) -> Outcome {
                 "Failed",
                 format!(
                     "background start exited {code}: {}",
-                    String::from_utf8_lossy(&stderr.bytes)
+                    String::from_utf8_lossy(stderr.kept())
                 ),
             )
         })?;
@@ -143,9 +133,9 @@ pub(crate) fn exec(args: &SdkValue) -> Outcome {
 /// The container's first process is the daemon, which does not reap orphans,
 /// so a finished member can stay a zombie that `kill -0` still finds.
 fn start_time(state: &SandboxState, pid: u32) -> Result<Option<String>, SdkRefusal> {
-    let (code, out, _) = run(state, "/tmp", vec!["bash".into(), "-c".into(), format!("s=$(cat /proc/{pid}/stat 2>/dev/null) || exit 1; set -- ${{s##*) }}; shift 19; printf '%s' \"$1\"")])?;
+    let (code, out, _) = run(state, "/tmp", vec!["bash".into(), "-c".into(), format!("s=$(cat /proc/{pid}/stat 2>/dev/null) || exit 1; set -- ${{s##*) }}; shift 19; printf '%s' \"$1\"")], false)?;
     if code == 0 {
-        Ok(Some(String::from_utf8_lossy(&out.bytes).into_owned()))
+        Ok(Some(String::from_utf8_lossy(out.kept()).into_owned()))
     } else {
         Ok(None)
     }
@@ -156,7 +146,12 @@ fn alive(state: &SandboxState, pid: u32) -> Result<bool, SdkRefusal> {
         "for f in /proc/[0-9]*/stat; do s=$(cat \"$f\" 2>/dev/null) || continue; \
          set -- ${{s##*) }}; [ \"$1\" != Z ] && [ \"$3\" = {pid} ] && exit 0; done; exit 1"
     );
-    let (code, _, _) = run(state, "/tmp", vec!["bash".into(), "-c".into(), probe])?;
+    let (code, _, _) = run(
+        state,
+        "/tmp",
+        vec!["bash".into(), "-c".into(), probe],
+        false,
+    )?;
     Ok(code == 0)
 }
 
@@ -260,6 +255,7 @@ pub(crate) fn cancel(args: &SdkValue) -> Outcome {
             "-c".into(),
             format!("kill -TERM -- -{pid} 2>/dev/null; true"),
         ],
+        false,
     )?;
     let mut gone = false;
     for _ in 0..GONE_CHECKS {

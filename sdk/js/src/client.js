@@ -21,7 +21,8 @@ export async function invokeOperator(op, args, options) {
 /** A traced call carries its scope; the binding removes it before dispatch. */
 const observed = (args, scope) => (scope ? { ...args, observe: scope } : args);
 
-function outcome(answer) {
+/** A binding answer's value, or its refusal thrown as a LayerFSError. */
+export function outcome(answer) {
   if (answer.refused) {
     const { code, message, detail } = answer.refused;
     throw new LayerFSError(code, message, detail);
