@@ -1198,6 +1198,8 @@ test("F-031 option (c): seed pack, lane commits with their own index and ref, th
     sh(dir, "sleep 1; touch marker");
     writeFileSync(join(wt, "a.txt"), "a2\n"); rmSync(join(wt, "d/b.txt"));
     const cmds = g.laneCommands({ lane: "L1", add: ["a.txt"], remove: ["d/b.txt"], message: "r016.s0010", date: "1700000001 +0000" }, join(dir, "scratch"));
+    // the add hashes its paths again whatever their stat data says (f031-r1-slice-g r015.s0013)
+    assert.match(cmds.at(-1), /git add -f --pathspec-from-file=\S+ --pathspec-file-nul && git add --renormalize --pathspec-from-file=/);
     let out = ""; for (const c of cmds) out = sh(wt, c);
     const m = g.marks(out);
     assert.equal(sh(wt, "git rev-parse refs/heads/lanes/L1").trim(), m.commit);

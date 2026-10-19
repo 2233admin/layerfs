@@ -47,7 +47,17 @@ SPEC §2's outer and inner cycles add these git steps:
   - `commit-tree` takes the exact parents, author, committer, dates and
     message, so ids equal dsh's.
 - **Blobs come from real bytes.** A lane's `git add` hashes what is in the
-  Workspace. Blobs no step wrote come from one native pack by real
+  Workspace. It is followed by `git add --renormalize` of the same paths, which
+  hashes them whatever their stat data says. A one-shot Workspace's index can
+  come from a lane commit that mounted before the lane's previous write landed
+  and was merged after it. When that write kept the file's size, inode and
+  second, the stale entry's stat data matches, and the index is newer than the
+  entry, so git does not treat it as racy. Plain `git add` then keeps the old
+  blob. This happened in `f031-r1-slice-g` at `r015.s0013`: blob `e70f8059`
+  was never written, and the lead's `write-tree` stopped. git 2.39.5
+  reproduces it natively (`~/lfs-history/dev/git-object-r015-20261019/`).
+  LayerFS merged correctly; git's stat cache assumes one index on one
+  timeline. Blobs no step wrote come from one native pack by real
   `git unpack-objects`, counted apart.
 - **No lane writes a shared single file.** Auto-gc, auto-maintenance and
   reflogs are off in the seed, recorded departures from git defaults. The

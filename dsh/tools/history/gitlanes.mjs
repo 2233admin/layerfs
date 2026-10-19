@@ -125,7 +125,7 @@ const timed = (name, cmd) => `s0=$(date +%s%N); ${cmd}; echo "@@${name}Ms $(( ($
  * is made (HEAD, commondir, gitdir), its ref set to the range base (the shared
  * HEAD) and its index read and refreshed. Then, each timed on its own and with
  * GIT_OPTIONAL_LOCKS=0 for the two reads: `git status --porcelain`, `git diff
- * --stat`, `git add -f`, `git rm --cached`, porcelain `git commit`. The lane's
+ * --stat`, `git add -f` then `git add --renormalize` of the same paths, `git rm --cached`, porcelain `git commit`. The lane's
  * loose-object count and the commit's tree close it. Returns exec commands
  * with `.scratch`.
  */
@@ -144,7 +144,11 @@ export function laneCommands({ lane, add, remove, message, date }, scratch) {
     `export GIT_DIR=${gd} GIT_WORK_TREE=.`,
     timed("status", `GIT_OPTIONAL_LOCKS=0 GIT_TRACE2_PERF=${t2} git status --porcelain > ${scratch}/st`), `echo "@@statusLines $(wc -l < ${scratch}/st)"`, ...traced("status", t2),
     timed("diff", `GIT_OPTIONAL_LOCKS=0 GIT_TRACE2_PERF=${t2} git diff --stat > ${scratch}/df`), `echo "@@diffLines $(wc -l < ${scratch}/df)"`, ...traced("diff", t2)];
-  if (add.length) script.push(ship("add", add), timed("add", `git add -f --pathspec-from-file=${scratch}/add --pathspec-file-nul`), `echo "@@addPaths ${add.length}"`);
+  // --renormalize hashes the named paths again whatever their stat data says. A one-shot Workspace's index can be a
+  // merged-in rewrite from a snapshot taken before this lane's last write; when that write kept the size, inode and
+  // second, the entry's stat matches and the index is newer than it, so plain `git add` keeps the old blob
+  // (f031-r1-slice-g r015.s0013: e70f8059 never written, the lead's write-tree stopped; git 2.39.5 reproduces it)
+  if (add.length) script.push(ship("add", add), timed("add", `git add -f --pathspec-from-file=${scratch}/add --pathspec-file-nul && git add --renormalize --pathspec-from-file=${scratch}/add --pathspec-file-nul`), `echo "@@addPaths ${add.length}"`);
   if (remove.length) script.push(ship("rm", remove), timed("rm", `git rm --cached -q --ignore-unmatch --pathspec-from-file=${scratch}/rm --pathspec-file-nul`), `echo "@@rmPaths ${remove.length}"`);
   script.push(`export ${who}`, timed("commit", `GIT_TRACE2_PERF=${t2} git commit -q --allow-empty --no-verify -m ${q(message)}`), ...traced("commit", t2),
     "echo \"@@commit $(git rev-parse HEAD)\"; echo \"@@tree $(git rev-parse 'HEAD^{tree}')\"",
