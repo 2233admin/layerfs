@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fetchScript } from "../fetch-store.mjs";
 import { addedBySource, changedGroupBytes, cumulative, liveParts, sealedParts, seedBySource, stepSource, storageFigures, storageProblems } from "../storage.mjs";
-import { parseLister, rootless, verifiedAges, buildBytes, buildListCommand, changedPackages, CLOSURE_OUTPUT, closureSteps, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, nothingToBuild, playClosure, tscStates } from "../closure.mjs";
+import { CLEAN_REMOVE, installCommand, STORE_MOUNT, parseLister, rootless, verifiedAges, buildBytes, buildListCommand, changedPackages, CLOSURE_OUTPUT, closureSteps, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, nothingToBuild, playClosure, tscStates } from "../closure.mjs";
 import { aggregate, buildBaseline, reinstallGate, evaluate, probeSeries, thinClass } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, installedText, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
@@ -955,6 +955,12 @@ test("fetch-store: one status line per lockfile, at most four fetches at a time,
 
 test("closure (INSTALLS): install, build and test steps; the node_modules lister and oracle comparison", async () => {
   const packages = new Set(["packages/a", "packages/b", "packages/c"]), tsconfigs = new Set(["packages/a", "packages/b"]);
+  // the lead repair is a clean relink (owner 2026-10-19, F-057): every node_modules removed, then the frozen offline install
+  const repairStep = closureSteps({ packages, tsconfigs, run: [], changed: ["docs/x.md"], installed: true, milestone: false, repair: true })[0];
+  assert.deepEqual([repairStep.kind, repairStep.command], ["repair-install", installCommand({ clean: true })]);
+  assert.ok(repairStep.command.includes(`${CLEAN_REMOVE} && `) && /--offline --frozen-lockfile/.test(repairStep.command) && repairStep.command.startsWith(storeSetup(STORE_MOUNT)));
+  assert.equal(closureSteps({ packages, tsconfigs, run: [], changed: ["pnpm-lock.yaml"], installed: true, milestone: false })[0].command, installCommand(), "an incremental install outside the repair stays incremental");
+  assert.equal(closureSteps({ packages, tsconfigs, run: [], changed: [], installed: true, milestone: true, repair: true })[0].kind, "clean-install", "a milestone's clean install is already clean");
   const kinds = (o) => closureSteps({ packages, tsconfigs, run: [], ...o }).map((s) => s.kind);
   assert.deepEqual(kinds({ changed: ["packages/a/src/x.ts"], installed: false, milestone: false }), ["install", "build"]);
   assert.deepEqual(kinds({ changed: ["packages/c/package.json", "packages/b/src/y.ts"], installed: true, milestone: false }), ["incremental-install", "build"]);

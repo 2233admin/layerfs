@@ -111,7 +111,12 @@ the native tree never have, and the bundler takes every `packages/*/*` folder
 as a package (R1 dev slice, `r015-1-docs-rfc.mid`). Natively this is a no-op. After all lane
 merges, the **lead repair**: one install on the merged tree, then `tsc -b`,
 then the range build and tests, capped at **60 s native** (5 min at
-milestones).
+milestones). The repair's install is a **clean relink**: every `node_modules`
+is removed, then the same frozen offline install with the store setup and the
+fail-fast flags. The native repair chain runs the same command. Owner
+decision 2026-10-19 (liaison relay), verbatim: "Yes: make the lead's repair a clean relink of node_modules on the merged tree (native the same), keep F-057 open for the product fix, and play range 15 a4." Reason: F-057. A
+newest-wins merge of pnpm's install state let the incremental repair keep
+stale hoisting (range 15 a3). The repair keeps its own Commit and storage row.
 
 ## 5. Merges
 

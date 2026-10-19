@@ -109,8 +109,10 @@ export function closureSteps({ changed, packages, tsconfigs, milestone, installe
   if (milestone && installed) steps.push({ kind: "clean-install", command: installCommand({ store, clean: true, policy }) });
   else if (!installed) steps.push({ kind: "install", command: installCommand({ store, policy }) });
   // owner S4: after a merge whose /.lww rules picked a side, the merged result re-runs the install, as developers do after git merge;
-  // NODE_RULE §4 (`repair`): a lead repair follows every consolidation, whatever changed
-  else if (installInputsChanged(changed) || lwwPicked || repair) steps.push({ kind: repair ? "repair-install" : "incremental-install", command: installCommand({ store, policy }) });
+  // NODE_RULE §4 (`repair`): a lead repair follows every consolidation, whatever changed. It is a clean relink on the
+  // merged tree (owner 2026-10-19): every node_modules removed, then the frozen offline install, so newest-wins over
+  // pnpm's install state (F-057) never reaches the repaired lead; the native repair chain replays the same command
+  else if (installInputsChanged(changed) || lwwPicked || repair) steps.push({ kind: repair ? "repair-install" : "incremental-install", command: installCommand({ store, policy, clean: repair }) });
   // development checks (owner 2026-10-18): a clean reinstall of the unchanged lockfile, whose Commit's metadata bytes are recorded
   if (checks && steps.length) steps.push({ kind: "reinstall-check", command: installCommand({ store, clean: true, policy }) });
   const built = [...new Set(changed.map((p) => packageOf(p, packages)).filter((d) => d && tsconfigs.has(d)))].sort();

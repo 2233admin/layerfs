@@ -944,5 +944,9 @@
     Changing the repair command changes the workload, so it is the owner's
     call (liaison under owner delegation 2026-10-19).
 
-  **Status: OPEN, product finding; range 15 stays at stop until it is
-  decided.**
+  **Status: OPEN, product finding.** Owner decision 2026-10-19: the workload
+  now avoids it. The lead's repair is a clean relink of `node_modules` on the
+  merged tree, and native runs the same (NODE_RULE §4). The product fix is
+  still owed: lanes still merge their install output by newest-wins, and a
+  Workspace that installs incrementally on such a merge keeps the stale
+  hoisting.
