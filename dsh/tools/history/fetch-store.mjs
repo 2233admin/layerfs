@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Fills the pnpm store once from the lockfiles of all ranges (SPEC §2,
 // Speed-ups 4; INSTALLS.md §2): the one step that uses the network.
-//   node dsh/tools/history/fetch-store.mjs --repo <dsh.git> --plan <dir> --image I --volume V [--from i] [--to j | --only blob,…] [--jobs n] [--note text] [--list] | --collect
+//   node dsh/tools/history/fetch-store.mjs --repo <dsh.git> --plan <dir> --image I --volume V [--versions k-j] [--from i] [--to j | --only blob,…] [--jobs n] [--note text] [--list] | --collect
 // The distinct pnpm lockfiles of the plan's checkpoints (by git blob id, in
 // first-range order; range 0 is yarn's and has none) are numbered 0..n-1;
 // `--list` prints them. For lockfiles [from, to) it writes each one's
@@ -15,6 +15,11 @@
 // ~/lfs-history/ledger/ledger.jsonl (kind pnpm-fetch). Failed fetches keep
 // their log beside the lockfile, and nothing works around them. Installs and
 // tests never use the network.
+// `--versions k-j` takes instead the lockfile versions the plan's steps write
+// in ranges k..j (NODE_RULE §11 a; owner 2026-10-19: fetch and verify every
+// intermediate version, keeping dsh's minimumReleaseAge), each with the files
+// of a commit whose tree holds it, and leaves out those already fetched
+// (a fetch.log beside the lockfile).
 import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -40,6 +45,19 @@ export function lockfiles(repo, planDir) {
   return [...out.values()];
 }
 
+/** The lockfile versions the plan's steps write in ranges k..j: [{ blob, ranges, checkpoint: the writing step's commit, step }], plan order. */
+export function versionLockfiles(planDir, k, j) {
+  const out = new Map();
+  for (let r = k; r <= j; r++) {
+    const plan = JSON.parse(readFileSync(join(planDir, `range-${pad(r)}.json`), "utf8"));
+    for (const s of plan.steps) for (const f of s.files ?? []) if (f.path === "pnpm-lock.yaml" && f.op === "write") {
+      if (!out.has(f.blob)) out.set(f.blob, { blob: f.blob, ranges: [], checkpoint: s.commit, step: s.id });
+      if (!out.get(f.blob).ranges.includes(r)) out.get(f.blob).ranges.push(r);
+    }
+  }
+  return [...out.values()];
+}
+
 /**
  * The script one fetch container runs: each directory's `pnpm fetch`, its
  * status on one line, `jobs` at a time (pnpm's store is content-addressed and
@@ -58,12 +76,13 @@ function main() {
   const opt = (n, d = null) => { const i = args.indexOf(n); return i < 0 ? d : args[i + 1]; };
   const repo = opt("--repo"), planDir = opt("--plan"), image = opt("--image"), volume = opt("--volume");
   if (!repo || !planDir) { console.error("usage: fetch-store.mjs --repo <dsh.git> --plan <dir> --image I --volume V [--from i] [--to j] [--list]"); process.exit(2); }
-  const all = lockfiles(repo, planDir);
-  if (args.includes("--list")) { all.forEach((l, i) => console.log(`${i} ${l.blob} ranges ${l.ranges.join(",")}`)); return; }
+  const versions = opt("--versions")?.split("-").map(Number), root = join(process.env.HOME, "lfs-history", "fetch");
+  const all = versions ? versionLockfiles(planDir, versions[0], versions[1] ?? versions[0]).filter((l) => !existsSync(join(root, l.blob, "fetch.log"))) : lockfiles(repo, planDir);
+  if (args.includes("--list")) { all.forEach((l, i) => console.log(`${i} ${l.blob} ranges ${l.ranges.join(",")}${l.step ? ` step ${l.step}` : ""}`)); return; }
   if (!image || !volume) process.exit(2);
   const from = Number(opt("--from", "0")), to = Number(opt("--to", String(all.length)));
   const jobs = Number(opt("--jobs", "4")), only = opt("--only")?.split(",");
-  const batch = (only ? all.filter((l) => only.some((b) => l.blob.startsWith(b))) : all.slice(from, to)), root = join(process.env.HOME, "lfs-history", "fetch");
+  const batch = only ? all.filter((l) => only.some((b) => l.blob.startsWith(b))) : all.slice(from, to);
   for (const l of batch) {
     const dir = join(root, l.blob);
     mkdirSync(dir, { recursive: true });
@@ -79,7 +98,7 @@ function main() {
   const before = storeBytes(image, volume);
   const id = execFileSync("docker", ["run", "-d", "--name", NAME, "--network", "bridge", "-v", `${volume}:/pnpm-store`, "-v", `${root}:/f`,
     "--entrypoint", "sh", image, "-c", fetchScript(batch.map((l) => l.blob), jobs)], { encoding: "utf8" }).trim();
-  writeFileSync(PENDING, JSON.stringify({ id, volume, image, from, to, jobs, only, note: opt("--note"), lockfiles: batch.map((l) => ({ blob: l.blob, ranges: l.ranges })), storeBefore: before }));
+  writeFileSync(PENDING, JSON.stringify({ id, volume, image, from, to, jobs, only, versions: opt("--versions"), note: opt("--note"), lockfiles: batch.map((l) => ({ blob: l.blob, ranges: l.ranges })), storeBefore: before }));
   console.log(JSON.stringify({ started: id.slice(0, 12), from, to }));
 }
 

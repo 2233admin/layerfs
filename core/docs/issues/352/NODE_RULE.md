@@ -235,6 +235,35 @@ versions plus 6 checkpoints.
   policy with `pnpm_config_minimum_release_age=0`. Either way, add the hono
   tarball. Recommended: fetch and verify, which keeps dsh's config as it is.
 
+**(a) again, after the store fill (2026-10-19, policy on, one attempt each).**
+The owner chose to fetch and verify (RESULTS.md decision log). Every lockfile
+version the R1 plan writes in ranges 15–20 was fetched with `fetch-store.mjs
+--versions` (49 not fetched before, which covers the frozen plan's 40); the
+store's `lockfile-verified.jsonl` grew from 231 to 281 rows, and
+`hono@4.12.28` is in it. The same 51 states as above, same tools and image:
+
+| Range | Versions passing, policy on | Checkpoints passing |
+| --- | --- | --- |
+| 15 | 12/13 | 1/1 |
+| 16 | 13/13 | 1/1 |
+| 17 | 8/8 | 1/1 |
+| 18 | 6/6 | 1/1 |
+| 19 | 2/2 | 1/1 |
+| 20 | 3/3 | 1/1 |
+| **Total** | **44/45** | **6/6** |
+
+- No `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` and no missing tarball; every
+  passing row reports the lockfile as verified.
+- The one failure is `r015.s0032`, `ERR_PNPM_OUTDATED_LOCKFILE`: dsh's own
+  lockfile is behind `packages/bash/tool-bash/package.json` at that commit.
+  It fails natively the same way, so it is an equal native failure, not a
+  finding.
+- Receipts: `~/lfs-history/evidence/node-rule-11a-recheck-20261019/`
+  (`IDENTITY.md`, `w/results-a.jsonl`). Three fetches were killed for memory
+  while another session's build shared the Docker VM, and were fetched once
+  more alone. Docker Desktop restarted by itself during range 20; its two
+  remaining rows ran once afterwards on the same chain.
+
 **(b) Under the plan rule, every lane step's tree has consistent install
 inputs** (policy off, so only consistency is tested):
 
@@ -270,8 +299,9 @@ throughout.
 
 - **B1** (done 2026-10-19): ranges 15 and later re-planned under R1 into
   `~/lfs-history/plan-r1/`.
-- **B2** (after the §11 a decision): fill the store for intermediate lockfiles
-  (or apply the policy override) and add `hono-4.12.28.tgz`; rerun §11 a once.
+- **B2** (done 2026-10-19): the store was filled with every intermediate
+  lockfile, fetched and verified, including `hono-4.12.28.tgz`; §11 a was
+  rerun once (44/45 and 6/6, policy on).
 - **B3:** add `--fetch-retries=0 --fetch-timeout=3000` to closure.mjs
   `installCommand`.
 - **B4:** the test-point churn of §4, the lead repair, and proofs P1–P6 with
