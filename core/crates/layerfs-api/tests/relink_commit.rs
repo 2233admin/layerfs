@@ -1,4 +1,4 @@
-//! A clean relink's Commit on a replay Store (#364 item 2).
+//! A clean relink's Commit on a replay Store (#364 items 2 and 3).
 //!
 //! Set `LAYERFS_364_RELINK_STORE` to a closed Store file,
 //! `LAYERFS_364_RELINK_BINDING` to its history binding key (hex) and
@@ -7,7 +7,8 @@
 //! forked from that Commit unlinks every regular file under a `node_modules`
 //! directory and creates it again with the same bytes, mode and mtime, as pnpm's
 //! copy import does after `rm -rf node_modules`: new inodes, identical bytes.
-//! Only the Commit is timed; it prints one `RELINK_COMMIT` line per round.
+//! Only the Commit is timed; it prints one `RELINK_COMMIT` line per round
+//! and one `RELINK_HEAD` line with each new Commit's identity.
 //! `LAYERFS_364_RELINK_LIMIT` relinks only that many files.
 //! `LAYERFS_364_RELINK_ROUNDS=2` relinks again over the first relink's
 //! Commit and then pages `branch.diff_commits` between the two (range 16's
@@ -286,6 +287,9 @@ fn clean_relink_commit() {
         .into_iter()
         .chain((1..=rounds).map(|round| relink(&service, &workspace, round, keep_times)))
         .collect();
+    for commit in &commits {
+        println!("RELINK_HEAD {commit}");
+    }
     drop(workspace);
     if let [first, second] = commits.as_slice() {
         // Range 16's verify: every page of the diff between two relinks.
