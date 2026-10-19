@@ -199,6 +199,7 @@
 | 2026-10-20 | **Range 23 a1 (`p3-main-r`): WATCH, terminal; first range on binaries from main 3ef00d32e5 (daemon `45a196ef`, addon `4668012e`; owner 2026-10-20).** Checkpoint ok, git ✓, Node 17 pass, repair P6 pass. `diff_commits` row cleared: verify 9.9 s (r21–22: 91–96 s). Speed/Scaling/Counters watch (r15 baseline binary, 1 of 3 same-binary points) | switched in place at 22/23 |
 | 2026-10-20 | **Range 24 a1 (`p3-main-r`, daemon `45a196ef`): WATCH, terminal.** Checkpoint ok, git ✓, Node 17 pass, 0 stop, 0 NOT_RUN over 4 points, repair P6 pass. Final-step alarms rebalanced within 295 s (repair 160, verify 70, finish 65) now that verify takes ~10 s | — |
 | 2026-10-20 | **Range 25 a1 (`p3-main-r`, daemon `45a196ef`): OPTIMIZE, terminal under the fast-mode ruling (counters recorded).** Checkpoint ok, git ✓, Node 13 pass, 0 stop, 0 NOT_RUN over 4 points, repair P6 pass. Only optimize row: Counters `glob_tree.statements` per tree file, depth exponent 1.489 (3 same-binary points) | — |
+| 2026-10-20 | **Range 26 a1 (`p3-main-r`, daemon `45a196ef`): OPTIMIZE, terminal under the fast-mode ruling (counters recorded).** Checkpoint ok, git ✓, Node 16 pass, 0 stop, 0 NOT_RUN over 4 points, repair P6 pass (1,167 emitted). Only optimize row: Counters `glob_tree.vm_steps` per tree file, depth exponent 0.726 | — |
 
 ## P1 · Pilot
 
