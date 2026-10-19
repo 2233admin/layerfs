@@ -35,7 +35,17 @@ export const HEADLINE_CELLS = ["Latest version", "Store on disk", "Space amplifi
  * shims, root in pnpm's output. Lister v6: what is not byte-compared and what is
  * compared by target, counted the same way.
  */
-export function installedText(cl) {
+/** The repair's P1 against the on-top native chain, from its P6 record (nodeproof.mjs judgeRepair: "P1 <result>…"). */
+export const repairP1 = (repair) => (repair ? /^P1 (pass|stop|NOT_RUN|n\/a)/.exec(repair.proofs?.P6?.detail ?? "")?.[1] ?? null : undefined);
+
+/**
+ * The Installed tree row. With Node on (`repairGroups`), the closure's inline oracle replays the lead's chain alone,
+ * without the lane points' installs and builds its merged node_modules carries; the installed tree's oracle is the
+ * on-top chain the repair's P6 judges (P1 of P6). The lead-only comparison is shown after it as context, never as
+ * the verdict (r017: `python/sdk-runtime/node_modules/.bin` has the shim a lane's build target makes, equal to the
+ * on-top chain, absent from the lead-only one).
+ */
+export function installedText(cl, repair = undefined) {
   const o = cl.oracle, n = cl.normalized, f = n?.files ?? {};
   const st = (p) => (f[p] ? `\`${p.slice(13)}\` root ×${f[p].root}, time ×${f[p].time}` : `\`${p.slice(13)}\` absent`);
   const vt = f.vitest ? ` · vitest results: order sorted in ${f.vitest.reordered} of ${f.vitest.files} files, duration ×${f.vitest.durations}${f.vitest.unparsed ? `, ${f.vitest.unparsed} unparsed` : ""}` : "";
@@ -44,7 +54,14 @@ export function installedText(cl) {
   const norm = v6 ?? (n ? `normalized: ${st("node_modules/.modules.yaml")} · ${st("node_modules/.pnpm-workspace-state-v1.json")} · root ×${f.shims?.root ?? 0} in ${f.shims?.files ?? 0} bin shims · output root ×${n.outputRoot}${n.outputVerifiedAge != null ? `, verification age ×${n.outputVerifiedAge}` : ""}${f.vitest ? ` · vitest results: order sorted in ${f.vitest.reordered} of ${f.vitest.files} files, duration ×${f.vitest.durations}${f.vitest.unparsed ? `, ${f.vitest.unparsed} unparsed` : ""}` : ""}` : "normalized: not recorded");
   const er = cl.earlierRoots, earlier = er ? ` · earlier mount roots ×${er.install.occurrences} in ${er.install.files} files (${er.roots.length} roots${er.reinstall ? `; reinstall ×${er.reinstall.occurrences}` : ""})${er.binCheck ? ` · \`${er.binCheck.command}\` in the new mount: exit ${er.binCheck.exitCode}` : ""}` : "";
   const bin = !er && cl.binCheck ? ` · \`${cl.binCheck.command}\` in the new mount: exit ${cl.binCheck.exitCode}` : "";
-  return `${cl.oracleKind === "sequence" ? "against the native replay of its chain · " : ""}${o.ok ? `**${o.groups} package groups equal to native**` : `**differs**: ${o.missing.length} missing, ${o.extra.length} extra, ${o.differ.length} differ`} · ${norm}${earlier}${bin}`;
+  const own = o.ok ? `**${o.groups} package groups equal to native**` : `**differs**: ${o.missing.length} missing, ${o.extra.length} extra, ${o.differ.length} differ`;
+  if (cl.repairGroups) {
+    const p1 = repairP1(repair), paths = [...o.missing, ...o.extra, ...o.differ];
+    const onTop = p1 === "pass" ? "**equal to native** (the repair's P1)" : p1 === "stop" ? "**differs** (the repair's P1)" : p1 ? `${p1} (the repair's P1)` : "not judged yet (nodeproof.mjs proofs)";
+    const lead = o.ok ? `${o.groups} package groups equal` : `${o.missing.length} missing, ${o.extra.length} extra, ${o.differ.length} differ (${paths.slice(0, 3).map((p) => `\`${p}\``).join(", ")}${paths.length > 3 ? ", …" : ""})`;
+    return `against the native replay of the on-top chain (lead, lane points, repair): ${onTop} · the lead's chain alone (context; without the lane points' installs and builds): ${lead} · ${norm}${earlier}${bin}`;
+  }
+  return `${cl.oracleKind === "sequence" ? "against the native replay of its chain · " : ""}${own} · ${norm}${earlier}${bin}`;
 }
 
 /** The range's 1-min load average line (owner 2026-10-18), or why there is none. */
@@ -155,7 +172,7 @@ export function renderFormat({ plan, summary, attempts, gates, lead, findings = 
     ["Steps", `${int(c.steps?.matched)} / ${int(c.steps?.total)} outcomes as planned`],
     ["Conflicts", `**${conflicts} / ${planned} planned hit · ${c.conflicts?.unplanned ?? 0} unplanned**`],
     ["Unit tests", c.tests?.run ? `**${c.tests.equal} / ${c.tests.run} equal to native**` : `— (not played in ${String(m.phase).toUpperCase()})`],
-    ...(m.closure?.oracle ? [["Installed tree", installedText(m.closure)]] : []),
+    ...(m.closure?.oracle ? [["Installed tree", installedText(m.closure, m.closure.repairGroups ? m.p3proofs?.["lead.repair"] ?? null : undefined)]] : []),
     ...(m.lww ? [["Last-writer-wins (`/.lww`)", `${m.lww.written ? "written" : "unchanged"} (${int(m.lww.lines)} lines from ${Object.keys(m.lww.sources ?? {}).length} .gitignore files) · **${int(m.lww.total)} picks** in ${m.lww.picks.length} merges${m.lww.picks.some((p) => p.nodeModules) ? ` (${int(m.lww.picks.reduce((n, p) => n + p.nodeModules, 0))} under node_modules)` : ""}${m.closure?.lwwPicked ? " · re-installed after the merge" : ""}`]] : []),
     ["Ignored files", (w.leftOut?.install ? `— (installs not played in ${String(m.phase).toUpperCase()})` : "as expected")],
     ["Milestone", plan.milestone ? (m.snapshot ? "snapshot taken; restore, oracle and quick_check by the lead (SPEC §7)" : "**snapshot not taken**") : "—"],

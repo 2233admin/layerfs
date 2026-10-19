@@ -443,6 +443,13 @@ test("install on top (lead 2026-10-18, dev352-p3h r016): the chain and its oracl
   assert.equal(oracleFiles("/o", { lock: "L", steps: [{ kind: "incremental-install", command: "i" }], chain: [], checkpoint: "c" }).kind, "clean", "no chain: clean");
   const shown = installedText({ oracleKind: "sequence", oracle: { ok: true, groups: 3, missing: [], extra: [], differ: [] }, normalized: { files: { bookkeeping: 3, shims: 251, links: 1753 }, outputRoot: 0 }, binCheck: { command: "./node_modules/.bin/tsc --version", exitCode: 0 } });
   assert.equal(shown, "against the native replay of its chain · **3 package groups equal to native** · not byte-compared: 3 pnpm state file(s) · by target: 251 bin shims, 1753 links · output root ×0 · `./node_modules/.bin/tsc --version` in the new mount: exit 0");
+  // Node on (r017.a2): the lead-only chain lacks the shim a lane's build target makes; the row's verdict is the repair's P1
+  const r17 = { oracleKind: "sequence", repairGroups: "/g.json", oracle: { ok: false, groups: 1612, missing: [], extra: [], differ: ["python/sdk-runtime/node_modules/.bin"] }, normalized: { files: { bookkeeping: 3, shims: 273, links: 2723 }, outputRoot: 0 } };
+  const p6 = (detail) => ({ proofs: { P6: { result: detail.startsWith("P1 stop") ? "stop" : "pass", detail } } });
+  assert.equal(installedText(r17, p6("P1 pass, P4 pass (418 emitted files, exit 0)")), "against the native replay of the on-top chain (lead, lane points, repair): **equal to native** (the repair's P1) · the lead's chain alone (context; without the lane points' installs and builds): 0 missing, 0 extra, 1 differ (`python/sdk-runtime/node_modules/.bin`) · not byte-compared: 3 pnpm state file(s) · by target: 273 bin shims, 2723 links · output root ×0");
+  assert.match(installedText(r17, p6("P1 stop (2 groups differ), P4 pass")), /on-top chain[^·]*: \*\*differs\*\* \(the repair's P1\)/, "a real difference stays a difference");
+  assert.match(installedText(r17, null), /on-top chain[^·]*: not judged yet/, "before the proofs: not judged, never equal");
+  assert.doesNotMatch(installedText(r17, null), /equal to native/);
 });
 
 test("per-call scratch (lead 2026-10-18): distinct folders; removed on success and after a failed exec", async () => {

@@ -24,7 +24,7 @@ Areas changed: `/` 13% · `examples/acp-agent` 11% · `packages/support` 7% · o
 | Steps | 2,025 / 2,025 outcomes as planned |
 | Conflicts | **3 / 3 planned hit · 0 unplanned** |
 | Unit tests | **30 / 30 equal to native** |
-| Installed tree | against the native replay of its chain · **differs**: 0 missing, 0 extra, 1 differ · not byte-compared: 3 pnpm state file(s) · by target: 273 bin shims, 2723 links · output root ×0, verification age ×1 |
+| Installed tree | against the native replay of the on-top chain (lead, lane points, repair): **equal to native** (the repair's P1) · the lead's chain alone (context; without the lane points' installs and builds): 0 missing, 0 extra, 1 differ (`python/sdk-runtime/node_modules/.bin`) · not byte-compared: 3 pnpm state file(s) · by target: 273 bin shims, 2723 links · output root ×0, verification age ×1 |
 | Last-writer-wins (`/.lww`) | unchanged (30 lines from 1 .gitignore files) · **170 picks** in 3 merges (170 under node_modules) · re-installed after the merge |
 | Ignored files | — (installs not played in P3) |
 | Milestone | — |
@@ -296,6 +296,10 @@ Diagnosis pending: `finding-017.a1.json`.
   - Index rows +7.9 MiB for 1,045 Commits, 7.7 KiB per Commit (r015 9.1, r016 5.7).
   - Content ratio 0.21× (0.29×); churn 0.00 (984 KiB stored for 1.16 GiB rewritten; r015 0.26).
   - Tooling 317.2 s; the final command took 216 s under the 295 s alarm. Lanes ran in one 101 s command.
+- **Correction (after a2, liaison question; verdict unchanged):** the Installed tree row read "**differs**: 0 missing, 0 extra, 1 differ" while every Node proof passed. The row read a different listing.
+  - With Node on, the closure's inline oracle replays the lead's chain alone. `nodeproof.mjs` judges the installed tree at the repair (P1 inside P6) against the on-top chain: the lead, every lane point's install and build, then the repair.
+  - The one group, `python/sdk-runtime/node_modules/.bin`, is equal to the on-top chain: 3 files, 2,778 B, digest `d785f42d…` on both sides. The lead-only chain has 2 files and 1,344 B (`9bb41a00…`), because pnpm links a workspace bin only when its target exists, and that target is a lane's build output.
+  - The row now leads with the on-top chain's result (the repair's P1) and shows the lead-only comparison as labelled context (`format.mjs` installedText; tests in `tests/p2.mjs`). The proofs are unchanged.
 
 
 ## Appendix
