@@ -4,12 +4,12 @@
 // here starts a Sandbox, a daemon or a container.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { changedPackages, checkNode, commitIdOf, inputsHash, pointsBefore, testPoints, treeDelta, treeIdCommand, wholeBuild } from "../nodelanes.mjs";
 import { PRUNE_EMPTY, pointBuild } from "../nodeconfig.mjs";
-import { chooseFiles, nativeClean, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
+import { chooseFiles, laneSteps, nativeClean, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
 import { execTool, forkP3State, p3StateOf, partsFromMetrics } from "../run.mjs";
 import { installCommand, pointInstall, STORE_POLICIES } from "../closure.mjs";
 import { sliceRange } from "../slice.mjs";
@@ -17,6 +17,7 @@ import { stepSource } from "../storage.mjs";
 import { decoyBytes, Tree } from "../steps.mjs";
 import { proofTally } from "../p3.mjs";
 import { cleanedPaths, cleanScript, marks } from "../gitlanes.mjs";
+import * as lanemerge from "../lanemerge.mjs";
 import { existsSync } from "node:fs";
 
 const tests = [];
@@ -203,15 +204,19 @@ test("the devcheck's reinstall oracle under Node: the repair's chain and build, 
     execFileSync("git", ["init", "-q", "--bare", repo]);
     const tree = execFileSync("git", ["--git-dir", repo, "mktree"], { input: "", encoding: "utf8" }).trim();
     const commit = execFileSync("git", ["--git-dir", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit-tree", tree, "-m", "c"], { encoding: "utf8" }).trim();
-    mkdirSync(plan); writeFileSync(join(plan, "range-015.json"), JSON.stringify({ lanes: [{ name: "a", areas: ["/"] }, { name: "b", areas: ["docs"] }] }));
+    mkdirSync(plan); writeFileSync(join(plan, "range-015.json"), JSON.stringify({ lanes: [{ name: "a", areas: ["/"] }, { name: "b", areas: ["docs"] }], consolidation: [{ op: "merge", lane: "b" }, { op: "merge", lane: "a" }, { op: "reconcile", files: [] }] }));
     const run = { manifest: { repo, plan, node: { on: true, inputsRule: "r1" } } };
     const lane = (laneName, order, root) => ({ lane: laneName, order, root, treeNative: `t-${laneName}${order}`, install: { command: "install" }, tsc: { command: `tsc ${laneName}` } });
     const m = { plan: { checkpoint: commit }, node: { chain: [{ tree: "t0", command: "lead install" }], points: [{ lane: "lead", root: "/workspaces/1" }, lane("a", 1, "/workspaces/2"), lane("b", 1, "/workspaces/3")] },
       closure: { rows: [{ kind: "repair-install", command: "repair", root: "/workspaces/4" }, { kind: "build", command: "build", packages: ["p"], root: "/workspaces/4" }] }, p3proofs: { "lead.repair": {} } };
     const states = reinstallStates(run, m, 15, "clean install");
-    assert.deepEqual(states.map((x) => [x.tree, x.command, x.root ?? null]), [
-      ["t0", "lead install", "/workspaces/1"], ["t-a1", "install", "/workspaces/2"], ["t-a1", "tsc a", "/workspaces/2"],
-      ["t-b1", "tsc b", "/workspaces/3"], [tree, "repair", "/workspaces/4"], [tree, "build", "/workspaces/4"], [tree, "clean install", null]]);
+    // option A (fix 042): lanes in merge order (b, then a), each tagged with its lane and merge rank
+    assert.deepEqual(states.map((x) => [x.tree, x.command, x.root ?? null, x.lane ?? null, x.merge ?? null]), [
+      ["t0", "lead install", "/workspaces/1", null, null], ["t-b1", "tsc b", "/workspaces/3", "b", 0],
+      ["t-a1", "install", "/workspaces/2", "a", 1], ["t-a1", "tsc a", "/workspaces/2", "a", 1],
+      [tree, "repair", "/workspaces/4", null, null], [tree, "build", "/workspaces/4", null, null], [tree, "clean install", null, null, null]]);
+    writeFileSync(join(plan, "range-015.json"), JSON.stringify({ lanes: [{ name: "a", areas: ["/"] }, { name: "b", areas: ["docs"] }], consolidation: [{ op: "merge", lane: "a" }] }));
+    assert.throws(() => reinstallStates(run, m, 15, "clean install"), /lane b is not merged/);
     assert.throws(() => reinstallStates(run, { ...m, p3proofs: {} }, 15, "clean install"), /repair proof has not run/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -279,6 +284,98 @@ test("a fork of a P3 snapshot keeps the git and Node state (r016.a2): from the s
   const sr = { storageReport: { parts: { total: 9, content: 5 }, sources: { tracked: { content: 3, metadata: 1, latest: 7 }, git: { content: 2, metadata: 0 } } } };
   assert.deepEqual(partsFromMetrics(sr), { parts: { total: 9, content: 5 }, bySource: { tracked: { content: 3, metadata: 1 }, git: { content: 2, metadata: 0 } } });
   assert.equal(partsFromMetrics({ storageReport: { parts: null } }), null);
+});
+
+
+// ---- option A (owner 2026-10-19, fix 042): the native repair chain merges the lanes as LayerFS does ----
+test("option A: lane steps snapshot the base, capture and restore each lane, and apply in merge order before the repair", () => {
+  const st = (lane, merge) => ({ tree: "t", command: "c", ...(lane ? { lane, merge } : {}) });
+  const ls = laneSteps([st(), st("root", 0), st("core", 1), st("core", 1), st("ex", 2), st()], "/t.mjs", "/b", "/l");
+  assert.deepEqual(ls.before, [[], ["node /t.mjs snapshot \"$PWD\" /b", "node /t.mjs mark /l/0"],
+    ["node /t.mjs capture \"$PWD\" /b /l/0", "node /t.mjs restore \"$PWD\" /b /l/0", "node /t.mjs mark /l/1"], [],
+    ["node /t.mjs capture \"$PWD\" /b /l/1", "node /t.mjs restore \"$PWD\" /b /l/1", "node /t.mjs mark /l/2"],
+    ["node /t.mjs capture \"$PWD\" /b /l/2", "node /t.mjs restore \"$PWD\" /b /l/2", "node /t.mjs apply \"$PWD\" /l/0 /l/1 /l/2"]]);
+  assert.deepEqual(ls.reset, [false, false, true, false, true, true], "after a restore the folder holds the lanes' base tree");
+  assert.equal(ls.lanes, 3);
+  // applied by merge rank, not by the order the lanes ran
+  assert.match(laneSteps([st("b", 1), st("a", 0), st()], "/t.mjs", "/b", "/l").before[2].at(-1), /apply "\$PWD" \/l\/1 \/l\/0$/);
+  assert.deepEqual(laneSteps([st(), st()]).lanes, 0, "no lanes: the chain as before");
+  assert.throws(() => laneSteps([st("a", 0), st("b", 1), st("a", 0)]), /not together/);
+  assert.throws(() => laneSteps([st("a")]), /no merge order/);
+});
+
+/** A folder of `files` ({path: text}) under a new temporary directory. */
+const folder = (files) => {
+  const dir = mkdtempSync(join(tmpdir(), "p3-lanes-")), work = join(dir, "w");
+  for (const [p, text] of Object.entries(files)) { mkdirSync(join(work, p, ".."), { recursive: true }); writeFileSync(join(work, p), text); }
+  return { dir, work, read: (p) => (existsSync(join(work, p)) ? readFileSync(join(work, p), "utf8") : null) };
+};
+/** Runs the lanes on `f` as nativeChain does: each lane's writes from the base, then the merge in `order`. */
+const playLanes = (f, lanes, order) => {
+  const base = join(f.dir, "base"), stores = {};
+  lanemerge.snapshot(f.work, base);
+  for (const [name, writes] of lanes) {
+    const store = join(f.dir, `l-${name}`);
+    lanemerge.mark(store);
+    for (const [p, text] of Object.entries(writes)) { if (text == null) rmSync(join(f.work, p), { recursive: true, force: true }); else { mkdirSync(join(f.work, p, ".."), { recursive: true }); writeFileSync(join(f.work, p), text); } }
+    lanemerge.capture(f.work, base, store);
+    lanemerge.restore(f.work, base, store);
+    stores[name] = store;
+  }
+  return lanemerge.apply(f.work, order.map((n) => stores[n]));
+};
+
+test("option A, r018.a1: lane 2's new tsc output of a moved source survives a later lane's rebuild of the old bytes", () => {
+  const out = "packages/core/session/lib/types/tool-pairing.js";
+  const f = folder({ "packages/core/session/src/tool-pairing.ts": "old src", [out]: "23bf (base output)", "node_modules/.pnpm/x/index.js": "pkg" });
+  try {
+    // lanes run 3, 2, 1 (as the play recorded them); the root lane's build rewrites the base's bytes (no change)
+    const two = playLanes(f, [
+      ["examples", { "packages/compact/compact/lib/types/tool-pairing.js": "compact output" }],
+      ["core", { "packages/core/session/src/tool-pairing.ts": "edited src", [out]: "042b (lane 2 output)" }],
+      ["root", { [out]: "23bf (base output)", "node_modules/.pnpm/y/index.js": "new pkg" }],
+    ], ["root", "core", "examples"]);
+    assert.equal(f.read(out), "042b (lane 2 output)", "LayerFS's merge: the only lane that changed it wins");
+    assert.equal(f.read("packages/compact/compact/lib/types/tool-pairing.js"), "compact output");
+    assert.equal(f.read("node_modules/.pnpm/y/index.js"), "new pkg", "the root lane's install changes merge too");
+    assert.equal(f.read("packages/core/session/src/tool-pairing.ts"), "edited src");
+    assert.deepEqual(two, [], "rewriting the base's bytes is no change, so nothing is two-sided");
+    // the checkpoint removes the source; the repair build never touches the orphan: it stays lane 2's
+    rmSync(join(f.work, "packages/core/session/src/tool-pairing.ts"));
+    assert.equal(f.read(out), "042b (lane 2 output)");
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+  // the old sequential model, for contrast: the last lane to run writes the base's bytes back
+  const g = folder({ [out]: "23bf (base output)" });
+  try {
+    writeFileSync(join(g.work, out), "042b (lane 2 output)"); writeFileSync(join(g.work, out), "23bf (base output)");
+    assert.equal(g.read(out), "23bf (base output)");
+  } finally { rmSync(g.dir, { recursive: true, force: true }); }
+});
+
+test("option A: a lane output the checkpoint build rewrites still converges; a lane's removals and restores are exact", () => {
+  const f = folder({ "pkg/lib/a.js": "base a", "pkg/lib/b.js": "base b", "pkg/src/a.ts": "a", "keep/x.txt": "x", "gone/y.txt": "y" });
+  try {
+    playLanes(f, [["one", { "pkg/lib/a.js": "lane a", "gone/y.txt": null, "gone": null, "new/dir/z.txt": "z" }], ["two", { "pkg/lib/b.js": "lane b" }]], ["one", "two"]);
+    assert.deepEqual([f.read("pkg/lib/a.js"), f.read("pkg/lib/b.js"), f.read("gone/y.txt"), f.read("new/dir/z.txt"), f.read("keep/x.txt")], ["lane a", "lane b", null, "z", "x"]);
+    // the repair build rewrites a.js from the checkpoint's source: the result is the build's, whatever the lanes wrote
+    writeFileSync(join(f.work, "pkg/lib/a.js"), "built from checkpoint");
+    assert.equal(f.read("pkg/lib/a.js"), "built from checkpoint");
+    // each lane ran from the base: lane two never saw lane one's files
+    const two = JSON.parse(readFileSync(join(f.dir, "l-two", "changes.json"), "utf8"));
+    assert.deepEqual(two, { changed: ["pkg/lib/b.js"], removed: [] });
+    const one = JSON.parse(readFileSync(join(f.dir, "l-one", "changes.json"), "utf8"));
+    assert.deepEqual(one.removed, ["gone"], "a removed folder is named once");
+    assert.deepEqual(one.changed, ["new", "new/dir", "new/dir/z.txt", "pkg/lib/a.js"]);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+
+test("option A: two lanes writing one ignored file follow the merge order, and the path is listed as two-sided", () => {
+  const f = folder({ "dist/out.js": "base" });
+  try {
+    const two = playLanes(f, [["first", { "dist/out.js": "from first" }], ["second", { "dist/out.js": "from second" }]], ["second", "first"]);
+    assert.equal(f.read("dist/out.js"), "from first", "merged last, written last");
+    assert.deepEqual(two, ["dist/out.js"]);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 
 let failed = 0;

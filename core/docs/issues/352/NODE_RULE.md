@@ -210,6 +210,16 @@ Lanes still install and commit their `node_modules`, and the lead merge still
 merges them, so LayerFS's merge of install output is still exercised. The
 native repair chain is unchanged.
 
+**Owner decision 2026-10-19 (range 18 a1, option A; F-058, fix 042):** the
+native repair chain merges the lanes as LayerFS does.
+- Each lane point's states run from the state the lanes forked from.
+- Their changes are captured (created, removed, or rewritten with other bytes),
+  the folder is restored, and the changes are applied in the plan's
+  consolidation merge order before the repair (`lanemerge.mjs`).
+- A path two lanes both changed takes the later-merged lane's version and is
+  listed (`twoSided` in the oracle).
+- No gate, proof scope or workload changed.
+
 ## 7. Resilience checks per range
 
 - No `Busy`, `EAGAIN` or refused unmount.

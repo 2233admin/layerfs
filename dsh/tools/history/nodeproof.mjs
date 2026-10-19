@@ -23,7 +23,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { BlobCache, lsTree } from "./git.mjs";
 import { compareInstalled, LISTER_VERSION, listerCommand, normalizeOutput, ORACLE_ROOT, parseLister, rootless, STORE_MOUNT, firstDifference } from "./closure.mjs";
 import { emittedCommand, groupsFile, inputsHash, nodeOf, parseEmitted, pointBuild, testPoints, treeDelta, wholeBuild, changedPackages } from "./nodelanes.mjs";
@@ -35,6 +36,8 @@ import { devSteps } from "./devcheck.mjs";
 import { decoyBytes, pad, Tree } from "./steps.mjs";
 import { UNTRACKED_LIST } from "./gitlanes.mjs";
 import { installCommand } from "./closure.mjs";
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 export const PROOFS = ["P1", "P2", "P3", "P4", "P5", "P6"];
 /** pnpm's state files (not byte-compared since lister v6; owner 2026-10-19). */
@@ -97,11 +100,44 @@ export function modelDelta(plan, base, pt) {
 /** The native `git clean -f` of state i in the current folder (decision B): `idx` holds `git ls-tree -r -z` of its tree. */
 export const nativeClean = (i, idx, scratch = "/tmp") => `if rm -rf ${scratch}/cg && git init -q ${scratch}/cg && GIT_DIR=${scratch}/cg/.git GIT_WORK_TREE=$PWD git update-index -z --index-info < ${idx} && (export GIT_DIR=${scratch}/cg/.git GIT_WORK_TREE=$PWD; ${UNTRACKED_LIST}) > ${scratch}/cl${i}; then echo "@@cleaned ${i} $(tr -cd '\\0' < ${scratch}/cl${i} | wc -c | tr -d ' ')"; xargs -0 rm -f -- < ${scratch}/cl${i}; else echo "@@cleaned ${i} -1"; fi`;
 
+/**
+ * Option A (owner 2026-10-19, fix 042): the lane points' states (`lane`, `merge` = the lane's place in the
+ * consolidation's merge order) each run from the state the lanes forked from, as LayerFS's lanes do; their changes
+ * are captured, the folder restored, and the changes applied in merge order before the next state (lanemerge.mjs).
+ * Returns, per state index, the commands to run before it, whether `prev` (the tree the folder holds) goes back to
+ * the lanes' base before it, and the commands after the last state.
+ */
+export function laneSteps(states, tool = "/seq/lanemerge.mjs", base = "/lanebase", lanes = "/lanes") {
+  const before = states.map(() => []), reset = states.map(() => false), stores = [];
+  let cur = null;
+  const close = (i, cmds) => { cmds.push(`node ${tool} capture "$PWD" ${base} ${lanes}/${cur.n}`, `node ${tool} restore "$PWD" ${base} ${lanes}/${cur.n}`); if (i != null) reset[i] = true; };
+  const merge = (cmds) => cmds.push(`node ${tool} apply "$PWD" ${[...stores].sort((a, b) => a.merge - b.merge || a.n - b.n).map((x) => `${lanes}/${x.n}`).join(" ")}`);
+  states.forEach((st, i) => {
+    if (cur && st.lane !== cur.lane) {
+      close(i, before[i]);
+      if (!st.lane) { merge(before[i]); cur = null; }
+    }
+    if (st.lane && !cur && !stores.length) before[i].push(`node ${tool} snapshot "$PWD" ${base}`);
+    if (st.lane && st.lane !== cur?.lane) {
+      if (stores.some((x) => x.lane === st.lane)) throw new Error(`native chain: lane ${st.lane}'s points are not together`);
+      if (!Number.isFinite(st.merge)) throw new Error(`native chain: lane ${st.lane} has no merge order`);
+      cur = { lane: st.lane, merge: st.merge, n: stores.length };
+      stores.push(cur);
+      before[i].push(`node ${tool} mark ${lanes}/${cur.n}`);
+    }
+  });
+  const after = [];
+  if (cur) { close(null, after); merge(after); }
+  return { before, reset, after, lanes: stores.length };
+}
+
 export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
   const stage = mkdtempSync(join(tmpdir(), "lfs352-chain-"));
   try {
     const script = [`mkdir ${ORACLE_ROOT} /seq && tar -x -C /seq && cd ${ORACLE_ROOT}`];
-    let prev = null, at = ORACLE_ROOT, installRoot = ORACLE_ROOT;
+    let prev = null, at = ORACLE_ROOT, installRoot = ORACLE_ROOT, laneBase = null;
+    const lanes = laneSteps(states);
+    if (lanes.lanes) writeFileSync(join(stage, "lanemerge.mjs"), readFileSync(join(here, "lanemerge.mjs")));
     const earlier = [], moveTo = (root) => {
       if (!root || root === at) return;
       if (!/^\/[\w./-]+$/.test(root) || root.split("/").includes("..")) throw new Error(`native chain: root ${root} is not a plain absolute path`);
@@ -109,6 +145,10 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
       earlier.push(at); at = root;
     };
     states.forEach((st, i) => {
+      if (lanes.before[i].some((c) => c.includes(" snapshot "))) laneBase = prev;
+      script.push(...lanes.before[i]);
+      // after a lane's capture and restore (and after the merge) the folder's tracked files are the lanes' base
+      if (lanes.reset[i]) prev = laneBase;
       moveTo(st.root);
       if (st.tree !== prev) {
         if (!existsSync(join(stage, `${st.tree}.tar`))) writeFileSync(join(stage, `${st.tree}.tar`), execFileSync("git", ["--git-dir", repo, "archive", st.tree], { maxBuffer: 1 << 30 }));
@@ -132,6 +172,7 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
       script.push(i < states.length - 1 ? `t=$(date +%s%N); (${st.command}) > /tmp/s${i} 2>&1; e=$?; echo "@@step ${i} $e $(( ($(date +%s%N) - t) / 1000000 ))"`
         : `t=$(date +%s%N); (${st.command}) > /tmp/o 2>&1; echo "@@exit $? $(( ($(date +%s%N) - t) / 1000000 ))"; sed 's/^/@@out /' /tmp/o; ${listerCommand()}`);
     });
+    script.push(...lanes.after);
     moveTo(tail.root);
     if (tail.build) script.push(`t=$(date +%s%N); (${tail.build}) > /tmp/b 2>&1; echo "@@tsc $? $(( ($(date +%s%N) - t) / 1000000 ))"; tail -c ${tail.outputBytes ?? 4000} /tmp/b | sed 's/^/@@tscout /'`, `${emittedCommand(tail.packages ?? [])} | sed 's/^/@@emit /'`);
     if (tail.tests?.length) script.push(`t=$(date +%s%N); (${vitestCommand(tail.tests, tail.vitestTimeoutS ?? 100)}) > /tmp/v 2>/dev/null; echo "@@vt $? $(( ($(date +%s%N) - t) / 1000000 ))"; echo "@@vtjson $(base64 -w0 /tmp/v)"`);
@@ -152,6 +193,8 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
       tsc: tsc ? { exit: tsc[0], ms: tsc[1], output: pick("@@tscout ").join("\n") } : null,
       emitted: tail.build ? parseEmitted(pick("@@emit ").join("\n")) : null, vitest, ms: Date.now() - t0, root: at, installRoot,
       cleaned: pick("@@cleaned ").map((l) => { const [i, files] = l.split(" ").map(Number); return { i, files }; }),
+      ...(lanes.lanes ? { lanes: pick("@@lanecap ").map((l) => { const [n, changed, removed] = l.split(" ").map(Number); return { n, changed, removed }; }),
+        twoSided: { n: Number(pick("@@twosided ")[0] ?? NaN), paths: pick("@@twopath ") } } : {}),
     };
   } finally { rmSync(stage, { recursive: true, force: true }); }
 }
@@ -312,7 +355,12 @@ export function repairChain(run, m, k) {
   const plan = JSON.parse(readFileSync(join(run.manifest.plan, `range-${pad(k)}.json`), "utf8"));
   const rootLane = node.inputsRule === "r1" ? plan.lanes.find((l) => l.areas.includes("/"))?.name ?? null : null;
   const ran = m.node.points.filter((q) => q.lane !== "lead" && q.install?.command && q.treeNative);
-  const lanes = ran.flatMap((q) => (rootLane && q.lane !== rootLane ? pointStates(q).slice(1) : pointStates(q)));
+  // option A (fix 042): each lane's states run from the lanes' base and merge in the consolidation's order
+  const order = (plan.consolidation ?? []).filter((c) => c.op === "merge").map((c) => c.lane);
+  const rank = (lane) => { const r = order.indexOf(lane); if (r < 0) throw new Error(`range ${k}: lane ${lane} is not merged in the plan's consolidation`); return r; };
+  const byLane = [...new Set(ran.map((q) => q.lane))].sort((a, b) => rank(a) - rank(b));
+  const lanes = byLane.flatMap((lane) => ran.filter((q) => q.lane === lane).flatMap((q) => (rootLane && q.lane !== rootLane ? pointStates(q).slice(1) : pointStates(q)))
+    .map((st) => ({ ...st, lane, merge: rank(lane) })));
   const states = [...chain0, ...lanes, { tree, command: inst.command ?? installCommand({ policy: node.storePolicy }), ...at(inst.root), clean: true }];
   const buildState = build ? { tree, command: build.command ?? buildCommand(build.packages), ...at(build.root) } : null;
   return { tree, states, buildState, tail: build ? { build: buildState.command, packages: build.packages, ...at(build.root) } : {},

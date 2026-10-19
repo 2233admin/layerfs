@@ -960,3 +960,25 @@
   still owed: lanes still merge their install output by newest-wins, and a
   Workspace that installs incrementally on such a merge keeps the stale
   hoisting.
+
+- **F-058 · the native repair chain ran the lanes on top of each other
+  (harness oracle, not a product defect; range 18 a1, `p3-main-g`,
+  2026-10-19).**
+  - `nodeproof.mjs` `repairChain` built the repair's native oracle in one
+    folder, running each lane point's install and build after the previous
+    lane's. LayerFS runs each lane on its own fork of main and merges the
+    lanes' changes into main. So a later lane's build could write back bytes
+    that an earlier lane had changed.
+  - In r018 the plan's path lanes split dsh `cc546c4580`, which moved
+    `tool-pairing.ts` from `packages/core/session` to `packages/compact/compact`.
+    Lane 2 still edits the old source, so its build emitted new
+    `core/session/lib/types/tool-pairing.{d.ts,js}`. At the checkpoint the
+    source is gone and `tsc -b` leaves the orphan output. LayerFS kept lane 2's
+    output; the native folder ended with the older bytes. The repair's P6
+    stopped on P4 with "2 emitted file(s) differ".
+  - Fix ([fix 042](fixes/042-r018-a1-native-lane-merge.md), owner decision
+    2026-10-19, option A): each lane runs from the lanes' base, and its
+    changes are captured and applied in the consolidation's merge order
+    before the repair. No gate, proof scope or workload change.
+
+  **Status: Fixed** in the harness (fix 042); range 18 a2 plays with it.
