@@ -4,12 +4,12 @@
 // here starts a Sandbox, a daemon or a container.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { changedPackages, checkNode, commitIdOf, inputsHash, pointsBefore, testPoints, treeDelta, treeIdCommand, wholeBuild } from "../nodelanes.mjs";
 import { PRUNE_EMPTY, pointBuild } from "../nodeconfig.mjs";
-import { chooseFiles, laneSteps, nativeClean, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
+import { chooseFiles, laneSteps, nativeClean, oracleKey, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
 import { execTool, forkP3State, p3StateOf, partsFromMetrics } from "../run.mjs";
 import { installCommand, pointInstall, STORE_POLICIES } from "../closure.mjs";
 import { sliceRange } from "../slice.mjs";
@@ -291,14 +291,18 @@ test("a fork of a P3 snapshot keeps the git and Node state (r016.a2): from the s
 test("option A: lane steps snapshot the base, capture and restore each lane, and apply in merge order before the repair", () => {
   const st = (lane, merge) => ({ tree: "t", command: "c", ...(lane ? { lane, merge } : {}) });
   const ls = laneSteps([st(), st("root", 0), st("core", 1), st("core", 1), st("ex", 2), st()], "/t.mjs", "/b", "/l");
-  assert.deepEqual(ls.before, [[], ["node /t.mjs snapshot \"$PWD\" /b", "node /t.mjs mark /l/0"],
+  const cmd = (c) => c.replace(/ 2>\/tmp\/lane\.err .*$/, "");
+  assert.deepEqual(ls.before.map((xs) => xs.map(cmd)), [[], ["node /t.mjs snapshot \"$PWD\" /b", "node /t.mjs mark /l/0"],
     ["node /t.mjs capture \"$PWD\" /b /l/0", "node /t.mjs restore \"$PWD\" /b /l/0", "node /t.mjs mark /l/1"], [],
     ["node /t.mjs capture \"$PWD\" /b /l/1", "node /t.mjs restore \"$PWD\" /b /l/1", "node /t.mjs mark /l/2"],
     ["node /t.mjs capture \"$PWD\" /b /l/2", "node /t.mjs restore \"$PWD\" /b /l/2", "node /t.mjs apply \"$PWD\" /l/0 /l/1 /l/2"]]);
+  assert.ok(ls.before.flat().every((c) => /\|\| \{ echo "@@lanefail /.test(c)), "every merge step reports its failure");
+  assert.notEqual(oracleKey({ tree: "t", states: [st("a", 0)] }), oracleKey({ tree: "t", states: [{ ...st("a", 0), lane: undefined, merge: undefined }] }));
+  assert.equal(oracleKey({ tree: "t", states: [st()] }), oracleKey({ tree: "t", states: [st()] }), "a chain without lanes keeps its key");
   assert.deepEqual(ls.reset, [false, false, true, false, true, true], "after a restore the folder holds the lanes' base tree");
   assert.equal(ls.lanes, 3);
   // applied by merge rank, not by the order the lanes ran
-  assert.match(laneSteps([st("b", 1), st("a", 0), st()], "/t.mjs", "/b", "/l").before[2].at(-1), /apply "\$PWD" \/l\/1 \/l\/0$/);
+  assert.match(laneSteps([st("b", 1), st("a", 0), st()], "/t.mjs", "/b", "/l").before[2].at(-1), /apply "\$PWD" \/l\/1 \/l\/0 2>/);
   assert.deepEqual(laneSteps([st(), st()]).lanes, 0, "no lanes: the chain as before");
   assert.throws(() => laneSteps([st("a", 0), st("b", 1), st("a", 0)]), /not together/);
   assert.throws(() => laneSteps([st("a")]), /no merge order/);
@@ -366,6 +370,25 @@ test("option A: a lane output the checkpoint build rewrites still converges; a l
     const one = JSON.parse(readFileSync(join(f.dir, "l-one", "changes.json"), "utf8"));
     assert.deepEqual(one.removed, ["gone"], "a removed folder is named once");
     assert.deepEqual(one.changed, ["new", "new/dir", "new/dir/z.txt", "pkg/lib/a.js"]);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+
+test("option A: links are copied as links, never followed (r018.a2: pnpm links a folder), and restored exactly", () => {
+  const f = folder({ "node_modules/.pnpm/a@1/node_modules/a/index.js": "a1", "node_modules/.pnpm/a@2/node_modules/a/index.js": "a2" });
+  try {
+    symlinkSync(".pnpm/a@1/node_modules/a", join(f.work, "node_modules/a"));
+    const base = join(f.dir, "base"), store = join(f.dir, "l");
+    lanemerge.snapshot(f.work, base);
+    lanemerge.mark(store);
+    rmSync(join(f.work, "node_modules/a")); symlinkSync(".pnpm/a@2/node_modules/a", join(f.work, "node_modules/a"));
+    symlinkSync(".pnpm/a@2/node_modules/a", join(f.work, "node_modules/b"));
+    assert.deepEqual(lanemerge.capture(f.work, base, store).changed, ["node_modules/a", "node_modules/b"]);
+    lanemerge.restore(f.work, base, store);
+    assert.equal(readlinkSync(join(f.work, "node_modules/a")), ".pnpm/a@1/node_modules/a");
+    assert.ok(!existsSync(join(f.work, "node_modules/b")));
+    lanemerge.apply(f.work, [store]);
+    assert.equal(readlinkSync(join(f.work, "node_modules/b")), ".pnpm/a@2/node_modules/a");
+    assert.equal(f.read("node_modules/a/index.js"), "a2");
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 

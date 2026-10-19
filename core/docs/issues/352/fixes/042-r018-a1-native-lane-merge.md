@@ -9,7 +9,7 @@
 | Kind | none: a harness oracle fix; the daemon, addon and Store format are unchanged |
 | Binaries | daemon `44ac6c91` and addon `77597adb` unchanged |
 | Commits | fix and tests in this commit: `dsh/tools/history/lanemerge.mjs`, `nodeproof.mjs` (`laneSteps`, `nativeChain`, `repairChain`), tests in `tests/p3.mjs` |
-| Recovery | fork of snapshot `range-017` (`p3-main-g`'s), rerun as range 18 attempt 2 |
+| Recovery | fork of snapshot `range-017` (`p3-main-g`'s), rerun as range 18 attempt 2; after the a2 correction below, attempt 3 |
 | Decision | owner, 2026-10-19, via the liaison: option A; B (proof scope) and C (workload) are out |
 
 ## Old design
@@ -86,6 +86,30 @@
   later-merged lane's bytes win, and the path is listed as two-sided.
 - The devcheck reinstall test now asserts the lanes' merge order and tags.
 
+## Correction after a2 (the merge failed silently)
+
+- **What happened:** a2's P6 reported the same two files. Inside the
+  container, `capture` used `cpSync`, which followed a pnpm link to a folder
+  (`examples/node_modules/@cordisjs/plugin-hmr`) and refused to copy a
+  directory. The error went to stderr, which `nativeChain` reads only when the
+  container fails. So the oracle kept the old sequential model (`lanes: []` in
+  its record) and judged a2 with it.
+- **The changes:**
+  - `copyEntry` copies a link as the same link (`readlink`/`symlink`, never
+    followed), and a file with its mode and times.
+  - Every merge step reports a failure with its error (`@@lanefail`,
+    `@@laneerr`). `nativeChain` refuses the oracle unless every lane was
+    captured and the merge applied, so the proof is NOT_RUN, never judged on a
+    wrong oracle.
+  - `oracleKey` adds `laneMerge: 2` for chains with lane states, so the bad
+    oracle is never reused. Lane point oracles keep their keys.
+  - New test: links to folders are copied as links and restored exactly
+    (`tests/p3.mjs` 20/20).
+- **Diagnostic** (a2's state, uncached, not a proof): the chain emits
+  `tool-pairing.d.ts` `c233d58c…` and `.js` `042b06c9…`, equal to LayerFS. It
+  took 64 s. Lanes captured 10,276, 311 and 403 changed paths. 19 paths are
+  two-sided: 18 `tsconfig.tsbuildinfo` and `vendor/cordis/bin.js`.
+
 ## Performance
 
-Measured at range 18 a2's proofs; see range-018.md.
+The repair's native chain took 64 s with the merge (a1's sequential chain: about 69 s). Range 18 a3's proofs record it.

@@ -109,21 +109,24 @@ export const nativeClean = (i, idx, scratch = "/tmp") => `if rm -rf ${scratch}/c
  */
 export function laneSteps(states, tool = "/seq/lanemerge.mjs", base = "/lanebase", lanes = "/lanes") {
   const before = states.map(() => []), reset = states.map(() => false), stores = [];
+  // a failed merge step is reported, never skipped: nativeChain refuses the oracle (fix 042 a2: a silent failure
+  // left the old sequential model in place)
+  const step = (args) => `node ${tool} ${args} 2>/tmp/lane.err || { echo "@@lanefail ${args.split(" ")[0]} $?"; sed 's/^/@@laneerr /' /tmp/lane.err | tail -20; }`;
   let cur = null;
-  const close = (i, cmds) => { cmds.push(`node ${tool} capture "$PWD" ${base} ${lanes}/${cur.n}`, `node ${tool} restore "$PWD" ${base} ${lanes}/${cur.n}`); if (i != null) reset[i] = true; };
-  const merge = (cmds) => cmds.push(`node ${tool} apply "$PWD" ${[...stores].sort((a, b) => a.merge - b.merge || a.n - b.n).map((x) => `${lanes}/${x.n}`).join(" ")}`);
+  const close = (i, cmds) => { cmds.push(step(`capture "$PWD" ${base} ${lanes}/${cur.n}`), step(`restore "$PWD" ${base} ${lanes}/${cur.n}`)); if (i != null) reset[i] = true; };
+  const merge = (cmds) => cmds.push(step(`apply "$PWD" ${[...stores].sort((a, b) => a.merge - b.merge || a.n - b.n).map((x) => `${lanes}/${x.n}`).join(" ")}`));
   states.forEach((st, i) => {
     if (cur && st.lane !== cur.lane) {
       close(i, before[i]);
       if (!st.lane) { merge(before[i]); cur = null; }
     }
-    if (st.lane && !cur && !stores.length) before[i].push(`node ${tool} snapshot "$PWD" ${base}`);
+    if (st.lane && !cur && !stores.length) before[i].push(step(`snapshot "$PWD" ${base}`));
     if (st.lane && st.lane !== cur?.lane) {
       if (stores.some((x) => x.lane === st.lane)) throw new Error(`native chain: lane ${st.lane}'s points are not together`);
       if (!Number.isFinite(st.merge)) throw new Error(`native chain: lane ${st.lane} has no merge order`);
       cur = { lane: st.lane, merge: st.merge, n: stores.length };
       stores.push(cur);
-      before[i].push(`node ${tool} mark ${lanes}/${cur.n}`);
+      before[i].push(step(`mark ${lanes}/${cur.n}`));
     }
   });
   const after = [];
@@ -181,6 +184,9 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
     const r = spawnSync("docker", ["run", "--rm", "-i", "--name", name, "--network", "none", "-v", `${volume}:${STORE_MOUNT}:ro`, "--entrypoint", "sh", image, "-c", script.join("; ")], { input, encoding: "utf8", maxBuffer: 1 << 28 });
     if (r.status !== 0) throw new Error(`native chain container exited ${r.status}: ${String(r.stderr).slice(-300)}`);
     const lines = r.stdout.split("\n"), pick = (p) => lines.filter((l) => l.startsWith(p)).map((l) => l.slice(p.length));
+    // option A's merge must have run whole: every lane captured and the merge applied, or no oracle
+    if (lanes.lanes && (pick("@@lanefail ").length || pick("@@lanecap ").length !== lanes.lanes || !pick("@@twosided ").length))
+      throw new Error(`native chain: the lanes' merge did not complete (${pick("@@lanefail ").join("; ") || `${pick("@@lanecap ").length} of ${lanes.lanes} lanes captured`}): ${pick("@@laneerr ").join(" | ").slice(0, 1200)}`);
     const tsc = pick("@@tsc ")[0]?.split(" ").map(Number), vt = pick("@@vt ")[0]?.split(" ").map(Number);
     let vitest = null;
     if (vt) {
@@ -213,7 +219,10 @@ export function vitestReport(text, root) {
 /** The oracle's cache key: the tree, its install inputs and the chain that leads to it (NODE_RULE §6). */
 /** How nativeChain lays a tree down; part of the key, so an oracle made the old way is never reused (2: tar -m). */
 export const CHAIN_VERSION = 2;
-export const oracleKey = ({ tree, inputs, states, tail, image }) => createHash("sha256").update(JSON.stringify({ v: LISTER_VERSION, chain: CHAIN_VERSION, tree, inputs, states, tail, image })).digest("hex").slice(0, 24);
+/** The lanes' merge (fix 042) in the key of a chain with lane states only: 2 after the a2 silent-failure fix. */
+export const LANE_MERGE_VERSION = 2;
+export const oracleKey = ({ tree, inputs, states, tail, image }) => createHash("sha256").update(JSON.stringify({ v: LISTER_VERSION, chain: CHAIN_VERSION, tree, inputs, states, tail, image,
+  laneMerge: states?.some((st) => st.lane) ? LANE_MERGE_VERSION : undefined })).digest("hex").slice(0, 24);
 
 /** The native oracle of one point, cached under `dir` by its key. */
 export function cachedOracle(dir, args) {

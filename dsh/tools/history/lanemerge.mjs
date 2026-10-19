@@ -14,7 +14,7 @@
 //   node lanemerge.mjs restore <dir> <base> <store>     the folder back to <base> on the paths <store> names
 //   node lanemerge.mjs apply <dir> <store>...           the captured changes in the order given (merge order)
 import { execFileSync } from "node:child_process";
-import { cpSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 /** Every path under `dir` (relative), with its kind, link target and modification time; never follows a link. */
@@ -61,12 +61,14 @@ export function changesOf(dir, base, sinceMs) {
   return { changed: changed.sort(), removed };
 }
 
+/** One entry copied as it is: a link as the same link (never followed: pnpm links folders), a file with its mode and times. */
 const copyEntry = (from, to) => {
   rmSync(to, { recursive: true, force: true });
   mkdirSync(dirname(to), { recursive: true });
   const st = lstatSync(from);
-  if (st.isDirectory()) mkdirSync(to, { recursive: true, mode: st.mode });
-  else cpSync(from, to, { verbatimSymlinks: true, preserveTimestamps: true });
+  if (st.isSymbolicLink()) symlinkSync(readlinkSync(from), to);
+  else if (st.isDirectory()) mkdirSync(to, { recursive: true, mode: st.mode & 0o7777 });
+  else { copyFileSync(from, to); chmodSync(to, st.mode & 0o7777); utimesSync(to, st.atime, st.mtime); }
 };
 
 export function capture(dir, base, store) {
