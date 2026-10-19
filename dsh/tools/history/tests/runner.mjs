@@ -13,7 +13,8 @@ import {
   addDelta, deltaSummary, deltaWork,
 } from "../steps.mjs";
 import { blobId as blobOf } from "../git.mjs";
-import { caps, nextAttempt, options, outputs, POLICIES } from "../run.mjs";
+import { caps, forkPlan, nextAttempt, options, outputs, POLICIES, SWITCHABLE } from "../run.mjs";
+import { PLAN_VERSION } from "../plan.mjs";
 import { deltaLine, stageLine } from "../report.mjs";
 
 const tests = [];
@@ -242,6 +243,19 @@ test("stage timing: tooling time per stage, labelled", () => {
   const line = stageLine({ kind: "tooling", totalMs: 15700, prepareMs: 400, playMs: 9000, consolidateMs: 1900, verifyMs: 600, verify: "diff_commits", sealMs: 2900, reportMs: 100 });
   assert.ok(line.startsWith("15.70 s tooling: prepare 0.40 · play 9 · consolidate 1.90 · verify 0.60 (diff_commits) · seal 2.90 · report 0.10"), line);
   assert.equal(stageLine(null), "—");
+});
+
+test("P3 switches and fork plans: git and Node for dev, measured and baseline runs; a slice plan for dev runs only", () => {
+  assert.deepEqual([...SWITCHABLE].sort(), ["baseline", "dev", "measured"]);
+  const full = join(dir, "plan-full"), slice = join(dir, "plan-slice");
+  mkdirSync(full); mkdirSync(slice);
+  writeFileSync(join(full, "plan.json"), JSON.stringify({ version: PLAN_VERSION }));
+  writeFileSync(join(slice, "plan.json"), JSON.stringify({ version: PLAN_VERSION, slice: { range: 15 } }));
+  assert.equal(forkPlan({ plan: full, label: "measured" }).plan, full);
+  assert.equal(forkPlan({ plan: slice, label: "dev", oracle: dir }).oracle, dir);
+  assert.throws(() => forkPlan({ plan: slice, label: "measured" }), /dev slice/);
+  writeFileSync(join(full, "plan.json"), JSON.stringify({ version: PLAN_VERSION - 1 }));
+  assert.throws(() => forkPlan({ plan: full, label: "baseline" }), /plan v/);
 });
 
 let failed = 0;

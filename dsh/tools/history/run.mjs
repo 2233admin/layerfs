@@ -4,6 +4,9 @@
 //   node dsh/tools/history/run.mjs play --run <id> --from N --to M [--mode measured|fast]
 //   node dsh/tools/history/run.mjs fork --run <new id> --from-run <id> --range N [--label …] [--daemon <path>] [--addon <path>] [--sdk <dir>]
 //   node dsh/tools/history/run.mjs rebaseline --phase p2 --daemon <path> [--addon <path>] [--from-run <id>] [--run <id>]
+//   node dsh/tools/history/run.mjs rebaseline --prepare --phase p3 --git --daemon <path> --addon <path> [--plan <dir>] [--run <id>]
+//     then play ranges 2-4 one at a time (… --until lead, --resume --until lanes, --resume), then
+//   node dsh/tools/history/run.mjs rebaseline --write --phase p3 --daemon <path> --addon <path> [--run <id>]
 // Every command that touches the Store (new, play, fork, rebaseline) runs in the runner container (runner.mjs): Store calls run in
 // this process against the run's volume at /layerfs-store (F-020), Linux only.
 // --sdk <dir> picks the SDK's JavaScript (default sdk/js of this checkout);
@@ -751,11 +754,15 @@ function cmdPhase(o) {
   return EXIT.done;
 }
 
-/** Turns F-031 option (c) on for a dev run in a closure phase, from the range it stands at (gitplay.mjs). */
+/** The labels git and NODE_RULE can be switched on for (a control run never). */
+export const SWITCHABLE = new Set(["dev", "measured", "baseline"]);
+
+/** Turns F-031 option (c) on for a run in a closure phase, from the range it stands at (gitplay.mjs). */
 function cmdGit(o) {
   const dir = join(HISTORY, "runs", o.run), run = new Run(dir);
   if (!("on" in o)) return usage();
-  if (run.manifest.label !== "dev") { console.error(`run ${o.run}: git is for dev runs until its dev proof is accepted (F031_DESIGN §5a)`); return EXIT.usage; }
+  // the dev proof was accepted on f031-r1-slice-h (liaison under owner delegation 2026-10-19): main line and baselines too
+  if (!SWITCHABLE.has(run.manifest.label)) { console.error(`run ${o.run}: git is for ${[...SWITCHABLE].join(", ")} runs (label ${run.manifest.label})`); return EXIT.usage; }
   if (!PHASES[run.manifest.phase]?.closure) { console.error(`run ${o.run}: git starts in a closure phase (P3)`); return EXIT.usage; }
   if (run.state?.dirty != null) { console.error(`run ${o.run} stopped in range ${run.state.dirty}; recover by fork first`); return EXIT.guard; }
   run.manifest.git = { on: true, atRange: run.state.next, at: new Date().toISOString() };
@@ -769,7 +776,7 @@ function cmdGit(o) {
 function cmdNode(o) {
   const dir = join(HISTORY, "runs", o.run), run = new Run(dir);
   if (!("on" in o)) return usage();
-  if (run.manifest.label !== "dev") { console.error(`run ${o.run}: NODE_RULE churn is for dev runs until its dev range is accepted`); return EXIT.usage; }
+  if (!SWITCHABLE.has(run.manifest.label)) { console.error(`run ${o.run}: NODE_RULE churn is for ${[...SWITCHABLE].join(", ")} runs (label ${run.manifest.label})`); return EXIT.usage; }
   if (!PHASES[run.manifest.phase]?.closure) { console.error(`run ${o.run}: NODE_RULE starts in a closure phase (P3)`); return EXIT.usage; }
   const node = { on: true, inputsRule: o["inputs-rule"] ?? "plan", storePolicy: o["store-policy"] ?? "verified", atRange: run.state.next, at: new Date().toISOString() };
   const why = checkNode(nodeOf({ node })) ?? (STORE_POLICIES[node.storePolicy] == null ? `store policy ${node.storePolicy}: one of ${Object.keys(STORE_POLICIES).join(", ")}` : null);
@@ -793,6 +800,7 @@ export const REBASELINE_SOURCES = ["p1-rebase-d", "p1-pilot-b"];
  * beside the others. A range that does not pass or watch stops it; no baseline.
  */
 async function cmdRebaseline(o) {
+  if (o.prepare || o.write) return cmdRebaselineSplit(o);
   if (!o.phase || !o.daemon) return usage();
   const daemon = resolve(o.daemon), addon = resolve(o.addon ?? ADDON);
   const from = o["from-run"] ?? REBASELINE_SOURCES.find((r) => existsSync(join(HISTORY, "runs", r, "run.json"))
@@ -812,8 +820,47 @@ async function cmdRebaseline(o) {
   return EXIT.done;
 }
 
+/**
+ * The split re-baseline (liaison under owner delegation 2026-10-19, for P3 with `.git`): `--prepare` forks the
+ * pilot's range-1 snapshot (label baseline), moves it to the phase and turns git on from range 2 (`--git`); the
+ * ranges 2-4 are then played one by one with `play` (each in commands under 120 s); `--write` checks the run
+ * stands at range 5, clean, and writes the baseline. A range that stops leaves the run dirty and no baseline.
+ */
+async function cmdRebaselineSplit(o) {
+  if (!o.phase || !o.daemon) return usage();
+  const id = o.run ?? rebaselineId(o);
+  if (o.prepare) {
+    const daemon = resolve(o.daemon), addon = resolve(o.addon ?? ADDON);
+    const from = o["from-run"] ?? REBASELINE_SOURCES.find((r) => existsSync(join(HISTORY, "runs", r, "run.json"))
+      && existsSync(manifestPath(new Run(join(HISTORY, "runs", r)).manifest.outputs.snapshots, 1, r)));
+    if (!from) { console.error(`no pilot range-1 snapshot in ${REBASELINE_SOURCES.join(", ")}`); return EXIT.usage; }
+    await cmdFork({ run: id, "from-run": from, range: 1, label: "baseline", daemon, addon, sdk: o.sdk, ...(o.plan ? { plan: o.plan } : {}) });
+    const run = new Run(join(HISTORY, "runs", id));
+    if (run.manifest.phase !== o.phase && cmdPhase({ run: id, phase: o.phase }) !== EXIT.done) return EXIT.usage;
+    if (o.git && cmdGit({ run: id, on: true }) !== EXIT.done) return EXIT.usage;
+    console.log(JSON.stringify({ run: id, from, phase: o.phase, git: !!o.git, next: "play ranges 2-4, then rebaseline --write" }));
+    return EXIT.done;
+  }
+  const run = new Run(join(HISTORY, "runs", id));
+  if (run.manifest.label !== "baseline" || run.manifest.phase !== o.phase) { console.error(`rebaseline ${id}: not a ${o.phase} baseline run`); return EXIT.usage; }
+  if (run.state.dirty != null || run.state.next !== 5) { console.error(`rebaseline ${id}: stands at range ${run.state.next}${run.state.dirty != null ? `, dirty at ${run.state.dirty}` : ""}; no baseline written`); return EXIT.stop; }
+  const { writeBaseline } = await import("./report.mjs");
+  const r = writeBaseline({ metricsDir: run.manifest.outputs.metrics, ranges: [2, 3, 4], out: join(HISTORY, "metrics"), run: id, phase: o.phase, ...(o.note ? { note: o.note } : {}) });
+  run.note({ kind: "baseline", name: r.file, phase: o.phase, from: run.manifest.source });
+  console.log(JSON.stringify({ run: id, phase: o.phase, file: r.file, ops: Object.keys(r.baseline.ops).length }));
+  return EXIT.done;
+}
+
 /** The run id `rebaseline` makes when none is given (the runner mounts its volume). */
 export const rebaselineId = (o) => `rb-${o.phase}-${sha256(resolve(o.daemon)).slice(0, 8)}-${sha256(resolve(o.addon ?? ADDON)).slice(0, 8)}`;
+
+/** fork's --plan/--oracle: a slice (slice.mjs) for dev runs only; a full plan for any label, the oracle defaulting to the shared one. */
+export function forkPlan(o) {
+  const plan = resolve(o.plan ?? join(HISTORY, "plan")), summary = JSON.parse(readFileSync(join(plan, "plan.json"), "utf8"));
+  if (summary.slice && o.label && o.label !== "dev") throw new Error(`${plan} is a dev slice; --plan with a slice is for dev runs`);
+  if (summary.version !== PLAN_VERSION) throw new Error(`${plan} is plan v${summary.version}; this player plays v${PLAN_VERSION}`);
+  return { plan, oracle: resolve(o.oracle ?? join(HISTORY, "oracle")) };
+}
 
 /** A new run from run `from`'s snapshot of range N (SPEC §7, Forking): its file rebuilt into a new volume and home. */
 async function cmdFork(o) {
@@ -823,7 +870,8 @@ async function cmdFork(o) {
   if (!manifest.state) throw new Error(`snapshot ${k} carries no runner state`);
   const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), addon: resolve(o.addon ?? source.manifest.env.LAYERFS_NATIVE ?? ADDON), sdk: resolve(o.sdk ?? source.manifest.env.LAYERFS_SDK_JS ?? SDK_JS), source: { run: source.manifest.run, range: k },
     // a dev slice (slice.mjs): its own plan and oracle folders; never a measured run
-    ...(o.plan || o.oracle ? (o.label && o.label !== "dev" ? (() => { throw new Error("--plan/--oracle are for dev runs"); })() : { plan: resolve(o.plan), oracle: resolve(o.oracle) }) : {}) });
+    // a full plan (plan.mjs, e.g. plan-r1) for any label; a dev slice's plan and oracle for dev runs only
+    ...(o.plan || o.oracle ? forkPlan(o) : {}) });
   runManifest.binary = binaries(env);
   runManifest.planVersion = source.manifest.planVersion;
   mkdirSync(dir, { recursive: true });
