@@ -33,3 +33,4 @@
 | 026 | 60 | 29,975 | **optimize** | Counters | 43.5 MiB | [range-026](ranges/range-026.md) |
 | 027 | 63 | 30,629 | **watch** | Speed | 22.7 MiB | [range-027](ranges/range-027.md) |
 | 028 | 80 | 32,548 | **watch** | Speed | 53.6 MiB | [range-028](ranges/range-028.md) |
+| 029 | 90 | 33,478 | **watch** | Speed | 37.1 MiB | [range-029](ranges/range-029.md) |
