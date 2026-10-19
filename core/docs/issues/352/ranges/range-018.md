@@ -232,7 +232,7 @@ Range 15 is the reference (owner 2026-10-19; a watch row, not a gate). Uncontend
 **WAL across each class this range:** fs.write ≤1 KiB 12392 → 4194304 B · fs.write ≤8 KiB 4194304 → 4194304 B · fs.write ≤64 KiB 4194304 → 4194304 B · fs.read ≤8 KiB 4194304 → 4194304 B · sandbox.mount 4194304 → 4194304 B · sandbox.commit 1 file (Committed) 4194304 → 4194304 B · branch.merge 0 → 4194304 B
 **Host load (1-min, recorded, not waited on):** macOS 9.03 at the first command → 6.72 after the last (max 9.27 over 6 commands) · Docker VM 0.52 → 1.4
 
-**Control probe** (one sample per arm, same window and binaries; (a) the range 15 Store, (b) the range's):
+**Control probe** (one sample per arm, same window and binaries; (a) the range 15 Store, (b) the range's). Gap: each clone is copied just before its arm, which warms the OS cache equally in both, so the control cannot see a cold-read effect of a larger Store (storage reads are 0 in both arms); it compares warm-cache work only.
 
 | Sample | (a) Commits · MiB | (b) Commits · MiB | fs.write ≤1 KiB: (a) / (b) p50 ms · (b)/(a) · reads/call (a)/(b) | fs.write ≤8 KiB: (a) / (b) p50 ms · (b)/(a) · reads/call (a)/(b) | fs.read ≤8 KiB: (a) / (b) p50 ms · (b)/(a) · reads/call (a)/(b) | Host load (macOS) | Watch |
 | --- | --- | --- | --- | --- | --- | --- | --- |

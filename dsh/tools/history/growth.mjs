@@ -99,7 +99,7 @@ export function growthSection(points, controls = {}, hostLines = []) {
   out.push(`**Host load (1-min, recorded, not waited on):** macOS ${host ? `${num(host.start)} at the first command → ${num(host.end)} after the last (max ${num(host.max)} over ${host.commands} commands)` : "not recorded (before 2026-10-19)"} · Docker VM ${h ? `${h.start ?? "—"} → ${h.end ?? "—"}` : "—"}`);
   const ctl = Object.entries(controls).sort(([a], [b]) => a.localeCompare(b));
   if (ctl.length) {
-    out.push("", "**Control probe** (one sample per arm, same window and binaries; (a) the range 15 Store, (b) the range's):", "", "| Sample | (a) Commits · MiB | (b) Commits · MiB | " + CLASSES_SHOWN.map((c) => `${c}: (a) / (b) p50 ms · (b)/(a) · reads/call (a)/(b)`).join(" | ") + " | Host load (macOS) | Watch |", "| --- | --- | --- | " + CLASSES_SHOWN.map(() => "---").join(" | ") + " | --- | --- |");
+    out.push("", "**Control probe** (one sample per arm, same window and binaries; (a) the range 15 Store, (b) the range's). Gap: each clone is copied just before its arm, which warms the OS cache equally in both, so the control cannot see a cold-read effect of a larger Store (storage reads are 0 in both arms); it compares warm-cache work only.", "", "| Sample | (a) Commits · MiB | (b) Commits · MiB | " + CLASSES_SHOWN.map((c) => `${c}: (a) / (b) p50 ms · (b)/(a) · reads/call (a)/(b)`).join(" | ") + " | Host load (macOS) | Watch |", "| --- | --- | --- | " + CLASSES_SHOWN.map(() => "---").join(" | ") + " | --- | --- |");
     // the (a) arm's reference: its first sample in which the class completed (a failed sample is listed, never a reference)
     const first = (k) => ctl.map(([, c]) => c.arms.a.classes[k]).find((a) => a?.n && a.p50);
     for (const [name, c] of ctl) {

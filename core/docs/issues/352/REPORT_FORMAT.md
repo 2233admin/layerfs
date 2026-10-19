@@ -148,6 +148,9 @@ reference.
     sample, and read syscalls per call.
   - If both arms slow together, the host is the cause; if only (b) slows,
     history growth is.
+  - Gap: the clone copy warms the OS cache equally in both arms, so the
+    control cannot see a cold-read effect of a larger Store. The section says
+    so.
 - **Watch row:** fires when this attempt's control (b)/(a) p50 is over 1.25×,
   or (b)'s read syscalls per call are over 2× (a)'s. A sample with failed calls
   is listed but not judged. Labelled samples, such as

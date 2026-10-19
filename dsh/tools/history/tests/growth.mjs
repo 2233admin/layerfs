@@ -100,6 +100,7 @@ test("report section: trend from range 15, the control samples, the watch row ju
   assert.match(text, /\| 018\.a1 \| 17442 \| 332\.0 \| 7\.94 \(1\.35×\) · 7071 · 110 \(4 solo\)/);
   assert.match(text, /fs\.write ≤1 KiB 0 → 4096 B/);
   assert.match(text, /\| control-017\.diag-15v17-2 \| 12851/);
+  assert.match(text, /cannot see a cold-read effect/, "the warm-cache gap is stated");
   assert.match(text, /not split by class \(before range 18\)/, "merge before range 18: no ops row stands for it");
   const failedFirst = sample(17, 6.6); failedFirst.arms.a.classes["fs.write ≤1 KiB"] = { n: 0, p50: null, syscr: null };
   const two = growthSection([r15, r18], { "control-017.x": failedFirst, "control-017.y": sample(17, 6.6) }).join("\n");
