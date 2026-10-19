@@ -1026,3 +1026,25 @@
   an owner-approved workload change. Range 18 replays as a5 so range 19 starts
   from clean output, then range 19 a2. Option B (a carried point base, a
   relaxed build exit) is out.
+
+- **F-060 · the native repair chain never applied the consolidation's
+  reconcile (harness oracle, not a product defect; range 19 a3, `p3-main-m`,
+  2026-10-20).**
+  - After the lanes' merge, LayerFS's lead applies the plan's reconcile:
+    range 19 has 217 files, 12 `rm`. That removes the tracked files the lanes
+    brought that the checkpoint has not. The native chain (fix 042) only
+    deleted what git deletes from the lanes' base tree to the checkpoint.
+    Files a lane created and the checkpoint deleted stayed natively:
+    `packages/core/agent-core/README.md` and `packages/ui/stdio-agent/{src,tests}`.
+  - With fix 043's clean, tsdown took `packages/ui/stdio-agent` as a package
+    without `lib/types` natively: `UNRESOLVED_ENTRY`, native exit 1 against
+    LayerFS 0. The repair's P6 stopped: "P4 stop (tsc exit 0, native 1)".
+  - Fix (fix 044): `repairChain` gives the repair state the reconcile's `rm`
+    paths (`remove`), and `nativeChain` removes them before the state.
+    `LANE_MERGE_VERSION` 3 re-keys the chains. Natively r19 a3's repair build
+    then exits 0 with 721 emitted files, all equal to LayerFS's (diagnostic). No
+    gate, scope or workload change.
+
+  **Status: FIXED (harness).** Range 19 a4 plays from `p3-main-l`'s r018
+  snapshot.
+

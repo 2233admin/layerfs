@@ -204,7 +204,7 @@ test("the devcheck's reinstall oracle under Node: the repair's chain and build, 
     execFileSync("git", ["init", "-q", "--bare", repo]);
     const tree = execFileSync("git", ["--git-dir", repo, "mktree"], { input: "", encoding: "utf8" }).trim();
     const commit = execFileSync("git", ["--git-dir", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit-tree", tree, "-m", "c"], { encoding: "utf8" }).trim();
-    mkdirSync(plan); writeFileSync(join(plan, "range-015.json"), JSON.stringify({ lanes: [{ name: "a", areas: ["/"] }, { name: "b", areas: ["docs"] }], consolidation: [{ op: "merge", lane: "b" }, { op: "merge", lane: "a" }, { op: "reconcile", files: [] }] }));
+    mkdirSync(plan); writeFileSync(join(plan, "range-015.json"), JSON.stringify({ lanes: [{ name: "a", areas: ["/"] }, { name: "b", areas: ["docs"] }], consolidation: [{ op: "merge", lane: "b" }, { op: "merge", lane: "a" }, { op: "reconcile", files: [{ path: "pk/gone/src/i.ts", op: "rm" }, { path: "pk/kept.ts", op: "write" }] }] }));
     const run = { dir, manifest: { repo, plan, node: { on: true, inputsRule: "r1" } } };
     // the lanes' recorded writes (owner option 1): a's point finished after b's
     mkdirSync(join(dir, "trace"));
@@ -220,6 +220,9 @@ test("the devcheck's reinstall oracle under Node: the repair's chain and build, 
       ["t0", "lead install", "/workspaces/1", null, null, null], ["t-b1", "tsc b", "/workspaces/3", "b", 0, "2026-10-19T10:00:02.000Z"],
       ["t-a1", "install", "/workspaces/2", "a", 1, "2026-10-19T10:00:06.000Z"], ["t-a1", "tsc a", "/workspaces/2", "a", 1, "2026-10-19T10:00:06.000Z"],
       [tree, "repair", "/workspaces/4", null, null, null], [tree, "build", "/workspaces/4", null, null, null], [tree, "clean install", null, null, null, null]]);
+    // after the lanes' merge the repair state carries the reconcile's removals, as LayerFS's reconcile applies them
+    // (r019 a3: a lane's files under a folder the checkpoint deleted, natively kept, made tsdown fail)
+    assert.deepEqual(states.find((x) => x.command === "repair").remove, ["pk/gone/src/i.ts"]);
     writeFileSync(join(plan, "range-015.json"), JSON.stringify({ lanes: [{ name: "a", areas: ["/"] }, { name: "b", areas: ["docs"] }], consolidation: [{ op: "merge", lane: "a" }] }));
     assert.throws(() => reinstallStates(run, m, 15, "clean install"), /lane b is not merged/);
     assert.throws(() => reinstallStates(run, { ...m, attempt: 2 }, 15, "clean install"), /no trace of attempt 2/);

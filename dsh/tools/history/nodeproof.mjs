@@ -154,6 +154,13 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name }) {
       // after a lane's capture and restore (and after the merge) the folder's tracked files are the lanes' base
       if (lanes.reset[i]) prev = laneBase;
       moveTo(st.root);
+      // the consolidation's reconcile (its `rm` files): after the lanes' merge LayerFS removes the tracked files the
+      // lanes brought that the checkpoint has not (r019 a3: packages/ui/stdio-agent/src/*, natively kept, so tsdown
+      // took the folder as a package)
+      if (st.remove?.length) {
+        writeFileSync(join(stage, `${i}.rm`), `${st.remove.join("\n")}\n`);
+        script.push(`while IFS= read -r f; do rm -f -- "$f"; done < /seq/${i}.rm`);
+      }
       if (st.tree !== prev) {
         if (!existsSync(join(stage, `${st.tree}.tar`))) writeFileSync(join(stage, `${st.tree}.tar`), execFileSync("git", ["--git-dir", repo, "archive", st.tree], { maxBuffer: 1 << 30 }));
         // -m: the files get the time of the extraction, as a checkout's (and a LayerFS step's) writes do; with the
@@ -221,7 +228,7 @@ export function vitestReport(text, root) {
 /** How nativeChain lays a tree down; part of the key, so an oracle made the old way is never reused (2: tar -m). */
 export const CHAIN_VERSION = 2;
 /** The lanes' merge (fix 042) in the key of a chain with lane states only: 2 after the a2 silent-failure fix. */
-export const LANE_MERGE_VERSION = 2;
+export const LANE_MERGE_VERSION = 3;
 export const oracleKey = ({ tree, inputs, states, tail, image }) => createHash("sha256").update(JSON.stringify({ v: LISTER_VERSION, chain: CHAIN_VERSION, tree, inputs, states, tail, image,
   laneMerge: states?.some((st) => st.lane) ? LANE_MERGE_VERSION : undefined })).digest("hex").slice(0, 24);
 
@@ -395,7 +402,8 @@ export function repairChain(run, m, k) {
   const wrote = laneWriteOrder(traceOf(run, m), ran, order, k);
   const lanes = wrote.flatMap(({ lane, end }, rank) => ran.filter((q) => q.lane === lane).flatMap((q) => (rootLane && q.lane !== rootLane ? pointStates(q).slice(1) : pointStates(q)))
     .map((st) => ({ ...st, lane, merge: rank, wrote: end })));
-  const states = [...chain0, ...lanes, { tree, command: inst.command ?? installCommand({ policy: node.storePolicy }), ...at(inst.root), clean: true }];
+  const remove = lanes.length ? (plan.consolidation ?? []).filter((c) => c.op === "reconcile").flatMap((c) => c.files.filter((f) => f.op === "rm").map((f) => f.path)) : [];
+  const states = [...chain0, ...lanes, { tree, command: inst.command ?? installCommand({ policy: node.storePolicy }), ...at(inst.root), clean: true, ...(remove.length ? { remove } : {}) }];
   const buildState = build ? { tree, command: build.command ?? buildCommand(build.packages), ...at(build.root) } : null;
   return { tree, states, buildState, tail: build ? { build: buildState.command, packages: build.packages, ...at(build.root) } : {},
     complete: ran.length === m.node.points.filter((q) => q.lane !== "lead").length };
