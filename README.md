@@ -73,7 +73,7 @@
 ## See it run
 
 <p align="center">
-  <img src="docs/assets/readme/demo.gif" alt="A LayerFS project at work: agents fork Branches, mount Workspaces in Sandboxes, commit, merge and publish to main, while the history tree grows" width="100%">
+  <img src="docs/assets/demo/page3-demo.gif" alt="The LayerFS demo: agents on several Branches run tool calls in Sandboxes and fs, each call becomes a Commit, and the history tree grows" width="100%">
 </p>
 <p align="center"><sub>Agents fork Branches, work in Workspaces inside Sandboxes, commit, merge and publish to <code>main</code>. The history grows as they go.</sub></p>
 
