@@ -418,7 +418,9 @@ run's phase is `p2` (`PHASES.p2`, `p2Plan` and `consolidationSteps` in
   ` · uncontended` / ` · contended` (`series`). Speed judges the uncontended
   rows only. The new check **Contended work** fits each contended class's
   SQL VM steps p50 against tree files, banded like Counters, and never uses
-  wall time. A point needs 5 calls in its range, and the tree must have grown
+  wall time. From fix 067 (owner "yes", 2026-10-20) it reads the call's own
+  `sql.call` when the trace has it, and otherwise `writer` + `readers`,
+  labelled process-wide. A point needs 5 calls in its range, and the tree must have grown
   1.5× over the points. Existing baselines were re-derived from their runs'
   stored traces (`report.mjs baseline-series`, `derivation: "trace"`,
   earlier classes kept as `previousOps`). Those classes come from the trace

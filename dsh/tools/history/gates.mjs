@@ -94,6 +94,8 @@ export function aggregate(calls) {
     // per call: the SQL work's p50, an exec's FUSE opcodes' p50, and ms per unit of its own input
     const withSql = cs.filter((c) => c.sql);
     if (withSql.length) row.sql = Object.fromEntries(["statements", "vm_steps", "fullscan_steps"].map((k) => [k, quantile(withSql.map((c) => c.sql[k] ?? 0), 0.5)]));
+    // fix 067: the per-call counters, only when every call of the class has them
+    if (withSql.length && cs.every((c) => c.sqlCall)) row.sqlCall = Object.fromEntries(["statements", "vm_steps", "fullscan_steps"].map((k) => [k, quantile(cs.map((c) => c.sqlCall[k] ?? 0), 0.5)]));
     const withFuse = cs.filter((c) => c.fuse != null);
     if (withFuse.length) row.fuse = quantile(withFuse.map((c) => c.fuse), 0.5);
     const sized = cs.filter((c) => c.size?.n > 0);
@@ -171,16 +173,21 @@ export function contendedWork(m, history, t = THRESHOLDS) {
   const rows = contended(ser(m));
   if (!rows.length) return { value: "not applicable: no contended calls in this range", result: "pass" };
   let worst = null, short = 0;
+  // fix 067 (owner "yes", 2026-10-20): the call's own SQL work (`sql.call`) when this attempt traced it, and then
+  // only points that have it; else the session's writer + readers, which also count overlapping work ("process-wide")
+  const perCall = rows.some((r) => r.sqlCall);
+  const work = (o) => (perCall ? o?.sqlCall?.vm_steps : o?.sql?.vm_steps);
   for (const r of rows) {
-    const pts = [...history, m].map((x) => [x.inputs?.tree?.files, contended(ser(x)).find((o) => o.op === r.op && o.sizeClass === r.sizeClass && o.n >= BASELINE_MIN_N)?.sql?.vm_steps]).filter(([a, b]) => a > 0 && b > 0);
+    const pts = [...history, m].map((x) => [x.inputs?.tree?.files, work(contended(ser(x)).find((o) => o.op === r.op && o.sizeClass === r.sizeClass && o.n >= BASELINE_MIN_N))]).filter(([a, b]) => a > 0 && b > 0);
     if (pts.length < MINIMUM_POINTS) continue;
     const xs = pts.map(([x]) => x);
     if (Math.max(...xs) < CONTENDED_SPAN * Math.min(...xs)) { short++; continue; }
     const e = exponent(pts);
     if (e != null && (!worst || e > worst.e)) worst = { op: r.op, sizeClass: r.sizeClass, e, n: pts.length };
   }
-  if (!worst) return { value: `not judged: no contended class has ${MINIMUM_POINTS} ranges of ${BASELINE_MIN_N}+ calls${short ? ` over a tree that grew ${CONTENDED_SPAN}× (${short} class${short > 1 ? "es" : ""} too narrow)` : ""}`, result: "watch" };
-  return { value: `${worst.op} ${worst.sizeClass}: SQL VM steps against tree files, exponent ${worst.e} over ${worst.n} ranges`, result: band(worst.e, t.counterExponent) };
+  const source = perCall ? "per call (sql.call)" : "process-wide (writer + readers)";
+  if (!worst) return { value: `not judged: no contended class has ${MINIMUM_POINTS} ranges of ${BASELINE_MIN_N}+ calls${perCall ? " with per-call SQL" : ""}${short ? ` over a tree that grew ${CONTENDED_SPAN}× (${short} class${short > 1 ? "es" : ""} too narrow)` : ""}; SQL ${source}`, result: "watch" };
+  return { value: `${worst.op} ${worst.sizeClass}: SQL VM steps ${source} against tree files, exponent ${worst.e} over ${worst.n} ranges`, result: band(worst.e, t.counterExponent) };
 }
 
 /** F-024: a baseline class too thin to be a reference (BASELINE_MIN_N). */

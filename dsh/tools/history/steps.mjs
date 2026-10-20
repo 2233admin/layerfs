@@ -367,6 +367,18 @@ export function sqlCounters(line) {
 }
 
 /**
+ * The call's own SQL work (fix 057's `sql.call`, the request thread's counters), summed over the line's exchanges,
+ * or null when an exchange lacks it (binaries before fix 057): fix 067 feeds it to the Contended work gate.
+ */
+export function sqlCallCounters(line) {
+  const ds = (line.daemon ?? []).filter((d) => d.sql);
+  if (!ds.length || ds.some((d) => !d.sql.call)) return null;
+  const out = { statements: 0, vm_steps: 0, fullscan_steps: 0 };
+  for (const d of ds) for (const k of Object.keys(out)) out[k] += d.sql.call[k] ?? 0;
+  return out;
+}
+
+/**
  * The one-shot probe split by owner (lead 2026-10-18, after 013.a1): launching
  * a command belongs to the Sandbox, not LayerFS. From the trace lines of one
  * one-shot sequence (mount, exec, unmount):
@@ -525,8 +537,9 @@ export function callOf(line, entry = null) {
   }
   // SQL work is the call's own (its trace line), so a call classed from the trace alone keeps it too (SPEC §5)
   const sql = (({ statements, vm_steps, fullscan_steps }) => ({ statements, vm_steps, fullscan_steps }))(sqlCounters(line));
+  const sqlCall = sqlCallCounters(line);
   return { method: line.method, ms: line.ms, ok: line.ok, ...(size ? { size } : {}), ...(Object.keys(phases).length ? { phases } : {}),
-    ...((line.daemon ?? []).some((d) => d.sql) ? { sql } : {}), ...(line.fuse != null ? { fuse: line.fuse } : {}),
+    ...((line.daemon ?? []).some((d) => d.sql) ? { sql } : {}), ...(sqlCall ? { sqlCall } : {}), ...(line.fuse != null ? { fuse: line.fuse } : {}),
     ...(OUTCOME_CLASSES.has(line.method) ? { outcome: outcomeOf(entry?.kind ?? line.kind, entry?.newCommit) } : {}),
     ...(line.contention ? { contention: line.contention } : {}) };
 }

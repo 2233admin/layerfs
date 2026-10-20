@@ -1474,6 +1474,25 @@ test("uncontended vs contended (SPEC §5): overlap with a Commit or merge classe
   assert.match(evaluate(narrow.at(-1), narrow.slice(0, -1)).checks.find((c) => c.name === "Contended work").value, /too narrow/, "a fit over a few percent of growth is not judged");
 });
 
+test("fix 067 (owner yes, 2026-10-20): Contended work reads the call's own SQL (sql.call) when traced, else process-wide", () => {
+  // a contended call whose session work doubles with overlap while its own work stays flat (fix 057's r30 probe shape)
+  const line = (own, session) => ({ method: "fs.rm", ms: 14, ok: true, daemon: [{ sql: { writer: { statements: session, vm_steps: session * 75 }, readers: { statements: 0, vm_steps: 0 }, call: { statements: own, vm_steps: own * 75 } } }] });
+  assert.deepEqual(callOf(line(191, 377)).sqlCall, { statements: 191, vm_steps: 14325, fullscan_steps: 0 });
+  assert.equal(callOf({ method: "fs.rm", ms: 1, daemon: [{ sql: { writer: { vm_steps: 5 } } }] }).sqlCall, undefined, "binaries before fix 057: no per-call counters");
+  assert.equal(aggregate([callOf(line(191, 377)), callOf({ method: "fs.rm", ms: 1, daemon: [{ sql: { writer: { vm_steps: 5 } } }] })])[0].sqlCall, undefined, "a class is per-call only when every call is");
+  const mk = (i, call) => ({ range: 51 + i, binary: { daemon: "d" }, checks: {}, inputs: { tree: { files: 1000 * (i + 1) } },
+    ops: [{ op: "fs.rm", sizeClass: "1 files · contended", series: "contended", n: 9, p50: 14, p95: 20, sql: { vm_steps: 15000 * (i + 1) }, ...(call ? { sqlCall: { vm_steps: 14500 } } : {}) }] });
+  const cw = (call) => { const xs = [0, 1, 2, 3].map((i) => mk(i, call)); return evaluate(xs.at(-1), xs.slice(0, -1)).checks.find((c) => c.name === "Contended work"); };
+  // with sql.call the overlap no longer reads as growth; without it the old process-wide reading stands, labeled
+  assert.equal(cw(true).result, "pass");
+  assert.match(cw(true).value, /SQL VM steps per call \(sql\.call\) against tree files, exponent 0 over 4 ranges/);
+  assert.equal(cw(false).result, "optimize");
+  assert.match(cw(false).value, /process-wide \(writer \+ readers\)/);
+  // per-call points never mix with earlier process-wide ones: three ranges without call and one with it is one point
+  const mixed = [mk(0, false), mk(1, false), mk(2, false), mk(3, true)];
+  assert.match(evaluate(mixed.at(-1), mixed.slice(0, -1)).checks.find((c) => c.name === "Contended work").value, /^not judged: .* with per-call SQL.*; SQL per call/);
+});
+
 test("P3 proof: untracked closure output is no extra; a tracked file under it is still compared", () => {
   const items = [{ path: "/src/a.ts", kind: "Modified" }, { path: "/node_modules/.pnpm/x@1/node_modules/x/i.js", kind: "Added" }, { path: "/packages/a/dist/i.js", kind: "Added" },
     { path: "/packages/a/tsconfig.tsbuildinfo", kind: "Added" }, { path: "/packages/b/dist/keep.js", kind: "Modified" }];
