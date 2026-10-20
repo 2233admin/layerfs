@@ -50,3 +50,4 @@
 | 043 | 66 | 51,610 | **optimize** | Counters | 42.8 MiB | [range-043](ranges/range-043.md) |
 | 044 | 60 | 52,850 | **optimize** | Counters | 36.4 MiB | [range-044](ranges/range-044.md) |
 | 045 | 64 | 53,964 | **optimize** | Counters | 32.0 MiB | [range-045](ranges/range-045.md) |
+| 046 | 64 | 54,791 | **optimize** | Counters | 31.2 MiB | [range-046](ranges/range-046.md) |
