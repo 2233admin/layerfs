@@ -14,7 +14,7 @@ import { fetchScript } from "../fetch-store.mjs";
 import { addedBySource, changedGroupBytes, cumulative, liveParts, sealedParts, seedBySource, stepSource, storageFigures, storageProblems } from "../storage.mjs";
 import { CLEAN_REMOVE, installCommand, STORE_MOUNT, parseLister, rootless, verifiedAges, buildBytes, buildListCommand, changedPackages, CLOSURE_OUTPUT, closureSteps, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, nothingToBuild, playClosure, tscStates, buildCommand } from "../closure.mjs";
 import { PRUNE_EMPTY, repairClean } from "../nodeconfig.mjs";
-import { aggregate, buildBaseline, reinstallGate, evaluate, probeSeries, thinClass } from "../gates.mjs";
+import { aggregate, buildBaseline, callName, reinstallGate, evaluate, probeSeries, thinClass } from "../gates.mjs";
 import { checkFinding } from "../findings.mjs";
 import { checkFormat, installedText, issuesAsOf, movers, NONE_LINE, openIssues, renderFindingFormat, renderFormat } from "../format.mjs";
 import { parseReport } from "../frozen.mjs";
@@ -963,13 +963,33 @@ test("r017.a1 (liaison 2026-10-19): list_largest is chain-bounded per entry: r01
   for (const r of wider) assert.equal(r.result, "pass", r.value);
 });
 
+test("#352 prep 51-100: a chain-bounded window maximum names the call that set it and says when it is carried", () => {
+  // merge.returned_rows as recorded r031-r048 (last attempt each, daemon 27a769a4): 2,513 at r41, 2,514 at r45
+  const rows = [1633, 1488, 1941, 1849, 1784, 1536, 1553, 1818, 1739, 1753, 2513, 2440, 1721, 1720, 2514, 1874, 1613, 1926];
+  const mk = (i, r) => ({ range: 31 + i, attempt: i === 7 || i === 13 ? 2 : 1, binary: { daemon: "d" }, depth: { after: 30000 + 1000 * i }, checks: {}, storage: { delta: { caps: { metadata: 8 } } },
+    probes: { merge: { ms: 30, input: { filesPerSide: 2 }, counters: { returned_rows: r } } } });
+  const xs = rows.map((r, i) => mk(i, r));
+  const at = (k) => evaluate(xs[k], xs.slice(0, k)).checks.find((c) => c.name === "Counters");
+  const r48 = at(17);
+  assert.equal(r48.result, "optimize", "the band is unchanged");
+  assert.match(r48.value, /max over the latest cap period 2514 \(r045\.a1 merge probe\) vs the first 1941 \(r033\.a1 merge probe\): 1\.295× \(bound, period 8; carried from r045\.a1 merge probe; this range 1926, not a new maximum\)/);
+  assert.match(at(14).value, /2514 \(r045\.a1 merge probe\).*set by this range\)/, "r45 set it");
+  assert.match(at(12).value, /2513 \(r041\.a1 merge probe\).*carried from r041\.a1/, "r43 carries r41's");
+  assert.equal(callName({ range: 7 }, "stat"), "r007 seed stat probe");
+});
+
 test("F-024: baseline classes carry n; a thin class is not judged; merge and Commit outcomes are their own classes", () => {
   const b = buildBaseline([2, 3, 4].map((range) => ({ range, binary: { daemon: "d" }, ops: [{ op: "branch.merge", sizeClass: "17–64 entries · UpToDate", n: range === 2 ? 1 : 0, p50: 3.51, p95: 3.51 }, { op: "fs.read", sizeClass: "≤8 KiB", n: 20, p50: 4, p95: 6 }].filter((r) => r.n) })));
   assert.deepEqual([b.ops["branch.merge\u000017–64 entries · UpToDate"].perRange, b.ops["fs.read\u0000≤8 KiB"].n], [[1, 0, 0], 60]);
   const m = { range: 10, binary: { daemon: "d" }, checks: {}, ops: [{ op: "branch.merge", sizeClass: "17–64 entries · UpToDate", n: 3, p50: 227, p95: 300 }, { op: "fs.read", sizeClass: "≤8 KiB", n: 30, p50: 4.4, p95: 6.6 }] };
   const speed = evaluate(m, [], b).checks.find((c) => c.name === "Speed");
-  assert.equal(speed.result, "watch");
-  assert.match(speed.value, /not judged: branch\.merge 17–64 entries · UpToDate: baseline class has 1\/0\/0 calls \(minimum 5 per range\)/);
+  // #352 prep 51-100: the thin class is listed beside the judged ones and no longer hides the row
+  assert.equal(speed.result, "pass");
+  assert.match(speed.value, /^fs\.read ≤8 KiB: 1\.1× baseline .*; not judged: branch\.merge 17–64 entries · UpToDate: 1\/0\/0 calls \(85\.47×\) \(baseline class under 5 calls per range\)$/);
+  // only thin classes: the row is not judged, as before
+  const alone = evaluate({ ...m, ops: m.ops.slice(0, 1) }, [], b).checks.find((c) => c.name === "Speed");
+  assert.equal(alone.result, "watch");
+  assert.match(alone.value, /not judged: branch\.merge 17–64 entries · UpToDate: baseline class has 1\/0\/0 calls \(minimum 5 per range\)/);
   // lead rule: per range, every op and class; 3/3/8 is thin though it sums to 14, 5/5/5 is a reference
   const w = (counts) => buildBaseline(counts.map((n, i) => ({ range: 2 + i, binary: { daemon: "d" }, ops: [{ op: "fs.write", sizeClass: "≤512 KiB", n, p50: 10, p95: 12 }] })));
   const sp = (bl) => evaluate({ range: 10, binary: { daemon: "d" }, checks: {}, ops: [{ op: "fs.write", sizeClass: "≤512 KiB", n: 9, p50: 30, p95: 36 }] }, [], bl).checks.find((c) => c.name === "Speed");

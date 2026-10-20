@@ -263,14 +263,22 @@ export const CHAIN = new Set(["stat", "read", "list_small", "grep_scoped", "glob
 /** The bound's bands: counters are deterministic (any rise is a finding), ms carries noise. */
 export const BOUND = { counters: { watch: 1.0, act: 1.05 }, ms: { watch: 1.2, act: 1.5 } };
 
+/** The probe call that produced a point: range, attempt and probe ("r045.a1 merge probe"); a seed has no attempt. */
+export const callName = (x, probe) => `r${String(x.range).padStart(3, "0")}${x.attempt != null ? `.a${x.attempt}` : " seed"} ${probe} probe`;
+
 export function chainBound(name, m, pts, t = BOUND) {
   const period = m.storage?.delta?.caps?.metadata ?? m.storage?.deltaTotal?.caps?.metadata ?? null, unit = SCOPED[name] ? ` per ${SCOPE_UNIT[name]}` : "";
   const one = (label, value, th) => {
-    const v = pts.map(value).filter((x) => x != null);
+    const at = pts.map((x) => [x, value(x)]).filter(([, y]) => y != null), v = at.map(([, y]) => y);
     if (period == null) return { name: label, e: null, result: "watch", note: "no metadata delta cap recorded: the chain period is unknown" };
     if (v.length < period + 1) return { name: label, e: null, result: "watch", note: `${v.length} of ${period + 1} points: a bound needs a full metadata delta-cap period (${period}) plus one` };
     const first = Math.max(...v.slice(0, period)), last = Math.max(...v.slice(-period)), ratio = +(last / first).toFixed(3);
-    return { name: label, e: ratio, result: band(ratio, th), text: `max over the latest cap period ${last} vs the first ${first}: ${ratio}× (bound, period ${period})` };
+    // #352 prep 51-100: name the call that set each maximum (the latest, on a tie), so one event is not read as new each range
+    const setBy = (xs) => xs.findLast(([, y]) => y === Math.max(...xs.map(([, z]) => z)))[0];
+    const hi = setBy(at.slice(-period)), lo = setBy(at.slice(0, period)), own = hi === at.at(-1)[0];
+    const carried = own ? "set by this range" : `carried from ${callName(hi, name)}; this range ${at.at(-1)[1]}, not a new maximum`;
+    return { name: label, e: ratio, result: band(ratio, th), setBy: own ? null : callName(hi, name),
+      text: `max over the latest cap period ${last} (${callName(hi, name)}) vs the first ${first} (${callName(lo, name)}): ${ratio}× (bound, period ${period}; ${carried})` };
   };
   return {
     // a probe with its own growing input (list_largest) is bounded per unit of it, the fixed-input ones raw
@@ -431,7 +439,8 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
   } else if (baseline && (baseline.daemon ?? null) !== (m.binary?.daemon ?? null)) {
     add("Speed", `baseline measured with daemon ${(baseline.daemon ?? "unknown").slice(0, 12)}; ${insufficient(0)}`, `≤ ${t.speed.watch}×`, "watch");
   } else if (baseline) {
-    let worstRow = null, thin = null, floored = null;
+    let worstRow = null, floored = null;
+    const thin = [];
     // SPEC §5: Speed judges the uncontended series only, against the baseline's own
     // (rows recorded before the split, against a baseline that predates it too, are judged as before)
     const judged = (x) => { const ops = opsOf(x, baseline); return ops.some((r) => r.series) ? uncontended(ops) : baseline.derivation ? [] : ops; };
@@ -443,12 +452,15 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
       const over = +Math.max(r.p50 - b.p50 > t.absoluteFloorMs ? r.p50 / b.p50 : 0, r.p95 - b.p95 > t.absoluteFloorMs ? r.p95 / b.p95 : 0).toFixed(2);
       if (ratio > t.speed.watch && over <= t.speed.watch) { if (!floored || ratio > floored.ratio) floored = { ...r, ratio, extra: +Math.max(r.p50 - b.p50, r.p95 - b.p95).toFixed(2) }; continue; }
       // F-024: a baseline class of fewer than BASELINE_MIN_N calls is not a reference
-      if (thinClass(b)) { if (!thin || ratio > thin.ratio) thin = { ...r, ratio, bn: b.perRange ? b.perRange.join("/") : b.n }; continue; }
+      if (thinClass(b)) { thin.push({ ...r, ratio, bn: b.perRange ? b.perRange.join("/") : b.n }); continue; }
       const eff = ratio > t.speed.watch ? over : ratio;
       if (!worstRow || eff > worstRow.ratio) worstRow = { ...r, ratio: eff };
     }
-    if (thin && (!worstRow || thin.ratio > worstRow.ratio) && thin.ratio > t.speed.watch) {
-      add("Speed", `not judged: ${thin.op} ${thin.sizeClass}: baseline class has ${thin.bn} call${thin.bn === 1 ? "" : "s"} (minimum ${BASELINE_MIN_N} per range); ${thin.ratio}× it`, `≤ ${t.speed.watch}×`, "watch");
+    // A thin class is listed beside the judged ones and never hides them (#352 prep 51-100): only those over watch matter
+    const thinOver = thin.filter((x) => x.ratio > t.speed.watch).sort((a, b) => b.ratio - a.ratio);
+    const thinNote = thinOver.length ? `; not judged: ${thinOver.map((x) => `${x.op} ${x.sizeClass}: ${x.bn} call${x.bn === 1 ? "" : "s"} (${x.ratio}×)`).join(", ")} (baseline class under ${BASELINE_MIN_N} calls per range)` : "";
+    if (!worstRow && !floored && thinOver.length) {
+      add("Speed", `not judged: ${thinOver.map((x) => `${x.op} ${x.sizeClass}: baseline class has ${x.bn} call${x.bn === 1 ? "" : "s"} (minimum ${BASELINE_MIN_N} per range); ${x.ratio}× it`).join(", ")}`, `≤ ${t.speed.watch}×`, "watch");
     } else if (worstRow && !(floored && worstRow.ratio <= t.speed.watch)) {
       const series = history.map((x) => {
         const o = judged(x).find((r) => r.op === worstRow.op && r.sizeClass === worstRow.sizeClass);
@@ -456,9 +468,9 @@ export function evaluate(m, allHistory = [], baseline = null, t = THRESHOLDS, se
         return o ? Math.max(o.p50 / b.p50, o.p95 / b.p95) : null;
       }).concat(worstRow.ratio);
       const v = worstRow.ratio > t.speed.act ? (rising(series) ? "optimize" : "watch") : worstRow.ratio > t.speed.watch ? "watch" : "pass";
-      add("Speed", `${worstRow.op} ${worstRow.sizeClass}: ${worstRow.ratio}× baseline (${worstRow.slowPhase ?? "no phase"})`, `≤ ${t.speed.watch}×`, v);
+      add("Speed", `${worstRow.op} ${worstRow.sizeClass}: ${worstRow.ratio}× baseline (${worstRow.slowPhase ?? "no phase"})${thinNote}`, `≤ ${t.speed.watch}×`, v);
     } else if (floored) {
-      add("Speed", `${floored.op} ${floored.sizeClass}: ${floored.ratio}× baseline, under the ${t.absoluteFloorMs} ms floor (+${floored.extra} ms per call)`, `≤ ${t.speed.watch}× or ≤ ${t.absoluteFloorMs} ms extra`, "pass");
+      add("Speed", `${floored.op} ${floored.sizeClass}: ${floored.ratio}× baseline, under the ${t.absoluteFloorMs} ms floor (+${floored.extra} ms per call)${thinNote}`, `≤ ${t.speed.watch}× or ≤ ${t.absoluteFloorMs} ms extra`, "pass");
     } else unjudged("Speed", "no operation comparable to the baseline", `≤ ${t.speed.watch}×`);
   } else unjudged("Speed", "baseline not set (pilot)", `≤ ${t.speed.watch}×`);
   // Scaling: probes must stay flat with depth; counters are judged more strictly.

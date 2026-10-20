@@ -698,6 +698,10 @@ for a ~5% storage gain. Report raw deltas for both.
 > records n and its calls per baseline range (`perRange`). A class with fewer
 > than 5 calls in any baseline range (absent = 0) is never used for a ratio:
 > Speed for it reads "not judged: baseline class has a/b/c calls" (watch, F8).
+> Since fix 061 a thin class never hides the judged ones: the row is decided
+> by the judged classes and lists each thin class over watch after them
+> ("not judged: … a/b/c calls (r×)"); only a row with no judged class reads
+> "not judged" as a whole.
 > One rule for every op and class, no exceptions: fs.write ≤512 KiB (3/3/8)
 > and branch.merge 17–64 entries are not judged, and neither are the
 > once-per-range operations (publish, store stats). Per range, not summed: the
@@ -725,7 +729,9 @@ for a ~5% storage gain. Report raw deltas for both.
 > bound, not a depth exponent: the maximum over the latest cap period against
 > the maximum over the first (counters: any rise over 1.0× is watch, over
 > 1.05× optimize; ms: 1.2× / 1.5×). Fewer than a period plus one point, or no
-> recorded cap, is "not judged" (watch). Cost per decoded link was rejected:
+> recorded cap, is "not judged" (watch). Each bound names the probe call
+> that set both maxima and whether this range set the latest one or carries
+> an earlier range's (fix 062). Cost per decoded link was rejected:
 > it stays flat under unbounded chain growth. `list_largest` is bounded the
 > same way per entry of the directory it lists (its recorded input; liaison
 > 2026-10-19, after r017.a1), `glob_tree` per tree
