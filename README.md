@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/branding/layerfs-icon.png" alt="LayerFS icon" width="128">
+  <img src="docs/assets/readme/layerfs-mark.svg" alt="LayerFS" width="112">
 </p>
 
 <h1 align="center">LayerFS</h1>
@@ -7,267 +7,110 @@
 <p align="center"><strong>Ephemeral Workspaces. Durable Shared History.</strong></p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
-  <a href="release-notes/0.1.6/README.md"><img src="https://img.shields.io/badge/status-developer%20preview-orange.svg" alt="Developer preview"></a>
-  <a href="docs/assets/community/wechat-ephemeral-ai-lab.jpg"><img src="https://img.shields.io/badge/WeChat-Scan%20QR-07C160?logo=wechat&amp;logoColor=white" alt="WeChat QR invite"></a>
-  <a href="https://discord.gg/DrgJ4DX9E"><img src="https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&amp;logoColor=white" alt="Join Discord"></a>
-  <a href="https://x.com/yifanxu_ephai"><img src="https://img.shields.io/badge/X-%40yifanxu_ephai-000000?logo=x&amp;logoColor=white" alt="Follow @yifanxu_ephai on X"></a>
+  LayerFS is the substrate under your agents. Each one mounts a complete, writable
+  Workspace over shared committed history, does its work, commits what it changed,
+  and goes away.
 </p>
-
-
-> **v0.1.6 Developer Preview:** [release and downloads](https://github.com/Ephemeral-AI-Lab/layerfs/releases/tag/v0.1.6),
-> [every measured selection](release-notes/0.1.6/benchmark-closeout.md), and
-> [compatibility boundary](docs/versioned/0.1.6/storage-format.md).
-> Live Workspace state now lives in the sandbox and the Store format is
-> unchanged; one construction worker, a bounded sandbox spool and every measured
-> regression, waiver and declared allowance stay explicit.
->
-> **Source notice (2026-10-10):** the v0.1.6 implementation described below is
-> not on `main` any more. Its source under root `crates/` was retired once the
-> replacement in [`core/`](core/README.md) reached its closing examination; the
-> release tag `v0.1.6` still carries it, and the sections below describe that
-> release. `core/` is under development and is not a release.
-
-
-## 🚀 What is LayerFS?
-
-### Ephemeral Workspaces. Durable Shared History.
-
-LayerFS is a **SQLite-backed, content-addressed time machine for agent
-Workspaces**. Give every filesystem-affecting tool call its own ephemeral
-Workspace; when retained, that call becomes one immutable Commit—the base unit
-of the filesystem timeline. CAS, CDC, and COW store one shared base plus unique
-deltas instead of cloning full environments. From any Layer or eligible Commit,
-agents can fork zero-copy Branches, run parallel rollouts, discard failures,
-roll back by forking an earlier state, and promote a winning Branch with `Add`.
-The filesystem remains load-bearing for recursive multi-agent exploration
-without multiplying storage.
-
-> [!WARNING]
-> LayerFS 0.1.6 is a Developer Preview. It is intended
-> for local evaluation, agent-runtime integration, and performance research—not
-> production storage. It does not provide crash- or power-loss-durability
-> guarantees. Keep an independent copy of important data.
-
-## 🧱 LayerStack storage model
-
-### ⚙️ Core storage mechanisms
-
-CAS, CDC, and COW make LayerStack history storage-efficient by reusing
-unchanged objects, file regions, and filesystem structure.
-
-The governing invariant is simple: every filesystem state is complete
-logically, but incremental physically. A new state should cost what changed,
-not the size of the Workspace it exposes. Read the
-[CAS + CDC + COW foundations](https://learn.layerfs.ai/chapters/01-cas-and-cdc/)
-for the design rationale and step-by-step storage model.
-
-| **🔐 01 · Identity** | **📍 02 · Byte locality** | **🌳 03 · Structural locality** |
-| --- | --- | --- |
-| **Content-addressed storage** — Names immutable objects from their canonical bytes, verifies reads, and reuses exact duplicates across files, LayerStacks, and agents. | **Content-defined chunking** — Keeps chunk boundaries stable around localized edits, so changing a small region does not require storing an entirely new large file. | **Copy-on-write** — Rebuilds only the changed file and directory path when publishing a new Commit, preserving unchanged subtrees; a Branch head can then be added as the next Layer. |
-
-### 🗃️ Check out an ephemeral filesystem from any layer
-
-A LayerStack records complete filesystem checkpoints. Agent A can start from L1
-while Agent B independently starts from L3. Each gets a private place to work
-while the selected history remains shared.
-
-This is the conceptual checkout view; the public lifecycle is
-`Layer` or `Commit` → `Branch` → `Workspace`.
-
-<p align="left">
-  <img
-    src="docs/assets/diagrams/layerstack-checkout.png"
-    alt="Top-down LayerStack with Branches, Commits, and parallel agent Workspaces"
-    width="560"
-  >
-</p>
-
-*One LayerStack, many zero-copy Branches, and ephemeral COW Workspaces sharing
-immutable history.*
-
-### 📦 Measured deduplication
-
-The primary storage signal is semantic content growth: the canonical bytes
-needed by a new state. SQLite page allocation is reported separately because
-existing database pages can absorb new objects without changing the logical
-content represented by the Store.
-
-| Workload | LayerFS semantic growth |
-| --- | ---: |
-| Sixteen deterministic edits | **0.2250 MiB** |
-| Prepend 10 bytes to 32 MiB | **0.0256 MiB** |
-
-These measurements come from the final public-SDK, real-FUSE campaign. See the
-[full benchmark report](release-notes/0.1.0/benchmark-results.md) for physical
-allocation, equations, source identity, and raw evidence.
-
----
-
-## 🧭 System boundaries
-
-### 🧩 LayerFS components
-
-The storage engine, SDK, CLI, and filesystem projection are implemented in the
-0.1.6 Developer Preview. They remain separate public boundaries so callers do
-not depend on private CAS handles or storage formats.
-
-| **Status** | **Component** | **Role** |
-| --- | --- | --- |
-| **Implemented core** | **Storage** | Owns identities, canonical objects, CDC, file manifests, structural COW, immutable CAS admission, lifecycle coordination, and verified reads. |
-| **Implemented preview** | **SDK and CLI** | Expose filesystem, Workspace, LayerStack, Branch, Commit, publication, query, monitoring, and container-lifecycle operations through the public surfaces. |
-| **Implemented preview** | **Filesystem projection** | Exposes a Workspace through host materialization or real container FUSE and captures bounded filesystem effects while delegating identity, CDC, COW, and admission to storage. |
-| **Implemented preview** | **Container runtime** | Creates and controls resource-bounded Linux FUSE containers for Workspaces without placing the durable Store inside the container. |
-
-The one-Store boundary is intentional: a `Client` binds one SQLite Store, one
-Monitor, and one Workspace manager. A second Store uses a separate `Client`.
-
-Each `workspace exec` starts a fresh process. `commit` publishes the Workspace state to its Branch. `end` removes the ephemeral projection and never commits implicitly.
-
-## 🛠️ Quickstart
-
-Releases are built from source. You need **macOS or Linux** and **Rust 1.85 or newer**. Docker, `/dev/fuse`, and `CAP_SYS_ADMIN` are needed only for managed container-FUSE workspaces. No packages are published to crates.io for this release.
-
-From the repository root, at the `v0.1.6` release tag:
-
-```bash
-git clone https://github.com/Ephemeral-AI-Lab/layerfs.git
-cd layerfs
-git checkout v0.1.6
-
-cargo build --release -p layerfs-cli
-export LAYERFS_BIN="$PWD/target/release/layerfs"
-export LAYERFS_CONTEXT="$PWD/.layerfs/context"
-mkdir -p "$PWD/.layerfs"
-
-"$LAYERFS_BIN" db create "$PWD/.layerfs/store.sqlite"
-"$LAYERFS_BIN" context use --store "$PWD/.layerfs/store.sqlite"
-"$LAYERFS_BIN" layerstack init --name demo --empty
-"$LAYERFS_BIN" query layerstacks
-```
-
-This creates a SQLite Store and an empty LayerStack with a genesis Layer. Continue with the [complete quickstart](docs/versioned/0.1.6/quickstart.md) for Branch creation, Workspace execution, commits, cleanup, directory imports, managed containers, and real FUSE.
-
-When importing an existing directory, keep the Store file **outside** the directory being imported or projected:
-
-```bash
-mkdir -p "$PWD/import-root"
-printf 'hello\n' > "$PWD/import-root/hello.txt"
-"$LAYERFS_BIN" layerstack init --name imported "$PWD/import-root"
-```
-
-## 🗂️ Repository layout
-
-```text
-core/                          replacement implementation (in development)
-├── crates/                    content, storage, history, persistence, project,
-│                              telemetry, overlay, workspace, fuse, daemon,
-│                              bridge, sandbox and the SDK
-└── docs/                      architecture, design contracts and run records
-benchmark/                     core harnesses, registrations and proof tools
-└── data/fs-bench-pro/         released fs-bench-pro results, one folder per release
-docs/versioned/0.1.6           v0.1.6 manual
-docs/versioned/0.1.2           previous versioned product manual
-release-notes/                 release records, evidence and limitations
-tools/production_loc.py        pinned production source-line counter
-```
-
-The v0.1.6 crates, `tools/layerfs-eval` and `containers/layerfs-fuse` are in the
-`v0.1.6` release tag.
-
-## ⚠️ Current limitations
-
-LayerFS is suitable for evaluation and integration work, but the preview boundary matters:
-
-- 0.1.6 operates against one Store per Client; there is no cross-host synchronization;
-- live-process transaction visibility does not imply crash or power-loss durability,
-  and Workspace backing is not fsynced;
-- a v0.1.6 sandbox owner and a v0.1.5 host do not share a live Workspace; match
-  SDK, CLI, daemon and runtime components across a session;
-- the sandbox owns live mutable state and a private payload backing for its mount;
-  the host learns it only when a Commit transfers it, and that transfer pays a
-  storage read (bounded sandbox spool residency ≤ 2.6 MiB) instead of page-cache
-  service. Kernel-dirty shared `mmap` is still not captured by a Commit;
-- canonical construction runs **one worker** (namespace init is the only
-  exception), so six dedup/CDC construction cells are 1.50–1.65× slower than
-  v0.1.5 and are owner-accepted, and the cold `namespace-100000` Init target is
-  owner-waived (4.986 s against 2.7 s). Read the
-  [release record](release-notes/0.1.6/README.md),
-  [acceptance](release-notes/0.1.6/acceptance.md) and
-  [waivers](release-notes/0.1.6/waivers.md);
-- explicit compaction stays removed; compacted Stores from earlier builds remain
-  readable through the retained authenticated read path, and ordinary storage is
-  the only supported route;
-- the measured v0.1.6 set is 36 selections: 28 performance receipts and 36
-  independent verifications, three performance rows above the 15 s family target
-  under declared allowances, one verification row under a declared 30 s ceiling
-  and two verify-only rows under frozen 120 s / 300 s watchdogs. Endurance is not
-  qualified;
-- the retained SQLite Store still misses the 600 MB primary-control goal;
-  storage-efficiency tradeoffs are accepted for
-  [v0.1.4](docs/roadmap/0.1/0.1.4/README.md)
-  in [#18](https://github.com/Ephemeral-AI-Lab/layerfs/issues/18), with optimization design still to be discussed;
-- the detached CLI context owner does not forward an interactive PTY; and
-- CLI JSON output is a preview text envelope, not a stable machine API.
-
-Read the full [limitations](docs/versioned/0.1.6/limitations.md) before using LayerFS with important data.
-
-## 📚 Documentation
-
-Start with the [documentation index](docs/README.md), or jump directly to a focused guide:
-
-| Goal | Guide |
-| --- | --- |
-| Learn the concepts | [Core concepts](docs/general/concepts.md) |
-| Run the CLI and SDK | [Quickstart](docs/versioned/0.1.6/quickstart.md) |
-| Find a CLI command | [CLI reference](docs/versioned/0.1.6/cli.md) |
-| Integrate with Rust | [Rust SDK reference](docs/versioned/0.1.6/sdk.md) |
-| Configure container FUSE | [Container runtime](docs/versioned/0.1.6/container-runtime.md) |
-| Understand storage | [Storage format](docs/versioned/0.1.6/storage-format.md) |
-| Review v0.1.6 changes | [Numbered changelog](docs/releases/v0.1.6/CHANGELOG.md) |
-| Review released evidence | [0.1.6 release record](release-notes/0.1.6/README.md) |
-| Review completed 0.1.2 work | [0.1.2 checklist](docs/roadmap/0.1/0.1.2/README.md) |
-| Contribute changes | [0.1.x development guide](docs/roadmap/0.1/development.md) |
-
-The [first-principles learning site](https://learn.layerfs.ai/) is educational material and may describe future work. The versioned repository manual defines the current product contract.
-
-## 🗺️ Roadmap
-
-| Stage | Focus | Status |
-| --- | --- | --- |
-| **0.1.0 Developer Preview** | One SQLite Store, immutable LayerStack history, Branches, Workspaces, public SDK/CLI, host materialization, container FUSE, monitoring, and benchmark evidence. | **Released** as source under `v0.1.0`. |
-| **0.1.1** | Measure and harden existing-directory initialization through localized Commit, with focused FUSE and Docker proof. | **Released** as source under `v0.1.1`; see the [release record](release-notes/0.1.1/README.md). |
-| **0.1.2** | Three SDK-only 1/10/100/500 MiB edit families, namespace and Store refresh, and universal regular-file editing. | **Released** as source under `v0.1.2`; see the [release record](release-notes/0.1.2/README.md). |
-| **0.1.3** | Shared live Workspaces, optimized Commit and reads, and the 198-case/226-proof checkpoint. | **Released** as source under `v0.1.3`; see the [release record](release-notes/0.1.3/README.md). |
-| **0.1.4** | Packed storage and bounded Init/Commit improvements; measured tradeoffs accepted. | **Closed; release qualified**; [release record and limitations](release-notes/0.1.4/README.md). |
-| **0.1.5** | Ordinary schema-10 storage, bounded pending edits, coalesced pack rows and the removal of explicit compaction; full campaign qualification with published regressions. | **Released** as source under `v0.1.5`; see the [release record](release-notes/0.1.5/README.md), [acceptance](release-notes/0.1.5/acceptance.md) and [limitations](docs/versioned/0.1.5/limitations.md). |
-| **0.1.6** | Sandbox-local Workspace state: the sandbox owner holds the live namespace and file data, the host keeps canonical construction and publication, and Commit transfers mutable state with no pause fence and one construction worker. | **Released** as source under `v0.1.6`; see the [release record](release-notes/0.1.6/README.md), [acceptance](release-notes/0.1.6/acceptance.md) and [limitations](docs/versioned/0.1.6/limitations.md). |
-| **0.2.0** | Establish a portable projection foundation, including capability-detected reflink/clonefile paths and a future OverlayFS projection. | **Planned**; requires a new compatibility contract. |
-| **Later** | Add platform/runtime expansion and verified Store export, import, and synchronization. | **Research**; no cross-host synchronization is part of 0.1.0. |
-
-See the [roadmap checklist](docs/roadmap/README.md) and
-[roadmap architecture notes](docs/roadmap/architecture.md) for acceptance gates,
-ownership boundaries, and sequencing. Use the [Rust SDK reference](docs/versioned/0.1.6/sdk.md)
-to integrate the current public SDK.
-
-## 🤝 Contributing
-
-Bug reports, reproducible performance evidence, documentation corrections, and focused pull requests are welcome. Before opening a change, review the [0.1.x development guide](docs/roadmap/0.1/development.md) and run the repository’s relevant verification commands.
-
-## 💬 Community
-
-- WeChat: scan the [Ephemeral AI Lab group QR code](docs/assets/community/wechat-ephemeral-ai-lab.jpg). The invitation is time-limited; refresh the image when it expires.
-- Discord: [join the Ephemeral AI Lab community](https://discord.gg/DrgJ4DX9E).
-- 𝕏: [@yifanxu_ephai](https://x.com/yifanxu_ephai).
 
 <p align="center">
-  <img
-    src="docs/assets/community/wechat-ephemeral-ai-lab.jpg"
-    alt="WeChat QR code for the Ephemeral AI Lab group"
-    width="300"
-  >
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+  <a href="release-notes/0.1.7/README.md"><img src="https://img.shields.io/badge/status-0.1.7%20developer%20preview-orange.svg" alt="0.1.7 Developer Preview"></a>
 </p>
 
-## 📄 License
+> **Status:** LayerFS 0.1.7 Developer Preview, released as source. It is for
+> evaluation and agent-runtime integration, not production storage: there is no
+> crash or power-loss durability. Read the [release record](release-notes/0.1.7/README.md)
+> and its waivers before relying on it.
+
+## Core ideas
+
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <img src="docs/assets/readme/idea-01-ephemeral.svg" alt="fs calls go straight into the Store as Commits; each Bash call mounts a Workspace, runs, commits and unmounts" width="100%"><br>
+      <img src="docs/assets/readme/icon-ephemeral.svg" width="16" height="16" alt=""> <b>01 · Ephemeral Computing</b><br>
+      Compute exists only while a command runs.
+    </td>
+    <td width="33%" valign="top">
+      <img src="docs/assets/readme/idea-02-decentralized.svg" alt="Four agents, each on its own computer, read and commit to one shared Store" width="100%"><br>
+      <img src="docs/assets/readme/icon-decentralized.svg" width="16" height="16" alt=""> <b>02 · Decentralized Agents</b><br>
+      Agents on different computers share one serverless Store.
+    </td>
+    <td width="33%" valign="top">
+      <img src="docs/assets/readme/idea-03-coordination.svg" alt="Main with two Branches, three agents on each; a commit to a file that already changed is refused with a Conflict" width="100%"><br>
+      <img src="docs/assets/readme/icon-coordination.svg" width="16" height="16" alt=""> <b>03 · Multiagent Coordination</b><br>
+      One project, many Branches. One Branch, many agents.
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top">
+      <img src="docs/assets/readme/idea-04-recursive.svg" alt="Agents fork instantly into new Branches, recursively; each Branch is scored and the best one is kept" width="100%"><br>
+      <img src="docs/assets/readme/icon-recursive.svg" width="16" height="16" alt=""> <b>04 · Recursive Filesystem</b><br>
+      Fork recursively any Commit, at any depth.
+    </td>
+    <td width="33%" valign="top">
+      <img src="docs/assets/readme/idea-05-storage.svg" alt="Four agents commit the same packages; the first stores every chunk and each later Commit adds only what is new" width="100%"><br>
+      <img src="docs/assets/readme/icon-storage.svg" width="16" height="16" alt=""> <b>05 · Ultra Storage Optimization</b><br>
+      10 copies compress into 0.31.
+    </td>
+    <td width="33%" valign="top">
+      <img src="docs/assets/readme/idea-06-bootstrap.svg" alt="Without ignored files the tests fail until packages are installed; with LayerFS the mount already has them" width="100%"><br>
+      <img src="docs/assets/readme/icon-bootstrap.svg" width="16" height="16" alt=""> <b>06 · Instant Bootstrap</b><br>
+      Dependencies come with every mount. No time lost reinstalling.
+    </td>
+  </tr>
+</table>
+
+**And underneath them**
+
+| | Supporting idea | In one line |
+| --- | --- | --- |
+| <img src="docs/assets/readme/icon-checkpoints.svg" width="16" height="16" alt=""> | **07 · Auto Checkpoints** | Every step an agent takes is a checkpoint to return to. |
+| <img src="docs/assets/readme/icon-immutable.svg" width="16" height="16" alt=""> | **08 · Append-only Objects** | Saved objects are never rewritten. The Store only grows. |
+| <img src="docs/assets/readme/icon-lww.svg" width="16" height="16" alt=""> | **09 · Conflict Rules (`.lww`)** | Name the files that should never conflict. The newest edit wins. |
+| <img src="docs/assets/readme/icon-bigfile.svg" width="16" height="16" alt=""> | **10 · Big File, Small Edit** | An edit costs the size of the edit, not the size of the file. |
+
+## See it run
+
+<p align="center">
+  <img src="docs/assets/readme/demo.gif" alt="A LayerFS project at work: agents fork Branches, mount Workspaces in Sandboxes, commit, merge and publish to main, while the history tree grows" width="100%">
+</p>
+<p align="center"><sub>Agents fork Branches, work in Workspaces inside Sandboxes, commit, merge and publish to <code>main</code>. The history grows as they go.</sub></p>
+
+## Get started
+
+Paste this into your coding agent. It sets LayerFS up and works on a Branch of its own:
+
+```text
+Set up LayerFS for this project and start using it for your work.
+
+1. Read the setup guide in https://github.com/Ephemeral-AI-Lab/layerfs: sdk/js/README.md explains the JavaScript SDK, its native binding, the Linux daemon and the environment it reads (LAYERFS_HOME, LAYERFS_DOCKER, LAYERFS_IMAGE, LAYERFS_VOLUME, LAYERFS_DAEMON).
+2. Check the requirements before you start: a Linux host, Docker Engine, Node 20 or newer, and a local ext4, xfs or btrfs filesystem for the Store. If one is missing, stop and tell me which.
+3. Build what the guide says to build and set those variables.
+4. Run project.init once on this repository. It captures the whole tree, ignored files included, as main @ L0.
+5. Fork a Branch for your work. From now on, use sdk.fs for file reads and edits, and for each Bash command mount a Workspace on your Branch, exec, commit, then unmount.
+6. Check it worked: write a file on your Branch and confirm list_commits shows the Commit.
+
+Report what you ran and what each step returned. If a step fails, stop and give me the exact error; don't retry it on your own.
+```
+
+To set it up by hand, follow the [JavaScript SDK guide](sdk/js/README.md).
+
+## Works with
+
+- **LayerFS × [DSH](dsh/README.md)** (preview): agents in a DeepSeek Harness session fork, test, merge and
+  publish from bash, and a LayerFS tab draws what each one did.
+- **LayerFS × Pi**: planned.
+
+## Learn more
+
+| | |
+| --- | --- |
+| The 0.1.7 manual | [Manual](docs/versioned/0.1.7/README.md) · [SDK and terminal UI](docs/versioned/0.1.7/sdk-and-ui.md) · [SDK reference](docs/versioned/0.1.7/sdk-reference.md) |
+| Concepts | [Core concepts](docs/general/concepts.md) · [Documentation index](docs/README.md) |
+| Release and limits | [0.1.7 release record](release-notes/0.1.7/README.md) · [Known limits](docs/versioned/0.1.7/sdk-and-ui.md#7-known-limits) |
+| Benchmarks | Released fs-bench-pro results: [v0.1.4](release-notes/0.1.4/benchmark-closeout.md) · [v0.1.5](release-notes/0.1.5/benchmark-closeout.md) · [v0.1.6](release-notes/0.1.6/benchmark-closeout.md) (0.1.7 published none) |
+
+## License
 
 LayerFS is licensed under the [MIT License](LICENSE).
