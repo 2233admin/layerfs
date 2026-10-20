@@ -214,6 +214,15 @@ impl CanonicalClient {
     pub(crate) fn directory_count(&self, root: ObjectId) -> ContentResult<Option<u64>> {
         Ok(self.state()?.counts.get(root))
     }
+    /// Remembers one count a Commit constructed, without counting a scan.
+    pub(crate) fn remember_constructed_count(
+        &self,
+        root: ObjectId,
+        count: u64,
+    ) -> ContentResult<()> {
+        self.state()?.counts.insert(root, count);
+        Ok(())
+    }
     /// Remembers one derived count; the least recently used one makes room.
     pub(crate) fn remember_directory_count(&self, root: ObjectId, count: u64) -> ContentResult<()> {
         let mut state = self.state()?;

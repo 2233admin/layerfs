@@ -250,14 +250,33 @@ fn main() {
     let pid = std::process::id();
     match mode {
         "list" => {
-            let value = call(
-                &service,
-                "fs.list",
-                args(&[("branch", "main"), ("path", &rest[0])]),
-            )
-            .expect("list");
-            let text = format!("{value:?}");
-            println!("{}", &text[..text.len().min(6000)]);
+            // Every entry of each named directory on main, paged: the count
+            // and the first names.
+            for dir in rest {
+                let (mut count, mut first, mut pos) = (0, Vec::new(), 0i64);
+                loop {
+                    let mut a = args(&[("branch", "main"), ("path", dir)]);
+                    if let SdkValue::Map(fields) = &mut a {
+                        fields.push(("pageSize".into(), SdkValue::Int(1000)));
+                        fields.push(("pagePos".into(), SdkValue::Int(pos)));
+                    }
+                    let value = call(&service, "fs.list", a).expect("list");
+                    if let Some(SdkValue::List(items)) = value.get("items") {
+                        count += items.len();
+                        for item in items.iter().take(12usize.saturating_sub(first.len())) {
+                            first.push(item.get_text("name").unwrap_or("?").to_owned());
+                        }
+                    }
+                    match value.get("nextPagePos") {
+                        Some(SdkValue::Int(next)) => pos = *next,
+                        _ => break,
+                    }
+                }
+                println!(
+                    "{{\"dir\":\"{dir}\",\"entries\":{count},\"first\":\"{}\"}}",
+                    first.join(",")
+                );
+            }
         }
         "rm" => {
             let branch = format!("p367-{pid}");

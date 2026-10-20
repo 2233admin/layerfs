@@ -96,6 +96,7 @@ impl<'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Capture
                 failure: None,
                 file: None,
                 work: CapturedNamespaceWork::default(),
+                directories: Vec::new(),
                 record_ns: 0,
             }),
             route: workspace.route(),
@@ -280,7 +281,14 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Attempt<'_,
         let mut owner = shared.borrow_mut();
         owner.work.update_emit_ns = timed.ns;
         owner.work.update_record_ns = owner.record_ns.saturating_sub(recorded);
+        let directories = std::mem::take(&mut owner.directories);
         drop(owner);
+        // Each changed directory's new root gets the count its row holds, so
+        // the next change there need not list it again (#367). A cache fill:
+        // it never changes this attempt's result.
+        if let Ok(built) = &result {
+            let _ = base.remember_constructed_counts(self.objects, built.root, &directories);
+        }
         result
     }
 }

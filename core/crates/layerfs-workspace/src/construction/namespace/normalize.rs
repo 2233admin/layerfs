@@ -310,6 +310,14 @@ pub(crate) fn values<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Si
                 add(&mut shared.borrow_mut().work.tombstones_skipped, 1);
                 continue;
             }
+            if inode.kind == InodeKind::Directory {
+                let mut owner = shared.borrow_mut();
+                if owner.directories.len() < crate::base::REMEMBERED_DIRECTORIES {
+                    owner
+                        .directories
+                        .push((inode.serial, inode.entries, inode.subdirs));
+                }
+            }
             let fresh = !root && facts.reader.created_above(inode.born);
             let record = if fresh {
                 None

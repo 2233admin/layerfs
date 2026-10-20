@@ -46,6 +46,9 @@ pub(crate) struct State<'a, P: OverlayOperationRecords + ?Sized> {
     pub work: CapturedNamespaceWork,
     /// Running time of this adapter's record jobs; the driver splits it by phase.
     pub record_ns: u64,
+    /// Live changed directories as (serial, entries, subdirs), at most
+    /// `REMEMBERED_DIRECTORIES`: their counts outlive the Commit (#367).
+    pub directories: Vec<(u64, u64, u64)>,
 }
 pub(crate) struct Shared<'a, P: OverlayOperationRecords + ?Sized>(RefCell<State<'a, P>>);
 impl<'a, P: OverlayOperationRecords + ?Sized> Shared<'a, P> {

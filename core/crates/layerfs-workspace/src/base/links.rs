@@ -7,10 +7,12 @@
 //! listed serials. A serial's kind never changes, so the answer is a pure
 //! function of the directory's content root and is remembered under it.
 use crate::BaseView;
+use layerfs_content::filesystem::directory::root_shape;
 use layerfs_content::filesystem::directory::{list_after, DirectoryReadWork};
 use layerfs_content::filesystem::inode::{lookup_many, InodeReadWork};
-use layerfs_content::filesystem::{DirectoryRoot, PathName};
+use layerfs_content::filesystem::{DirectoryRoot, FilesystemRead, FilesystemRootId, PathName};
 use layerfs_content::object::inode_leaf::{InodeKind, InodeValue};
+use layerfs_content::AuthenticatedObjects;
 use layerfs_content::{ContentError, ContentResult, ObjectId};
 use std::collections::BTreeMap;
 
@@ -21,6 +23,8 @@ use std::collections::BTreeMap;
 /// content root in the other; 1,441,792 bytes at capacity. This is
 /// accounting of the stored values, not a measured allocation.
 pub const DIRECTORY_COUNT_CAPACITY: usize = 16_384;
+/// Changed directories one Commit remembers counts for, one inode demand.
+pub(crate) const REMEMBERED_DIRECTORIES: usize = 256;
 /// Bindings listed, and kinds resolved, per window of one derivation.
 const WINDOW_ENTRIES: usize = 256;
 /// Encoded row bytes per listing window. One row is at most 265 bytes.
@@ -125,5 +129,36 @@ impl BaseView {
         }
         client.remember_directory_count(value.content_root, count)?;
         Ok(count)
+    }
+
+    /// Remembers each changed directory's count under its content root in
+    /// the just-built `root` (#367). A Commit gives every changed directory
+    /// a new root, and without this the next change there lists the whole
+    /// directory again in `subdirs_among`. `rows` are the Workspace's
+    /// (serial, entries, subdirs): exact counts of what was constructed. A
+    /// row whose new root page holds another entry count is not remembered.
+    pub(crate) fn remember_constructed_counts(
+        &self,
+        objects: &dyn AuthenticatedObjects,
+        root: FilesystemRootId,
+        rows: &[(u64, u64, u64)],
+    ) -> ContentResult<()> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let serials: Vec<u64> = rows.iter().map(|(serial, ..)| *serial).collect();
+        let values = FilesystemRead::new(objects, root)?.lookup_inodes(&serials)?;
+        let client = self.client();
+        for (&(_, entries, subdirs), value) in rows.iter().zip(values) {
+            let Some(value) = value.filter(|v| v.kind == InodeKind::Directory) else {
+                continue;
+            };
+            if subdirs <= entries
+                && root_shape(objects, DirectoryRoot(value.content_root))?.1 == entries
+            {
+                client.remember_constructed_count(value.content_root, subdirs)?;
+            }
+        }
+        Ok(())
     }
 }

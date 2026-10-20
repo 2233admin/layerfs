@@ -1,6 +1,7 @@
 //! Child-directory counts across a Commit. Nothing about them is added to
 //! the canonical namespace: a captured row's count and the count derived
-//! from the root the producer built from that row agree by construction.
+//! from the root the producer built from that row agree by construction, so
+//! the producer remembers the row's count under that root (#367).
 //! This drives the real captured-namespace producer and the known local
 //! install, and compares every directory before and after.
 mod common;
@@ -93,18 +94,15 @@ fn every_directory_reports_the_count_it_had_before_the_commit_from_the_installed
     let scans = b.cache.diagnostics().unwrap().directory_count_scans;
     d.build("directory link counts").install(&b);
     drain(&b);
-    // No local row is read any more: each count now comes from the new base,
-    // derived once per directory content, and equals what the row reported.
+    // No local row is read any more: each count now comes from the new base
+    // and equals what the row reported, checked against a fresh listing.
     for (serial, _) in &before {
         assert_eq!(local(&b, *serial), None, "serial {serial}");
     }
     assert_eq!(reported(&b, &d, &paths), before);
-    // The six directories that have a child were listed; the five empty
-    // ones needed no listing at all.
-    assert_eq!(
-        b.cache.diagnostics().unwrap().directory_count_scans,
-        scans + 6
-    );
+    // #367: construction remembered each changed directory's count under its
+    // new content root, so none of them was listed to derive it again.
+    assert_eq!(b.cache.diagnostics().unwrap().directory_count_scans, scans);
 
     // One more mkdir after the install: the first local row over the new
     // base starts from the derived count.
