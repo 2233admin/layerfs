@@ -44,9 +44,15 @@ export async function clientFor(spec, project) {
   }
 }
 
-/** Closes every Sandbox a Host client opened (its service Sandbox). */
-export async function release({ layerfs }) {
-  for (const id of [...layerfs.sandboxes]) await layerfs.sandbox.close(id);
+/**
+ * Releases a Host client: closes the Sandboxes it opened and its Store. The
+ * project's service Sandbox (`_service.<project>`) is shared with every agent
+ * script, so it stays open unless `service` is set: for a removal or a failed
+ * Init, whose volume must have no running container.
+ */
+export async function release({ layerfs }, { service = false } = {}) {
+  for (const id of [...layerfs.sandboxes]) if (service || !id.startsWith("_service.")) await layerfs.sandbox.close(id);
+  await layerfs.close?.();
 }
 
 /**
@@ -57,7 +63,7 @@ export async function release({ layerfs }) {
  * @param {object} client a project's client @param {string[]} sandboxes real Sandbox ids
  */
 export async function stateOf(client, sandboxes) {
-  const snap = await client.operator.inspect.snapshot();
+  const snap = await olderCommits(client.layerfs, await client.operator.inspect.snapshot());
   const m = new Mirror(), boxes = [];
   for (const real of sandboxes) {
     const listed = (snap.sandboxes || []).find((x) => x.id === real);
@@ -66,3 +72,24 @@ export async function stateOf(client, sandboxes) {
   m.absorb(snap, boxes);
   return { s: { ...m.s, roots: {} }, labels: Object.fromEntries(m.toLabel) };
 }
+
+/**
+ * The snapshot holds only each Branch's newest Commits (a few per Branch, to
+ * fit one answer) and names in `more` every Branch it cut short; the rest come
+ * from branch.list_commits, so History shows every Commit and links each to
+ * its parent. A Commit another Branch already listed comes once.
+ */
+async function olderCommits(layerfs, snap) {
+  const cut = Object.keys(snap.more || {});
+  if (!cut.length) return snap;
+  const commits = [...snap.commits], seen = new Set(commits.map((c) => c.id));
+  for (const branch of cut) {
+    for (let pos = 0; pos !== null;) {
+      const page = await layerfs.branch.list_commits(branch, LIST_PAGE, pos);
+      for (const c of page.items) if (!seen.has(c.id)) { seen.add(c.id); commits.push(c); }
+      pos = page.hasMore ? page.nextPagePos : null;
+    }
+  }
+  return { ...snap, commits, more: {} };
+}
+const LIST_PAGE = 50;

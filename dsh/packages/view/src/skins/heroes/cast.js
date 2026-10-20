@@ -1,5 +1,5 @@
-// The cast: the LayerFS website's 14 pixel heroes (layerfs-website
-// public/agents, downscaled into ../heroes). The lead is the cloud, as
+// The heroes skin's cast: the LayerFS website's 14 pixel heroes
+// (layerfs-website public/agents, downscaled into ./images). The lead is the cloud, as
 // the website's orchestrator; every other agent gets a hero by a hash of its
 // name. Each colour is a readable shade of the hero's own, for its name in
 // tags, History and cards.

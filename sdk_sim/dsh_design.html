@@ -7,7 +7,7 @@
 <link rel="icon" href="data:,">
 <style>
 /* The page's own chrome: title bar, story picker and player. The view
-   (tabs, work area, status bar, avatars) is styled by @dsh-layerfs/view. */
+   (tabs, work area, avatars) is styled by @dsh-layerfs/view. */
 html, body { margin: 0; height: 100%; }
 body { overflow: hidden; }
 .window { height: 100%; display: flex; flex-direction: column; background: var(--window); }
@@ -65,7 +65,6 @@ body { overflow: hidden; }
     <button class="ib" id="theme" title="Toggle light / dark"><svg viewBox="0 0 16 16"><path d="M8 2a6 6 0 100 12V2z" fill="currentColor"/><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
   </header>
   <main class="work" id="work"></main>
-  <div class="statusbar" id="status" aria-label="Sandboxes and processes"></div>
   <footer class="player" aria-label="Story player">
     <div class="ctl">
       <button class="ib" id="p-reset" title="Restart">⏮</button>
@@ -128,15 +127,14 @@ const DEMO = TRACE_LINES ? null : (window.LAYERFS_DEMO || {})[STORY_KEY] || null
 const LEAD = DEMO && DEMO.roster ? "lead" : "main";
 
 // ------------------------------------------------------------------ the view (@dsh-layerfs/view)
-// It draws W into this page: tabs in the title bar, the work area, the status
-// bar and the avatars (the LayerFS website's heroes). The main agent is the
+// It draws W into this page: tabs in the title bar, the work area and the
+// avatars (the LayerFS website's heroes). The main agent is the
 // cloud; every other agent gets a hero hashed from its name.
 const $ = (id) => document.getElementById(id);
 injectStyle();
 const view = createView($("root"), {
-  avatars: heroAvatars((h) => `../dsh/packages/view/heroes/${h}.png`), files: FM, lineDiff: M.lineDiff, live: LIVE, lead: LEAD,
-  layout: { tabs: $("tabs"), work: $("work"), status: $("status"), follow: $("follow") },
-  hint: "space play · ←→ step · F follow · hover a History node",
+  avatars: heroAvatars((h) => `../dsh/packages/view/src/skins/heroes/images/${h}.png`), files: FM, lineDiff: M.lineDiff, live: LIVE, lead: LEAD,
+  layout: { tabs: $("tabs"), work: $("work"), follow: $("follow") },
   onFollowOn: () => go(step),
 });
 // the cast in story order: the lead first, then everyone this story uses

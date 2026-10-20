@@ -7,12 +7,14 @@
 //   session/event    a subagent's descriptor names it
 //   ctx.webServer    the /layerfs route, behind ctx.connection's checks
 //                    (only where a web server runs: Web and Desktop)
+//   ctx.systemPrompt each agent's runtime context names its conversation's
+//                    LayerFS project (where a system prompt is assembled)
 import { BindingStore } from "./binding.js";
 import { ensureBox } from "./box.js";
 import { Collector } from "./collector.js";
 import z from "@deepseek-ai/schemastery";
 import { resolveConfig } from "./config.js";
-import { contributor } from "./env.js";
+import { contributor, projectContext } from "./env.js";
 import { registerRoutes } from "./route.js";
 import { TreeReader } from "./trees.js";
 
@@ -49,4 +51,13 @@ export function apply(ctx, config) {
   const trees = new TreeReader(spec);
   ctx.effect(() => () => trees.dispose(), "layerfs-host: tree clients");
   ctx.inject(["webServer", "connection"], (child) => registerRoutes(child, { spec, bindings, collector, trees }));
+  ctx.inject(["systemPrompt"], (scope) => {
+    scope.systemPrompt.context({
+      name: "layerfs:project",
+      // right after the working directory, the other fact about where the agent works
+      order: scope.systemPrompt.getContextOrder("WORKING_DIRECTORY") + 1,
+      interpolate: false,
+      text: (context) => (context.agent ? projectContext(bindings, collector, context.agent.session) : ""),
+    });
+  });
 }

@@ -59,7 +59,7 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
   - the project terminal with agent tags;
   - Branches and Sandboxes;
   - History and Files;
-  - the status bar and the avatars.
+  - the agents' avatars.
 
   An unbound session shows Setup: pick one of the folder's projects, or Init.
 
