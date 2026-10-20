@@ -214,6 +214,7 @@
 | 2026-10-20 | **Range 36 a1 (`p3-main-u`, daemon `27a769a4`): WATCH, terminal.** Checkpoint ok, git ✓, Node 11 pass, 0 stop, 0 NOT_RUN over 4 points, repair P6 pass. A docs-only range (no build, no tests); Speed judged for the first time on the re-baseline: watch on `branch.diff_branches` p95 (289 ms, 5.58×; p50 1.05×) | — |
 | 2026-10-20 | **Range 37 a1 (`p3-main-u`, daemon `27a769a4`): WATCH, terminal.** Checkpoint ok, git ✓, Node 20 pass, 0 stop, 0 NOT_RUN over 5 points, repair P6 pass. Two lane points have P5 n/a from their hybrid lane trees (as r34); the merged checkpoint builds and tests clean natively | — |
 | 2026-10-20 | **Range 38 a1 (`p3-main-u`, daemon `27a769a4`): STOP at the checkpoint, oracle cause (fix 058).** One extra path, `.sessions/session-query.db`, a test output that dsh's `.gitignore` ignores; nothing missing, content and modes match git. Node 12 pass, 0 stop, 0 NOT_RUN, repair P6 pass. Fix 058: the P3 checkpoint check exempts paths the checkpoint's own `.gitignore` files ignore. a2 replays r38 on a fork of r37's snapshot | — |
+| 2026-10-20 | **Range 38 a2 (`p3-main-v`, fork of `p3-main-u`'s r037 snapshot, daemon `27a769a4`): WATCH, terminal, after fix 058 (accepted by the liaison).** Checkpoint ok, git ✓, Node 17 pass, 0 stop, 0 NOT_RUN over 4 points, repair P6 pass. Fix 058 exempted `.sessions/session-query.db` only; from r39 the metrics keep the list (`checks.tree.gitIgnored`) | liaison condition: list exempted paths at r40 |
 
 ## P1 · Pilot
 
