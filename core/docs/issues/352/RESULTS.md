@@ -625,6 +625,64 @@ Storage and watch items:
 - **`fs.rm` (#367): the r39+ rise has its root cause in [fix 059](fixes/059-r039-a1-directory-count-after-commit.md)** (product, on main `729c3b3196`, not in these binaries). From r39 the agents remove notes from `.agents/notes/implemented/*`, with 24–211 entries per directory. Each remove relisted its parent directory to count child directories, and the cached count was lost at every Commit. It is not tree or history growth. The ranges with such removes (r41–r43, r45) read 9.2–12.1 ms and 169–207 statements per call. r44 had none and is back at 6.2 ms and 132 statements. On these binaries the rise stays recorded and expected; fix 059 reaches the replay at a later re-baseline.
 - Space amplification rose from 1.45× (r40) to 1.61× (r45); the Store grew 1.09 → 1.26 GiB.
 
+### Ranges 46–50, the ranges 31–50 session (2026-10-20)
+
+Fast mode, the same binaries as 31–45: daemon `27a769a4`, addon `0611f3e0`, SDK JS `e990c25c`, image `d3773b4e`. Speed is read against `baseline-27a769a48998-0611f3e0cf81-p3.json`. All five ranges ran on `p3-main-w`. r50 was re-judged and reported on the harness rebased onto prep Part A (main `22f8099b98`); r46–r49 were reported on the earlier harness. One sample per attempt.
+
+| Range | Attempts | Terminal verdict | Stops and causes | Repair build s | Final commands s (repair / verify / finish) |
+| --- | --- | --- | --- | --- | --- |
+| 46 | 1 | optimize, counters recorded | — (`merge.returned_rows` 1.295×; Contended work `fs.rm`) | 22.6 | 107 / 17 / 50 |
+| 47 | 1 | optimize, counters recorded | — (the same counter row; Contended work `fs.write ≤1 KiB`) | 32.1 | 142 / 15 / 47 |
+| 48 | 1 | optimize, counters recorded | — (the same rows) | 29.1 | 129 / 21 / 61 |
+| 49 | 1 | optimize, time and counter rows recorded | — (new Scaling `diff_commits` probe 9.55 vs 2.97 ms with flat counters, under host load 10–12) | 27.7 | 124 / 16 / 57 |
+| 50 | 1 | optimize (re-judged), counters recorded | native first: `fs-sandbox.spec` probed under `/root` ([068](fixes/068-r050-native-first-probe-home.md)); a1: Node stop at `lead.initial` P1/P2, the milestone oracle ([069](fixes/069-r050-a1-milestone-oracle-start-chain.md), liaison ruling, re-judged on retained state); control lost in the Docker Desktop crash, run once after it | 29.3 | 137 / 21 / 65 (finish at its alarm on exit, every output written) |
+
+- **One stop, an oracle cause, and one native-first break, a calibration cause.** Neither is a LayerFS product defect.
+  - r50 is a milestone. Its clean install runs on the live tree, which keeps the earlier builds' ignored `lib/`, so pnpm linked `cli-demo`'s bin (`lib/bin.js`). The fresh-checkout oracle had no `lib/` and warned instead.
+  - Fix 069 (liaison ruling) starts the milestone oracle from the run's chain state and runs the lead's own commands. It keeps the old diff as an information line.
+  - Fix 068 makes the test calibration probe with the replay's `HOME=/tmp`, which fix 052 had set for the replay itself.
+- **Infrastructure:** Docker Desktop crashed at 07:28:57Z, during r50's first `control.mjs`. That control is a dead sample with no numbers. A second start refused on the crashed control's leftover volume. Control then ran once and passes. The r50 snapshot verified intact after the restart.
+- **Folders the `-d` clean removed (liaison condition), r46–r50:** none. Files removed: r48 220 (1.04 MB; the same 8 tracked packages' emitted `.js`/`.d.ts`/`.map` as r45) and r49 32 (`goal`, `session-projection-cache`). Every other range removed 0. The native clean matched in every range.
+- **Paths fix 058 exempted (liaison condition):** r46, r48 and r50 `.sessions/session-query.db`; r47 and r49 none. The same one test-output path as r38–r45.
+- **Counters:** `merge.returned_rows` (chain-bounded) stays at 2,514 vs 1,941 (1.295×). From r50, under the new harness, the row says it is carried from r45 (r50 itself 1,533).
+- **Contended work** reads process-wide counters on these binaries: `fs.rm` (r46, r50) and `fs.write ≤1 KiB` (r47–r49), exponents 1.29–1.91. The per-call switch (`sql.call`, main's fix 067) lands with the next re-baseline.
+- **r49's Scaling row** is the one-file `diff_commits` scale probe. Its five samples spread 5.6–11.3 ms against 1.9–3.6 ms at r41–r48, while its SQL counters stayed flat (60 statements, 2,045 VM steps). Host 1-min load was 10.2–12.3. It is recorded as load on wall time above the 5 ms floor.
+- Repair steps took 107–142 s under the owner's 200 s alarm. The two largest ranges (r47: 258 steps over 4 lanes; r50: a milestone with 161 test files) took 142 and 137 s.
+- **Concurrent load:** the prep session's re-baseline runs recorded 18 QUIET overlaps against r50 (07:27:43–07:41:45Z), after its play and finish. No other overlap was recorded in 46–50. Host 1-min load reached 18.8 at r47 and 12.3 at r49.
+
+Uncontended p50 in ms (calls), against the re-baseline:
+
+| Class | baseline | r46 | r47 | r48 | r49 | r50 |
+| --- | --- | --- | --- | --- | --- | --- |
+| fs.write ≤1 KiB | 6.4 (147) | 7.6 (31) | 8.4 (82) | 8.3 (89) | 8.1 (60) | 7.4 (247) |
+| fs.write ≤8 KiB | 7.2 (353) | 7.7 (137) | 8.4 (378) | 7.8 (483) | 8.2 (306) | 8.3 (294) |
+| fs.read ≤8 KiB | 2.1 (85) | 2.7 (23) | 2.5 (30) | 2.8 (28) | 3.3 (37) | 2.8 (35) |
+| sandbox.mount | 11.2 (368) | 8.8 (153) | 9.5 (166) | 9.9 (148) | 9.9 (180) | 9.6 (148) |
+| sandbox.commit 0 files · Committed | 20.8 (218) | 22.1 (90) | 24.9 (100) | 27.5 (87) | 25.2 (99) | 25.5 (78) |
+| sandbox.commit "—" · Committed (p95) | 69.0 (9) | 104.2 (8; 1,045) | 107.2 (10; 1,322) | 102.6 (10; 1,013) | 84.4 (8; 1,184) | 81.2 (12; 14,653) |
+| branch.diff_commits >64 entries | 17.2 (285) | 18.9 (395) | 21.7 (400) | 21.8 (398) | 23.3 (398) | 21.3 (398) |
+| branch.merge >64 entries · new Commit | 91.9 (6) | 307.2 (3) | 540.8 (3) | 455.6 (1) | 355.0 (1) | 459.5 (2) |
+| fs.rm 1 file | 6.7 (208) | 8.4 (9) | 9.6 (31) | 6.3 (247) | 10.4 (47) | 8.8 (10) |
+
+- **Speed reads "not judged" at r46–r49** for the thin-class reason given at r31–r35. The `sandbox.commit` "— · Committed" class has 3 calls per baseline range, under the gate's minimum of 5. Its p50 is 81–107 ms against the baseline's 69 ms. Its 14.7–19.2× is the p95, 1,013–1,322 ms: the repair's build Commit, which captures `tsc -b`'s 2,071–2,189 emitted files. At r50 the class has 12 calls, so its p95 is the clean-relink Commit itself (14.7 s; 15.2–17.0 s at r47–r50). The baseline's 3 calls per range were pilot-sized, so it is not a regression.
+- **r50's Speed row is watch**, on the rebased harness (prep Part A lists thin classes): `branch.diff_branches >64 entries` reads 8.45× its baseline with no phase. Not judged, each with baseline classes under 5 calls per range: the thin `sandbox.commit` class, merge, `fs.grep` and `fs.write ≤512 KiB`.
+- **Merge** reads 3.3–5.9× (307–541 ms against 91.9 ms). The baseline's 6 merges come from pilot ranges 2–4, with small trees and no `node_modules` merge. The p50 follows the merge's size: r47's four-lane merge took 541 ms, the top of r23–r46's 79–515 ms band. This is tree and merge size against a small-tree baseline, not a new regression.
+- **The other classes** are within 0.8–1.35× of the baseline, or are calls under 5 ms where the extra is below the absolute floor. `diff_commits` rose from 18.3–19.0 ms (r41–r46) to 21.3–23.3 ms (r47–r50), +3–5 ms, under the floor, with flat counters (298–308 statements).
+
+Storage and watch items:
+
+| Range | Added | Store on disk | Space amplification | Commits | Index rows (#366) | `fs.rm` uncontended p50 / calls / statements / VM steps (#367) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 46 | 31.2 MiB | 1.28 GiB | 1.64× | 827 | 377.3 MiB (sealed) | 8.44 ms / 9 / 180 / 11,656 |
+| 47 | 48.8 MiB | 1.33 GiB | 1.68× | 1,787 | 459.8 MiB live (index + waste + other) | 9.57 ms / 31 / 173 / 10,273 |
+| 48 | 37.0 MiB | 1.36 GiB | 1.71× | 1,510 | 403.1 MiB (sealed) | 6.31 ms / 247 / 114 / 4,698 |
+| 49 | 36.0 MiB | 1.39 GiB | 1.75× | 1,207 | 487.2 MiB live (index + waste + other) | 10.40 ms / 47 / 161 / 10,021 |
+| 50 | 42.6 MiB | 1.43 GiB | 1.79× | 1,155 | 435.0 MiB (sealed) | 8.76 ms / 10 / 156 / 7,807 |
+
+- **Index rows (#366)** on sealed snapshots: 354.7 MiB at r44, then 377.3 (r46), 403.1 (r48) and 435.0 (r50). That is 13.4 MiB per range, up from 12.2 (r41–r45) and 11.9 (r36–r40).
+- **`fs.rm` (#367):** the fix 059 cause, unchanged on these binaries. Ranges with notes-directory removes read 8.4–10.4 ms and 156–180 statements per call. r48, with 247 calls and none of them in large notes directories, reads 6.3 ms and 114 statements, the baseline level.
+- Space amplification rose from 1.61× (r45) to 1.79× (r50); the Store grew 1.26 → 1.43 GiB, and content 800 → 816 MiB.
+
 ## P4 · Recovery and demo
 
 Pending.
