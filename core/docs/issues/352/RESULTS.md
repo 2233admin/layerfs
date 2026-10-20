@@ -238,6 +238,7 @@
 | 2026-10-20 | **Range 52 a1 (`p3-main-x`, daemon `32eda22d`): WATCH, terminal, after fix 072 (native first: test fixture folders are not packages, TS6310).** Checkpoint ok, git ✓, Node 3 points P1–P5 pass, repair P6 pass, control passes, report check F1–F8 PASS. **F-063 active:** PREFIX 558 vs FULL 188 over 108 lane git Commits. **Storage:** Store +41.9 MiB; `.git` +10.8 MiB; index rows +11.5 MiB. **Watch:** Speed `fs.grep` 5–16 files uncontended p90 2.30× (19.0 ms; p50 0.99×); Scaling/Counters 2 of 3 same-binary points. Repair 133 s (39.8 / 31.1 / 3.8 s), finish 57 s. | range-052.md · `8fd8c871ae` |
 | 2026-10-20 | **Range 53 a1 (`p3-main-x`, daemon `32eda22d`): OPTIMIZE, terminal under the fast-mode ruling (rows recorded).** Checkpoint ok, git ✓, Node 3 points P1–P5 pass, repair P6 pass, control passes, report check F1–F8 PASS. **Optimize rows:** Counters `oneshot_mount_unmount.statements` depth exponent 3.77: r51–r53 57 → 65 → 64 statements over depth +3.3%, one step at r52 and then flat; Snapshot time size exponent 1.11 (4.9 / 4.9 / 5.9 s for 1,282 / 1,313 / 1,323 MiB new; host load 7.8–12.2). **F-063 active:** PREFIX 448 vs FULL 222 over 107 lane git Commits. **Storage:** Store +23.0 MiB; `.git` +7.9 MiB; index rows +10.9 MiB. **Watch:** Speed `sandbox.commit` UpToDate uncontended p90 1.99× (11.9 ms; p50 1.12×; counters equal to r52). Repair 138 s (43.0 / 31.1 / 4.1 s), finish 60 s. | range-053.md · `808cac30cc` |
 | 2026-10-20 | **Range 54 a1 (`p3-main-x`, daemon `32eda22d`): OPTIMIZE, terminal under the fast-mode ruling (row recorded).** Checkpoint ok, git ✓, Node 4 points P1–P5 pass, repair P6 pass, control passes, report check F1–F8 PASS. **Optimize row:** Counters `oneshot_mount_unmount.statements` depth exponent 2.42 (66). It is all in the cold mount's metadata blob lookups (8 blobs), chain-bounded per the liaison's reading. **F-063 active:** PREFIX 694 vs FULL 295 over 159 lane git Commits. **Storage:** Store +30.7 MiB; `.git` +11.7 MiB; index rows +12.6 MiB. **Watch:** Speed `fs.glob` 17–64 files p90 4.92× (38.2 ms; p50 1.37×; the calls match more files within the bucket). Repair 124 s, finish 57 s. Five transient packages were cleaned. | range-054.md · `38c66e93d5` |
+| 2026-10-20 | **Range 55 a1 (`p3-main-x`, daemon `32eda22d`): OPTIMIZE, terminal under the fast-mode ruling (row recorded).** Checkpoint ok, git ✓, Node 3 points P1–P5 pass (`r055-3-root.end` has no natively passing test at its hybrid lane state), repair P6 pass, control passes, report check F1–F8 PASS. **Optimize row:** Counters `oneshot_mount_unmount.statements` depth exponent 2.87 (72; cold mount 68 statements, 11 blob opens). Cold-mount blob opens over r45–r55: 7, 8, 8, 10, 9, 6, 4, 8, 7, 8, 11, varying with no trend. **F-063 active:** PREFIX 434 vs FULL 245. **Storage:** Store +22.8 MiB; `.git` +7.2 MiB; index rows +11.1 MiB. **Watch:** Speed `fs.write` ≤512 KiB p90 3.14× (57 ms; p50 1.07×, statements flat). Repair 154 s (45.9 / 36.8 / 5.7 s), finish 64 s. | range-055.md · `@SHA@` |
 
 ## P1 · Pilot
 
@@ -697,3 +698,72 @@ Pending.
 ## P5 · Full history
 
 Pending.
+
+
+### Ranges 51–55, the ranges 51–60 session (2026-10-20)
+
+Fast mode on the 51–100 binaries: daemon `32eda22d`, addon `4c52d23c`, SDK JS `6928ca80`, built at main `6928ca809d`; image `d3773b4e`. Speed is read against `baseline-32eda22d657d-4c52d23cd1b4-p3.json`. All five ranges ran on `p3-main-x`, a fork of `p3-main-w`'s r50 snapshot with the lead51 and prep51 volumes. One sample per attempt. Snapshots were taken every range from r52 (fix 071). The finish alarm is 90 s from r52 (owner).
+
+| Range | Attempts | Terminal verdict | Stops and causes | Repair s (install / build / tests) | Final commands s (repair / verify / finish) |
+| --- | --- | --- | --- | --- | --- |
+| 51 | 1 | watch | — | 128 (37.4 / 32.1 / 4.0) | 128 / 21 / 59 |
+| 52 | 1 | watch | native first: test fixture folders built as packages, TS6310 ([072](fixes/072-r052-fixture-packages-not-built.md)) | 133 (39.8 / 31.1 / 3.8) | 133 / 19 / 57 |
+| 53 | 1 | optimize, rows recorded | — (Counters `oneshot_mount_unmount.statements`; Snapshot time exponent 1.11) | 138 (43.0 / 31.1 / 4.1) | 138 / 20 / 60 |
+| 54 | 1 | optimize, row recorded | — (the same counter) | 124 (36.1 / 29.7 / 3.8) | 124 / 19 / 57 |
+| 55 | 1 | optimize, row recorded | — (the same counter) | 154 (45.9 / 36.8 / 5.7) | 154 / 21 / 64 |
+
+- **No LayerFS stop.** Every range's checkpoint was ok and git ✓. Node proofs passed at every point, and the repair's P6 passed. Every control passed, and every report check was F1–F8 PASS.
+  - The one break was native first at r52, before any LayerFS attempt. r052 adds typert's `tests/fixtures/type-model/`, whose folders each hold a package.json and a tsconfig.json. The harness's whole build listed them as packages, and `tsc -b` of the fixture client fails TS6310. Fix 072 skips fixture folders. No earlier checkpoint has one.
+- **F-063 active in every range:**
+
+  | Range | 51 | 52 | 53 | 54 | 55 |
+  | --- | --- | --- | --- | --- | --- |
+  | PREFIX / FULL chunks | 401 / 179 | 558 / 188 | 448 / 222 | 694 / 295 | 434 / 245 |
+  | Lane git Commits | 100 | 108 | 107 | 159 | 113 |
+
+  `.git` stored per range was 7.2–11.7 MiB, against 13.1–23.1 MiB on r46–r50 before the fix.
+- **`oneshot_mount_unmount.statements`** (Counters optimize at r53–r55: 57, 65, 64, 66, 72 over r51–r55).
+  - In every range the probe's four warm mounts take 40 statements and open no blob, and its unmounts take none.
+  - The change is all in the first, cold mount's bind: about 45–46 statements plus 2 per metadata blob opened. Cold-mount blob opens over r45–r55 were 7, 8, 8, 10, 9, 6, 4, 8, 7, 8, 11. They vary with no trend in depth.
+  - This is an inference from the blob counters (`sql.call` `blob_open_calls`, `bound_bytes`), which move with the statements in every range. The traces carry no statement text, so the exact statements are not named.
+  - The liaison's reading: bounded per-bind cost, not growth with depth. At r52–r54 I described it as capped by the delta period 8; r55's 11 shows it is not capped at 8.
+  - The row stays optimize in this block. Proposal for the next re-baseline (liaison): judge the cold-mount counter by the F-016 chain bound, as the 2026-10-19 `list_largest` ruling did.
+- **Speed watch rows,** each above the 5 ms floor:
+  - r51 `sandbox.exec` "—" class 1.47×. The lane shell; the "0 files" class read 1.06×.
+  - r52 `fs.grep` 5–16 files p90 2.30× (p50 0.99×).
+  - r53 `sandbox.commit` UpToDate p90 1.99× (p50 1.12×).
+  - r54 `fs.glob` 17–64 files p90 4.92×, with more files matched per call (statements 55 → 100).
+  - r55 `fs.write` ≤512 KiB p90 3.14× (p50 1.07×), statements flat.
+
+  Host 1-minute load was 5.0–12.2.
+- **Storage:**
+
+  | Range | Store added | `.git` stored | Index rows (#366) | Snapshot new |
+  | --- | --- | --- | --- | --- |
+  | 51 | 24.0 MiB | 8.2 MiB | 446.2 MiB (+11.2) | 1,282 MiB |
+  | 52 | 41.9 MiB | 10.8 MiB | 457.7 MiB (+11.5) | 1,313 MiB |
+  | 53 | 23.0 MiB | 7.9 MiB | 468.6 MiB (+10.9) | 1,323 MiB |
+  | 54 | 30.7 MiB | 11.7 MiB | 481.2 MiB (+12.6) | 1,354 MiB |
+  | 55 | 22.8 MiB | 7.2 MiB | 492.3 MiB (+11.1) | 1,366 MiB |
+
+  The Store went 1.45 → 1.57 GiB. Index rows grew 11.4 MiB per range, as in r21–r45.
+- **Folders the `-d` clean removed (liaison condition), r51–r55:** none. Files removed: r53 88 (875 KB); every other range removed 0. The pre-scan's transient packages (r51 and r52 `subagent-subprocess`; r54 `code-mode`, `source-guard` and three `session-registry` packages; r55 two) left no folder for the clean to remove. The r54 note's "the clean reached them" means only that the checkpoint compare passed.
+- **Repair** took 124–154 s, under the 200 s alarm and the 170 s notify line. r55's 154 s is the largest, with install 45.9 s and build 36.8 s.
+- **Concurrent load:** no QUIET overlap during a play in 51–55. The four overlaps recorded for `p3-main-x` were native calibration at 08:11–08:12Z, against the re-baseline run's stale QUIET, before r51 played.
+
+Uncontended p50 in ms (calls), against the 51–100 baseline:
+
+| Class | baseline | r51 | r52 | r53 | r54 | r55 |
+| --- | --- | --- | --- | --- | --- | --- |
+| fs.write ≤1 KiB | 7.6 (237) | 8.4 (64) | 8.4 (108) | 8.9 (76) | 7.9 (107) | 9.5 (64) |
+| fs.write ≤8 KiB | 7.5 (1156) | 7.6 (287) | 7.8 (308) | 8.8 (184) | 8.7 (201) | 10.6 (168) |
+| fs.read ≤8 KiB | 2.6 (99) | 2.6 (33) | 2.5 (33) | 2.7 (19) | 2.4 (22) | 3.2 (21) |
+| sandbox.mount — | 10.0 (503) | 9.4 (148) | 9.9 (152) | 10.6 (134) | 9.8 (177) | 10.3 (158) |
+| sandbox.commit 0 files · Committed | 25.1 (286) | 28.5 (76) | 27.8 (85) | 27.6 (72) | 25.2 (104) | 25.3 (91) |
+| sandbox.commit 0 files · UpToDate | 3.4 (129) | 3.6 (39) | 3.7 (34) | 3.8 (35) | 3.5 (44) | 3.7 (43) |
+| branch.diff_commits >64 entries | 20.9 (1195) | 20.5 (397) | 20.0 (400) | 19.7 (397) | 19.2 (397) | 20.6 (391) |
+| branch.merge >64 entries · Merged (new Commit) | 491.1 (5) | 417.1 (1) | 367.4 (2) | 247.8 (3) | 400.8 (3) | 422.4 (2) |
+| fs.rm 1 files | 9.0 (333) | 8.8 (21) | 10.0 (42) | 10.2 (4) | 7.8 (61) | 10.0 (22) |
+| fs.grep 5–16 files | 5.5 (40) | 6.0 (17) | 5.5 (9) | 4.0 (4) | 5.3 (8) | 4.9 (10) |
+| fs.glob 17–64 files | 5.7 (36) | 3.8 (14) | 7.1 (12) | 4.2 (6) | 7.9 (14) | 7.6 (3) |
+| sandbox.exec 0 files | 35.0 (620) | 37.2 (176) | 32.4 (170) | 35.1 (165) | 34.3 (227) | 34.6 (220) |
