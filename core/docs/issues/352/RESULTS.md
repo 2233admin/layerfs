@@ -213,6 +213,7 @@
 | 2026-10-20 | **Range 35 a1 (`p3-main-u`, daemon `27a769a4`): OPTIMIZE, terminal under the fast-mode ruling (counters recorded).** Checkpoint ok, git ✓, Node 12 pass, 0 stop, 0 NOT_RUN over 3 points, repair P6 pass. Only optimize row: Counters `oneshot_mount_unmount.vm_steps`, depth exponent 0.947 | — |
 | 2026-10-20 | **Range 36 a1 (`p3-main-u`, daemon `27a769a4`): WATCH, terminal.** Checkpoint ok, git ✓, Node 11 pass, 0 stop, 0 NOT_RUN over 4 points, repair P6 pass. A docs-only range (no build, no tests); Speed judged for the first time on the re-baseline: watch on `branch.diff_branches` p95 (289 ms, 5.58×; p50 1.05×) | — |
 | 2026-10-20 | **Range 37 a1 (`p3-main-u`, daemon `27a769a4`): WATCH, terminal.** Checkpoint ok, git ✓, Node 20 pass, 0 stop, 0 NOT_RUN over 5 points, repair P6 pass. Two lane points have P5 n/a from their hybrid lane trees (as r34); the merged checkpoint builds and tests clean natively | — |
+| 2026-10-20 | **Range 38 a1 (`p3-main-u`, daemon `27a769a4`): STOP at the checkpoint, oracle cause (fix 058).** One extra path, `.sessions/session-query.db`, a test output that dsh's `.gitignore` ignores; nothing missing, content and modes match git. Node 12 pass, 0 stop, 0 NOT_RUN, repair P6 pass. Fix 058: the P3 checkpoint check exempts paths the checkpoint's own `.gitignore` files ignore. a2 replays r38 on a fork of r37's snapshot | — |
 
 ## P1 · Pilot
 
