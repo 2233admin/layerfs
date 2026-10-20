@@ -4,8 +4,10 @@
 // A plain Mac script uses the ported SDK as an agent would: Init, the Store
 // install (a first Sandbox), Store calls (fork, write, read, list, publish),
 // Workspace calls (mount, exec, commit, unmount), a refusal and an exec whose
-// output is spooled. Each SDK call runs as one process in a fresh box. The
-// box, the volume, the containers and the home are removed afterwards.
+// output is spooled. Each SDK call goes to the box's long-lived worker, which
+// keeps the project's Store open between calls; Init runs in its own
+// container. The box, the volume, the containers and the home are removed
+// afterwards.
 // macOS only; under 2 minutes.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
