@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { changedPackages, checkNode, commitIdOf, inputsHash, pointsBefore, testPoints, treeDelta, treeIdCommand, wholeBuild } from "../nodelanes.mjs";
 import { PRUNE_EMPTY, pointBuild } from "../nodeconfig.mjs";
 import { chooseFiles, laneSteps, laneWriteOrder, nativeClean, oracleKey, reinstallStates, judgeP1, judgeP2, judgeP3, judgeP4, judgeP5, judgePoint, judgeRepair, materialize, modelDelta, scratchRepo, STATE_FILES, vitestReport } from "../nodeproof.mjs";
-import { baselineRanges, execTool, forkP3State, p3StateOf, partsFromMetrics } from "../run.mjs";
+import { baselineRanges, execTool, snapshotsEvery, forkP3State, p3StateOf, partsFromMetrics } from "../run.mjs";
 import { installCommand, pointInstall, STORE_POLICIES } from "../closure.mjs";
 import { sliceRange } from "../slice.mjs";
 import { stepSource } from "../storage.mjs";
@@ -769,6 +769,13 @@ test("51-100 re-baseline: the split procedure measures three recent ranges after
   assert.throws(() => baselineRanges({ range: "44", ranges: "47-49" }), /must start at 45/);
   assert.throws(() => baselineRanges({ ranges: "47-50" }), /three consecutive ranges/);
   assert.throws(() => baselineRanges({ ranges: "x" }), /three consecutive ranges/);
+});
+
+test("snapshots every range (fix 071): the run's switch or the phase's own every; otherwise due() decides", () => {
+  assert.equal(snapshotsEvery({ snapshot: "due" }, {}), false);
+  assert.equal(snapshotsEvery({ snapshot: "due" }, { snapshots: { every: true, atRange: 52 } }), true);
+  assert.equal(snapshotsEvery({ snapshot: "every" }, {}), true);
+  assert.equal(snapshotsEvery({ snapshot: "due" }, { snapshots: { every: "yes" } }), false);
 });
 
 let failed = 0;

@@ -32,6 +32,7 @@
 //     (a long lanes stage: … --resume --until lanes --cut <plan order> one or more times, each stopping there (agents.mjs safeCut))
 //     (a range in two commands, each under 120 s: halves.mjs; the P3 command shape with git on)
 //   node dsh/tools/history/run.mjs git --run <dev run> --on   (F-031 option (c) from the next range; dev runs only until the dev proof is accepted)
+//   node dsh/tools/history/run.mjs snapshots --run <id> --every   (a snapshot after every measured range from the next one, fix 071)
 //   node dsh/tools/history/run.mjs node --run <dev run> --on [--inputs-rule plan|r1] [--store-policy verified|release-age-off]
 //     (NODE_RULE from the next range: the lead's first install, lane test points, the lead's repair; dev runs only.
 //     Owner 2026-10-19: §3 is R1, which plays a plan made with plan.mjs --inputs-rule r1; the store is fetched and
@@ -503,7 +504,7 @@ async function playRange(run, k, mode, half = null, until = null, cut = null) {
       lap("consolidateMs", since);
     }
     since = performance.now();
-    const snapshotDue = measured && (phase.snapshot === "every" || due({ planned: plan.snapshot, verdict: "pass", sinceMs: run.state.sinceMs, lastCostMs: run.state.lastSnapshotMs }).due);
+    const snapshotDue = measured && (snapshotsEvery(phase, run.manifest) || due({ planned: plan.snapshot, verdict: "pass", sinceMs: run.state.sinceMs, lastCostMs: run.state.lastSnapshotMs }).due);
     if (saved?.stage === "verified") proof = decodeLate(saved.proof);
     else {
       proof = await verify(run, k, { prevHead: run.state.head, head: published.source.commit, layer: published.publishedLayer.id, prevCommit: run.state.prevCommit, full: snapshotDue });
@@ -808,6 +809,21 @@ function cmdGit(o) {
   return EXIT.done;
 }
 
+/** Whether a measured range takes a snapshot whatever due() says: the phase's own "every", or the run's switch (fix 071). */
+export const snapshotsEvery = (phase, manifest) => phase.snapshot === "every" || manifest.snapshots?.every === true;
+
+/** Snapshots every measured range for a run, from the range it stands at (liaison 2026-10-20 for ranges 51-60, fix 071). */
+function cmdSnapshots(o) {
+  const dir = join(HISTORY, "runs", o.run), run = new Run(dir);
+  if (!("every" in o)) return usage();
+  if (run.state?.dirty != null) { console.error(`run ${o.run} stopped in range ${run.state.dirty}; recover by fork first`); return EXIT.guard; }
+  run.manifest.snapshots = { every: true, atRange: run.state.next, at: new Date().toISOString() };
+  writeJson(join(dir, "run.json"), run.manifest);
+  run.note({ kind: "snapshots", name: "every range", atRange: run.state.next });
+  console.log(JSON.stringify({ run: o.run, snapshots: run.manifest.snapshots }));
+  return EXIT.done;
+}
+
 /** Turns NODE_RULE on for a dev run in a closure phase, from the range it stands at (nodelanes.mjs), with its two switches. */
 function cmdNode(o) {
   const dir = join(HISTORY, "runs", o.run), run = new Run(dir);
@@ -1101,7 +1117,7 @@ async function main() {
   if (!o.run && cmd !== "rebaseline") process.exit(usage());
   const outside = checkRunner(cmd, process.env);
   if (outside) { console.error(outside); process.exit(EXIT.guard); }
-  const code = cmd === "new" ? (await cmdNew(o), EXIT.done) : cmd === "play" ? await cmdPlay(o) : cmd === "phase" ? cmdPhase(o) : cmd === "fork" ? (await cmdFork(o), EXIT.done) : cmd === "cleanup" ? await cmdCleanup(o) : cmd === "devcheck" ? await cmdDevcheck(o) : cmd === "git" ? cmdGit(o) : cmd === "node" ? cmdNode(o) : cmd === "rebaseline" ? await cmdRebaseline(o) : usage();
+  const code = cmd === "new" ? (await cmdNew(o), EXIT.done) : cmd === "play" ? await cmdPlay(o) : cmd === "phase" ? cmdPhase(o) : cmd === "fork" ? (await cmdFork(o), EXIT.done) : cmd === "cleanup" ? await cmdCleanup(o) : cmd === "devcheck" ? await cmdDevcheck(o) : cmd === "git" ? cmdGit(o) : cmd === "node" ? cmdNode(o) : cmd === "snapshots" ? cmdSnapshots(o) : cmd === "rebaseline" ? await cmdRebaseline(o) : usage();
   process.exit(code);
 }
 

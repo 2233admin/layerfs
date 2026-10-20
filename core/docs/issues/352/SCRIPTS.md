@@ -521,9 +521,9 @@ each runs under (`perl -e 'alarm N; exec @ARGV'`):
 | Oracle | `closure.mjs oracle --run R --range k …` (host) | 115 s |
 | Native first | `nodeproof.mjs calibrate --run R --range k` until every point is done, then once more: the predicted repair natively; exit 4 and `NATIVE REFERENCE BROKEN` stop the range before any LayerFS attempt | 115 s each |
 | Lead and lanes | `play … --until lead`, `--resume --until lanes --cut N` …, `--resume --until lanes` | 118 s each |
-| Repair | `play … --resume --until repair`: merges, lead git, the closure (repair install, build, tests), publish | 200 s from r34 (owner 2026-10-20: "increase it to 200s", after r32's 130 s of 160 s); 160 s r24–r33; 130 s r21–r23 |
+| Repair | `play … --resume --until repair`: merges, lead git, the closure (repair install, build, tests), publish | 200 s from r34 (owner 2026-10-20: "increase it to 200s", after r32's 130 s of 160 s); 160 s r24–r33; 130 s r21–r23. From r51 a repair over 170 s is reported to the liaison, with its install/build/test split, before the next range plays (liaison 2026-10-20; the alarm is unchanged) |
 | Verify | `play … --resume --until verified`: the checkpoint check | 70 s from r24 (115 s r21–r23) |
-| Finish | `play … --resume`: probes, version, metrics, snapshot, report | 65 s from r24 (50 s r21–r23) |
+| Finish | `play … --resume`: probes, version, metrics, snapshot, report | 90 s for r51–r60 (owner 2026-10-20, asked "Raise its alarm to 90 s for ranges 51–60?": "Yes, 90 s"; r47–r50 finished in 55, 43, 59 and 65 s); 65 s r24–r50 (50 s r21–r23) |
 | Proofs | `nodeproof.mjs proofs --run R --range k --budget-s 20` until `"left":0` | 115 s each |
 | Control | `control.mjs --run R --range k`; releases QUIET | 118 s |
 | Native state | after a terminal range: `nodeproof.mjs savestate --run R`, then `--adopt` | 115 s |
@@ -630,6 +630,31 @@ It also checks that the build commit contains `2de43d0a02`.
 
 Pre-fix reference, r049.a1 (`p3-main-w`, daemon `27a769a4`): 139 lane git
 Commits, chunk FULL 782 / PREFIX 0.
+
+### Snapshots every range from r52 (fix 071)
+
+The liaison approved a snapshot after every measured range for ranges 51–60,
+on one condition: one snapshot adds at most 2 GB on disk, and host free space
+stays at or above 100 GB (`tools/cleanup.py check`) over the ten ranges.
+Otherwise even ranges stay.
+
+Measured:
+
+| | r50 (`p3-main-w`) | r51 (`p3-main-x`) |
+| --- | --- | --- |
+| Store (sealed) | 1,533,022,208 B | 1,558,138,880 B |
+| New blocks on disk | 1,279 (1,340,084,224 B) | 1,282 (1,344,229,376 B) |
+| Copy / seal | 6,180 ms / 1,492 ms | 4,903 ms / 1,587 ms |
+
+Host free space was 397.6 GB at r51 (`cleanup.py check`, floor 100 GB).
+Ten snapshots at about 1.35 GB each come to about 14 GB, which leaves about
+384 GB. The condition holds, so the choice is **every range**.
+
+r51 was already snapshotted by `due()`, the fork's first range. The switch
+is `run.mjs snapshots --run p3-main-x --every`. It sets `snapshots.every`
+in `run.json` from the range the run stands at (52) and adds a ledger note.
+`snapshotsEvery()` then makes `snapshotDue` true for every measured range.
+The phase's own `"every"` (p1) still works as before.
 
 ### Re-baseline for ranges 51–100 from recent ranges (owner 2026-10-20)
 
