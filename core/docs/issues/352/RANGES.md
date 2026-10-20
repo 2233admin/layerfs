@@ -64,3 +64,4 @@
 | 057 | 61 | 67,927 | **optimize** | Counters | 31.9 MiB | [range-057](ranges/range-057.md) |
 | 058 | 60 | 69,520 | **stop** | Node proofs | 33.2 MiB | [range-058](ranges/range-058.md) |
 | 059 | 63 | 70,240 | **watch** | Speed | 25.5 MiB | [range-059](ranges/range-059.md) |
+| 060 | 79 | 71,393 | **optimize** | Snapshot time | 33.9 MiB | [range-060](ranges/range-060.md) |
