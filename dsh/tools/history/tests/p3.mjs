@@ -18,6 +18,7 @@ import { decoyBytes, Tree } from "../steps.mjs";
 import { proofTally } from "../p3.mjs";
 import { cleanedPaths, cleanScript, marks } from "../gitlanes.mjs";
 import * as lanemerge from "../lanemerge.mjs";
+import { buildContains, judge as judgeF063, laneGitChunks, line as f063Line } from "../f063.mjs";
 import { notes, prescanRange, scan, SHELL_WRITE, WRITE, workspaceGlobs, workspaceOf } from "../prescan.mjs";
 import { existsSync } from "node:fs";
 
@@ -707,6 +708,34 @@ test("fix 064: the pre-scan flags packages added and removed, .gitignore changes
     assert.deepEqual(r.addedRemoved.map((t) => [t.dir, t.packageJson, t.lanes]), [["packages/b/tmp", true, ["r051-1-root"]]]);
     assert.deepEqual(r.gitignore, [{ path: ".gitignore", added: [".sessions/"], removed: [] }]);
     assert.deepEqual([r.meta.commits, r.meta.lanes], [2, "r051-1-root"]);
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test("fix 066: F-063 is proved active from the lane git Commits' own chunk depths, and stops on PREFIX 0", () => {
+  const commit = (step, chunk_depths, method = "sandbox.commit") => ({ method, step, daemon: [{ timing: {} }, { delta: { payload: { chunk_depths, prefix_selected: 1 } } }] });
+  // r049.a1 on pre-fix binaries: 139 lane git Commits, 782 chunks, all FULL
+  const before = laneGitChunks([commit("r049.s0094.git-commit#125", [25]), commit("r049.s0100.git-commit", [3]), commit("r049.s0094#7", [0, 9]), commit("r049.s0094.git-commit#1", [9], "sandbox.exec")]);
+  assert.deepEqual([before.commits, before.full, before.prefix, before.withPrefix], [2, 28, 0, 0], "other steps and methods are not lane git Commits");
+  const stop = judgeF063(before);
+  assert.deepEqual([stop.active, stop.exit], [false, 4]);
+  assert.match(stop.why, /chunk PREFIX 0 vs FULL 28 over 2 lane git Commits: F-063 not active/);
+  // with the predecessor: the first step FULL, later steps PREFIX up to the depth cap
+  const after = laneGitChunks([commit("a.git-commit", [28]), commit("b.git-commit", [1, 9, 0]), commit("c.git-commit", [0, 0, 10])]);
+  assert.deepEqual([after.full, after.prefix, after.withPrefix, after.depths], [29, 19, 2, [29, 9, 10]]);
+  const ok = judgeF063(after, { commit: "2de43d0a02ff", contains: true });
+  assert.equal(ok.exit, 0);
+  assert.equal(f063Line(after, ok, { commit: "2de43d0a02ff", contains: true }), "**F-063 (rename-over chunk predecessor):** active; chunk PREFIX 19 vs FULL 29 over 3 lane git Commits (2 with a PREFIX chunk); chunk depths 0:29 1:9 2:10; build 2de43d0a02 contains 2de43d0a02.");
+  assert.equal(judgeF063(after, { commit: "bc5c5c1564", contains: false }).exit, 4, "a build without the fix stops whatever the trace");
+  assert.equal(judgeF063(laneGitChunks([])).exit, 2, "nothing traced: not judged");
+  assert.equal(judgeF063(laneGitChunks([commit("a.git-commit", [])])).exit, 2, "no chunk stored: not judged");
+  // the ancestry check on a scratch history
+  const d = mkdtempSync(join(tmpdir(), "lfs-f063-"));
+  const g = (...a) => execFileSync("git", ["-C", d, "-c", "user.name=t", "-c", "user.email=t@t", ...a], { encoding: "utf8" }).trim();
+  try {
+    execFileSync("git", ["init", "-q", d]); g("commit", "-q", "--allow-empty", "-m", "base"); const base = g("rev-parse", "HEAD");
+    g("commit", "-q", "--allow-empty", "-m", "fix"); const fix = g("rev-parse", "HEAD");
+    g("commit", "-q", "--allow-empty", "-m", "later"); const later = g("rev-parse", "HEAD");
+    assert.deepEqual([buildContains(later, fix, d), buildContains(base, fix, d)], [true, false]);
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 

@@ -605,3 +605,26 @@ the batch from the slowest probe wall per file of this checkpoint's earlier
 commands (kept in `tests-NNN.partial.json` `commands`), so the probe projects
 under 60 s inside the 115 s alarm. `--max-files M` only lowers the batch.
 The command prints the next batch size.
+
+### F-063 active in the 51–100 lane (fix 066)
+
+Owner 2026-10-20: "the .git improvements should be ported into the 51-100
+lane once it starts running". The re-baseline report and the first 51–100
+range report each quote the line from
+
+```
+node dsh/tools/history/f063.mjs --run <run> --range k --attempt a --build <daemon/addon build commit>
+```
+
+It reads the attempt's own trace. For the lane git Commits
+(`<step>.git-commit`, `sandbox.commit`) it sums
+`daemon[].delta.payload.chunk_depths`: depth 0 is FULL, depth > 0 is PREFIX.
+It also checks that the build commit contains `2de43d0a02`.
+
+- Exit 0: active.
+- Exit 4: the build lacks the fix, or chunk PREFIX is 0 while chunks were
+  stored. Stop and tell the liaison before playing r51.
+- Exit 2: nothing to judge.
+
+Pre-fix reference, r049.a1 (`p3-main-w`, daemon `27a769a4`): 139 lane git
+Commits, chunk FULL 782 / PREFIX 0.
