@@ -258,7 +258,7 @@ export function createFiles(v) {
     }
     if ((el = at("[data-fopen]"))) { openFile(filesOf(tab), el.dataset.fopen); v.render(); return true; }
     if ((el = at("[data-fblame]"))) { const p = filesOf(tab); showPoint(tab, el.dataset.fblame); p.mode = "diff"; v.render(); return true; }
-    if ((el = at(".gview [data-node], .blist [data-node]"))) { (v.project ? showAt : showPoint)(tab, el.dataset.node); v.render(); return true; }
+    if ((el = at(".gview [data-node], .blist [data-node], svg.tree [data-node]"))) { (v.project ? showAt : showPoint)(tab, el.dataset.node); v.render(); return true; }
     return false;
   }
   function change(e) {

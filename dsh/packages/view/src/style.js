@@ -3,64 +3,50 @@
 // lfs-*. The preview keeps only its own chrome (title bar, player).
 export const CSS = `
 .lfs {
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --mono: "SF Mono", ui-monospace, Menlo, Monaco, monospace;
-  --window: #fff; --chrome: #ececef; --card: #fff; --well: #f2f2f5; --grid-bg: #e4e4e8;
-  --text: #1d1d1f; --text-2: #6e6e73; --text-3: #a1a1a6; --sep: rgba(0,0,0,.09); --sep-strong: rgba(0,0,0,.16);
-  --accent: #007aff; --accent-bg: rgba(0,122,255,.12); --green: #28a745; --orange: #e08600; --red: #ff3b30; --purple: #a347d4;
-  --orange-bg: rgba(255,149,0,.14); --purple-bg: rgba(175,82,222,.13); --red-bg: rgba(255,59,48,.12); --green-bg: rgba(52,199,89,.14);
-  --term: #ffffff; --term-head: #f5f5f7; --term-border: rgba(0,0,0,.12); --term-text: #1d1d1f; --term-dim: #86868b;
-  --t-blue: #0058d0; --t-green: #1a7f37; --t-orange: #b35c00; --t-red: #d1242f; --t-purple: #8a3ab9; --t-cyan: #0a7590;
-  --t-add-bg: rgba(26,127,55,.08); --t-del-bg: rgba(209,36,47,.08);
-  --b0: #0a6cff; --b1: #1f9d55; --b2: #0f8b9a; --b3: #d6336c; --b4: #5856d6; --b5: #8e6e53;
+  /* the LayerFS website's tokens (layerfs-website global.css), light only */
+  --font: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+  --paper: #FBF9F5; --dot: #EEE9DF; --line: #E2DED6; --line2: #ECE9E2; --tab: #F4F2EC; --lane: #F3F6FC;
+  --trunk: #5C9A3C; --green-dark: #3F7524; --twig: #B9B2A6; --coral: #E07A5A; --coral-text: #B8502C; --coral-pale: #FBE9E2;
+  --window: #FBF9F5; --chrome: #F4F2EC; --card: #FFFFFF; --well: #F0EEE8; --grid-bg: #FBF9F5;
+  --text: #1E2533; --text-2: #5B6372; --text-3: #8A8780; --sep: #ECE9E2; --sep-strong: #E2DED6;
+  --accent: #2F5BB5; --accent-bg: #E6EEFA; --green: #3E9B74; --orange: #D29A2E; --red: #C8452F; --purple: #8A6BC8;
+  --orange-bg: rgba(210,154,46,.14); --purple-bg: rgba(138,107,200,.13); --red-bg: #FBE9E2; --green-bg: rgba(62,155,116,.13);
+  --term: #FDFCFA; --term-head: #F6F4EF; --term-border: #E2DED6; --term-text: #1E2533; --term-dim: #8A8780;
+  --t-blue: #2F5BB5; --t-green: #2E7D5B; --t-orange: #93650F; --t-red: #B8502C; --t-purple: #6A4DA8; --t-cyan: #1F6B78;
+  --t-add-bg: rgba(46,125,91,.09); --t-del-bg: rgba(184,80,44,.09);
+  /* Branch colours: the website demo's */
+  --b0: #E07A5A; --b1: #3E9B74; --b2: #8A6BC8; --b3: #D29A2E; --b4: #2B8A9A; --b5: #C8557A;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  .lfs:not([data-theme="light"]) {
-  --window: #1e1e20; --chrome: #2a2a2d; --card: #2c2c2f; --well: #252528; --grid-bg: #141416;
-  --text: #f5f5f7; --text-2: #a1a1a6; --text-3: #6e6e73; --sep: rgba(255,255,255,.08); --sep-strong: rgba(255,255,255,.16);
-  --accent: #0a84ff; --accent-bg: rgba(10,132,255,.18); --green: #30d158; --orange: #ff9f0a; --red: #ff453a; --purple: #bf5af2;
-  --orange-bg: rgba(255,159,10,.16); --purple-bg: rgba(191,90,242,.16); --red-bg: rgba(255,69,58,.16); --green-bg: rgba(48,209,88,.16);
-  --term: #1c1c1e; --term-head: #252528; --term-border: rgba(255,255,255,.08); --term-text: #e5e5ea; --term-dim: #8e8e93;
-  --t-blue: #64b5ff; --t-green: #5fd97a; --t-orange: #ffb340; --t-red: #ff6b61; --t-purple: #d38cff; --t-cyan: #64d2ff;
-  --t-add-bg: rgba(95,217,122,.1); --t-del-bg: rgba(255,107,97,.1);
-  --b0: #4aa3ff; --b1: #3ecf74; --b2: #3cc6d4; --b3: #ff6b9a; --b4: #8e8cff; --b5: #c09a78;
-  color-scheme: dark; }
-}
-.lfs[data-theme="dark"] {
-  --window: #1e1e20; --chrome: #2a2a2d; --card: #2c2c2f; --well: #252528; --grid-bg: #141416;
-  --text: #f5f5f7; --text-2: #a1a1a6; --text-3: #6e6e73; --sep: rgba(255,255,255,.08); --sep-strong: rgba(255,255,255,.16);
-  --accent: #0a84ff; --accent-bg: rgba(10,132,255,.18); --green: #30d158; --orange: #ff9f0a; --red: #ff453a; --purple: #bf5af2;
-  --orange-bg: rgba(255,159,10,.16); --purple-bg: rgba(191,90,242,.16); --red-bg: rgba(255,69,58,.16); --green-bg: rgba(48,209,88,.16);
-  --term: #1c1c1e; --term-head: #252528; --term-border: rgba(255,255,255,.08); --term-text: #e5e5ea; --term-dim: #8e8e93;
-  --t-blue: #64b5ff; --t-green: #5fd97a; --t-orange: #ffb340; --t-red: #ff6b61; --t-purple: #d38cff; --t-cyan: #64d2ff;
-  --t-add-bg: rgba(95,217,122,.1); --t-del-bg: rgba(255,107,97,.1);
-  --b0: #4aa3ff; --b1: #3ecf74; --b2: #3cc6d4; --b3: #ff6b9a; --b4: #8e8cff; --b5: #c09a78;
-  color-scheme: dark; }
 .lfs, .lfs * { box-sizing: border-box; }
 .lfs button { font: inherit; color: inherit; }
-/* title bar + tabs */
-.lfs .tabs { display: flex; gap: 4px; align-items: center; min-width: 0; overflow-x: auto; flex: 1; scrollbar-width: none; padding: 4px 0; }
-.lfs .tab { height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 10px; border-radius: 7px; cursor: pointer; color: var(--text-2); white-space: nowrap; border: 0; background: transparent; position: relative; transition: opacity .4s, background .2s; }
-.lfs .tab:hover { background: var(--sep); }
-.lfs .tab[aria-selected="true"] { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 0 0 .5px var(--sep); }
-.lfs .tab .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bc); flex: none; }
-.lfs .tab.main .dot { border-radius: 2px; transform: rotate(45deg); background: var(--purple); }
-.lfs .tab.conflict { box-shadow: 0 0 0 1.5px var(--red) !important; color: var(--red); }
+/* title bar + tabs: the website's Branch tabs */
+.lfs .tabs { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-end; align-self: stretch; min-width: 0; flex: 1; padding: 8px 0 0; }
+.lfs .tab { min-height: 40px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; color: var(--text); white-space: nowrap; border: 1px solid transparent; border-bottom: 0; background: transparent; position: relative; font: 13px var(--mono); transition: opacity .4s, background .2s; margin-bottom: -1px; }
+.lfs .tab:hover { background: rgba(255,255,255,.6); }
+.lfs .tab[aria-selected="true"] { background: #fff; border-color: var(--line); }
+.lfs .tab.dim { opacity: .55; }
+.lfs .tab .sq { width: 8px; height: 8px; background: var(--bc); flex: none; }
+.lfs .tab.main .sq { background: var(--accent); }
+.lfs .tab .tchip { font: 11.5px var(--mono); padding: 1px 6px; background: #F0EEE8; color: #6B6964; }
+.lfs .tab .tchip.ro { background: var(--coral-pale); color: var(--coral-text); }
+.lfs .tab .tchip.bad { background: var(--coral-pale); color: var(--coral-text); }
+.lfs .tab.conflict { color: var(--t-red); }
 .lfs .tab .avs { display: inline-flex; gap: 1px; }
-.lfs .tab .pin { opacity: 0; font-size: 10px; padding: 0 2px; border-radius: 3px; }
+.lfs .tab .pin { opacity: 0; font-size: 10px; padding: 0 2px; }
 .lfs .tab:hover .pin, .lfs .tab .pin.on { opacity: .8; }
 .lfs .tab.enter { animation: lfs-grow .35s ease-out; }
 .lfs .tab.more { font: 600 11px var(--mono); }
-.lfs .menu { position: absolute; z-index: 60; background: var(--card); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.25), 0 0 0 .5px var(--sep-strong); padding: 4px; min-width: 160px; }
+.lfs .menu { position: absolute; z-index: 60; background: var(--card); border-radius: 0; box-shadow: 0 10px 30px rgba(0,0,0,.25), 0 0 0 .5px var(--sep-strong); padding: 4px; min-width: 160px; }
 .lfs .menu button { display: flex; width: 100%; gap: 8px; align-items: center; border: 0; background: transparent; padding: 6px 8px; border-radius: 5px; cursor: pointer; text-align: left; }
 .lfs .menu button:hover { background: var(--accent-bg); }
-.lfs .ib { height: 28px; min-width: 28px; padding: 0 9px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; color: var(--text-2); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.lfs .ib { height: 26px; min-width: 26px; padding: 0 8px; border: 1px solid transparent; border-radius: 0; font: 11.5px var(--mono); background: transparent; cursor: pointer; color: var(--text-2); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .lfs .ib:hover { background: var(--sep); color: var(--text); }
-.lfs .ib.on { color: var(--accent); background: var(--accent-bg); }
+.lfs .ib.on { color: var(--accent); border-color: var(--accent); background: var(--card); }
 .lfs .ib svg { width: 15px; height: 15px; }
 /* work area */
-.lfs .work { flex: 1; min-height: 0; display: grid; gap: 6px; padding: 6px; background: var(--grid-bg); }
+.lfs .work { flex: 1; min-height: 0; display: grid; gap: 12px; padding: 12px; background: var(--card); }
 .lfs.lfs-project { display: flex; flex-direction: column; min-height: 0; background: var(--window); }
 .lfs .work.projectview { grid-template-columns: minmax(240px, var(--hist, 55%)) 12px minmax(280px, 1fr); gap: 0; }
 .lfs.lfs-project { container-type: inline-size; }
@@ -73,35 +59,127 @@ export const CSS = `
 .lfs .work.dragging { cursor: col-resize; user-select: none; }
 @container (max-width: 640px) { .lfs .work.projectview { grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(320px, 1fr); } .lfs .split { display: none; } .lfs-project .col + .col { border-top: 1px solid var(--term-border); } }
 .lfs .ptitle { font-size: 12px; font-weight: 500; color: var(--term-text); overflow: hidden; text-overflow: ellipsis; }
-.lfs .work.mainview { grid-template-columns: minmax(240px, .9fr) minmax(300px, 1fr) minmax(320px, 1.4fr); }
-.lfs .work.branchview { grid-template-columns: minmax(240px, 1fr) minmax(300px, 1.55fr) minmax(300px, 1.3fr); }
-.lfs .work.branchview.wide { grid-template-columns: minmax(200px, .7fr) minmax(260px, 1fr) minmax(320px, 1.7fr); }
-.lfs .work.mainview.wide { grid-template-columns: minmax(200px, .7fr) minmax(260px, .8fr) minmax(320px, 1.7fr); }
-.lfs .seg { display: inline-flex; background: var(--well); border-radius: 6px; padding: 2px; gap: 2px; flex: none; }
-.lfs .seg button { border: 0; background: transparent; font: 500 11.5px var(--font); padding: 2px 10px; border-radius: 4px; cursor: pointer; color: var(--text-2); }
-.lfs .seg button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 0 0 .5px var(--sep); }
-.lfs .seg button.on.h { color: var(--t-purple); }
-.lfs .seg button.on.f { color: var(--t-green); }
-.lfs .col { display: flex; flex-direction: column; gap: 6px; min-height: 0; min-width: 0; }
-.lfs .term { display: flex; flex-direction: column; background: var(--term); border-radius: 8px; overflow: hidden; min-width: 0; min-height: 0; box-shadow: 0 0 0 1px var(--term-border); position: relative; flex: 1; transition: box-shadow .25s; }
+.lfs .work.mainview { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); grid-template-rows: minmax(0, 1fr); }
+.lfs .work.branchview { display: flex; flex-direction: column; gap: 10px; }
+/* the preview's layout: History is the work area's first column */
+.lfs .work.withhist { grid-template-columns: minmax(360px, 440px) minmax(0, 7fr) minmax(0, 5fr); background: var(--paper); }
+.lfs .work.branchview.withhist { display: grid; grid-template-columns: minmax(360px, 440px) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
+.lfs .work.branchview.withhist .hist { grid-row: 1 / -1; }
+.lfs .work.withhist .hist { grid-row: 1 / -1; }
+.lfs .ctl { display: flex; flex: none; align-self: flex-end; margin: 0 0 8px; border: 1px solid var(--line); background: #fff; }
+.lfs .ctl button { min-height: 28px; border: 0; padding: 0 8px; font: 11.5px var(--mono); background: transparent; color: var(--text-2); cursor: pointer; }
+.lfs .ctl button:hover { color: var(--accent); }
+.lfs .ctl button.on { background: var(--text); color: #fff; }
+/* terminals (Term in OrchestrationDemo.jsx) */
+.lfs .wterm { border: 1px solid var(--line); box-shadow: none; }
+.lfs .wterm .thead { height: auto; padding: 6px 10px; font: 12px var(--mono); border-bottom: 1px solid var(--line); gap: 8px; }
+.lfs .wterm .thead .t { font-weight: 500; color: var(--text); }
+.lfs .wterm .thead .ghost { color: var(--text-3); min-width: 0; overflow: hidden; text-overflow: ellipsis; border: 0; background: none; padding: 0; font: inherit; }
+.lfs .wterm .thead .sp { flex: 1; margin-right: -8px; }
+.lfs .wterm .thead .ghost.sbchip { flex: 0 1 auto; cursor: pointer; }
+.lfs .wterm .thead .ghost.sbchip:hover { color: var(--t-orange); background: none; }
+.lfs .wterm .thead .av { width: 22px; height: 18px; }
+.lfs .tbox { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.lfs .tbox .wm { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); height: 76%; max-height: 240px; min-height: 48px; width: auto; pointer-events: none; font-family: var(--mono); }
+.lfs .wterm .tbody { position: relative; padding: 6px 10px; font: 12.5px/1.6 var(--mono); white-space: normal; }
+.lfs .wterm .ln { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lfs .wterm .ln .grp { display: none; }
+.lfs .wterm .ln .av { width: 20px; height: 15px; margin-left: 6px; vertical-align: -3px; }
+.lfs .wterm .out { padding-left: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lfs .wterm.hot { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.lfs .wterm.bad { border-color: var(--coral); box-shadow: 0 0 0 2px var(--coral); }
+.lfs .wtag { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 6px; flex: 0 1 auto; }
+.lfs .wterm .thead .t, .lfs .storep .thead .t { flex: none; }
+.lfs .wtag.grey { background: #F0EEE8; color: var(--text-2); }
+.lfs .wtag.blue { background: var(--accent-bg); color: var(--accent); }
+.lfs .wtag.coral { background: var(--coral-pale); color: var(--coral-text); }
+.lfs .fsi { flex: none; }
+/* main: the Branch cards on a sand floor (AgentBoard), the Store (StorePanel), the project terminal */
+.lfs .board { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--line); background: #fff; }
+.lfs .bhead { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--term-head); font: 12px var(--mono); color: #6B6964; }
+.lfs .bhead .t { font-weight: 500; color: var(--text); }
+.lfs .bhead .sp { flex: 1; margin-right: -8px; }
+.lfs .bhead .roster { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.lfs .bhead .roster:hover { color: var(--accent); }
+.lfs .floor { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); grid-auto-rows: min-content; align-content: start; gap: 8px; padding: 8px; background: #F6EEDD radial-gradient(#E9DCC0 1px, transparent 1px) 0 0 / 12px 12px; }
+.lfs .floor .none { grid-column: 1 / -1; padding: 24px 0; text-align: center; font: 12px var(--mono); color: #8C6A3A; }
+.lfs .bcard { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--bc); background: #fff; transition: opacity .3s; }
+.lfs .bcard.dim { opacity: .55; }
+.lfs .bcard.flash { animation: lfs-flash 1s ease-out; }
+.lfs .bcard .bhd { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font: 12.5px var(--mono); background: color-mix(in srgb, var(--bc) 10%, white); cursor: pointer; min-width: 0; }
+.lfs .bcard .bhd .sq { width: 10px; height: 10px; background: var(--bc); flex: none; }
+.lfs .bcard .bhd .nm { font-weight: 500; color: color-mix(in srgb, var(--bc) 75%, black); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.lfs .bcard .bhd .note { margin-left: auto; flex: none; font-size: 11px; color: #6B6964; }
+.lfs .crow { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-top: 1px solid var(--line2); font: 12px var(--mono); cursor: default; }
+.lfs .crow[data-dws] { cursor: pointer; }
+.lfs .crow.off { opacity: .6; }
+.lfs .crow .av { width: 24px; height: 20px; }
+.lfs .crow .nm { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.lfs .crow .st { margin-left: auto; flex: none; padding: 1px 4px; font-size: 10.5px; background: color-mix(in srgb, var(--ac) 12%, white); color: color-mix(in srgb, var(--ac) 80%, black); }
+.lfs .crow.off .st { background: #F0EEE8; color: var(--text-3); }
+.lfs .crow.sblit { box-shadow: inset 0 0 0 2px var(--orange); }
+.lfs .bcard.pulse { animation: lfs-focuspane 1.6s ease-out; }
+.lfs .pool { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 10px; border-top: 1px solid #E4D6B8; background: #EFE3C8; font: 11px var(--mono); color: #8C6A3A; }
+.lfs .pool .av { width: 22px; height: 18px; opacity: .7; }
+.lfs .storep { flex: none; border: 1px solid var(--line); box-shadow: none; }
+.lfs .storep .thead { height: auto; padding: 6px 10px; font: 12px var(--mono); border-bottom: 1px solid var(--line); }
+.lfs .storep .thead .t { font-weight: 500; }
+.lfs .storep .thead .sp { flex: 1; margin-right: -8px; }
+.lfs .sbody { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; }
+.lfs .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+@media (min-width: 1536px) { .lfs .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.lfs .tile { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line2); background: #fff; padding: 4px 8px; font-family: var(--mono); }
+.lfs .tile span { font-size: 10.5px; line-height: 1.25; color: #6B6964; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lfs .tile b { font-size: 15px; font-weight: 500; line-height: 1.4; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lfs .tile b.blue { color: var(--accent); }
+.lfs .tile b.coral { color: var(--coral-text); }
+.lfs .sbar2 { display: flex; height: 6px; background: #E6EBF5; }
+.lfs .sbar2 .p { background: var(--accent); }
+.lfs .sbar2 .m { background: var(--coral); }
+.lfs .sbar2 .f { background: #C9D0DB; }
+.lfs .sline { font: 11px var(--mono); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lfs .sline b { font-weight: 500; color: var(--text); }
+.lfs .sline .mc { color: var(--coral-text); }
+/* a Branch (BranchPanel): its line, its agents, then fs and Workspace terminals two by two */
+.lfs .binfo { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font: 12.5px var(--mono); color: var(--text-2); }
+.lfs .binfo .nm { font-weight: 500; }
+.lfs .binfo .status { margin-left: auto; background: #F0EEE8; padding: 2px 8px; }
+.lfs .wchips { flex: none; display: flex; flex-wrap: wrap; gap: 6px; min-height: 26px; }
+.lfs .wchips .none { font: 11.5px var(--mono); color: var(--text-3); align-self: center; }
+.lfs .wchip { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); padding: 2px 8px 2px 4px; font: 11.5px var(--mono); opacity: .7; }
+.lfs .wchip.on { border-color: var(--ac); background: #fff; opacity: 1; }
+.lfs .wchip .av { width: 20px; height: 16px; }
+.lfs .wchip .nm { color: var(--text); }
+.lfs .wchip .st { color: var(--text-3); }
+.lfs .wchip.on .st { color: color-mix(in srgb, var(--ac) 80%, black); }
+.lfs .wgrid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(176px, 1fr); gap: 12px; overflow-y: auto; }
+.lfs .wempty { display: flex; align-items: center; justify-content: center; border: 1px dashed #E4E0D8; font: 11.5px var(--mono); color: var(--text-3); }
+.lfs .seg { display: inline-flex; border: 1px solid var(--line); background: var(--card); flex: none; }
+.lfs .seg button { border: 0; background: transparent; font: 11px var(--mono); padding: 3px 8px; cursor: pointer; color: var(--text-2); display: inline-flex; align-items: center; gap: 4px; }
+.lfs .seg button:hover { color: var(--text); }
+.lfs .seg button.on { background: var(--text); color: #fff; }
+.lfs .seg svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.lfs .col { display: flex; flex-direction: column; gap: 12px; min-height: 0; min-width: 0; }
+.lfs .term { display: flex; flex-direction: column; background: var(--term); border-radius: 0; overflow: hidden; min-width: 0; min-height: 0; box-shadow: 0 0 0 1px var(--line); position: relative; flex: 1; transition: box-shadow .25s; }
 .lfs .term.hot { box-shadow: 0 0 0 1.5px var(--accent), 0 6px 18px rgba(0,0,0,.12); }
 .lfs .term.bad { box-shadow: 0 0 0 1.5px var(--red), 0 6px 18px rgba(255,59,48,.18); }
 .lfs .term.enter { animation: lfs-grow .35s ease-out; }
 .lfs .term.leaving { animation: lfs-leave 1.2s ease-in forwards; pointer-events: none; }
-.lfs .thead { height: 30px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px; background: var(--term-head); color: var(--term-text); font-size: 12px; border-bottom: 1px solid var(--term-border); white-space: nowrap; overflow: hidden; }
-.lfs .thead .ttl { font: 12px var(--font); color: var(--term-dim); overflow: hidden; text-overflow: ellipsis; }
+.lfs .thead { height: 34px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px; background: var(--term-head); color: var(--term-text); font: 12.5px var(--mono); border-bottom: 1px solid var(--line2); white-space: nowrap; overflow: hidden; }
+.lfs .thead .ttl { font: 12px var(--mono); color: var(--term-dim); overflow: hidden; text-overflow: ellipsis; }
 .lfs .thead .sp { flex: 1; }
-.lfs .kind { font: 700 10px var(--mono); padding: 1px 5px; border-radius: 4px; letter-spacing: .03em; flex: none; }
+.lfs .kind { font: 600 11px var(--mono); padding: 0; letter-spacing: .06em; flex: none; background: none !important; color: var(--text) !important; }
 .lfs .kind.fs { background: var(--accent-bg); color: var(--t-blue); }
 .lfs .kind.sandbox { background: var(--orange-bg); color: var(--t-orange); }
 .lfs .kind.history { background: var(--purple-bg); color: var(--t-purple); }
 .lfs .kind.files { background: var(--green-bg); color: var(--t-green); }
 .lfs .kind.plain { background: var(--well); color: var(--text-2); }
-.lfs .pill { font: 10.5px var(--mono); padding: 1px 6px; border-radius: 4px; background: var(--well); color: var(--term-dim); white-space: nowrap; display: inline-flex; gap: 4px; align-items: center; }
+.lfs .pill { font: 11px var(--mono); padding: 1px 6px; border-radius: 0; background: var(--well); color: var(--term-dim); white-space: nowrap; display: inline-flex; gap: 4px; align-items: center; }
 .lfs .pill.warn { background: var(--red-bg); color: var(--t-red); }
 .lfs .pill.run { background: var(--green-bg); color: var(--t-green); }
+.lfs .pill.ro { background: var(--coral-pale); color: var(--coral-text); }
 .lfs .agent-tag { display: inline-flex; align-items: center; gap: 4px; font: 600 11px var(--font); color: var(--ac); background: color-mix(in srgb, var(--ac) 14%, transparent); padding: 0 6px 0 3px; border-radius: 4px; height: 17px; }
-.lfs .tbody { flex: 1; min-height: 0; overflow: auto; padding: 8px 10px 6px; font: 12px/1.6 var(--mono); color: var(--term-text); white-space: pre-wrap; word-break: break-word; }
+.lfs .tbody { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px 8px; font: 12.5px/1.7 var(--mono); color: var(--term-text); white-space: pre-wrap; word-break: break-word; }
 .lfs .ln { display: block; white-space: pre-wrap; }
 .lfs .ln.new { animation: lfs-fadein .35s ease-out; }
 .lfs .ln .cmd { color: var(--term-text); }
@@ -111,36 +189,68 @@ export const CSS = `
 .lfs .out.good { color: var(--t-green); }
 .lfs .out.bad { color: var(--t-red); }
 .lfs .out.mark { color: var(--t-orange); }
-.lfs .prompt { color: var(--t-blue); }
+.lfs .prompt { color: var(--text-3); }
 .lfs .inrow { flex: none; display: flex; align-items: center; gap: 6px; padding: 5px 10px 7px; font: 12px var(--mono); color: var(--term-dim); border-top: 1px solid var(--term-border); }
 .lfs .inrow .prompt { flex: none; white-space: nowrap; }
 .lfs .inrow > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lfs .inrow .caret { width: 7px; height: 14px; background: var(--term-dim); opacity: .5; animation: lfs-blink 1.1s steps(2) infinite; }
-/* main view */
+/* History: the website's tree (tree.js) */
 .lfs .graphwrap { flex: 1; min-height: 0; overflow: auto; padding: 6px 4px; }
-.lfs svg.graph { display: block; }
-.lfs svg.graph text { font-family: var(--font); fill: var(--term-text); }
-.lfs svg.graph .rowband { fill: var(--accent-bg); }
-.lfs svg.graph .edge { fill: none; stroke: var(--term-dim); stroke-width: 1.8; }
-.lfs svg.graph .edge.main { stroke: var(--purple); stroke-width: 2.4; }
-.lfs svg.graph .edge.publish { stroke: var(--purple); stroke-width: 1.5; stroke-dasharray: 4 4; }
-.lfs svg.graph .edge.merge { stroke: var(--bc); stroke-width: 1.6; stroke-dasharray: 5 3; }
-.lfs svg.graph .mergehead { fill: none; stroke: var(--bc); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.lfs svg.graph .node .shape { transform-box: fill-box; transform-origin: center; }
-.lfs svg.graph .layer .shape { fill: var(--purple); }
-.lfs svg.graph .commit .shape { fill: var(--bc); }
-.lfs svg.graph .commit .inner { fill: var(--term); }
-.lfs svg.graph .fork .shape { fill: var(--term); stroke: var(--bc); stroke-width: 2; }
-.lfs svg.graph .ini { font: 700 8px var(--font); fill: #fff; }
-.lfs svg.graph .mbadge circle { fill: var(--orange); stroke: var(--term); stroke-width: 1.5; }
-.lfs svg.graph .mbadge.stale circle { fill: var(--red); }
-.lfs svg.graph .mbadge text { fill: #fff; font: 700 8.5px var(--font); }
-.lfs svg.graph .popin { animation: lfs-popin .5s .3s both cubic-bezier(.2,.9,.3,1.35); transform-box: fill-box; transform-origin: center; }
-/* History rows beside the lanes: id · Branch · message · author · head */
-.lfs .gview { display: flex; align-items: flex-start; min-width: 0; }
-.lfs .gview svg.graph { flex: none; }
-.lfs .glabels { flex: 1; min-width: 0; }
-.lfs .grow { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; font: 12px var(--font); color: var(--term-text); white-space: nowrap; text-align: left; }
+.lfs .panel { background: var(--card); border: 1px solid var(--line); box-shadow: 0 1px 0 var(--line), 0 12px 32px rgba(30,37,51,.06); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.lfs .hist .phead { flex: none; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--tab); font: 12px var(--mono); color: var(--text-3); white-space: nowrap; overflow: hidden; }
+.lfs .hist .phead .ref { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.lfs .hist .phead .sp { flex: 1; }
+.lfs .hist .fbody, .lfs .hist .ftree, .lfs .hist .fview { min-height: 0; }
+.lfs .treewrap { flex: 1; min-height: 0; overflow: auto; outline: none; position: relative; }
+.lfs .treewrap:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.lfs svg.tree { display: block; font-family: var(--mono); font-size: 10px; }
+.lfs svg.tree .lane { fill: var(--lane); }
+.lfs svg.tree .grid { stroke: #F1EEE8; }
+.lfs svg.tree .now { stroke: var(--text); stroke-opacity: .35; stroke-dasharray: 2 3; }
+.lfs svg.tree .nowt { font-weight: 600; fill: var(--text); }
+.lfs svg.tree .fork { fill: none; stroke-width: 2.5; opacity: .6; stroke-linecap: round; }
+.lfs svg.tree .publish { fill: none; stroke-width: 1.6; stroke-dasharray: 4 3; opacity: .75; }
+.lfs svg.tree .graft { fill: none; stroke-width: 1.8; opacity: .6; }
+.lfs svg.tree .bough { fill: none; stroke-linecap: round; opacity: .9; }
+.lfs svg.tree .twig { fill: none; stroke: var(--twig); stroke-width: 2.4; stroke-linecap: round; }
+.lfs svg.tree .trunk { fill: none; stroke: var(--trunk); stroke-linecap: round; }
+.lfs svg.tree .band { stroke: #fff; stroke-width: 1; }
+.lfs svg.tree .lid { font-weight: 600; pointer-events: none; }
+.lfs svg.tree .hit { fill: transparent; }
+.lfs svg.tree .knot circle:not(.hit) { fill: var(--card); stroke-width: 1.8; }
+.lfs svg.tree .ring { fill: #fff; stroke-width: 2.4; }
+.lfs svg.tree .vein { stroke: #fff; stroke-opacity: .55; stroke-width: .9; stroke-linecap: round; fill: none; }
+.lfs svg.tree .node { cursor: pointer; }
+.lfs svg.tree .node:hover path:not(.vein), .lfs svg.tree .node.sel path:not(.vein) { stroke: var(--text); stroke-width: 1.4; }
+.lfs svg.tree .node.sel .ring, .lfs svg.tree .node.sel .band, .lfs svg.tree .knot.sel circle:not(.hit) { stroke: var(--text); }
+.lfs svg.tree .leader { stroke: var(--twig); stroke-width: 1; stroke-dasharray: 2 2; }
+.lfs svg.tree .tag { cursor: pointer; }
+.lfs svg.tree .tag rect { fill: var(--tc); stroke: var(--tc); }
+.lfs svg.tree .tag text { font-weight: 600; fill: #fff; }
+.lfs svg.tree .tag.idle rect { fill: #fff; }
+.lfs svg.tree .tag.idle text { fill: var(--tc); }
+.lfs svg.tree .tag.on rect { stroke: var(--text); stroke-width: 1.5; }
+.lfs svg.tree .tavbg { fill: var(--card); stroke-width: 1.2; }
+.lfs svg.tree .ground { fill: #F6EEDD; }
+.lfs svg.tree .groundline { stroke: #E4D6B8; }
+.lfs svg.tree .mbadge circle { fill: var(--orange); stroke: #fff; stroke-width: 1.5; }
+.lfs svg.tree .mbadge.stale circle { fill: var(--red); }
+.lfs svg.tree .mbadge text { fill: #fff; font: 700 8.5px var(--font); }
+.lfs svg.tree .popin { animation: lfs-popin .5s .3s both cubic-bezier(.2,.9,.3,1.35); transform-box: fill-box; transform-origin: center; }
+.lfs .ov { flex: none; display: flex; height: 40px; border-top: 1px solid var(--line2); }
+.lfs .ovl { width: 110px; flex: none; display: flex; flex-direction: column; justify-content: center; padding: 0 10px; border-right: 1px solid var(--line2); font: 10px/1.4 var(--mono); color: var(--text-3); }
+.lfs .ovl button { align-self: flex-start; border: 0; background: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
+.lfs .ovstrip { flex: 1; position: relative; cursor: pointer; background: #FAF9F6; }
+.lfs .ovs { display: block; width: 100%; height: 100%; }
+.lfs .ovs .bar { fill: #D6D1C7; }
+.lfs .ovs .tick { fill: var(--trunk); }
+.lfs .ovs .nowl { stroke: var(--text); stroke-opacity: .5; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
+.lfs .ovbox { position: absolute; top: 1px; bottom: 1px; border: 1.5px solid var(--accent); background: rgba(47,91,181,.08); pointer-events: none; }
+.lfs .tlegend { flex: none; display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 12px; border-top: 1px solid var(--line2); font: 11px var(--mono); color: var(--text-2); }
+.lfs .tlegend span { display: inline-flex; align-items: center; gap: 6px; }
+.lfs .tlegend .dash { width: 16px; border-top: 2px dashed var(--b1); }
+.lfs .tlegend .hint { color: var(--text-3); }
+.lfs .grow { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 8px; border: 0; background: transparent; cursor: pointer; font: 12px var(--mono); color: var(--term-text); white-space: nowrap; text-align: left; }
 .lfs .grow:hover { background: var(--sep); }
 .lfs .grow.sel { background: var(--accent-bg); }
 .lfs .grow > * { flex: none; }
@@ -158,16 +268,20 @@ export const CSS = `
 .lfs .brow .age { color: var(--term-dim); min-width: 2.5em; text-align: right; }
 @keyframes lfs-popin { from { transform: scale(0); } to { transform: scale(1); } }
 .lfs .rows { flex: 1; min-height: 0; overflow: auto; padding: 4px; }
-.lfs .brow { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 6px; cursor: pointer; min-height: 32px; transition: background .25s; }
-.lfs .brow .slot { width: 100px; height: 20px; flex: none; }
+.lfs .brow { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 0; border-bottom: 1px solid var(--line2); cursor: pointer; min-height: 32px; transition: background .25s; }
+.lfs .brow .slot { width: 66px; height: 20px; flex: none; }
 .lfs .brow .hd { font: 11px var(--mono); color: var(--text-2); width: 34px; text-align: right; flex: none; }
 .lfs .brow:hover { background: var(--well); }
 .lfs .brow.flash { animation: lfs-flash 1s ease-out; }
+.lfs .brow .sq { width: 9px; height: 9px; background: var(--bc); flex: none; }
 .lfs .brow .st { width: 16px; text-align: center; font-size: 12px; flex: none; }
 .lfs .brow .nm { font: 600 12px var(--mono); color: var(--bc); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lfs .brow .meta { font: 11px var(--mono); color: var(--text-3); white-space: nowrap; }
+.lfs .brow .meta.busy { color: var(--t-green); }
+.lfs .brow .meta.pub { color: var(--t-blue); }
+.lfs .brow .meta.bad { color: var(--t-red); }
 .lfs .brow.idle .nm { opacity: .6; }
-.lfs .bench { flex: none; min-height: 64px; border-top: 1px dashed var(--sep-strong); display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 11px; color: var(--text-3); position: relative; }
+.lfs .bench { flex: none; min-height: 48px; background: var(--term); box-shadow: 0 0 0 1px var(--line); display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 11px; color: var(--text-3); position: relative; }
 .lfs .bench b { font-weight: 600; letter-spacing: .04em; text-transform: uppercase; font-size: 10px; }
 /* branch view */
 /* SDK call details on a terminal line (tui.html) */
@@ -280,18 +394,21 @@ export const CSS = `
 .lfs .bch { flex: none; width: 40px; margin: 0 4px 0 6px; font: 600 10.5px/18px var(--mono); color: var(--bc); border-left: 3px solid var(--bc); padding-left: 5px; cursor: pointer; }
 .lfs .bch.cont { opacity: .55; }
 .lfs .bch:hover { background: var(--well); }
-.lfs svg.graph .node { cursor: pointer; }
 /* Sandbox / process status bar (tui.html) */
-.lfs .statusbar { height: 32px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--chrome); border-top: .5px solid var(--sep); overflow-x: auto; scrollbar-width: none; font-size: 11px; }
+.lfs .statusbar { height: 30px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 14px; background: var(--card); border-top: 1px solid var(--line2); font-family: var(--mono); overflow-x: auto; scrollbar-width: none; font-size: 11px; }
 .lfs .statusbar .lbl { color: var(--text-3); white-space: nowrap; }
+.lfs .statusbar .snote { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.lfs .statusbar .snote:empty { display: none; }
 .lfs .statusbar .sp { flex: 1; min-width: 10px; }
-.lfs .chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; font: 11px var(--mono); background: var(--card); box-shadow: 0 0 0 .5px var(--sep-strong); white-space: nowrap; }
+.lfs .chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 0; font: 11px var(--mono); background: var(--card); box-shadow: 0 0 0 .5px var(--sep-strong); white-space: nowrap; }
 .lfs .chip .d { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
 .lfs .chip.closed { opacity: .5; }
 .lfs .chip.closed .d { background: var(--text-3); }
 .lfs .chip.proc .d { background: var(--orange); animation: lfs-blink 1.2s steps(2) infinite; }
 .lfs .chip.enter { animation: lfs-grow .3s ease-out; }
-.lfs .sblist { flex: 1 1 0; min-height: 140px; }
+.lfs .sblist { flex: 1 1 0; min-height: 120px; }
+.lfs .storecard { flex: none; }
+.lfs .storecard .store { border-top: 0; background: var(--term); padding: 6px 10px; }
 .lfs .blist { flex: 0 1 auto; max-height: 48%; min-height: 96px; }
 .lfs .blist .rows { overflow-y: auto; padding: 4px; }
 .lfs .sbg { display: flex; flex-direction: column; gap: 1px; padding: 4px 2px 6px; border-radius: 6px; transition: box-shadow .15s; }
@@ -323,7 +440,7 @@ export const CSS = `
 .lfs .term.focus { animation: lfs-focuspane 1.2s ease-out; }
 @keyframes lfs-focuspane { 0%, 40% { box-shadow: 0 0 0 2.5px var(--accent), 0 6px 18px rgba(0,0,0,.18); } }
 /* Hover card on History nodes (tui.html) */
-.lfs .hcard { position: absolute; z-index: 65; width: 290px; background: var(--card); border-radius: 10px; box-shadow: 0 14px 44px rgba(0,0,0,.24), 0 0 0 .5px var(--sep-strong); padding: 8px; display: none; font-size: 12px; }
+.lfs .hcard { position: absolute; z-index: 65; width: 290px; background: var(--card); border-radius: 0; border: 1px solid var(--line); box-shadow: 0 14px 44px rgba(0,0,0,.24), 0 0 0 .5px var(--sep-strong); padding: 8px; display: none; font-size: 12px; }
 .lfs .hcard.open { display: block; animation: lfs-grow .12s ease-out; }
 .lfs .hcard .h { display: flex; align-items: baseline; gap: 6px; margin: 0 4px 2px; }
 .lfs .hcard .h b { font: 600 13px var(--mono); }
@@ -341,42 +458,15 @@ export const CSS = `
 .lfs .hcard .cbtn { flex: 1; border: 0; border-radius: 6px; padding: 5px 6px; background: var(--well); cursor: pointer; font-size: 11.5px; color: var(--text); }
 .lfs .hcard .cbtn:hover { background: var(--accent); color: #fff; }
 .lfs .hcard .hint { margin: 6px 4px 0; font-size: 10.5px; color: var(--text-3); }
-.lfs .panes { flex: 1; min-height: 0; display: grid; gap: 6px; grid-auto-rows: minmax(0, 1fr); }
-.lfs .empty { flex: 1; display: grid; place-items: center; text-align: center; color: var(--text-2); background: var(--term); border-radius: 8px; box-shadow: 0 0 0 1px var(--term-border); padding: 16px; }
+.lfs .empty { flex: 1; display: grid; place-items: center; text-align: center; color: var(--text-2); background: var(--term); border-radius: 0; box-shadow: 0 0 0 1px var(--line); padding: 16px; }
 .lfs .empty h3 { margin: 0 0 6px; font-size: 14px; color: var(--text); }
 .lfs .empty .recent { white-space: pre; margin-top: 10px; font: 11.5px/1.7 var(--mono); text-align: left; color: var(--term-dim); }
-.lfs .legend { flex: none; display: flex; flex-wrap: wrap; gap: 4px 10px; padding: 6px 10px 8px; border-top: 1px solid var(--term-border); font: 11px var(--mono); color: var(--text-2); }
-.lfs .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--bc); margin-right: 4px; }
-/* player */
-/* crabs */
-.lfs .lfs-crabs { position: absolute; inset: 0; pointer-events: none; z-index: 40; overflow: hidden; }
-.lfs .crab { position: absolute; left: 0; top: 0; width: 36px; height: 48px; transition: transform .55s ease-in-out, opacity .3s; }
-.lfs .crab .spr { display: block; width: 36px; height: 48px; background-repeat: no-repeat; transform-origin: 50% 100%; transition: transform .25s; filter: drop-shadow(0 2px 2px rgba(0,0,0,.18)); }
-.lfs .crab.flip .spr { transform: scaleX(-1); }
-.lfs .crab.small .spr { transform: scale(.5); }
-.lfs .crab.small.flip .spr { transform: scale(-.5, .5); }
-.lfs .crab.gone { opacity: 0; }
-.lfs .crab.idle .spr { animation: lfs-avbob 2.6s ease-in-out infinite; }
-.lfs .crab.walk .spr { animation: lfs-avhop .28s ease-in-out infinite; }
-.lfs .crab .fx { display: none; position: absolute; right: -2px; top: 2px; font: 700 13px/1 var(--font); font-style: normal; }
-.lfs .crab .fx.bang { color: var(--red); right: 0; top: 0; font-size: 15px; }
-.lfs .crab.sweat .fx.sweat, .lfs .crab.bang .fx.bang { display: block; animation: lfs-avhop .5s ease-in-out infinite; }
-.lfs .crab.small .fx { top: 22px; right: 4px; font-size: 10px; }
-.lfs .crab .dup, .lfs .av .dup { position: absolute; right: -3px; bottom: -2px; font: 700 8px/10px var(--font); font-style: normal; min-width: 10px; text-align: center; border-radius: 5px; background: var(--card); color: var(--text-2); box-shadow: 0 0 0 .5px var(--sep-strong); }
-.lfs .crab .dup { bottom: 12px; }
-.lfs .av { position: relative; display: inline-block; width: 16px; height: 16px; flex: none; border-radius: 50%; background-repeat: no-repeat; background-color: var(--well); box-shadow: 0 0 0 1px var(--ac); vertical-align: middle; }
+/* heroes stand still and bob while they work (the website's animate-bob); bubbles and blocks fly over the view */
+.lfs .lfs-fx { position: absolute; inset: 0; pointer-events: none; z-index: 40; overflow: hidden; }
+.lfs .av.bob { animation: lfs-avbob .3s ease-in-out infinite; }
+.lfs .av .dup { position: absolute; right: -3px; bottom: -2px; font: 700 8px/10px var(--font); font-style: normal; min-width: 10px; text-align: center; border-radius: 5px; background: var(--card); color: var(--text-2); box-shadow: 0 0 0 .5px var(--sep-strong); }
+.lfs .av { position: relative; display: inline-block; width: 20px; height: 16px; flex: none; background-repeat: no-repeat; background-size: contain; background-position: 50% 100%; vertical-align: middle; }
 @keyframes lfs-avbob { 50% { translate: 0 -1.5px; } }
-@keyframes lfs-avhop { 50% { translate: 0 -4px; } }
-.lfs .crab .name { position: absolute; left: 50%; top: 48px; transform: translateX(-50%); font: 600 9.5px var(--font); color: var(--c); white-space: nowrap; background: color-mix(in srgb, var(--window) 80%, transparent); padding: 0 3px; border-radius: 3px; }
-.lfs .crab.small .name { display: none; }
-/* fan-out: an agent working in several places at once (a script's calls) */
-.lfs .crab .fan { display: none; position: absolute; left: -4px; top: 4px; font: 700 9px/13px var(--font); font-style: normal; padding: 0 3px; border-radius: 7px; background: var(--c); color: #fff; box-shadow: 0 0 0 1.5px var(--window); }
-.lfs .crab.fanned .fan { display: block; }
-.lfs .crab.small .fan { top: 22px; left: 6px; font-size: 8px; line-height: 11px; }
-.lfs .crab.ghost { opacity: .42; transition: opacity .3s; }
-.lfs .crab.ghost .spr { filter: grayscale(.3); animation: none; }
-.lfs .crab.ghost .name { opacity: .8; }
-.lfs .crab.ghost.gone { opacity: 0; }
 .lfs .bubble { position: absolute; z-index: 45; pointer-events: none; transform: translate(-50%, -100%); font: 600 11px var(--mono); padding: 3px 7px; border-radius: 8px; background: var(--card); color: var(--text); box-shadow: 0 4px 14px rgba(0,0,0,.2), 0 0 0 .5px var(--sep-strong); white-space: nowrap; animation: lfs-bubble 1.9s ease-out forwards; }
 .lfs .bubble.good { color: var(--t-green); }
 .lfs .bubble.bad { color: var(--t-red); }
@@ -390,21 +480,113 @@ export const CSS = `
 @keyframes lfs-pop { from { transform: scale(0); } to { transform: scale(1); } }
 @keyframes lfs-flash { 0% { background: var(--accent-bg); } 100% { background: transparent; } }
 @keyframes lfs-bubble { 0% { opacity: 0; margin-top: 6px; } 12% { opacity: 1; margin-top: 0; } 80% { opacity: 1; } 100% { opacity: 0; margin-top: -8px; } }
-@media (max-width: 860px) {
-  .lfs .work.mainview, .lfs .work.branchview { grid-template-columns: 1fr; }
-  .lfs .col { min-height: 300px; }
-}
 @media (prefers-reduced-motion: reduce) {
-  .lfs .crab, .lfs .block { transition: none; }
-  .lfs .crab .spr, .lfs .crab .fx { animation: none !important; }
+  .lfs .block { transition: none; }
+  .lfs .av.bob { animation: none; }
 }
 /* the view's own root: position for the overlay, the card and menus */
-.lfs { position: relative; font: 13px/1.4 var(--font); color: var(--text); -webkit-font-smoothing: antialiased; }
-/* standalone layout (the dsh tab): strip, work area, status bar */
-.lfs.lfs-app { height: 100%; min-height: 0; display: flex; flex-direction: column; background: var(--window); overflow: hidden; }
-.lfs .lfs-strip { height: 40px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 8px; background: var(--chrome); border-bottom: .5px solid var(--sep); }
+.lfs { container: lfs / inline-size; position: relative; font: 13px/1.4 var(--font); color: var(--text); -webkit-font-smoothing: antialiased; }
+/* standalone layout (the dsh tab): History left; Branch tabs over the work area right; status bar */
+.lfs.lfs-app { height: 100%; min-height: 0; display: flex; flex-direction: column; background: var(--paper); overflow: hidden; }
+.lfs .lfs-cols { flex: 1; min-height: 0; display: grid; grid-template-areas: "h s w"; grid-template-columns: minmax(var(--histmin, 360px), var(--histw, 440px)) 14px minmax(560px, 1fr); grid-template-rows: minmax(0, 1fr); gap: 0; padding: 14px; background: var(--paper) radial-gradient(var(--dot) 1px, transparent 1px) 0 0 / 24px 24px; }
+.lfs .lfs-cols > .hist { grid-area: h; }
+.lfs .lfs-cols > .split { grid-area: s; }
+.lfs .lfs-cols > .panel.right { grid-area: w; }
+/* where History docks (view.js fitCols): left is the rule above */
+.lfs .lfs-cols[data-dock="right"] { grid-template-areas: "w s h"; grid-template-columns: minmax(560px, 1fr) 14px minmax(var(--histmin, 360px), var(--histw, 440px)); }
+.lfs .lfs-cols[data-stack] { grid-template-areas: "h" "s" "w"; grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--histh, 560px) 14px var(--workrow, minmax(640px, auto)); overflow-y: auto; }
+.lfs .lfs-cols[data-stack][data-dock="bottom"] { grid-template-areas: "w" "s" "h"; grid-template-rows: var(--workrow, minmax(640px, auto)) 14px var(--histh, 560px); }
+/* Files widened: History takes 55% whatever its dragged width */
+.lfs .lfs-cols.wide:not([data-stack]) { --histw: 55% !important; --histmin: 55% !important; }
+/* one window or both (the switch in the status bar); the divider resizes History */
+.lfs .lfs-cols[data-panes="history"] { grid-template-areas: "h"; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.lfs .lfs-cols[data-panes="work"] { grid-template-areas: "w"; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.lfs .lfs-cols[data-panes="history"] > .split, .lfs .lfs-cols[data-panes="history"] > .panel.right { display: none; }
+.lfs .lfs-cols[data-panes="work"] > .split, .lfs .lfs-cols[data-panes="work"] > .hist { display: none; }
+.lfs .lfs-cols.dragging { cursor: col-resize; user-select: none; }
+.lfs .lfs-cols[data-stack].dragging, .lfs .lfs-cols[data-stack] > .split { cursor: row-resize; }
+.lfs .split.cols::after { left: 6.5px; background: transparent; }
+.lfs .split.cols:hover::after, .lfs .lfs-cols.dragging .split.cols::after { left: 6px; width: 2px; background: var(--accent); }
+.lfs .lfs-cols[data-stack] > .split::after { inset: 6.5px 0 auto 0; width: auto; height: 1px; }
+.lfs .lfs-cols[data-stack] > .split:hover::after, .lfs .lfs-cols[data-stack].dragging > .split::after { inset: 6px 0 auto 0; width: auto; height: 2px; }
+/* docking: a window is grabbed by its grip (or its header's empty part) */
+.lfs .lfs-cols.docking, .lfs .lfs-cols.docking * { cursor: grabbing !important; user-select: none; }
+.lfs .grip { display: none; flex: none; width: 10px; height: 18px; margin-right: 2px; cursor: grab; border-radius: 3px; background: radial-gradient(circle, var(--text-3) 1.1px, transparent 1.3px) 0 0 / 5px 5px; opacity: .7; }
+.lfs .grip:hover { opacity: 1; background-color: var(--well); }
+.lfs .lfs-cols[data-panes="both"] .grip { display: block; }
+.lfs .lfs-strip > .grip { align-self: center; margin: 0 4px 0 2px; }
+/* the drop targets while a window is dragged (view.js onDockDown) */
+.lfs .dockui { position: absolute; }
+.lfs .dkprev { position: absolute; display: none; background: rgba(47,91,181,.10); border: 2px dashed var(--accent); border-radius: 10px; transition: left .12s, right .12s, top .12s, bottom .12s; }
+.lfs .dkpad { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: grid; grid-template-columns: repeat(3, 72px); grid-template-rows: repeat(3, 58px); gap: 6px; }
+.lfs .dkt, .lfs .dkc { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border-radius: 9px; font: 10.5px var(--mono); }
+.lfs .dkt { background: var(--card); border: 1px solid var(--line2); color: var(--text-2); box-shadow: 0 4px 14px rgba(30,37,51,.14); transition: background .1s, color .1s; }
+.lfs .dkt .dkic { width: 26px; height: 18px; }
+.lfs .dkt.cur { border-style: dashed; }
+.lfs .dkt.hot { background: var(--accent); border-color: var(--accent); color: #fff; }
+.lfs .dkt.off { opacity: .45; box-shadow: none; }
+.lfs .dkt[data-z="top"] { grid-area: 1 / 2; } .lfs .dkt[data-z="left"] { grid-area: 2 / 1; } .lfs .dkt[data-z="right"] { grid-area: 2 / 3; } .lfs .dkt[data-z="bottom"] { grid-area: 3 / 2; }
+.lfs .dkc { grid-area: 2 / 2; color: var(--accent); font-weight: 600; text-align: center; background: rgba(251,249,245,.9); }
+.lfs .dkic { width: 18px; height: 12px; display: block; }
+.lfs .dkic rect { fill: none; stroke: currentColor; stroke-width: 1; }
+.lfs .dkic rect.f { fill: currentColor; stroke: none; }
+.lfs .statusbar .docksw button { padding: 0 6px; }
+.lfs .statusbar .docksw button:disabled { opacity: .35; cursor: not-allowed; }
+/* the divider's grip: always visible, so it reads as something to drag */
+.lfs .split.cols::before { content: ""; position: absolute; left: 4px; top: 50%; width: 6px; height: 40px; margin-top: -20px; border-radius: 3px; background: var(--card) radial-gradient(circle, var(--text-3) 1px, transparent 1.2px) 0 0 / 6px 6px; border: 1px solid var(--line2); z-index: 1; }
+.lfs .split.cols:hover::before, .lfs .lfs-cols.dragging .split.cols::before { border-color: var(--accent); }
+.lfs .lfs-cols[data-stack] > .split::before { left: 50%; top: 4px; width: 40px; height: 6px; margin: 0 0 0 -20px; }
+.lfs .work.histonly { grid-template-columns: minmax(0, 1fr); background: var(--paper); }
+.lfs .statusbar .ctl { margin: 0 6px 0 0; align-self: center; }
+.lfs .statusbar .ctl button { min-height: 22px; font-size: 11px; }
+.lfs .panel.right { overflow: hidden; }
+.lfs .panel.right .work { padding: 12px; }
+.lfs .lfs-strip { flex: none; display: flex; align-items: flex-end; gap: 8px; padding: 0 10px; background: var(--tab); border-bottom: 1px solid var(--line); }
 .lfs .lfs-strip .tabs { flex: 1; }
-.lfs .lfs-strip .lfs-note { font: 11px var(--mono); color: var(--text-3); white-space: nowrap; }
+.lfs .lfs-strip .ib { margin-bottom: 7px; }
+/* Narrow widths. The arrangement (the dock rules above) is decided in view.js
+   (fitCols): side by side holds while History's minimum (its dragged width,
+   else 360 px), 560 px for the work window, the divider and padding fit;
+   otherwise the windows stack, History on top, and the view scrolls. */
+/* Inside the work window, by the view's width: */
+/* under 1280: the main panel's columns share the width evenly */
+@container lfs (max-width: 1279px) {
+  .lfs .work.mainview { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .lfs .work.mainview.withhist { grid-template-columns: minmax(300px, 360px) minmax(0, 1fr) minmax(0, 1fr); }
+  .lfs .work.branchview.withhist { grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); }
+  .lfs .tab { min-height: 36px; padding: 6px 10px; font-size: 12.5px; }
+}
+/* the preview keeps History inside the work area: it stacks under 1000 */
+@container lfs (max-width: 999px) {
+  .lfs .work.withhist { overflow-y: auto; }
+  .lfs .work.mainview.withhist { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: 560px minmax(560px, auto); }
+  .lfs .work.branchview.withhist { grid-template-columns: minmax(0, 1fr); grid-template-rows: 560px auto auto minmax(480px, auto); }
+  .lfs .work.withhist .hist { grid-column: 1 / -1; grid-row: auto; }
+}
+/* under 760: one column everywhere; a Branch's terminals one under another */
+@container lfs (max-width: 759px) {
+  .lfs .lfs-cols { padding: 8px; }
+  .lfs .lfs-cols[data-stack] { --workrow: auto; }
+  /* stacked, the work window grows with what it holds and the view scrolls */
+  .lfs .lfs-cols[data-stack] .panel.right, .lfs .lfs-cols[data-stack] .panel.right .work { overflow: visible; }
+  .lfs .lfs-cols[data-stack] .panel.right .work { flex: none; min-height: auto; }
+  .lfs .lfs-cols[data-stack] > .panel.right { min-height: auto; }
+  /* alone, the work window scrolls inside */
+  .lfs .lfs-cols:not([data-stack]) .panel.right .work { overflow-y: auto; }
+  .lfs .work .col { min-height: auto; }
+  .lfs .work.mainview .wterm { flex: none; height: 300px; }
+  .lfs .work.branchview .wgrid { grid-auto-rows: 240px; }
+  .lfs .work { padding: 8px; gap: 8px; }
+  .lfs .work.mainview, .lfs .work.mainview.withhist { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+  .lfs .work.mainview.withhist { grid-template-rows: 480px; }
+  .lfs .work.mainview .board { min-height: 320px; }
+  .lfs .wgrid { grid-template-columns: minmax(0, 1fr); flex: none; overflow: visible; }
+  .lfs .binfo { gap: 4px 12px; }
+  .lfs .binfo .status { margin-left: 0; }
+  .lfs .tab { min-height: 32px; padding: 5px 8px; gap: 6px; }
+  .lfs .tab .pin { display: none; }
+  .lfs .tlegend .hint { display: none; }
+}
 `;
 
 /** Adds the stylesheet once per document; returns its element. */

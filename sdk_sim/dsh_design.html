@@ -91,11 +91,10 @@ body { overflow: hidden; }
 <script src="simulation_engine/backend/live.js"></script>
 <script src="scenarios.js"></script>
 <script src="demo.js"></script>
-<script src="avatars/avatars.js"></script>
 <script src="dsh_story.js"></script>
 <!-- The view model and the view: @dsh-layerfs/model and @dsh-layerfs/view, shared with the dsh client plugin. --><script type="module">
 import * as X from "../dsh/packages/model/src/index.js";
-import { createView, injectStyle } from "../dsh/packages/view/src/index.js";
+import { createView, injectStyle, heroAvatars } from "../dsh/packages/view/src/index.js";
 const SCOUTS = window.LAYERFS_DSH_STORY.SCOUTS;
 const M = window.LayerSim, FM = window.LayerFiles, { simulateShell, liveCommand, execLines, Engine } = window.LayerTerm;
 // ?backend=sim (default): the simulator in this page, with a free player.
@@ -130,12 +129,12 @@ const LEAD = DEMO && DEMO.roster ? "lead" : "main";
 
 // ------------------------------------------------------------------ the view (@dsh-layerfs/view)
 // It draws W into this page: tabs in the title bar, the work area, the status
-// bar and the avatars (sharky_maid, built by avatars/build.py). The main
-// agent is ellen_joe; every other agent gets a colour variant hashed from its name.
+// bar and the avatars (the LayerFS website's heroes). The main agent is the
+// cloud; every other agent gets a hero hashed from its name.
 const $ = (id) => document.getElementById(id);
 injectStyle();
 const view = createView($("root"), {
-  avatars: window.DSH_AVATARS, files: FM, lineDiff: M.lineDiff, live: LIVE, lead: LEAD,
+  avatars: heroAvatars((h) => `../dsh/packages/view/heroes/${h}.png`), files: FM, lineDiff: M.lineDiff, live: LIVE, lead: LEAD,
   layout: { tabs: $("tabs"), work: $("work"), status: $("status"), follow: $("follow") },
   hint: "space play · ←→ step · F follow · hover a History node",
   onFollowOn: () => go(step),
