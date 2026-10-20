@@ -133,3 +133,14 @@ attempts and the decisions between them, not to the replay.
   Branches, depth 4 vs 60, 1 vs 600 projects).
 - Measure old vs new on the same snapshots with a fresh daemon per case, one
   sample each; label every series with its binary.
+
+## 4. Ranges 31–35 (the ranges 31–50 session, 2026-10-20)
+
+| # | Lesson | Evidence |
+| --- | --- | --- |
+| R1 | **A session's run owns all it writes.** Fork with `--pnpm-store` and `--native-states` and use copies of the plan and oracle; the fork copies its chain's native-state tars. Nothing then depends on, or is changed under, another session's run | `p3-main-u` from r31 (`fe258e3843`); the r31–50 lockfile fetch went into the shared store once and was then copied |
+| R2 | **Pin the SDK JS by folder when main moves.** A rebase that changes `sdk/js/src` changes the run's pinned digest. Keep a copy of the base commit's `sdk/js` in `core/target/` and point the run at it (`sdkJsPins`) | fix 056 (`6ee064ce91`) changed `sdk/js`; the run kept `e990c25c` from r33 |
+| R3 | **Count LOC on origin/main's tree, after the rebase.** A docs commit's LOC line counted before the rebase names the old total | e5889c5ee9 recorded 104,629; main was 104,847 (fix 056), then 104,900 (fix 057) |
+| R4 | **The first test-calibration command after the checkout moves is slow.** It moves the working tree and installs; keep it to about 15 files. An alarmed command leaves its container running, so remove it before the next | r31 and r33: 40–45 files hit the 115 s alarm; the next command then failed on the container name (exit 125) |
+| R5 | **Lane trees are hybrids.** A lane applies only its own areas, so a root lane's `tsconfig.json` can reference packages other lanes add, and vitest cannot load natively or in LayerFS. P5 is then n/a at that point; the repair's tests still run on the merged checkpoint | r034-1-root.end and r034-2-packages-client.end ("Failed to load tsconfig") |
+| R6 | **Read a thin class's ratio before calling it a regression.** The Speed row names the class with too few baseline calls; its ratio is the p95, the largest call | `sandbox.commit` "—": p95 = the repair's build Commit (778–925 ms) against pilot-sized 69 ms calls |

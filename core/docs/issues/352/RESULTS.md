@@ -454,6 +454,53 @@ Fast mode under the owner's delegation, liaison rulings in the decision log. Ran
   - Is the Sandbox exec's ~1 MiB stdout cap an artificial transport limit
     (fix 052)? It is unchanged; the harness reads reports from a file.
 
+### Ranges 31–35, the ranges 31–50 session (2026-10-20)
+
+Fast mode under the owner's delegation, liaison rulings in the decision log. All five ranges ran on run `p3-main-u`, a fork of `p3-main-t`'s r030 snapshot onto the P3 re-baseline binaries from main 3c7852e50f: daemon `27a769a4`, addon `0611f3e0`, SDK JS `e990c25c` (from r33, read from a pinned copy of 3c7852e50f's `sdk/js`, because fix 056 changed `sdk/js` on main). The image stayed `d3773b4e`. The run has its own Store, pnpm store, native-state volume, plan and oracle copies (owner 2026-10-20: sessions share nothing they write). Speed is read against `baseline-27a769a48998-0611f3e0cf81-p3.json` (pilot ranges 2–4). F-057 merge units were not used. One sample per attempt; no QUIET overlap was recorded in any range.
+
+| Range | Attempts | Terminal verdict | Stops and causes | Repair build s | Final commands s (repair / verify / finish) |
+| --- | --- | --- | --- | --- | --- |
+| 31 | 1 | watch | — (first range on the re-baseline) | 21.5 | 108 / 15 / 45 |
+| 32 | 1 | watch | — (P5 n/a at 2 points from the history: a failing dsh build; a native vitest timeout) | 21.8 | 130 / 13 / 35 |
+| 33 | 1 | optimize, counters recorded | — (`glob_tree.vm_steps` depth exponent 0.787) | 20.5 | 114 / 15 / 47 |
+| 34 | 1 | watch | — (P5 n/a at 2 hybrid lane trees that cannot load vitest natively) | 20.2 | 110 / 12 / 37 |
+| 35 | 1 | optimize, counters recorded | — (`oneshot_mount_unmount.vm_steps` depth exponent 0.947) | 23.0 | 105 / 17 / 47 |
+
+- **No stop.** Every range ended on its first attempt. Every terminal attempt has checkpoint ok, git ✓, Node P1–P6 with no stop and no NOT_RUN, repair P6 pass, and report check F1–F8 PASS. No LayerFS product defect was found.
+- **Repair alarm.** r32's repair step took 130 s of its 160 s alarm. The owner raised that one alarm to 200 s from r34 ("increase it to 200s"); r34–r35 took 110 and 105 s.
+- **Counters to follow.** `glob_tree.vm_steps` per tree file (0.787 at r33) repeats r25–r26's row on the earlier binary. `oneshot_mount_unmount.vm_steps` rose from 0.297 (r34, watch) to 0.947 (r35); its probe counts 68 statements, 2,402 VM steps and 82 full-scan steps at r35. Both are recorded, not acted on.
+
+Uncontended p50 in ms (calls), against the re-baseline:
+
+| Class | baseline | r31 | r32 | r33 | r34 | r35 |
+| --- | --- | --- | --- | --- | --- | --- |
+| fs.write ≤1 KiB | 6.4 (147) | 10.8 (18) | 8.5 (67) | 8.7 (18) | 8.7 (137) | 9.3 (18) |
+| fs.write ≤8 KiB | 7.2 (353) | 7.2 (94) | 8.2 (250) | 7.8 (142) | 7.7 (365) | 7.1 (144) |
+| fs.read ≤8 KiB | 2.1 (85) | 2.5 (12) | 2.8 (22) | 2.2 (20) | 2.7 (18) | 2.9 (25) |
+| sandbox.mount | 11.2 (368) | 9.9 (64) | 10.2 (167) | 10.9 (105) | 9.9 (108) | 9.6 (91) |
+| sandbox.commit 0 files · Committed | 20.8 (218) | 25.2 (29) | 21.7 (90) | 27.4 (58) | 26.0 (62) | 27.5 (51) |
+| branch.diff_commits >64 entries | 17.2 (285) | 20.0 (338) | 20.6 (342) | 20.3 (342) | 20.5 (343) | 20.3 (341) |
+| branch.merge >64 entries · new Commit | 91.9 (6) | — | 495.3 (3) | 306.1 (1) | 378.6 (1) | 332.2 (1) |
+| fs.rm 1 file | 6.7 (208) | 6.4 (15) | 18.2 (29) | 8.8 (7) | 9.8 (123) | 6.0 (4) |
+
+- **Speed reads "not judged" in every range** for one reason: the thin class `sandbox.commit` "— · Committed" (Commits whose changed-file count is not measured) has 3 calls per baseline range, under the gate's minimum of 5. The class holds the exec Commits of the closure. Its p50 is 51–113 ms against the baseline's 69 ms. The 11.27–13.4× is its p95, 778–925 ms in each range: the repair's build Commit, which captures `tsc -b`'s ~1,600 emitted files. The baseline's 3 calls per range were pilot-sized Commits. It is not a regression. The repair's clean-relink Commit is 13.1–13.9 s each range, in its own class (r15: 11.8 s).
+- **Merge** reads 3.3–5.4× (276–495 ms against 91.9 ms). The baseline's 6 merges come from pilot ranges 2–4, with small trees and no `node_modules` merge. Ranges 23–30 measured 229–456 ms for the same class, so r31–r35 are in that band: this is tree size against a small-tree baseline, not a new regression.
+- **The other classes** are within 1.0–1.35× of the baseline, or are calls under 5 ms where the extra is below the absolute floor. `diff_commits` stays at 20.0–20.6 ms (r23–r29: 18.7–22.2 ms).
+
+Storage and watch items:
+
+| Range | Added | Store on disk | Space amplification | Commits | Index rows (#366) | `fs.rm` uncontended p50 / calls / VM steps (#367) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 31 | 33.8 MiB | 835.9 MiB | 1.15× | 328 | 204.4 MiB (sealed) | 6.39 ms / 15 / 4,699 |
+| 32 | 35.2 MiB | 870.9 MiB | 1.19× | 1,187 | 262.6 MiB live (index + waste + other) | 18.21 ms / 29 / 7,884 |
+| 33 | 24.6 MiB | 890.5 MiB | 1.21× | 646 | 226.6 MiB (sealed) | 8.84 ms / 7 / 7,561 |
+| 34 | 32.7 MiB | 922.8 MiB | 1.25× | 1,410 | 284.7 MiB live (index + waste + other) | 9.77 ms / 123 / 9,376 |
+| 35 | 28.6 MiB | 946.2 MiB | 1.28× | 835 | 246.8 MiB (sealed) | 5.99 ms / 4 / 7,717 |
+
+- **Index rows (#366)** on the sealed snapshots: 196.1 MiB at r30 (`p3-main-t` state), 204.4 at r31, 226.6 at r33 and 246.8 at r35. That is 10.1 MiB per range over r31–r35, inside the 21–30 summary's 12.0 MiB per range. The clean relink still rewrites about 120k entries each range (repair P6).
+- **`fs.rm` (#367).** Fix 057 (on main, not in these binaries) found that the contended SQL counters included overlapping calls, and that a call's own work is flat at about 7.9k VM steps and 150 statements from r20 to r32. By that reading the r31 → r32 rise in time (6.4 → 18.2 ms) was host load on the same binaries, not more work per call. The recorded VM steps per call stay between 4,699 and 9,376 across r31–r35 with no trend, and the time returned to 6.0–9.8 ms in r33–r35. Host 1-min load across the play commands was 7.1–9.8 at r31 and 6.5–10.7 at r32.
+- Space amplification rose from 1.11× (r30) to 1.28× (r35); the Store grew 142.5 MiB over five ranges.
+
 ## P4 · Recovery and demo
 
 Pending.
