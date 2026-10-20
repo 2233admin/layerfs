@@ -60,7 +60,10 @@ export const CSS = `
 @container (max-width: 640px) { .lfs .work.projectview { grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(320px, 1fr); } .lfs .split { display: none; } .lfs-project .col + .col { border-top: 1px solid var(--term-border); } }
 .lfs .ptitle { font-size: 12px; font-weight: 500; color: var(--term-text); overflow: hidden; text-overflow: ellipsis; }
 .lfs .work.mainview { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); grid-template-rows: minmax(0, 1fr); }
-.lfs .work.branchview { display: flex; flex-direction: column; gap: 10px; }
+/* a Branch: its info, its agents, then its terminals two by two; more than four
+   terminals keep their height and the whole view scrolls */
+.lfs .work.branchview { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+.lfs .work.branchview:not(.withhist) .wgrid { flex: 1 0 auto; overflow: visible; grid-auto-rows: minmax(240px, 1fr); }
 /* the preview's layout: History is the work area's first column */
 .lfs .work.withhist { grid-template-columns: minmax(360px, 440px) minmax(0, 7fr) minmax(0, 5fr); background: var(--paper); }
 .lfs .work.branchview.withhist { display: grid; grid-template-columns: minmax(360px, 440px) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
@@ -82,9 +85,21 @@ export const CSS = `
 .lfs .tbox { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .lfs .tbox .wm { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); height: 76%; max-height: 240px; min-height: 48px; width: auto; pointer-events: none; font-family: var(--mono); }
 .lfs .wterm .tbody { position: relative; padding: 6px 10px; font: 12.5px/1.6 var(--mono); white-space: normal; }
-.lfs .wterm .ln { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lfs .wterm .ln { white-space: normal; }
+/* a line's row: prompt, command (shortened with "…"), agent, time, sdk; the time never leaves the view */
+.lfs .wterm .lrow { display: flex; align-items: center; min-width: 0; white-space: nowrap; }
+.lfs .wterm .lrow > * { flex: none; }
+.lfs .wterm .lrow .prompt { white-space: pre; }
+.lfs .wterm .lrow .cmd { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lfs .wterm .ln .grp { display: none; }
-.lfs .wterm .ln .av { width: 20px; height: 15px; margin-left: 6px; vertical-align: -3px; }
+.lfs .wterm .ln .av { width: 20px; height: 15px; margin-left: 6px; }
+.lfs .wterm .lrow .tm { margin-left: 8px; }
+/* a new command types itself out, then its time, sdk and output appear */
+.lfs .wterm .ln.typing .cmd { max-width: calc(var(--n) * 1ch + 0.55ch); border-right: 0.55ch solid transparent; animation: lfs-type var(--d) steps(var(--n), end) both, lfs-caret var(--d) step-end both; }
+.lfs .wterm .ln.typing .lrow > :not(.cmd):not(.prompt) { animation: lfs-fadein .25s var(--d) both; }
+.lfs .wterm .out.new[style] { animation: lfs-fadein .25s var(--d) both; }
+@keyframes lfs-type { from { max-width: 0; } }
+@keyframes lfs-caret { 0% { border-right-color: var(--accent); } 100% { border-right-color: transparent; } }
 .lfs .wterm .out { padding-left: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lfs .wterm.hot { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .lfs .wterm.bad { border-color: var(--coral); box-shadow: 0 0 0 2px var(--coral); }
@@ -101,7 +116,7 @@ export const CSS = `
 .lfs .bhead .sp { flex: 1; margin-right: -8px; }
 .lfs .bhead .roster { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }
 .lfs .bhead .roster:hover { color: var(--accent); }
-.lfs .floor { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); grid-auto-rows: min-content; align-content: start; gap: 8px; padding: 8px; background: #F6EEDD radial-gradient(#E9DCC0 1px, transparent 1px) 0 0 / 12px 12px; }
+.lfs .floor { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); grid-auto-rows: min-content; align-content: start; align-items: start; gap: 8px; padding: 8px; background: #F6EEDD radial-gradient(#E9DCC0 1px, transparent 1px) 0 0 / 12px 12px; }
 .lfs .floor .none { grid-column: 1 / -1; padding: 24px 0; text-align: center; font: 12px var(--mono); color: #8C6A3A; }
 .lfs .bcard { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--bc); background: #fff; transition: opacity .3s; }
 .lfs .bcard.dim { opacity: .55; }
@@ -121,6 +136,45 @@ export const CSS = `
 .lfs .bcard.pulse { animation: lfs-focuspane 1.6s ease-out; }
 .lfs .pool { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 10px; border-top: 1px solid #E4D6B8; background: #EFE3C8; font: 11px var(--mono); color: #8C6A3A; }
 .lfs .pool .av { width: 22px; height: 18px; opacity: .7; }
+/* the main tab's left column: the Sandboxes over the Branches */
+.lfs .work.mainview > .col.boards { gap: 8px; }
+.lfs .work.mainview > .col.boards > .board:last-child { flex: 1 1 0; }
+.lfs .board.sbp { flex: 0 1 auto; max-height: 42%; }
+.lfs .sbcards { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); grid-auto-rows: min-content; align-content: start; gap: 8px; padding: 8px; background: #F3F5FA; }
+.lfs .sbcards .none { grid-column: 1 / -1; padding: 14px 0; text-align: center; font: 12px var(--mono); color: var(--text-3); }
+.lfs .sbrow { display: flex; flex-direction: column; min-width: 0; border: 1px solid #C9D3E6; background: #fff; cursor: default; transition: opacity .3s, box-shadow .15s; }
+.lfs .sbrow.closed { opacity: .5; border-style: dashed; }
+.lfs .sbrow.sblit { box-shadow: 0 0 0 2px var(--orange); }
+.lfs .sbrow.pulse { animation: lfs-focuspane 1.6s ease-out; }
+.lfs .sbrow .sbhd { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font: 12.5px var(--mono); background: var(--accent-bg); color: var(--accent); min-width: 0; }
+.lfs .sbrow .sbhd .id { display: flex; min-width: 0; white-space: nowrap; }
+.lfs .sbrow .sbhd .id .pre { flex: 0 1 auto; min-width: 2ch; overflow: hidden; text-overflow: ellipsis; opacity: .65; }
+.lfs .sbrow .sbhd .id b { flex: none; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.lfs .sbst { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--text-3); }
+.lfs .sbst::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+.lfs .sbst.on { color: var(--green-dark); }
+.lfs .sbst.on::before { background: var(--green); box-shadow: 0 0 0 3px var(--green-bg); }
+.lfs .sbrow .boxi { flex: none; }
+.lfs .sbmeta { display: flex; align-items: center; gap: 6px; padding: 3px 8px; font: 11px var(--mono); color: var(--text-3); white-space: nowrap; min-width: 0; }
+.lfs .sbmeta span { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.lfs .sbmeta .av { width: 18px; height: 15px; flex: none; }
+.lfs .sbws { display: flex; align-items: center; gap: 6px; padding: 3px 8px; border-top: 1px solid var(--line2); font: 12px var(--mono); min-width: 0; }
+.lfs .sbws[data-dws] { cursor: pointer; }
+.lfs .sbws[data-dws]:hover { background: color-mix(in srgb, var(--bc) 8%, white); }
+.lfs .sbws .sq { width: 8px; height: 8px; background: var(--bc); flex: none; }
+.lfs .sbws .wsn { flex: none; color: var(--text); }
+.lfs .sbws .br { color: color-mix(in srgb, var(--bc) 75%, black); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.lfs .sbws .av { width: 20px; height: 17px; margin-left: auto; flex: none; }
+.lfs .sbws .dt { flex: none; padding: 0 4px; font-size: 10.5px; background: #F0EEE8; color: var(--text-2); }
+.lfs .sbws .dt.warn { background: var(--coral-pale); color: var(--coral-text); }
+.lfs .sbproc { display: flex; align-items: center; gap: 6px; padding: 3px 8px; border-top: 1px solid var(--line2); font: 11.5px var(--mono); color: var(--green-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lfs .sbproc .d { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: none; }
+.lfs .sbempty { padding: 3px 8px; border-top: 1px solid var(--line2); font: 11px var(--mono); color: var(--text-3); }
+.lfs .hint-i { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid currentColor; font: italic 600 9.5px/1 var(--font); color: var(--text-3); cursor: help; flex: none; }
+.lfs .hint-i:hover, .lfs .hint-i:focus { color: var(--accent); outline: none; }
+.lfs .menu .mhead { padding: 6px 8px 2px; border-top: 1px solid var(--line2); margin-top: 4px; font: 10.5px var(--mono); color: var(--text-3); }
+.lfs .menu .mt { margin-left: auto; font: 10.5px var(--mono); color: var(--text-3); }
+.lfs .tab.more.retired { color: var(--text-3); font-weight: 400; }
 .lfs .storep { flex: none; border: 1px solid var(--line); box-shadow: none; }
 .lfs .storep .thead { height: auto; padding: 6px 10px; font: 12px var(--mono); border-bottom: 1px solid var(--line); }
 .lfs .storep .thead .t { font-weight: 500; }
@@ -164,7 +218,7 @@ export const CSS = `
 .lfs .term.hot { box-shadow: 0 0 0 1.5px var(--accent), 0 6px 18px rgba(0,0,0,.12); }
 .lfs .term.bad { box-shadow: 0 0 0 1.5px var(--red), 0 6px 18px rgba(255,59,48,.18); }
 .lfs .term.enter { animation: lfs-grow .35s ease-out; }
-.lfs .term.leaving { animation: lfs-leave 1.2s ease-in forwards; pointer-events: none; }
+.lfs .term.leaving { animation: lfs-leave 3.6s ease-in forwards; pointer-events: none; }
 .lfs .thead { height: 34px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px; background: var(--term-head); color: var(--term-text); font: 12.5px var(--mono); border-bottom: 1px solid var(--line2); white-space: nowrap; overflow: hidden; }
 .lfs .thead .ttl { font: 12px var(--mono); color: var(--term-dim); overflow: hidden; text-overflow: ellipsis; }
 .lfs .thead .sp { flex: 1; }
@@ -201,7 +255,17 @@ export const CSS = `
 .lfs .hist .phead .ref { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .lfs .hist .phead .sp { flex: 1; }
 .lfs .hist .fbody, .lfs .hist .ftree, .lfs .hist .fview { min-height: 0; }
-.lfs .treewrap { flex: 1; min-height: 0; overflow: auto; outline: none; position: relative; }
+.lfs .treebox { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.lfs .treewrap { flex: 1; min-height: 0; overflow: auto; outline: none; position: relative; cursor: grab; }
+.lfs .treewrap.panning { cursor: grabbing; user-select: none; }
+.lfs .treewrap [data-node], .lfs .treewrap .tag { cursor: pointer; }
+.lfs.tz-key .treewrap, .lfs.tz-key .treewrap [data-node] { cursor: zoom-in; }
+.lfs.tz-key.tz-out .treewrap, .lfs.tz-key.tz-out .treewrap [data-node] { cursor: zoom-out; }
+.lfs .tzoom { position: absolute; z-index: 5; right: 12px; top: 10px; display: flex; border: 1px solid var(--line); background: rgba(255,255,255,.92); box-shadow: 0 2px 8px rgba(0,0,0,.08); backdrop-filter: blur(4px); }
+.lfs .tzoom button { min-width: 28px; height: 26px; border: 0; padding: 0 6px; background: none; font: 13px var(--mono); color: var(--text-2); cursor: pointer; }
+.lfs .tzoom button + button { border-left: 1px solid var(--line2); }
+.lfs .tzoom button:hover { background: var(--accent-bg); color: var(--accent); }
+.lfs .tzoom .tzv { min-width: 48px; font-size: 11px; }
 .lfs .treewrap:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
 .lfs svg.tree { display: block; font-family: var(--mono); font-size: 10px; }
 .lfs svg.tree .lane { fill: var(--lane); }
@@ -341,7 +405,8 @@ export const CSS = `
 .lfs .fmodes .sp { flex: 1; }
 .lfs .fstat { font-size: 11px; color: var(--term-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: help; }
 .lfs .fstat b { color: var(--term-text); }
-.lfs .fdir { padding: 6px 10px 1px; color: var(--term-dim); font-size: 11px; }
+.lfs .fdir { display: flex; align-items: center; gap: 6px; padding: 8px 10px 3px; color: var(--text-2); font: 500 11.5px var(--font); }
+.lfs .fdir .fr { margin-left: auto; }
 .lfs .fgroup { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 4px 10px; border-top: 1px dashed var(--term-border); color: var(--term-dim); font-size: 11.5px; cursor: pointer; white-space: nowrap; }
 .lfs .fgroup:hover { background: var(--well); }
 .lfs .fgroup b { color: var(--term-text); font-weight: 600; }
@@ -353,13 +418,23 @@ export const CSS = `
 .lfs .fback:hover { background: var(--accent-bg); }
 .lfs .fpathx { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--mono); }
 .lfs .fpathx .dir { color: var(--term-dim); }
+.lfs .fpathx .sl { color: var(--line); margin: 0 2px; }
+.lfs .fpage .sp { flex: 1; }
+.lfs .flang { flex: none; font: 11px var(--mono); color: var(--text-3); white-space: nowrap; }
 .lfs .fpathx b { color: var(--term-text); }
-.lfs .frow { display: flex; align-items: center; gap: 4px; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
-.lfs .frow:hover { background: var(--well); }
-.lfs .frow.sel { background: var(--accent-bg); }
+.lfs .frow { display: flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 10px 0 8px; cursor: pointer; white-space: nowrap; font-family: var(--font); font-size: 12.5px; color: var(--text); border-left: 2px solid transparent; }
+.lfs .frow:hover { background: #F4F2EC; }
+.lfs .frow.sel { background: var(--accent-bg); border-left-color: var(--accent); }
 .lfs .frow.flash { animation: lfs-flash 1.2s ease-out; }
-.lfs .frow .car { width: 10px; color: var(--term-dim); flex: none; }
-.lfs .frow .nm { overflow: hidden; text-overflow: ellipsis; }
+.lfs .frow.dir .nm { font-weight: 500; }
+.lfs .frow .car { width: 10px; color: var(--text-3); flex: none; display: inline-grid; place-items: center; }
+.lfs .frow .nm { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.lfs .frow .ind { flex: none; align-self: stretch; margin-right: -6px; background: repeating-linear-gradient(90deg, transparent 0 6px, #E8E4DC 6px 7px, transparent 7px 14px); }
+.lfs .chev { transition: transform .12s; }
+.lfs .chev.open { transform: rotate(90deg); }
+.lfs .fico { flex: none; display: inline-block; vertical-align: middle; }
+.lfs .fico.badge { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 3px; background: color-mix(in srgb, var(--fc) 14%, white); color: var(--fc); font: 700 7.5px/1 var(--mono); letter-spacing: -.02em; }
+.lfs .fico.badge.w { font-size: 6.5px; }
 .lfs .frow.gone .nm { text-decoration: line-through; color: var(--term-dim); }
 .lfs .frow.flat { padding: 2px 10px; font: 12px var(--mono); }
 .lfs .fb { font: 700 9.5px var(--mono); padding: 0 4px; border-radius: 3px; margin-left: auto; flex: none; }
@@ -382,15 +457,35 @@ export const CSS = `
 .lfs .frev td.n, .lfs .frev th.n { text-align: right; }
 .lfs .frev .zero { color: var(--term-dim); }
 .lfs .fempty { padding: 18px 12px; color: var(--term-dim); line-height: 1.6; }
-.lfs .code { padding: 2px 0 10px; }
-.lfs .cl { display: flex; white-space: pre; min-height: 18px; }
-.lfs .cl .no { flex: none; width: 34px; padding-right: 8px; text-align: right; color: var(--term-dim); user-select: none; }
+.lfs .code { padding: 4px 0 12px; font: 12px/1.65 var(--mono); tab-size: 2; min-width: max-content; }
+.lfs .cl { display: flex; white-space: pre; min-height: 19px; }
+.lfs .cl:hover { background: #F6F4EF; }
+.lfs .cl .no { flex: none; width: 44px; padding-right: 10px; margin-right: 10px; text-align: right; color: #B4AFA5; user-select: none; border-right: 1px solid var(--line2); }
+.lfs .cl:hover .no { color: var(--text-2); }
+/* syntax colours (highlight.js), the website's palette */
+.lfs .hl-com { color: #9A958B; font-style: italic; }
+.lfs .hl-str { color: #2E7D5B; }
+.lfs .hl-num, .lfs .hl-lit { color: #B8502C; }
+.lfs .hl-kw { color: #6A4DA8; font-weight: 500; }
+.lfs .hl-fn { color: #2F5BB5; }
+.lfs .hl-typ { color: #1F6B78; }
+.lfs .hl-prop { color: #93650F; }
+.lfs .hl-tag { color: #C8452F; }
+.lfs .hl-attr { color: #93650F; }
+.lfs .hl-var { color: #1F6B78; }
+.lfs .hl-op { color: #D29A2E; font-weight: 600; }
+
 .lfs .cl .op { flex: none; width: 14px; color: var(--term-dim); }
 .lfs .cl .tx { flex: 1; padding-right: 10px; }
 .lfs .cl.add { background: var(--t-add-bg); }
 .lfs .cl.add .op, .lfs .cl.add .tx { color: var(--t-green); }
 .lfs .cl.del { background: var(--t-del-bg); }
 .lfs .cl.del .op, .lfs .cl.del .tx { color: var(--t-red); }
+/* a diff keeps the syntax colours: the line is tinted, its gutter more */
+.lfs .cl.add .tx, .lfs .cl.del .tx { color: var(--term-text); }
+.lfs .cl.add .no { background: rgba(46,125,91,.13); color: var(--t-green); }
+.lfs .cl.del .no { background: rgba(184,80,44,.13); color: var(--t-red); }
+.lfs .cl.del .tx { text-decoration: none; opacity: .85; }
 .lfs .bch { flex: none; width: 40px; margin: 0 4px 0 6px; font: 600 10.5px/18px var(--mono); color: var(--bc); border-left: 3px solid var(--bc); padding-left: 5px; cursor: pointer; }
 .lfs .bch.cont { opacity: .55; }
 .lfs .bch:hover { background: var(--well); }
@@ -475,7 +570,7 @@ export const CSS = `
 @keyframes lfs-claw { 50% { transform: translateY(-2px); } }
 @keyframes lfs-blink { 50% { opacity: .1; } }
 @keyframes lfs-grow { from { transform: scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes lfs-leave { from { opacity: 1; } to { opacity: 0; transform: scale(.98); } }
+@keyframes lfs-leave { 0%, 45% { opacity: 1; filter: none; } 55% { opacity: .85; filter: grayscale(.6); } 100% { opacity: 0; transform: scale(.98); filter: grayscale(1); } }
 @keyframes lfs-fadein { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 @keyframes lfs-pop { from { transform: scale(0); } to { transform: scale(1); } }
 @keyframes lfs-flash { 0% { background: var(--accent-bg); } 100% { background: transparent; } }
@@ -580,6 +675,7 @@ export const CSS = `
   .lfs .work.mainview, .lfs .work.mainview.withhist { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
   .lfs .work.mainview.withhist { grid-template-rows: 480px; }
   .lfs .work.mainview .board { min-height: 320px; }
+  .lfs .work.mainview .board.sbp { min-height: 0; max-height: 360px; }
   .lfs .wgrid { grid-template-columns: minmax(0, 1fr); flex: none; overflow: visible; }
   .lfs .binfo { gap: 4px 12px; }
   .lfs .binfo .status { margin-left: 0; }

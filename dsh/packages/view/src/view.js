@@ -15,6 +15,7 @@
 import * as X from "../../model/src/index.js";
 import { createFiles } from "./files.js";
 import { createTree, LEAF } from "./tree.js";
+import { createTreeZoom } from "./treezoom.js";
 import { cmdTime, esc, fmtBytes, timingText } from "./util.js";
 
 const { CAP, RECENT_S, bubbleOf } = X;
@@ -126,9 +127,11 @@ export function createView(root, o) {
   let sbLit = null, sbPulse = null, focusPane = null, cardTimer = null;
   // Workspaces unmounted since an earlier render stay LEAVE_MS as a fading
   // trail, by the wall clock: the model drops them at once, and a Workspace a
-  // script mounts and unmounts within a second still reads as one that was there
-  const LEAVE_MS = 1200, leaving = new Map();
-  let shownWs = {}, leaveTimer = null;
+  // script mounts and unmounts within a second still reads as one that was
+  // there. One that mounted and left between two draws (a fast script, Max
+  // speed) is found by its pane's `left` step, newer than the last draw's.
+  const LEAVE_MS = 3600, leaving = new Map();
+  let shownWs = {}, leaveTimer = null, leftSeen = null;
   // a step's entrance animations (a new line, a new pane, a Branch row's
   // flash) play on its first draw only: later redraws (a poll, a tree that
   // loaded, the trail ending) would restart them, a flicker
@@ -136,6 +139,10 @@ export function createView(root, o) {
   function trackLeaving(W) {
     const now = Date.now();
     for (const [k, w] of Object.entries(shownWs)) if (!W.ws[k] && !leaving.has(k)) leaving.set(k, { w, at: now });
+    if (leftSeen !== null && leftSeen <= W.seq) for (const [k, p] of Object.entries(W.panes)) {
+      if (p.left > leftSeen && !W.ws[k] && !leaving.has(k) && p.branch) leaving.set(k, { w: { id: k, agent: p.agent, branch: p.branch, lines: p.lines, born: p.born }, at: now });
+    }
+    leftSeen = W.seq;
     for (const [k, l] of leaving) if (W.ws[k] || now - l.at >= LEAVE_MS) leaving.delete(k);
     shownWs = W.ws;
     clearTimeout(leaveTimer);
@@ -149,7 +156,7 @@ export function createView(root, o) {
   // The website's Branch tabs: a square in the Branch's colour, its name and a
   // chip (main: read-only; a Branch: its mounted Workspaces, a conflict or idle).
   function renderTabs() {
-    const W = v.W, { tabs, hidden } = X.visibleTabs(W, { pinned, active: v.active });
+    const W = v.W, { tabs, hidden, retired } = X.visibleTabs(W, { pinned, active: v.active });
     const chip = (b) => {
       const B = W.branches[b], isNew = !seenTabs.has(b); seenTabs.add(b);
       const bad = X.conflicted(W, b), nWs = Object.values(W.ws).filter((w) => w.branch === b).length, dim = branchIdle(b);
@@ -158,7 +165,7 @@ export function createView(root, o) {
         <span class="sq"></span>${esc(b)}${meta}<span class="pin${pinned[b] ? " on" : ""}" data-pin="${esc(b)}" title="Pin tab">${pinned[b] ? "📌" : "⌖"}</span></button>`;
     };
     layout.tabs.innerHTML = `<button class="tab main" role="tab" data-tab="main" aria-selected="${v.active === "main"}"><span class="sq"></span>main<span class="tchip ro">read-only</span></button>`
-      + tabs.map(chip).join("") + (hidden.length ? `<button class="tab more" data-more="1" title="${hidden.length} idle Branches">+${hidden.length}</button>` : "");
+      + tabs.map(chip).join("") + (hidden.length || retired.length ? `<button class="tab more${hidden.length ? "" : " retired"}" data-more="1" title="${hidden.length} idle Branch${hidden.length === 1 ? "" : "es"} · ${retired.length} retired (nobody on them for over ${X.RETIRE_S} s)">${hidden.length ? `+${hidden.length}` : `${retired.length} retired`}</button>` : "");
   }
 
   // ---------------------------------------------------------------- terminals
@@ -167,8 +174,12 @@ export function createView(root, o) {
     const sdk = c.length ? `<button class="sdkbtn" data-sdk="${esc(key)}" title="Show the SDK call and inline Node script">sdk${c.length > 1 ? " ×" + c.length : ""}</button><div class="sdk">${c.map((x) => `<span class="code"><b>${esc(x.call)}</b> → ${esc(x.code)}<span class="tm">${esc(timingText(x.timing))}</span></span>${x.script ? `<pre>${esc(x.script)}</pre>` : ""}`).join("")}</div>` : "";
     const grp = l.group ? `<span class="grp" title="event group: these calls come from one script of ${esc(l.agent || "this agent")}">⧉ ${esc(l.group)}</span>` : "";
     const who = l.agent && !l.dim ? mascot(l.agent) : "";
-    return `<div class="ln${l.dim ? " dim" : ""}${isNew ? " new" : ""}${OPEN_SDK.has(key) ? " open" : ""}">${prefix}${grp}${l.text ? `<span class="cmd">${esc(l.text)}</span>` : ""}${who}${cmdTime(c)}${sdk}</div>`
-      + (l.out || []).map((x) => `<span class="out${x.c ? " " + x.c : ""}${isNew ? " ln new" : ""}">${esc(x.t)}</span>`).join("");
+    // one row: the command shortens with "…" (the whole of it is its hint) and its time stays in view;
+    // a new command types itself out (--n characters over --d), then its output and time appear
+    const n = l.text ? [...l.text].length : 0, type = isNew && n && !l.dim ? ` style="--n:${n};--d:${Math.min(700, Math.max(140, n * 14))}ms"` : "";
+    const sdkBtn = sdk.slice(0, sdk.indexOf("<div")), sdkBox = sdk.slice(sdk.indexOf("<div"));
+    return `<div class="ln${l.dim ? " dim" : ""}${isNew ? " new" : ""}${type ? " typing" : ""}${OPEN_SDK.has(key) ? " open" : ""}"${type}><div class="lrow">${prefix}${grp}${l.text ? `<span class="cmd" title="${esc(l.text)}">${esc(l.text)}</span>` : ""}${who}${cmdTime(c)}${sdkBtn}</div>${c.length ? sdkBox : ""}</div>`
+      + (l.out || []).map((x) => `<span class="out${x.c ? " " + x.c : ""}${isNew ? " ln new" : ""}"${type} title="${esc(x.t)}">${esc(x.t)}</span>`).join("");
   }
 
   // ---------------------------------------------------------------- History
@@ -177,6 +188,8 @@ export function createView(root, o) {
   // it shows "now" (upright: the top, centred on main; lying down: the right end).
   const tree = createTree();
   let treeAuto = true, treeSet = null, sizeTries = 0;
+  // zooming or panning takes the tree off "now", like scrolling it
+  const tz = createTreeZoom({ root, onZoom: () => { treeAuto = false; placeOverview(); } });
   /** A Branch nobody is on, whose tab has faded: a bare twig in the tree. */
   function branchIdle(b) {
     const W = v.W;
@@ -212,7 +225,7 @@ export function createView(root, o) {
     if (!W.mainHead) return head + `<div class="empty">No project yet</div>`;
     if (mode === "files") return head + files.filesHtml(tab);
     const t = treeOf(tab, size, v.orient === "upright");
-    return head + `<div class="treewrap" data-tree tabindex="0" aria-label="History tree">${t.svg}</div>`
+    return head + `<div class="treebox">${tz.controlsHtml()}<div class="treewrap" data-tree tabindex="0" aria-label="History tree: drag to pan, ⌘ + scroll to zoom">${t.svg}</div></div>`
       + `<div class="ov"><div class="ovl"><span>Overview</span><button data-now="1" title="Back to now">now</button></div><div class="ovstrip" data-ov title="Click to move there">${t.overview}<i class="ovbox"></i></div></div>${LEGEND}`;
   }
   // Puts the tree at "now" until the viewer scrolls it, then keeps their place.
@@ -230,17 +243,17 @@ export function createView(root, o) {
   function placeOverview() {
     const el = q("[data-tree]"), box = q(".ovbox"), svg = el && el.querySelector("svg");
     if (!box || !svg) return;
-    const span = +svg.dataset.span, base = +svg.dataset.base;
-    const [a, b] = svg.dataset.dir === "up" ? [base - el.scrollTop - el.clientHeight, base - el.scrollTop] : [el.scrollLeft - 6, el.scrollLeft + el.clientWidth - 6];
+    const z = tz.zoom, span = +svg.dataset.span * z, base = +svg.dataset.base * z;
+    const [a, b] = svg.dataset.dir === "up" ? [base - el.scrollTop - el.clientHeight, base - el.scrollTop] : [el.scrollLeft - 6 * z, el.scrollLeft + el.clientWidth - 6 * z];
     const lo = Math.max(0, a / span), hi = Math.min(1, b / span);
     box.style.left = (lo * 100).toFixed(2) + "%"; box.style.width = Math.max(2, (hi - lo) * 100).toFixed(2) + "%";
   }
   function overviewTo(e, strip) {
     const el = q("[data-tree]"), svg = el && el.querySelector("svg");
     if (!svg) return;
-    const r = strip.getBoundingClientRect(), t = ((e.clientX - r.left) / r.width) * +svg.dataset.span;
-    if (svg.dataset.dir === "up") el.scrollTop = +svg.dataset.base - t - el.clientHeight / 2;
-    else el.scrollLeft = t + 6 - el.clientWidth / 2;
+    const z = tz.zoom, r = strip.getBoundingClientRect(), t = ((e.clientX - r.left) / r.width) * +svg.dataset.span * z;
+    if (svg.dataset.dir === "up") el.scrollTop = +svg.dataset.base * z - t - el.clientHeight / 2;
+    else el.scrollLeft = t + 6 * z - el.clientWidth / 2;
     treeAuto = false;
   }
   function rosterMenu(anchor) {
@@ -259,6 +272,13 @@ export function createView(root, o) {
     m.style.left = Math.max(8, (width ? r.right - width : r.left) - base.left) + "px";
     root.appendChild(m);
   }
+  // the tabs' "+N" (and the board's "retired"): hidden Branches, then retired ones
+  function moreMenu(anchor) {
+    const { hidden, retired } = X.visibleTabs(v.W, { pinned, active: v.active });
+    openMenu(anchor, "", branchItems(hidden) + (retired.length ? `<div class="mhead">retired · nobody on them for over ${X.RETIRE_S} s</div>${branchItems(retired)}` : ""));
+  }
+  const branchItems = (list) => list.map((b) => { const age = v.W.clock - v.W.branches[b].last;
+    return `<button data-open="${esc(b)}"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(${v.W.branches[b].color})"></span>${esc(b)}<span class="mt">${age}s</span></button>`; }).join("");
   const closeMenu = () => { const m = root.querySelector(".menu"); if (m) m.remove(); };
 
   // The website's terminal window parts: a faint LayerFS stamp behind the
@@ -267,6 +287,10 @@ export function createView(root, o) {
     + lines.map((l, k) => `<text x="160" y="${248 + k * 30}" text-anchor="middle" font-size="24" font-weight="500" fill="#2F5BB5" opacity="0.2">${esc(l)}</text>`).join("") + `</svg>`;
   const FSICON = (c) => `<svg class="fsi" width="18" height="18" viewBox="-1 -1 10 10" shape-rendering="crispEdges" aria-hidden="true"><rect x="-1" y="-1" width="10" height="10" style="fill:${c}"/><path fill="#fff" d="M1 1h6v1H1zM1 3h6v1H1zM1 5h6v1H1zM6 6h1v1H6z"/></svg>`;
   const TAG = (tone, text) => `<span class="wtag ${tone}">${esc(text)}</span>`;
+  const HINT = (text) => `<span class="hint-i" tabindex="0" role="note" title="${esc(text)}" aria-label="${esc(text)}">i</span>`;
+  const BOXICON = `<svg class="boxi" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.5 12.5 4v6L7 12.5 1.5 10V4Z M1.5 4 7 6.5 12.5 4 M7 6.5v6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>`;
+  // "sha256:091f…ee9d2" → "sha256:091f785b", a tag stays as given
+  const shortImage = (img) => (/^sha256:[0-9a-f]{12,}$/.test(img) ? img.slice(0, 15) : img.length > 28 ? img.slice(0, 27) + "…" : img);
   const term = (cls, attrs, head, stamp, body) => `<section class="term wterm${cls}" ${attrs}><div class="thead">${head}</div><div class="tbox">${STAMP(stamp)}<div class="tbody" data-scroll>${body}</div></div></section>`;
   // What an agent is doing on a Branch, for its chip or card row: "ws/2 exec", "fs", "idle".
   function stateOf(n) {
@@ -277,12 +301,14 @@ export function createView(root, o) {
   // agents a Branch shows: on it now, holding a Workspace there, or recently here
   const castOf = (b) => [...new Set([...X.agentsOn(v.W, b), ...Object.values(v.W.ws).filter((w) => w.branch === b).map((w) => w.agent), ...X.recentlyOn(v.W, b)])];
 
-  // main is read-only: the Branches (each a card on the sand floor, with its
-  // agents) on the left; the Store and the project terminal on the right.
+  // main is read-only: the Sandboxes and the Branches (each a card on the
+  // sand floor, with its agents) on the left; the Store and the project
+  // terminal on the right. A Branch nobody has been on for RETIRE_S retires
+  // from the board (pinned ones stay); the tabs' "+N" menu still lists it.
   function boardHtml() {
-    const W = v.W, s = W.engine.s, open = s.sandboxOrder.filter((id) => !s.sandboxes[id].closed), nWs = Object.keys(W.ws).length;
-    const placed = new Set();
-    const cards = W.order.slice().sort((x, y) => W.branches[y].last - W.branches[x].last).map((b) => {
+    const W = v.W, placed = new Set();
+    const live = W.order.filter((b) => pinned[b] || !X.retired(W, b)), nRetired = W.order.length - live.length;
+    const cards = live.sort((x, y) => W.branches[y].last - W.branches[x].last).map((b) => {
       const B = W.branches[b], bad = X.conflicted(W, b), dim = branchIdle(b), cast = castOf(b), age = W.clock - B.last;
       const head = B.head.startsWith("fork:") ? `from ${B.base}` : B.head;
       const note = bad ? "conflict" : B.published ? `${head} · ↑ ${W.mainHead}` : `${head} · ${age < 1 ? "now" : age + "s"}`;
@@ -295,9 +321,49 @@ export function createView(root, o) {
     }).join("");
     const pool = Object.keys(W.agents).filter((n) => !placed.has(n) && where(n).kind === "bench");
     const all = Object.keys(W.agents), nIdle = all.filter((n) => idle(n)).length;
-    return `<section class="board"><div class="bhead"><span class="t">sandboxes</span><span>${open.length}</span><span class="sp"></span>${TAG("blue", `${nWs} workspace${nWs === 1 ? "" : "s"} mounted`)}<button class="roster" data-roster="1" title="All agents">${nIdle} idle</button></div>
-      <div class="floor">${cards || `<div class="none">no Branch yet · an agent forks one from main</div>`}</div>
+    const none = nRetired ? `every Branch has retired · nobody on one for over ${X.RETIRE_S} s` : "no Branch yet · an agent forks one from main";
+    return `<section class="board"><div class="bhead"><span class="t">branches</span><span>${live.length}</span>${HINT(`Branches: a Branch is a line of Commits forked from main. A card shows its head (or the main Layer it was published to) and the agents on it now or in the last ${RECENT_S} s; a Branch nobody has been on for ${X.RETIRE_S} s retires from this board and the tabs (pin a tab to keep it).`)}<span class="sp"></span>${nRetired ? `<button class="roster" data-more="1" title="Branches nobody has been on for over ${X.RETIRE_S} s: still in History">${nRetired} retired</button>` : ""}<button class="roster" data-roster="1" title="All agents">${nIdle} idle</button></div>
+      <div class="floor">${cards || `<div class="none">${none}</div>`}</div>
       ${pool.length ? `<div class="pool"><span>unassigned</span>${pool.map((n) => mascot(n)).join("")}</div>` : ""}</section>`;
+  }
+  // The Sandboxes: the open ones, then the ones closed in the last RETIRE_S,
+  // each with who made it, its image, its use, its mounted Workspaces (click
+  // one: its pane) and its running processes; hover for the whole record.
+  const sinceClock = (t) => (t == null ? "–" : v.W.clock - t < 1 ? "now" : `${v.W.clock - t}s ago`);
+  function sandboxPanel() {
+    const W = v.W, s = W.engine.s, at = W.sbAt || {}, by = W.sbBy || {};
+    const shown = s.sandboxOrder.filter((id) => !s.sandboxes[id].closed || (at[id]?.closed != null && W.clock - at[id].closed <= X.RETIRE_S));
+    shown.sort((x, y) => (s.sandboxes[x].closed - s.sandboxes[y].closed) || ((at[y]?.last ?? 0) - (at[x]?.last ?? 0)));
+    const open = shown.filter((id) => !s.sandboxes[id].closed), nWs = Object.keys(W.ws).length;
+    const nProc = open.reduce((a, id) => a + s.sandboxes[id].procOrder.filter((p) => s.sandboxes[id].processes[p].status === "running").length, 0);
+    const real = (id) => W.engine.m?.toReal?.get(id), project = s.project ? s.project.name : "";
+    const rows = shown.map((id) => {
+      const sb = s.sandboxes[id], a = at[id] || {}, who = by[id] || {};
+      const wss = sb.wsOrder.filter((p) => sb.workspaces[p].mounted).map((p) => ({ p, w: sb.workspaces[p], view: W.ws[`${id}:${p}`] }));
+      // a closed Sandbox's last process list is stale: it runs nothing
+      const procs = sb.closed ? [] : sb.procOrder.map((p) => sb.processes[p]).filter((p) => p.status === "running");
+      const state = sb.closed ? `closed ${sinceClock(a.closed)}${who.closed ? ` by ${who.closed}` : ""}` : `open · used ${sinceClock(a.last)}`;
+      const hint = [`Sandbox ${id}${real(id) && real(id) !== id ? ` (${real(id)})` : ""}`, state,
+        who.made ? `made by ${who.made}${who.service ? " (a service)" : ""}${a.made != null ? ` ${sinceClock(a.made)}` : ""}` : null,
+        a.image ? `image ${a.image}` : null,
+        a.calls ? `${a.calls} call${a.calls === 1 ? "" : "s"} · ${a.execs || 0} command${a.execs === 1 ? "" : "s"}` : null,
+        ...wss.map(({ p, w, view }) => `${p} → ${w.branch}${w.baseCommit ? ` @ ${w.baseCommit}` : ""}${view ? ` · ${view.agent}` : ""}${w.dirty ? ` · ${w.dirty} dirty` : ""}${w.stale ? " · head moved since mount" : ""}${w.pendingMerge ? " · merge pending" : ""}`),
+        ...procs.map((p) => `● ${p.command} (${p.path})`)].filter(Boolean).join("\n");
+      const wsRows = wss.map(({ p, w, view }) => {
+        const B = W.branches[w.branch], name = p.replace("/workspaces/", "ws/");
+        return `<div class="sbws"${view ? ` data-dws="${esc(view.id)}"` : ""} style="--bc:var(${B ? B.color : "--line"})" title="${esc(`${p}: ${w.branch} from ${w.baseCommit || w.baseLayer || "main"}${w.dirty ? ` · ${w.dirty} changed entries not yet committed` : ""}${view ? ` · click: its pane on ${w.branch}` : ""}`)}"><span class="sq"></span><span class="wsn">${esc(name)}</span><span class="br">${esc(w.branch)}</span>${view ? mascot(view.agent) : ""}${w.dirty ? `<span class="dt">${w.dirty} dirty</span>` : ""}${w.stale ? `<span class="dt warn">stale</span>` : ""}</div>`;
+      }).join("");
+      const procRows = procs.map((p) => `<div class="sbproc" title="${esc(`${p.command} · ${p.path} · process ${p.id}`)}"><span class="d"></span>${esc(p.command)}</div>`).join("");
+      const when = sb.closed ? null : `used ${sinceClock(a.last)}`;
+      const meta = [when, a.image ? shortImage(a.image) : null, a.calls ? `${a.calls} call${a.calls === 1 ? "" : "s"}` : null, a.execs ? `${a.execs} cmd${a.execs === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ");
+      // the project's prefix gives way first, so "demo-agents-checkout" reads "demo-ag…checkout"
+      const pre = project && id.startsWith(project + "-") && id.length > project.length + 1 ? project + "-" : "";
+      return `<div class="sbrow${sb.closed ? " closed" : ""}" data-sbid="${esc(id)}" data-sbhl="${esc(id)}" title="${esc(hint)}">
+        <div class="sbhd">${BOXICON}<span class="id">${pre ? `<span class="pre">${esc(pre)}</span>` : ""}<b>${esc(id.slice(pre.length))}</b></span><span class="sbst${sb.closed ? "" : " on"}">${sb.closed ? `closed ${esc(sinceClock(a.closed))}` : "open"}</span></div>
+        <div class="sbmeta">${who.made ? mascot(who.made) : ""}<span>${esc(meta)}</span></div>${wsRows || (sb.closed ? "" : `<div class="sbempty">no Workspace mounted</div>`)}${procRows}</div>`;
+    }).join("");
+    return `<section class="board sbp"><div class="bhead"><span class="t">sandboxes</span><span>${open.length}</span>${HINT(`Sandboxes: a Sandbox is a Linux container where an agent mounts Workspaces (each a full view of one Branch) and runs commands. A card shows who made it, its image, its calls and commands, its mounted Workspaces and running processes; hover a card for its whole record, click a Workspace for its pane. A closed Sandbox stays ${X.RETIRE_S} s.`)}<span class="sp"></span>${TAG("blue", `${nWs} workspace${nWs === 1 ? "" : "s"} mounted`)}${nProc ? TAG("grey", `${nProc} running`) : ""}</div>
+      <div class="sbcards">${rows || `<div class="none">no Sandbox open · an agent creates one to mount a Branch</div>`}</div></section>`;
   }
   // Store totals as the operator's store.stats reports them, for the whole project.
   function storePanel() {
@@ -310,12 +376,12 @@ export function createView(root, o) {
     return `<section class="term storep"><div class="thead">${FSICON("var(--accent)")}<span class="t">store.stats</span><span class="sp"></span>${TAG("coral", "main · read-only")}</div>
       <div class="sbody"><div class="tiles">${tile(z ? x(z.logical, z.payload) : "–", "dedupe", "blue")}${tile(z ? x(z.payload, z.stored) : "–", "compression", "coral")}${tile(z ? fmtBytes(z.stored) : "–", "stored", "")}${tile(z ? fmtBytes(z.store) : "–", "file", "")}</div>
       <div class="sbar2"><span class="p" style="width:${pct(z ? z.stored : 0)}%"></span><span class="m" style="width:${pct(z ? z.metadata : 0)}%"></span><span class="f" style="width:${pct(free)}%"></span></div>
-      <div class="sline">${z ? `logical <b>${fmtBytes(z.logical)}</b> · canonical <b>${fmtBytes(z.payload)}</b> · <span class="mc">metadata</span> ${fmtBytes(z.metadata)} · ` : `${v.live ? "not reported yet" : "empty"} · `}${nC} commit${nC === 1 ? "" : "s"} · ${nL} layer${nL === 1 ? "" : "s"}${z && z.estimate ? " · sim est." : ""}</div></div></section>`;
+      <div class="sline">${z ? `logical <b>${fmtBytes(z.logical)}</b> · canonical <b>${fmtBytes(z.payload)}</b> · <span class="mc">metadata</span> ${fmtBytes(z.metadata)} · ` : `${v.live ? "not reported yet" : nC ? "sizes not reported" : "empty"} · `}${nC} commit${nC === 1 ? "" : "s"} · ${nL} layer${nL === 1 ? "" : "s"}${z && z.estimate ? " · sim est." : ""}</div></div></section>`;
   }
   function mainView() {
     const W = v.W, project = W.engine.s.project ? W.engine.s.project.name : "no project yet";
     const lines = W.hist.map((l) => lineHtml(l, l.t === fresh, '<span class="prompt">$ </span>')).join("") || `<span class="out">no calls yet</span>`;
-    return `${boardHtml()}<div class="col">${storePanel()}${term(lastHit("hist"), 'data-loc="hist"', `${mascot(LEAD)}<span class="t">project</span><span class="ghost">${esc(project)}</span><span class="sp"></span>${TAG("blue", "project · branch")}`, ["project · branch"], lines)}</div>`;
+    return `<div class="col boards">${sandboxPanel()}${boardHtml()}</div><div class="col">${storePanel()}${term(lastHit("hist"), 'data-loc="hist"', `${mascot(LEAD)}<span class="t">project</span><span class="ghost">${esc(project)}</span><span class="sp"></span>${TAG("blue", "project · branch")}`, ["project · branch"], lines)}</div>`;
   }
 
   function branchView(b) {
@@ -337,7 +403,8 @@ export function createView(root, o) {
         `${mascot(w.agent)}<span class="t">${esc(w.agent)}</span><button class="ghost sbchip" data-sbchip="${esc(sb)}" title="Runs in Sandbox ${esc(sb)} · click: the Sandboxes on main">sandbox ${esc(sb)}</button><span class="sp"></span>${pill}`,
         ["sandbox " + sb, "workspace " + ws], w.lines.map((l) => lineHtml(l, l.t === fresh, l.dim ? "" : '<span class="prompt">$ </span>')).join("")); });
     const cells = [fs, ...panes];
-    while (cells.length < 4 || cells.length % 2) cells.push(`<div class="wempty">opens on the next tool call</div>`);
+    // two by two: a lone terminal gets one placeholder beside it, an odd count one to even the row
+    while (cells.length < 2 || cells.length % 2) cells.push(`<div class="wempty">a Workspace opens here on the next tool call</div>`);
     return `<div class="binfo"><span class="nm" style="color:var(${B.color})">${esc(b)}</span><span>from ${esc(B.base)}</span><span>head ${esc(headId)}</span><span>${nC} commit${nC === 1 ? "" : "s"}</span><span class="status">${esc(status)}</span></div>
       <div class="wchips">${chips || `<span class="none">nobody on ${esc(b)} in the last ${RECENT_S} s</span>`}</div>
       <div class="wgrid">${cells.join("")}</div>`;
@@ -367,7 +434,7 @@ export function createView(root, o) {
     if (id === sbLit) return;
     sbLit = id;
     for (const el of root.querySelectorAll(".sblit")) el.classList.remove("sblit");
-    if (id) for (const el of root.querySelectorAll(`.crow[data-sbhl="${CSS.escape(id)}"], .term[data-sb="${CSS.escape(id)}"]`)) el.classList.add("sblit");
+    if (id) for (const el of root.querySelectorAll(`.crow[data-sbhl="${CSS.escape(id)}"], .term[data-sb="${CSS.escape(id)}"], .sbrow[data-sbid="${CSS.escape(id)}"]`)) el.classList.add("sblit");
   }
 
   // ---------------------------------------------------------------- render
@@ -391,7 +458,7 @@ export function createView(root, o) {
     const where = !at ? `main @ ${W.mainHead || "–"}` : at.startsWith("fork:") ? `the fork point of ${at.slice(5)}` : `${at}${n ? ` (${n.branch || "main"})` : ""}`;
     const seg = (id, label) => `<button class="${v.left === id ? "on" : ""}" data-left="${id}">${label}</button>`;
     const left = v.left === "branches" ? branchesHtml()
-      : W.mainHead ? `<div class="treewrap" data-tree>${treeOf("main", treeSize(layout.work.querySelector(".col")), true).svg}</div>` : `<div class="empty">No history yet</div>`;
+      : W.mainHead ? `<div class="treebox">${tz.controlsHtml()}<div class="treewrap" data-tree tabindex="0" aria-label="History tree: drag to pan, ⌘ + scroll to zoom">${treeOf("main", treeSize(layout.work.querySelector(".col")), true).svg}</div></div>` : `<div class="empty">No history yet</div>`;
     return `<div class="col"><section class="term"><div class="thead"><span class="seg">${seg("history", "History")}${seg("branches", "Branches")}</span><span class="sp"></span><span class="ttl">${W.order.length} Branch${W.order.length === 1 ? "" : "es"}</span></div>${left}</section></div>
       <div class="split" data-split role="separator" aria-orientation="vertical" aria-label="Resize History and Files"></div>
       <div class="col"><section class="term"><div class="thead"><span class="ptitle">Files at ${esc(where)}</span></div>${W.mainHead ? files.filesHtml("main") : ""}</section></div>`;
@@ -403,11 +470,12 @@ export function createView(root, o) {
       const keep = [".ftree", ".fview", ".blist"].map((sel) => { const el = layout.work.querySelector(sel); return [sel, el ? el.scrollTop : 0]; });
       const tw = q("[data-tree]"), at = tw && { left: tw.scrollLeft, top: tw.scrollTop };
       layout.work.innerHTML = projectView();
+      tz.apply();
       for (const [sel, top] of keep) { const el = layout.work.querySelector(sel); if (el) el.scrollTop = top; }
       placeTree(at);
       drawnFor = q("[data-tree]") && { w: q("[data-tree]").clientWidth, h: q("[data-tree]").clientHeight };
       const now = q("[data-tree]"), size = treeSize(null);
-      if (now && sizeTries++ < 1 && (Math.abs(now.querySelector("svg").width.baseVal.value - Math.max(size.w, 0)) > 8)) requestAnimationFrame(render);
+      if (now && sizeTries++ < 1 && (Math.abs(+(now.querySelector("svg").dataset.w ?? 0) - Math.max(size.w, 0)) > 8)) requestAnimationFrame(render);
       else sizeTries = 0;
       return;
     }
@@ -431,6 +499,7 @@ export function createView(root, o) {
     work.className = "work " + (v.active === "main" ? "mainview" : "branchview") + (layout.hist ? "" : showHist && showWork ? " withhist" : showHist ? " histonly" : "");
     work.innerHTML = inWork + (showWork || layout.hist ? (v.active === "main" ? mainView() : branchView(v.active)) : "");
     for (const [sel, top] of keepFiles) { const el = root.querySelector(sel); if (el) el.scrollTop = top; }
+    tz.apply();
     placeTree(at);
     { const el = q("[data-tree]"); drawnFor = el && { w: el.clientWidth, h: el.clientHeight }; }
     // the tree is drawn for its box: when the box turned out another size, draw it again (once)
@@ -441,7 +510,13 @@ export function createView(root, o) {
     for (const el of work.querySelectorAll(".tbody")) el.scrollTop = el.scrollHeight;
     for (const [sel, top] of keepScroll) { const el = work.querySelector(sel); if (el) el.scrollTop = top; }
     if (sbLit) { const id = sbLit; sbLit = null; lightSandbox(id); } // the redraw dropped the highlight
-    if (sbPulse) { const r = work.querySelector(`.crow[data-sbhl="${CSS.escape(sbPulse)}"]`), g = r && r.closest(".bcard"); sbPulse = null; if (g) { g.classList.add("pulse"); g.scrollIntoView({ block: "nearest" }); } }
+    // a node card whose node went away with the redraw (History became Files) never saw its mouseout
+    if (card.classList.contains("open") && !card.matches(":hover") && !root.querySelector("svg.graph [data-node]:hover")) hideCard(true);
+    if (sbPulse) {
+      const card = work.querySelector(`.sbrow[data-sbid="${CSS.escape(sbPulse)}"]`), r = work.querySelector(`.crow[data-sbhl="${CSS.escape(sbPulse)}"]`), g = r && r.closest(".bcard");
+      sbPulse = null;
+      for (const el of [card, g]) if (el) { el.classList.add("pulse"); el.scrollIntoView({ block: "nearest" }); }
+    }
   }
 
   // ---------------------------------------------------------------- hover card (tui.html)
@@ -537,10 +612,7 @@ export function createView(root, o) {
     const pin = e.target.closest("[data-pin]");
     if (pin) { const b = pin.dataset.pin; pinned[b] = !pinned[b]; e.stopPropagation(); render(); return; }
     const more = e.target.closest("[data-more]");
-    if (more) {
-      openMenu(more, "", X.visibleTabs(v.W, { pinned, active: v.active }).hidden.map((b) => `<button data-open="${esc(b)}"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(${v.W.branches[b].color})"></span>${esc(b)}</button>`).join(""));
-      e.stopPropagation(); return;
-    }
+    if (more) { moreMenu(more); e.stopPropagation(); return; }
     const t = e.target.closest("[data-tab]");
     if (t) openTab(t.dataset.tab);
   };
@@ -557,6 +629,7 @@ export function createView(root, o) {
   };
   const onClick = (e) => {
     if (!v.W) return;
+    if (tz.click(e)) return;
     if (layout.tabs && layout.tabs.contains(e.target)) return onTabs(e);
     if (layout.follow && layout.follow.contains(e.target)) { setFollow(!v.follow); if (v.follow && o.onFollowOn) o.onFollowOn(); return; }
     const c = e.target.closest("[data-card-at], [data-card-cmp]");
@@ -575,6 +648,8 @@ export function createView(root, o) {
     if (files.click(e)) return;
     const ro = e.target.closest("[data-roster]");
     if (ro) { rosterMenu(ro); return; }
+    const mo = e.target.closest("[data-more]");
+    if (mo) { moreMenu(mo); return; }
     const r = e.target.closest("[data-right]");
     if (r) { const [t, m] = r.dataset.right.split(":"); v.rightMode[t] = m; render(); return; }
     const pn = e.target.closest("button[data-panes]");
@@ -735,6 +810,7 @@ export function createView(root, o) {
     avatar, render, animate, files,
     dispose() {
       clearTimeout(leaveTimer);
+      tz.dispose();
       root.removeEventListener("click", onClick);
       root.removeEventListener("mouseover", onOver);
       layout.work.removeEventListener("mouseout", onOut);

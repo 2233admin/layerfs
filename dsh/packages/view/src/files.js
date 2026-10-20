@@ -2,6 +2,8 @@
 // (or main) at its latest head or at one fixed point; the base is what it is
 // compared with. Reads go through the files helpers (simulation_engine/files.js)
 // on the engine state, so they work on any engine that has trees.
+import { iconOf } from "./fileicons.js";
+import { highlightLines, langOf } from "./highlight.js";
 import { bar, esc, fmtBytes, ratio } from "./util.js";
 
 const COLLAPSE = ["/node_modules", "/.git", "/.next"];
@@ -11,7 +13,16 @@ const bytesOf = (t) => new TextEncoder().encode(t || "").length;
 // output fold into one row each, so the source changes come first.
 const DEPS = /^\/(node_modules\/|package-lock\.json$|yarn\.lock$|pnpm-lock\.yaml$)/, BUILD = /^\/(\.next|dist|build|out|\.turbo|coverage)\//, VCS = /^\/\.git\//;
 const groupOf = (path) => (DEPS.test(path) ? "deps" : BUILD.test(path) ? "build" : VCS.test(path) ? "vcs" : "src");
-const codeLines = (text) => text.split("\n").map((t, i) => `<div class="cl"><span class="no">${i + 1}</span><span class="tx">${esc(t) || " "}</span></div>`).join("");
+// a file's lines, coloured by its language (highlight.js) when it has one
+const codeLines = (text, path) => {
+  const lit = path ? highlightLines(text, path) : null;
+  return text.split("\n").map((t, i) => `<div class="cl"><span class="no">${i + 1}</span><span class="tx">${(lit ? lit[i] : esc(t)) || " "}</span></div>`).join("");
+};
+// one line coloured on its own (a diff's): a construct across lines is coloured plainly
+const litLine = (t, path) => (t ? (highlightLines(t, path)?.[0] ?? esc(t)) : "");
+const CHEV = (open) => `<svg class="chev${open ? " open" : ""}" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 2 6.5 5 3.5 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+// indent guides: one faint rule per folder level
+const indent = (depth) => (depth ? `<span class="ind" style="width:${depth * 14}px"></span>` : "");
 
 /**
  * @param {object} v the view: W, FM (files helpers), lineDiff, live,
@@ -55,7 +66,7 @@ export function createFiles(v) {
   function changesHtml(tab, p, sv, bv, ch, flash) {
     const files = Object.entries(ch.files).filter(([path]) => ((sv.tree[path] || bv.tree[path]) || {}).type === "file");
     if (!files.length) return `<div class="fempty">No file differences between ${esc(pointLabel(p.base))} and ${esc(pointLabel(subjectOf(tab, p)))}.</div>`;
-    const row = (path, k, label, indent) => `<div class="frow${flash.has(path) ? " flash" : ""}" data-fopen="${esc(path)}" style="padding-left:${indent}px" title="${esc(path)}"><span class="fb ${k} lead">${k}</span><span class="nm">${esc(label)}</span></div>`;
+    const row = (path, k, label, pad) => `<div class="frow${flash.has(path) ? " flash" : ""}" data-fopen="${esc(path)}" style="padding-left:${pad}px" title="${esc(path)}">${iconOf(path.slice(path.lastIndexOf("/") + 1), "file")}<span class="nm">${esc(label)}</span><span class="fb ${k}">${k}</span></div>`;
     const by = { src: [], build: [], deps: [], vcs: [] };
     for (const f of files) by[groupOf(f[0])].push(f);
     // source: by folder, root files first
@@ -63,14 +74,14 @@ export function createFiles(v) {
     for (const [path, k] of by.src.sort(([a], [b]) => a.localeCompare(b))) { const d = path.slice(0, path.lastIndexOf("/") + 1); (dirs.get(d) || dirs.set(d, []).get(d)).push([path, k]); }
     let html = "";
     for (const [d, list] of [...dirs].sort(([a], [b]) => (a === "/" ? -1 : b === "/" ? 1 : a.localeCompare(b)))) {
-      if (d !== "/") html += `<div class="fdir">${esc(d.slice(1))}</div>`;
+      if (d !== "/") html += `<div class="fdir">${iconOf(d.slice(0, -1).split("/").pop(), "dir", true)}<span>${esc(d.slice(1))}</span><span class="fr">${list.length}</span></div>`;
       html += list.map(([path, k]) => row(path, k, path.slice(d.length), d === "/" ? 10 : 22)).join("");
     }
     const lww = sv.tree["/.lww"] ? " · .lww: newest wins" : "";
     const fold = (g, label, hint) => {
       const list = by[g]; if (!list.length) return "";
       const open = p.toggled.includes("group:" + g), roots = [...new Set(list.map(([path]) => path.split("/")[1]))].join(", ");
-      return `<div class="fgroup" data-fgroup="${esc(tab)}|${g}"><span class="car">${open ? "▾" : "▸"}</span><b>${label}</b><span class="nm">${esc(roots)}</span><span class="fr">${list.length} file${list.length === 1 ? "" : "s"}${hint}</span></div>`
+      return `<div class="fgroup" data-fgroup="${esc(tab)}|${g}">${CHEV(open)}<b>${label}</b><span class="nm">${esc(roots)}</span><span class="fr">${list.length} file${list.length === 1 ? "" : "s"}${hint}</span></div>`
         + (open ? list.sort(([a], [b]) => a.localeCompare(b)).map(([path, k]) => row(path, k, path.slice(1), 22)).join("") : "");
     };
     return `<div class="flist">${html || `<div class="fempty">Only generated files and dependencies changed.</div>`}${fold("build", "build output", lww)}${fold("deps", "dependencies", "")}${fold("vcs", "version control", "")}</div>`;
@@ -79,8 +90,8 @@ export function createFiles(v) {
   function treeHtml(p, subj, base, ch, dir, depth, flash) {
     return FM.listBoth(subj, base, dir).map((e) => {
       const open = e.type === "dir" && dirOpen(p, e.path), k = ch && ch.files[e.path], roll = ch && !k && ch.dirs[e.path];
-      const row = `<div class="frow${e.path === p.path ? " sel" : ""}${e.gone ? " gone" : ""}${flash.has(e.path) ? " flash" : ""}" data-ftree="${esc(e.path)}" data-ftype="${e.type}" style="padding-left:${8 + depth * 13}px" title="${esc(e.path)}">
-        <span class="car">${e.type === "dir" ? (open ? "▾" : "▸") : ""}</span><span class="nm">${esc(e.name)}${e.type === "dir" ? "/" : ""}</span>${k ? `<span class="fb ${k}">${k}</span>` : roll ? `<span class="fr">${roll}</span>` : ""}</div>`;
+      const row = `<div class="frow${e.type === "dir" ? " dir" : ""}${e.path === p.path ? " sel" : ""}${e.gone ? " gone" : ""}${flash.has(e.path) ? " flash" : ""}" data-ftree="${esc(e.path)}" data-ftype="${e.type}" title="${esc(e.path)}">
+        ${indent(depth)}<span class="car">${e.type === "dir" ? CHEV(open) : ""}</span>${iconOf(e.name, e.type, open)}<span class="nm">${esc(e.name)}</span>${k ? `<span class="fb ${k}">${k}</span>` : roll ? `<span class="fr" title="changed entries inside">${roll}</span>` : ""}</div>`;
       return row + (open ? treeHtml(p, subj, base, ch, e.path, depth + 1, flash) : "");
     }).join("");
   }
@@ -139,7 +150,7 @@ export function createFiles(v) {
     const se = sv.tree[p.path], be = bv && bv.tree[p.path];
     if (p.mode === "view") {
       if (!se) return `<div class="fempty">${esc(p.path)} does not exist at ${esc(pointLabel(subject))}${be ? " (deleted; switch to Diff to see what was removed)" : ""}.</div>`;
-      return se.type === "file" ? (se.content == null ? `<div class="fempty">${esc(se.note || "Content not loaded.")}</div>` : `<div class="code">${codeLines(se.content)}</div>`) : `<div class="fempty">${esc(p.path)} is a folder.</div>`;
+      return se.type === "file" ? (se.content == null ? `<div class="fempty">${esc(se.note || "Content not loaded.")}</div>` : `<div class="code">${codeLines(se.content, p.path)}</div>`) : `<div class="fempty">${esc(p.path)} is a folder.</div>`;
     }
     if (p.mode === "history") return fileHistoryHtml(subject, p.path);
     if (p.mode === "blame") {
@@ -152,21 +163,22 @@ export function createFiles(v) {
       } else b = FM.blame(W().engine, subject, p.path);
       if (!b) return `<div class="fempty">${esc(p.path)} does not exist at ${esc(pointLabel(subject))}.</div>`;
       let last = null;
-      const rows = b.lines.map((ln) => {
+      const lit = highlightLines(b.lines.map((ln) => ln.text).join("\n"), p.path);
+      const rows = b.lines.map((ln, i) => {
         const o = ln.origin, first = o.id !== last; last = o.id;
-        return `<div class="cl"><span class="bch${first ? "" : " cont"}" style="--bc:${o.kind === "layer" ? "var(--purple)" : laneColor(o.branch)}" data-fblame="${o.id}" title="${esc(o.id)} · ${esc(W().attrib[o.id] || "")} · click to diff with its parent">${first ? o.id : ""}</span><span class="no">${ln.n}</span><span class="tx">${esc(ln.text) || " "}</span></div>`;
+        return `<div class="cl"><span class="bch${first ? "" : " cont"}" style="--bc:${o.kind === "layer" ? "var(--purple)" : laneColor(o.branch)}" data-fblame="${o.id}" title="${esc(o.id)} · ${esc(W().attrib[o.id] || "")} · click to diff with its parent">${first ? o.id : ""}</span><span class="no">${ln.n}</span><span class="tx">${(lit ? lit[i] : esc(ln.text)) || " "}</span></div>`;
       }).join("");
       return `<div class="fsum">Blame at <b>${esc(pointLabel(subject))}</b> · ${v.live ? "product attribution (fs.blame)" : `composed from ${b.versions} saved versions`}</div><div class="code">${rows}</div>`;
     }
     if (!bv) return `<div class="fempty">Diff needs something to compare with: pick it next to the point above.</div>`;
     if (!se && !be) return `<div class="fempty">${esc(p.path)} is in neither side.</div>`;
     const before = be && be.type === "file" ? be.content : null, after = se && se.type === "file" ? se.content : null;
-    if (before === after) return `<div class="fsum">No changes between <b>${esc(pointLabel(p.base))}</b> and <b>${esc(pointLabel(subject))}</b>.</div><div class="code">${codeLines(after || "")}</div>`;
+    if (before === after) return `<div class="fsum">No changes between <b>${esc(pointLabel(p.base))}</b> and <b>${esc(pointLabel(subject))}</b>.</div><div class="code">${codeLines(after || "", p.path)}</div>`;
     let o = 0, n = 0;
     const rows = v.lineDiff(before ?? "", after ?? "").map((d) => {
       if ((before == null && d.op === "-") || (after == null && d.op === "+")) return "";
       const on = d.op === "+" ? "" : ++o, nn = d.op === "-" ? "" : ++n;
-      return `<div class="cl ${d.op === "+" ? "add" : d.op === "-" ? "del" : ""}"><span class="no">${on}</span><span class="no">${nn}</span><span class="op">${d.op === " " ? "" : d.op}</span><span class="tx">${esc(d.text) || " "}</span></div>`;
+      return `<div class="cl ${d.op === "+" ? "add" : d.op === "-" ? "del" : ""}"><span class="no">${on}</span><span class="no">${nn}</span><span class="op">${d.op === " " ? "" : d.op}</span><span class="tx">${litLine(d.text, p.path) || " "}</span></div>`;
     }).join("");
     return `<div class="fsum">${before == null ? "added" : after == null ? "deleted" : "modified"} · <b>${esc(pointLabel(p.base))}</b> → <b>${esc(pointLabel(subject))}</b></div><div class="code diff">${rows}</div>`;
   }
@@ -196,7 +208,9 @@ export function createFiles(v) {
     const k = ch && ch.files[p.path], cut = p.path.lastIndexOf("/") + 1;
     const back = ch && p.list === "changes" ? "Changes" : "All files";
     const seg = (m, label) => `<button class="fseg${p.mode === m ? " on" : ""}" data-fmode="${esc(tab)}|${m}">${label}</button>`;
-    return `<div class="fpage"><button class="fback" data-fback="${esc(tab)}" title="Back to the list">‹ ${back}</button><span class="fpathx" title="${esc(p.path)} @ ${esc(pointLabel(subject))}"><span class="dir">${esc(p.path.slice(1, cut))}</span><b>${esc(p.path.slice(cut))}</b></span>${k ? `<span class="fb ${k}">${k}</span>` : ""}</div>
+    const e = sv.tree[p.path], lang = langOf(p.path), nLines = e && e.type === "file" && e.content != null ? e.content.split("\n").length - (e.content.endsWith("\n") ? 1 : 0) : null;
+    const crumbs = p.path.slice(1, cut).split("/").filter(Boolean).map((d) => `<span class="dir">${esc(d)}</span><span class="sl">/</span>`).join("");
+    return `<div class="fpage"><button class="fback" data-fback="${esc(tab)}" title="Back to the list">‹ ${back}</button>${iconOf(p.path.slice(cut), "file")}<span class="fpathx" title="${esc(p.path)} @ ${esc(pointLabel(subject))}">${crumbs}<b>${esc(p.path.slice(cut))}</b></span>${k ? `<span class="fb ${k}">${k}</span>` : ""}<span class="sp"></span><span class="flang">${[lang ? lang.label : null, nLines != null ? `${nLines} line${nLines === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ")}</span></div>
       <div class="fmodes"><span class="segs">${bv ? seg("diff", "Diff") : ""}${seg("view", "File")}${seg("blame", "Blame")}${seg("history", "History")}</span><span class="sp"></span>${fileStatsHtml(subject, p, sv)}</div>
       <div class="fbody"><div class="fview">${viewHtml(subject, p, sv, bv)}</div></div>`;
   }
