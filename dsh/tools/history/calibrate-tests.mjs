@@ -81,6 +81,9 @@ export function batchSize({ moved, commands = [], cap = 0, target = BATCH_TARGET
   return cap > 0 ? Math.min(n, cap) : n;
 }
 
+/** The commit the calibration last checked out into `tree` (a `<tree>.commit` file beside it), or null. */
+export const checkedOut = (tree) => { try { return readFileSync(`${tree}.commit`, "utf8").trim(); } catch { return null; } };
+
 /** Parses the probe's JSON lines. */
 export const parseProbe = (stdout) => stdout.split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l));
 
@@ -103,9 +106,10 @@ function main() {
     const tests = plan.closure.tests;
     if (!tests || typeof tests !== "object") throw new Error(`range ${k}: plan v${summary.version} has no test selection; regenerate the plan`);
     const t0 = Date.now();
-    const headOf = () => { try { return execFileSync("git", ["-C", tree, "rev-parse", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch { return null; } };
-    const moved = headOf() !== plan.checkpoint;
+    // the tree has no HEAD of its own (git.mjs checkout uses the bare clone's): the checked-out commit is kept beside it
+    const moved = checkedOut(tree) !== plan.checkpoint;
     checkout(repo, tree, plan.checkpoint);
+    writeFileSync(`${tree}.commit`, plan.checkpoint);
     const blocked = noInstall(tree);
     if (!blocked && (plan.closure.install || !existsSync(join(tree, "node_modules")))) {
       // `--fetch` fills the store from this lockfile first (the network's one use);

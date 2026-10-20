@@ -35,3 +35,14 @@ rate; 15 files in 45 s gives 20 (r049's shape, not 40); the slowest rate
 decides; fast files give a large batch; the cap only lowers; at least 1; an
 empty command is no rate. tools 16/17. The REBUILD.md §4 case fails
 identically on origin/main `bc5c5c1564`.
+
+## Follow-up · the moved check (r051, p3-main-x)
+
+The first version asked the tree for `git rev-parse HEAD`. `git.mjs checkout`
+works through the bare clone's own HEAD, so the tree has none, and every
+command read as "checkout moved". The batch then stayed at 15. The r051
+calibration ran 4 such commands.
+
+The calibration now keeps the checked-out commit in a `<tree>.commit` file
+beside the tree (`checkedOut`). The test covers a missing file (moved) and a
+recorded commit. After the fix, r051's commands took 16 files each (34–51 s).

@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { blockify, due, manifestOf, manifestPath, newManifestPath, orphans, pageSizeOf, rebuild, verify } from "../snapshot.mjs";
 import { parseIds, ROLES, storeFigures, trend } from "../inspect.mjs";
 import { chooseRun, compareResults, packageOf, parseVitestJson, selectTests, vitestCommand } from "../unit-tests.mjs";
-import { batchSize, dockerArgs, FETCH, INSTALL, nextSlice, noInstall, parseProbe } from "../calibrate-tests.mjs";
+import { batchSize, checkedOut, dockerArgs, FETCH, INSTALL, nextSlice, noInstall, parseProbe } from "../calibrate-tests.mjs";
 import { evaluate } from "../gates.mjs";
 import { change, checkFinding, checkRebuild, checkRecord, checkRecords, loadFindings } from "../findings.mjs";
 import { renderFinding, renderOptimization } from "../report.mjs";
@@ -211,6 +211,11 @@ test("fix 065: the calibration batch sizes itself: 15 after a checkout move, the
   assert.equal(batchSize({ moved: true, cap: 5 }), 5);
   assert.equal(batchSize({ moved: false, commands: [{ files: 1, wallMs: 90_000 }] }), 1, "at least one file");
   assert.equal(batchSize({ moved: false, commands: [{ files: 0, wallMs: 400 }] }), 15, "an empty command is no rate");
+  // r051 (p3-main-x): the moved check must see the calibration's own record, not a HEAD the tree does not have
+  const tree = join(dir, "checkout-x");
+  assert.equal(checkedOut(tree), null, "never checked out: moved");
+  writeFileSync(`${tree}.commit`, "abc\n");
+  assert.equal(checkedOut(tree), "abc");
 });
 
 test("calibration runs offline in the runtime image", () => {
