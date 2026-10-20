@@ -216,6 +216,7 @@
 | 2026-10-20 | **Range 38 a1 (`p3-main-u`, daemon `27a769a4`): STOP at the checkpoint, oracle cause (fix 058).** One extra path, `.sessions/session-query.db`, a test output that dsh's `.gitignore` ignores; nothing missing, content and modes match git. Node 12 pass, 0 stop, 0 NOT_RUN, repair P6 pass. Fix 058: the P3 checkpoint check exempts paths the checkpoint's own `.gitignore` files ignore. a2 replays r38 on a fork of r37's snapshot | — |
 | 2026-10-20 | **Range 38 a2 (`p3-main-v`, fork of `p3-main-u`'s r037 snapshot, daemon `27a769a4`): WATCH, terminal, after fix 058 (accepted by the liaison).** Checkpoint ok, git ✓, Node 17 pass, 0 stop, 0 NOT_RUN over 4 points, repair P6 pass. Fix 058 exempted `.sessions/session-query.db` only; from r39 the metrics keep the list (`checks.tree.gitIgnored`) | liaison condition: list exempted paths at r40 |
 | 2026-10-20 | **Range 39 a1 (`p3-main-v`, daemon `27a769a4`): OPTIMIZE, terminal under the fast-mode ruling (counters recorded).** Checkpoint ok, git ✓, Node 21 pass, 0 stop, 0 NOT_RUN over 5 points, repair P6 pass. Only optimize row: Counters `diff_files.statements` chain-bounded, 108 vs 96 (1.125×). Fix 058 exempted nothing | — |
+| 2026-10-20 | **Range 40 a1 (`p3-main-v`, daemon `27a769a4`): OPTIMIZE, terminal under the fast-mode ruling (counters recorded).** Checkpoint ok, git ✓, Node 20 pass, 0 stop, 0 NOT_RUN over 5 points, repair P6 pass. Only optimize row: Counters `diff_files.statements` chain-bounded, 1.125× (as r39). Fix 058 exempted `.sessions/session-query.db` | — |
 
 ## P1 · Pilot
 
