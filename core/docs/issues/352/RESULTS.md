@@ -563,6 +563,61 @@ Storage and watch items:
 - **`fs.rm` (#367): new from r39.** The time per uncontended call doubled (6.1–6.5 → 11.9–12.7 ms). The SQL counters per call rose too: 127–134 → 192–254 statements and 6.4–6.9k → 15.8–19.2k VM steps. These binaries still count process-wide (fix 057's per-call counter is not in them), so overlapping work may be included. But these are uncontended calls, and the statements rose with the time. It is recorded, not acted on, and flagged for #367.
 - Space amplification rose from 1.28× (r35) to 1.45× (r40); the Store passed 1 GiB at r38.
 
+### Ranges 41–45, the ranges 31–50 session (2026-10-20)
+
+Fast mode, the same binaries as 31–40: daemon `27a769a4`, addon `0611f3e0`, SDK JS `e990c25c`, image `d3773b4e`. Speed is read against `baseline-27a769a48998-0611f3e0cf81-p3.json`. Ranges 41–43 and r44 a1 ran on `p3-main-v`. From r44 a2 the run is `p3-main-w`, a fork of `p3-main-v`'s r042 snapshot (r43 has no snapshot) with r43 replayed in fast mode as setup and the chain set to `p3-main-v`'s r43 native state. One sample per attempt; no QUIET overlap was recorded in any range.
+
+| Range | Attempts | Terminal verdict | Stops and causes | Repair build s | Final commands s (repair / verify / finish) |
+| --- | --- | --- | --- | --- | --- |
+| 41 | 1 | optimize, counters recorded | — (`merge.returned_rows` chain-bounded 1.295×) | 22.5 | 112 / 13 / 38 |
+| 42 | 1 | optimize, counters recorded | — (the same row) | 23.8 | 117 / 18 / 52 |
+| 43 | 1 | optimize, counters recorded | — (the same row) | 21.8 | 111 / 12 / 39 |
+| 44 | 2 | optimize (a2), counters recorded | native first: the repair's tsdown broke on an untracked package folder ([060](fixes/060-r044-native-first-untracked-package-folder.md) part 1); a1: git check, `?? packages/subagent/subagent-subprocess/` (060 part 2, liaison ruling: `git clean -f -d`); a2 none | 21.9 | a1 20 (stopped before the repair); a2 109 / 17 / 45 |
+| 45 | 1 | optimize, counters recorded | — (the same row; Contended work `fs.rm`) | 22.0 | 112 / 12 / 38 |
+
+- **One stop, a harness cause.** r44's agents add `packages/subagent/subagent-subprocess` and remove it again, and the plan splits it across two lanes. One lane's `tsc -b` of `subagent-acp` (TS6059 rootDir errors) emitted `.js`, `.d.ts` and `.map` files into that folder's `src/`. After the reconcile, the folder had no tracked file left, and decision B's `git clean -f` (no `-d`) never enters such a folder.
+  - Natively, tsdown took the folder as a package and failed. The native-first check caught this before any attempt; fix 060 part 1 makes the repair clean remove `packages/<g>/<n>` folders the checkpoint does not track.
+  - On LayerFS, the same folder failed the git status check (a1).
+  - Fix 060 part 2 applies the liaison's ruling: the lead's clean is `git clean -f -d`, still without `-x`, and the native clean is identical. Part 3 puts the native clean's command into the oracle cache key.
+  - No LayerFS product defect.
+- **Folders the `-d` clean removed (liaison condition), r44 a2–r45:** one, `packages/subagent/subagent-subprocess` at r44 a2. It held 12 emitted files (36,476 B) and was removed identically natively. It is the leftover of a package added and removed within the range, and neither the r43 nor the r44 checkpoint tracked a file there. Nothing to flag. r45 removed 0 folders. Its 220 removed files (999,872 B) are emitted output beside sources in 8 tracked packages, the case decision B was made for. Ranges 41–43 and r44 a1 ran before `-d`.
+- **Paths fix 058 exempted (liaison condition):** r41 none; r42, r43 and r44 a2 `.sessions/session-query.db`; r45 none. That is one path in all, the session-query test's SQLite file at the repository root: test output, not a LayerFS-relevant area.
+- **Counters:** `merge.returned_rows` (chain-bounded) reached a full cap period at r41: 2,513–2,514 rows against 1,941 (1.295×) in every range. It is recorded, not acted on.
+- **Contended work, new optimize rows:** r44 `fs.write ≤1 KiB · contended` (exponent 1.778 over 14 ranges) and r45 `fs.rm 1 files · contended` (2.212 over 9 ranges). The contended SQL counters are process-wide on these binaries, so they include the concurrent Commit or merge. r45's row also carries fix 059's cause (see `fs.rm` below). Recorded, not acted on.
+- Repair steps took 109–117 s under the owner's 200 s alarm. The repair's install took 34.7–35.8 s, its build 21.8–23.8 s and its tests 3.2–3.6 s.
+
+Uncontended p50 in ms (calls), against the re-baseline:
+
+| Class | baseline | r41 | r42 | r43 | r44 (a2) | r45 |
+| --- | --- | --- | --- | --- | --- | --- |
+| fs.write ≤1 KiB | 6.4 (147) | 8.7 (66) | 7.4 (97) | 7.0 (107) | 7.3 (61) | 7.2 (46) |
+| fs.write ≤8 KiB | 7.2 (353) | 8.1 (167) | 7.6 (314) | 7.4 (173) | 6.9 (226) | 7.0 (247) |
+| fs.read ≤8 KiB | 2.1 (85) | 2.3 (21) | 2.5 (34) | 2.4 (34) | 2.2 (27) | 2.4 (28) |
+| sandbox.mount | 11.2 (368) | 9.7 (147) | 10.1 (159) | 8.9 (173) | 8.8 (148) | 8.9 (124) |
+| sandbox.commit 0 files · Committed | 20.8 (218) | 24.2 (83) | 25.1 (93) | 25.6 (85) | 22.6 (77) | 25.8 (73) |
+| sandbox.commit "—" · Committed (p95) | 69.0 (9) | 89.9 (9; 981) | 84.3 (12; 981) | 56.2 (10; 1,000) | 93.3 (10; 1,029) | 85.0 (10; 951) |
+| branch.diff_commits >64 entries | 17.2 (285) | 19.0 (364) | 18.9 (394) | 18.9 (394) | 18.3 (399) | 18.6 (393) |
+| branch.merge >64 entries · new Commit | 91.9 (6) | 308.5 (3) | 514.5 (3) | 348.6 (3) | 166.3 (2) | 78.6 (2) |
+| fs.rm 1 file | 6.7 (208) | 9.8 (18) | 9.2 (53) | 12.1 (36) | 6.2 (48) | 12.1 (102) |
+
+- **Speed reads "not judged" in every range** for the reason given at r31–r35. The thin class `sandbox.commit` "— · Committed" (Commits whose changed-file count is not measured) has 3 calls per baseline range, under the gate's minimum of 5. Its p50 is 56–93 ms against the baseline's 69 ms. The 13.8–14.9× is its p95, 951–1,029 ms: the repair's build Commit, which captures `tsc -b`'s 1,939–2,045 emitted files. The baseline's 3 calls per range were pilot-sized Commits, so it is not a regression. The repair's clean-relink Commit is 13.5–14.3 s per range (the class's maximum).
+- **Merge** reads 0.85–5.6× (79–515 ms against 91.9 ms). The baseline's 6 merges come from pilot ranges 2–4, with small trees and no `node_modules` merge. The p50 follows the merge's size: three-lane merges in r41–r43 took 309–515 ms, in or near r23–r40's band (229–495 ms), and two-call merges in r44–r45 took 79–166 ms. This is tree and merge size against a small-tree baseline, not a new regression.
+- **The other classes** are within 0.8–1.35× of the baseline, or are calls under 5 ms where the extra is below the absolute floor. `diff_commits` held at 18.3–19.0 ms.
+
+Storage and watch items:
+
+| Range | Added | Store on disk | Space amplification | Commits | Index rows (#366) | `fs.rm` uncontended p50 / calls / statements / VM steps (#367) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 41 | 30.9 MiB | 1.12 GiB | 1.47× | 844 | 376.1 MiB live (index + waste + other) | 9.82 ms / 18 / 173 / 8,643 |
+| 42 | 41.4 MiB | 1.15 GiB | 1.49× | 1,210 | 331.0 MiB (sealed) | 9.21 ms / 53 / 169 / 10,407 |
+| 43 | 42.8 MiB | 1.20 GiB | 1.54× | 1,464 | 405.8 MiB live (index + waste + other) | 12.14 ms / 36 / 207 / 15,447 |
+| 44 (a2) | 36.4 MiB | 1.23 GiB | 1.57× | 1,240 | 354.7 MiB (sealed) | 6.23 ms / 48 / 132 / 6,991 |
+| 45 | 32.0 MiB | 1.26 GiB | 1.61× | 1,114 | 432.6 MiB live (index + waste + other) | 12.10 ms / 102 / 195 / 16,425 |
+
+- **Index rows (#366)** on sealed snapshots: 306.1 MiB at r40, then 331.0 (r42) and 354.7 (r44). That is 12.2 MiB per range, as in r36–r40 (11.9) and r21–r30 (12.0).
+- **`fs.rm` (#367): the r39+ rise has its root cause in [fix 059](fixes/059-r039-a1-directory-count-after-commit.md)** (product, on main `729c3b3196`, not in these binaries). From r39 the agents remove notes from `.agents/notes/implemented/*`, with 24–211 entries per directory. Each remove relisted its parent directory to count child directories, and the cached count was lost at every Commit. It is not tree or history growth. The ranges with such removes (r41–r43, r45) read 9.2–12.1 ms and 169–207 statements per call. r44 had none and is back at 6.2 ms and 132 statements. On these binaries the rise stays recorded and expected; fix 059 reaches the replay at a later re-baseline.
+- Space amplification rose from 1.45× (r40) to 1.61× (r45); the Store grew 1.09 → 1.26 GiB.
+
 ## P4 · Recovery and demo
 
 Pending.
