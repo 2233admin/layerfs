@@ -648,8 +648,16 @@ terminal, and measures r47, r48 and r49 on the new binaries.
     file.
   - SDK JS: `core/target/lead51/sdk-js-6928ca80` (sha256 `f58788de…`, as the
     harness hashes it).
-  - The cargo registry cache was refreshed once with `cargo fetch --locked`
-    in the same image (network on, fetch only).
+  - **Setup:** the private registry cache (`layerfs-issue352-prep51-cargo-home`,
+    copied from `layerfs-issue367-cargo-home`) was refreshed once with
+    `cargo fetch --manifest-path core/Cargo.toml --locked` in the same image.
+    The copied index was unreadable by cargo 1.85.1, so the offline build could
+    not resolve `libproc`. That fetch is the one step with network access.
+    `Cargo.lock` is unchanged. The build then ran with `--offline` and
+    `--network none`.
+  - **Host sharing (r50):** r50 plays on `p3-main-w` while this run plays.
+    Each range records the host's 1-minute load (`hostload.jsonl`) and the
+    baseline note declares the overlap. Nothing is rerun for load.
 - **Isolation:**
   - Prefix `LFS_RESOURCE_PREFIX=layerfs-issue352-prep51`.
   - Run `rb-p3-32eda22d-4c52d23c`, label `baseline`.
