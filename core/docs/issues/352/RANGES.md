@@ -63,3 +63,4 @@
 | 056 | 76 | 66,733 | **optimize** | Speed | 33.0 MiB | [range-056](ranges/range-056.md) |
 | 057 | 61 | 67,927 | **optimize** | Counters | 31.9 MiB | [range-057](ranges/range-057.md) |
 | 058 | 60 | 69,520 | **stop** | Node proofs | 33.2 MiB | [range-058](ranges/range-058.md) |
+| 059 | 63 | 70,240 | **watch** | Speed | 25.5 MiB | [range-059](ranges/range-059.md) |
