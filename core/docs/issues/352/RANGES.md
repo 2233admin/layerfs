@@ -60,3 +60,4 @@
 | 053 | 64 | 63,409 | **optimize** | Counters | 25.5 MiB | [range-053](ranges/range-053.md) |
 | 054 | 97 | 64,802 | **optimize** | Counters | 34.2 MiB | [range-054](ranges/range-054.md) |
 | 055 | 70 | 65,543 | **optimize** | Counters | 25.3 MiB | [range-055](ranges/range-055.md) |
+| 056 | 76 | 66,733 | **optimize** | Speed | 33.0 MiB | [range-056](ranges/range-056.md) |
