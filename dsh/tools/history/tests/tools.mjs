@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { blockify, due, manifestOf, manifestPath, newManifestPath, orphans, pageSizeOf, rebuild, verify } from "../snapshot.mjs";
 import { parseIds, ROLES, storeFigures, trend } from "../inspect.mjs";
 import { chooseRun, compareResults, packageOf, parseVitestJson, selectTests, vitestCommand } from "../unit-tests.mjs";
-import { dockerArgs, FETCH, INSTALL, nextSlice, noInstall, parseProbe } from "../calibrate-tests.mjs";
+import { batchSize, dockerArgs, FETCH, INSTALL, nextSlice, noInstall, parseProbe } from "../calibrate-tests.mjs";
 import { evaluate } from "../gates.mjs";
 import { change, checkFinding, checkRebuild, checkRecord, checkRecords, loadFindings } from "../findings.mjs";
 import { renderFinding, renderOptimization } from "../report.mjs";
@@ -197,6 +197,20 @@ test("calibration probes a large range across bounded commands", () => {
   assert.deepEqual([second.kept.length, second.todo, second.left], [2, ["c", "d"], 1]);
   assert.deepEqual(nextSlice(files, { ...partial, native: [...partial.native, { path: "c" }, { path: "d" }] }, "c1", 2).todo, ["e"]);
   assert.deepEqual(nextSlice(files, partial, "c2", 2).kept, [], "another checkpoint's partial results are not kept");
+});
+
+test("fix 065: the calibration batch sizes itself: 15 after a checkout move, then about 60 s from the measured time per file", () => {
+  assert.equal(batchSize({ moved: true }), 15, "the first command after the move (LESSONS R4)");
+  assert.equal(batchSize({ moved: true, commands: [{ files: 10, wallMs: 5000 }] }), 15, "a move resets to 15 whatever the rate");
+  assert.equal(batchSize({ moved: false }), 15, "no measured rate yet");
+  // r049: 110 files at 2.65 s each natively; 15 files in 45 s gives 20 per command (60 s), never 40 (the alarmed batches)
+  assert.equal(batchSize({ moved: false, commands: [{ files: 15, wallMs: 45_000 }] }), 20);
+  assert.equal(batchSize({ moved: false, commands: [{ files: 15, wallMs: 45_000 }, { files: 20, wallMs: 80_000 }] }), 15, "the slowest rate decides");
+  assert.equal(batchSize({ moved: false, commands: [{ files: 15, wallMs: 3000 }] }), 300, "fast files: a large batch");
+  assert.equal(batchSize({ moved: false, commands: [{ files: 15, wallMs: 3000 }], cap: 40 }), 40, "--max-files only lowers it");
+  assert.equal(batchSize({ moved: true, cap: 5 }), 5);
+  assert.equal(batchSize({ moved: false, commands: [{ files: 1, wallMs: 90_000 }] }), 1, "at least one file");
+  assert.equal(batchSize({ moved: false, commands: [{ files: 0, wallMs: 400 }] }), 15, "an empty command is no rate");
 });
 
 test("calibration runs offline in the runtime image", () => {

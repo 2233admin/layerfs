@@ -13,8 +13,9 @@
 // installs nothing and skips its files with that reason. It writes <plan>/tests-NNN.json beside the plan,
 // which stays as written: { range, image, candidates, native, run, skipped,
 // nativeMs }. One attempt per range; a range whose install fails stops the
-// calibration. `--max-files M` probes at most M not-yet-probed files per
-// command so a large range fits the command wall: the probed results wait in
+// calibration. Each command probes a batch of not-yet-probed files sized to
+// fit the command wall (batchSize: 15 after a checkout move, then ~60 s from
+// the measured time per file; `--max-files M` caps it): the probed results wait in
 // <plan>/tests-NNN.partial.json, the next command probes the rest, and the
 // range's file is written once every candidate has a result.
 import { execFileSync } from "node:child_process";
@@ -66,6 +67,20 @@ export function nextSlice(files, partial, checkpoint, max) {
   return { kept, todo: max ? rest.slice(0, max) : rest, left: max ? Math.max(0, rest.length - max) : 0 };
 }
 
+/**
+ * The calibration batch (fix 065, after r049: four 40-file commands all hit the 115 s alarm). The first command after
+ * the working tree moves to a new checkpoint, or with no measured rate yet, probes at most FIRST_BATCH files (LESSONS
+ * R4: the move and install share its wall). Later commands size the batch from the slowest wall time per file of
+ * this checkpoint's earlier probe commands, so the probe projects under BATCH_TARGET_MS. `cap` (`--max-files`) only
+ * lowers it.
+ */
+export const FIRST_BATCH = 15, BATCH_TARGET_MS = 60_000;
+export function batchSize({ moved, commands = [], cap = 0, target = BATCH_TARGET_MS, first = FIRST_BATCH }) {
+  const rates = commands.filter((c) => c.files > 0 && c.wallMs > 0).map((c) => c.wallMs / c.files);
+  const n = moved || !rates.length ? first : Math.max(1, Math.floor(target / Math.max(...rates)));
+  return cap > 0 ? Math.min(n, cap) : n;
+}
+
 /** Parses the probe's JSON lines. */
 export const parseProbe = (stdout) => stdout.split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l));
 
@@ -80,7 +95,7 @@ function main() {
   const tree = resolve(opt("--checkout", join(process.env.HOME, "lfs-history", "checkout")));
   const summary = JSON.parse(readFileSync(join(planDir, "plan.json"), "utf8"));
   const from = Number(opt("--from", "0")), to = Number(opt("--to", String(summary.ranges.length - 1)));
-  const max = Number(opt("--max-files", "0"));
+  const cap = Number(opt("--max-files", "0"));
   // NODE_RULE §11 a: the run's store policy (owner decision pending); the plan's own default keeps dsh's
   const install = installCommand({ policy: opt("--store-policy", "verified") });
   for (let k = from; k <= to; k++) {
@@ -88,6 +103,8 @@ function main() {
     const tests = plan.closure.tests;
     if (!tests || typeof tests !== "object") throw new Error(`range ${k}: plan v${summary.version} has no test selection; regenerate the plan`);
     const t0 = Date.now();
+    const headOf = () => { try { return execFileSync("git", ["-C", tree, "rev-parse", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch { return null; } };
+    const moved = headOf() !== plan.checkpoint;
     checkout(repo, tree, plan.checkpoint);
     const blocked = noInstall(tree);
     if (!blocked && (plan.closure.install || !existsSync(join(tree, "node_modules")))) {
@@ -97,16 +114,22 @@ function main() {
       execFileSync("docker", dockerArgs({ image, tree, store, command: install }), { stdio: "inherit" });
     }
     const file = join(planDir, `tests-${pad(k)}.json`), partialFile = join(planDir, `tests-${pad(k)}.partial.json`);
-    const slice = nextSlice(tests.files, existsSync(partialFile) ? JSON.parse(readFileSync(partialFile, "utf8")) : null, plan.checkpoint, max);
+    const partial = existsSync(partialFile) ? JSON.parse(readFileSync(partialFile, "utf8")) : null;
+    const commands = partial?.checkpoint === plan.checkpoint ? partial.commands ?? [] : [];
+    const max = batchSize({ moved, commands, cap });
+    const slice = nextSlice(tests.files, partial, plan.checkpoint, max);
+    const p0 = Date.now();
     const probed = blocked ? slice.todo.map((path) => ({ path, status: "skipped", reason: blocked, ms: 0 }))
       : slice.todo.length
       ? parseProbe(execFileSync("docker", dockerArgs({ image, tree, command: `node /t/unit-tests.mjs probe ${slice.todo.map((f) => `'${f.replaceAll("'", "'\\''")}'`).join(" ")}` }), { encoding: "utf8", maxBuffer: 1 << 26 }))
       : [];
     const byPath = new Map([...slice.kept, ...probed].map((r) => [r.path, r]));
+    // the probe's own wall (not the move or install) sizes the next batch
+    const done = [...commands, ...(blocked ? [] : [{ files: slice.todo.length, wallMs: Date.now() - p0 }])];
     if (slice.left) {
-      writeFileSync(`${partialFile}.tmp`, JSON.stringify({ range: k, checkpoint: plan.checkpoint, native: [...byPath.values()] }, null, 1));
+      writeFileSync(`${partialFile}.tmp`, JSON.stringify({ range: k, checkpoint: plan.checkpoint, native: [...byPath.values()], commands: done }, null, 1));
       renameSync(`${partialFile}.tmp`, partialFile);
-      console.log(`range ${k}: ${byPath.size} of ${tests.files.length} probed, ${slice.left} left (run again), ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+      console.log(`range ${k}: ${byPath.size} of ${tests.files.length} probed (batch ${slice.todo.length}${moved ? ", checkout moved" : ""}), ${slice.left} left (run again; next batch ${batchSize({ moved: false, commands: done, cap })}), ${((Date.now() - t0) / 1000).toFixed(1)} s`);
       return;
     }
     const native = tests.files.map((f) => byPath.get(f)).filter(Boolean);

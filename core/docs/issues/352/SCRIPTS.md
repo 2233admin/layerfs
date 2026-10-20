@@ -595,3 +595,13 @@ A flag is a reading aid, not a verdict, and changes no gate. The 51–100
 notes were made at plan-r31 on 2026-10-20: section 1 lists lane-written
 transient packages in 35 of the 50 ranges, about 30 each in r84–r88 and
 r91; `.gitignore` changes at r52 and r86.
+
+### Test calibration sizes its own batch (fix 065)
+
+`calibrate-tests.mjs` no longer needs `--max-files 40`. Each command probes
+at most 15 files when the working tree moves to a new checkpoint, or when
+this checkpoint has no measured rate yet (LESSONS R4). Later commands size
+the batch from the slowest probe wall per file of this checkpoint's earlier
+commands (kept in `tests-NNN.partial.json` `commands`), so the probe projects
+under 60 s inside the 115 s alarm. `--max-files M` only lowers the batch.
+The command prints the next batch size.
