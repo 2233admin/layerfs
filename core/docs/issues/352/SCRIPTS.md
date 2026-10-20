@@ -567,3 +567,31 @@ each runs under (`perl -e 'alarm N; exec @ARGV'`):
   Desktop's share can be stale).
 - **Fix numbers** come from `fixno.mjs`, which fetches and reads every origin
   branch, at commit time. Rebase on origin/main before each hand-off.
+
+## 16. Ranges 51–100 preparation (2026-10-20)
+
+### Pre-scan before each range (fix 064)
+
+Before a range's oracle, the lead reads its pre-scan, made from the dsh git
+history alone (previous checkpoint to this one) and the range's plan file:
+
+```
+node dsh/tools/history/prescan.mjs --repo ~/lfs-history/dsh.git --plan <run's plan dir> --from k --to k --out ~/lfs-history/prescan
+```
+
+It writes `prescan-NNN.md` (the range's plan notes) and `prescan-NNN.json`.
+About 2–3 s per range; run at most 25 ranges per command under a 115 s
+alarm. It never writes into a plan directory. The four sections, and the
+ranges that taught each one:
+
+| Section | What it flags | Lesson |
+| --- | --- | --- |
+| 1. Packages added and removed | a workspace folder (`pnpm-workspace.yaml` globs) or package.json folder that some range commit writes into and neither checkpoint holds, with the plan lanes that write there (those with no lane are side-branch commits only) | r044, fix 060, R9 |
+| 2. .gitignore | every added or removed line of a changed `.gitignore` | r038, fix 058, R7 |
+| 3. Writers | added lines of changed test or script files that write files (Node fs calls, `new Database(`, shell redirections, `mkdir`/`cp`/`mv`/`tee`), excluding the OS temp folder and comments; changed package.json scripts (a new package's only when a lifecycle script is not plain tsdown/tsc/vitest). A text match: the lead checks the target | R7 |
+| 4. New packages | workspace folders and top-level folders the checkpoint has and the previous one did not | R5 |
+
+A flag is a reading aid, not a verdict, and changes no gate. The 51–100
+notes were made at plan-r31 on 2026-10-20: section 1 lists lane-written
+transient packages in 35 of the 50 ranges, about 30 each in r84–r88 and
+r91; `.gitignore` changes at r52 and r86.

@@ -18,6 +18,7 @@ import { decoyBytes, Tree } from "../steps.mjs";
 import { proofTally } from "../p3.mjs";
 import { cleanedPaths, cleanScript, marks } from "../gitlanes.mjs";
 import * as lanemerge from "../lanemerge.mjs";
+import { notes, prescanRange, scan, SHELL_WRITE, WRITE, workspaceGlobs, workspaceOf } from "../prescan.mjs";
 import { existsSync } from "node:fs";
 
 const tests = [];
@@ -658,6 +659,55 @@ test("SYNC_TREE copies only what differs (content, mode, link), keeping an uncha
     assert.equal(readlinkSync(join(b, "p/link")), "src/same.ts");
     assert.equal(readFileSync(join(b, "p/dir-now-file"), "utf8"), "f\n");
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("fix 064: the pre-scan flags packages added and removed, .gitignore changes, writers and new packages from git alone", () => {
+  const globs = workspaceGlobs("packages:\n  - vendor/*\n  - packages/*/*\n  # note\n  - apps/*\n\nallowBuilds:\n  x: true\n");
+  assert.deepEqual(globs, ["vendor/*", "packages/*/*", "apps/*"]);
+  assert.equal(workspaceOf("packages/subagent/subagent-subprocess/src/index.ts", globs), "packages/subagent/subagent-subprocess");
+  assert.equal(workspaceOf("packages/README.md", globs), null);
+  // what the writers match: file writes in code, redirections in shell; not comparisons, method calls or the OS temp folder
+  for (const l of ["await writeFile(goldenPath, payload)", "fs.mkdirSync(d)", "const db = new Database(path)"]) assert.ok(WRITE.test(l), l);
+  for (const l of ["if (end > start) {", "await api.workspace.rename(req)", "async rename(request) {", "async * stream(o): AsyncIterable<StreamChunk> {"]) assert.ok(!WRITE.test(l), l);
+  for (const l of ["printf 'x' >>\"$f\"", "mkdir -p \"$D\"", "echo hi > out.txt"]) assert.ok(SHELL_WRITE.test(l), l);
+  for (const l of ["cmd 2>&1", "cmd >/dev/null", "[ \"$a\" -gt 1 ]"]) assert.ok(!SHELL_WRITE.test(l), l);
+  // the r044 shape: a package written and removed inside the range, by two lanes
+  const s = scan({ range: 44, prev: ["packages/a/old/package.json", "a.ts"], cp: ["packages/a/old/package.json", "packages/a/new/package.json", "patches/x.patch", "a.ts"],
+    touched: ["packages/sub/gone/package.json", "packages/sub/gone/src/index.ts", "packages/a/new/package.json", "packages/a/old/src/x.ts"], globs,
+    ignore: [{ path: "examples/w/.gitignore", added: [".sessions/"], removed: [] }, { path: "x/.gitignore", added: [], removed: [] }],
+    writers: [{ path: "apps/w/tests/s.e2e.ts", lines: ["await writeFile(join(cwd, 'a.txt'), 'x')", "const d = await mkdtemp(join(tmpdir(), 'p'))", "// writeFile(x)", "if (a > b) {"] }],
+    scripts: [{ path: "package.json", name: "clean", from: null, to: "tsx scripts/clean.ts" }],
+    lanes: [{ lane: "r044-1-root", path: "packages/sub/gone/package.json" }, { lane: "r044-3-ui", path: "packages/sub/gone/src/index.ts" }] });
+  assert.deepEqual(s.addedRemoved, [{ dir: "packages/sub/gone", paths: 2, packageJson: true, lanes: ["r044-1-root", "r044-3-ui"] }]);
+  assert.deepEqual(s.gitignore.map((g) => g.path), ["examples/w/.gitignore"]);
+  assert.deepEqual(s.writers, [{ path: "apps/w/tests/s.e2e.ts", lines: ["await writeFile(join(cwd, 'a.txt'), 'x')"] }]);
+  assert.deepEqual([s.newPackages.map((p) => p.dir), s.newTop], [["packages/a/new"], ["patches"]]);
+  assert.deepEqual([s.flags, s.total], [{ addedRemoved: 1, gitignore: 1, writers: 2, newPackages: 2 }, 6]);
+  const md = notes(s);
+  assert.match(md, /^# Range 044 · pre-scan/);
+  assert.match(md, /`packages\/sub\/gone\/`: 2 path changes, with its package\.json; neither checkpoint holds it \(lanes: r044-1-root, r044-3-ui\)/);
+  assert.match(md, /`\+ \.sessions\/`/);
+  assert.match(md, /script `clean`: new/);
+  // end to end over a scratch history: a package added then removed between two checkpoints
+  const d = mkdtempSync(join(tmpdir(), "lfs-prescan-")), w = join(d, "w"), bare = join(d, "dsh.git"), plan = join(d, "plan");
+  const g = (...a) => execFileSync("git", ["-C", w, "-c", "user.name=t", "-c", "user.email=t@t", ...a], { encoding: "utf8" }).trim();
+  const put = (p, c) => { mkdirSync(join(w, p, ".."), { recursive: true }); writeFileSync(join(w, p), c); };
+  try {
+    mkdirSync(w); execFileSync("git", ["init", "-q", w]);
+    put("pnpm-workspace.yaml", "packages:\n  - packages/*/*\n"); put("packages/a/one/package.json", "{}"); g("add", "-A"); g("commit", "-qm", "c0");
+    const c0 = g("rev-parse", "HEAD");
+    put("packages/b/tmp/package.json", '{"scripts":{"build":"node gen.mjs > out.txt"}}'); put("packages/b/tmp/tests/t.spec.ts", "writeFileSync('.sessions/q.db', x)\n"); g("add", "-A"); g("commit", "-qm", "c1");
+    g("rm", "-rq", "packages/b/tmp"); put(".gitignore", ".sessions/\n"); g("add", "-A"); g("commit", "-qm", "c2");
+    const c2 = g("rev-parse", "HEAD");
+    execFileSync("git", ["clone", "-q", "--bare", w, bare]);
+    mkdirSync(plan);
+    writeFileSync(join(plan, "range-050.json"), JSON.stringify({ checkpoint: c0 }));
+    writeFileSync(join(plan, "range-051.json"), JSON.stringify({ checkpoint: c2, lanes: [{ name: "r051-1-root" }], steps: [{ lane: "r051-1-root", files: [{ path: "packages/b/tmp/package.json" }] }] }));
+    const r = prescanRange(bare, plan, 51);
+    assert.deepEqual(r.addedRemoved.map((t) => [t.dir, t.packageJson, t.lanes]), [["packages/b/tmp", true, ["r051-1-root"]]]);
+    assert.deepEqual(r.gitignore, [{ path: ".gitignore", added: [".sessions/"], removed: [] }]);
+    assert.deepEqual([r.meta.commits, r.meta.lanes], [2, "r051-1-root"]);
+  } finally { rmSync(d, { recursive: true, force: true }); }
 });
 
 let failed = 0;
