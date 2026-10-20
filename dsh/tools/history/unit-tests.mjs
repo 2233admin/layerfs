@@ -112,10 +112,17 @@ export function compareResults(run, actual) {
   return { run: run.length, equal: run.length - differ.length, differ };
 }
 
+/**
+ * A probe's environment: HOME=/tmp as vitestCommand runs (fix 068, r050). Probed under the image's own HOME, a test
+ * that needs HOME outside the temp grants (fs-sandbox.spec) passed here and failed in the replay's repair, natively
+ * and on LayerFS.
+ */
+export const probeEnv = (env) => ({ ...env, CI: "1", HOME: "/tmp" });
+
 function probe(files) {
   for (const path of files) {
     const t0 = Date.now();
-    const r = spawnSync("./node_modules/.bin/vitest", ["run", path], { env: { ...process.env, CI: "1" }, timeout: CAP.fileTimeoutMs, stdio: "ignore" });
+    const r = spawnSync("./node_modules/.bin/vitest", ["run", path], { env: probeEnv(process.env), timeout: CAP.fileTimeoutMs, stdio: "ignore" });
     const status = r.error?.code === "ETIMEDOUT" || r.signal ? "timeout" : r.status === 0 ? "pass" : "fail";
     console.log(JSON.stringify({ path, status, ms: Date.now() - t0 }));
   }

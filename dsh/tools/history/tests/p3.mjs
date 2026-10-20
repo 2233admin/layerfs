@@ -582,6 +582,13 @@ test("store generation: a fetch batch in the ledger changes it (fix 048)", async
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("the calibration probe runs with the replay's HOME (fix 068, r050: fs-sandbox.spec passed under /root, failed under /tmp)", async () => {
+  const { probeEnv, vitestCommand } = await import("../unit-tests.mjs");
+  const env = probeEnv({ HOME: "/root", PATH: "/bin" });
+  assert.deepEqual([env.HOME, env.CI, env.PATH], ["/tmp", "1", "/bin"]);
+  assert.ok(vitestCommand(["a.ts"], 5).includes(`HOME=${env.HOME} `), "the probe and the replay's vitest share HOME");
+});
+
 test("vitestCommand compact: a big report comes back small and readable, exit kept (r027 a1)", async () => {
   const { vitestCommand, parseVitestJson } = await import("../unit-tests.mjs");
   const { vitestMessages } = await import("../nodeconfig.mjs");
