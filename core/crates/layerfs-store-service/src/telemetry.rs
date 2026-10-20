@@ -148,12 +148,14 @@ pub fn phase<T, E>(
     })
 }
 
-/// Store SQL sessions' totals: the writer's, and all readers' summed.
-pub type SqlTotals = (Option<SqlWork>, Option<SqlWork>);
+/// Store SQL sessions' totals: the writer's, all readers' summed, and the
+/// calling thread's on any session.
+pub type SqlTotals = (Option<SqlWork>, Option<SqlWork>, SqlWork);
 
 /// The call's SQL work: each session group's totals after the call minus
-/// before it. Concurrent calls on the same sessions are included. A group
-/// whose counters were unavailable at either end is left out; None when both are.
+/// before it, which include concurrent calls on the same sessions, and
+/// `call`, the work of the calling thread alone (#367). A session group
+/// whose counters were unavailable at either end is left out.
 pub fn sql(before: SqlTotals, after: SqlTotals) -> Option<SdkValue> {
     let difference = |before: Option<SqlWork>, after: Option<SqlWork>| {
         let (before, after) = (sql_values(&before?), sql_values(&after?));
@@ -167,11 +169,12 @@ pub fn sql(before: SqlTotals, after: SqlTotals) -> Option<SdkValue> {
     let fields: Vec<_> = [
         ("writer", difference(before.0, after.0)),
         ("readers", difference(before.1, after.1)),
+        ("call", difference(Some(before.2), Some(after.2))),
     ]
     .into_iter()
     .filter_map(|(name, value)| Some((name.to_owned(), value?)))
     .collect();
-    (!fields.is_empty()).then_some(SdkValue::Map(fields))
+    Some(SdkValue::Map(fields))
 }
 
 /// One call's delta selection work: the Store's Save totals after it minus

@@ -10,6 +10,7 @@ mod history;
 pub use backend::sqlite::connection::{ConnectionProfile, SqlWork};
 pub use backend::sqlite::reclamation::{SpaceReclamation, RECLAMATION_PAGE_LIMIT};
 pub use backend::sqlite::statement_work::StatementPhaseWork;
+pub use backend::sqlite::thread_work::thread_work;
 pub use config::{
     BackendSelection, PersistenceConfig, SqliteAcquisitionSchema, SqlitePackLayout,
     SqlitePersistenceProfile,

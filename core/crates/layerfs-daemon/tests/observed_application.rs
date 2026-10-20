@@ -513,6 +513,8 @@ fn traced_calls_carry_sql_work_and_status_unmount_carry_opcodes() {
     let bind = &telemetry[0];
     assert_eq!(width(bind, &["sql", "writer"]), 27);
     assert_eq!(width(bind, &["sql", "readers"]), 27);
+    // #367: and the request thread's own share of it.
+    assert_eq!(width(bind, &["sql", "call"]), 27);
     // Bind opens the Workspace's reader: its opening statements are this call's.
     assert!(counter(bind, &["sql", "readers"], "statements") > 0);
     assert!(bind.get("fuse").is_none(), "bind carries no opcode counts");

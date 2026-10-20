@@ -25,17 +25,18 @@ pub struct SqlSessions {
 impl SqlSessions {
     /// The writer's totals, and every reader's (live plus retired) summed
     /// under one registry turn so a reader closing meanwhile counts once.
-    /// Either is None when a session's counters are unavailable.
-    pub fn totals(&self) -> (Option<SqlWork>, Option<SqlWork>) {
+    /// Either is None when a session's counters are unavailable. Last, the
+    /// work the calling thread ran on any session (#367).
+    pub fn totals(&self) -> crate::telemetry::SqlTotals {
         let writer = self.writer.diagnostics().ok();
         let readers = self.readers.lock().ok().and_then(|readers| {
             let mut total = readers.retired?;
             for provider in readers.live.values().filter_map(Weak::upgrade) {
-                accumulate(&mut total, provider.diagnostics().ok()?);
+                total.accumulate(&provider.diagnostics().ok()?);
             }
             Some(total)
         });
-        (writer, readers)
+        (writer, readers, layerfs_persistence::thread_work())
     }
 }
 pub struct StoreDiagnostics {
@@ -150,7 +151,7 @@ pub fn open_store_observed(
                 match provider.diagnostics() {
                     Ok(work) => {
                         if let Some(total) = &mut rows.retired {
-                            accumulate(total, work);
+                            total.accumulate(&work);
                         }
                     }
                     Err(_) => rows.retired = None,
@@ -176,45 +177,4 @@ pub fn open_store_observed(
         writer: writer.storage,
         readers: observations,
     })
-}
-fn accumulate(total: &mut SqlWork, next: SqlWork) {
-    macro_rules! add { ($($field:ident),+) => { $(total.$field = total.$field.saturating_add(next.$field);)+ }; }
-    add!(
-        statements,
-        vm_steps,
-        fullscan_steps,
-        sorts,
-        autoindex_rows,
-        reprepares,
-        returned_rows,
-        bound_bytes,
-        statement_ns,
-        commit_ns,
-        transactions,
-        write_transactions,
-        write_commits,
-        commits,
-        read_snapshots,
-        rollbacks,
-        transaction_ns,
-        read_snapshot_ns,
-        sealed_inserts,
-        sealed_body_bytes,
-        blob_open_calls,
-        blob_reopen_calls,
-        blob_read_calls,
-        blob_requested_bytes,
-        blob_read_bytes,
-        blob_read_ns,
-        blob_close_calls
-    );
-    for (to, from) in total
-        .statement_phases
-        .iter_mut()
-        .zip(next.statement_phases)
-        .chain(total.commit_phases.iter_mut().zip(next.commit_phases))
-    {
-        to.calls = to.calls.saturating_add(from.calls);
-        to.wall_ns = to.wall_ns.saturating_add(from.wall_ns);
-    }
 }

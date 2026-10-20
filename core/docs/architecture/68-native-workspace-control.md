@@ -188,7 +188,9 @@ it is `Timing::disabled`. Telemetry holds `timing` (pre-order nodes
 27 scalar `SqlWork` counters of that session group's totals after the request
 minus before it; reader totals are live plus retired readers summed under one
 registry turn; concurrent requests' work on the same sessions is included and
-an unavailable group is left out), `delta` (#352: on a call that finished a
+an unavailable group is left out; `call`, #367, the same counters for the work
+the request's own thread ran on any Store session, which excludes concurrent
+requests and any helper thread), `delta` (#352: on a call that finished a
 Save, the daemon's Save selection totals after it minus before it: payload
 selection counts with `depth_capped` and `work_exceeded` refusals and the
 whole-file and chunk depth histograms, and the pooled metadata leaves' counts

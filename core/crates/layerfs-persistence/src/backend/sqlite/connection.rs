@@ -244,6 +244,7 @@ impl Session {
                 .map_err(rows::error)? as usize,
         };
         profile::check(&profile)?;
+        super::thread_work::add(&work.borrow());
         Ok(Self {
             admission: super::admission::Admission::default(),
             path: path.to_path_buf(),

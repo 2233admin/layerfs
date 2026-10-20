@@ -146,37 +146,39 @@ impl Session {
             .state
             .lock()
             .map_err(|_| E::from(BackendError::Unknown))?;
-        if state.quarantined {
-            return Err(BackendError::Unknown.into());
-        }
-        // An earlier uncertain transaction may still exist. It cannot be
-        // inherited by an independently owned snapshot or guessed complete.
-        if !state.connection.is_autocommit() {
-            state.quarantined = true;
-            return Err(BackendError::Unknown.into());
-        }
-        let result = (|| {
-            let mut statement =
-                super::prepared::Prepared::new(&state.connection, sql, &state.work, None)
-                    .map_err(E::from)?;
-            if !statement.readonly() {
-                return Err(BackendError::Integrity.into());
+        super::thread_work::attributed(&mut state, |state| {
+            if state.quarantined {
+                return Err(BackendError::Unknown.into());
             }
-            statement.mapped_filter(values, bytes, capacity, decode)
-        })();
-        state.work.borrow_mut().read_snapshot_ns += start.elapsed().as_nanos() as u64;
-        // The statement/cursor have been dropped. A read leaves autocommit
-        // intact; failed I/O or an unexpected transaction retains quarantine.
-        if !state.connection.is_autocommit()
-            || result.as_ref().err().is_some_and(OutcomeError::uncertain)
-        {
-            state.quarantined = true;
-            return Err(BackendError::Unknown.into());
-        }
-        if result.is_ok() {
-            state.work.borrow_mut().read_snapshots += 1;
-        }
-        result
+            // An earlier uncertain transaction may still exist. It cannot be
+            // inherited by an independently owned snapshot or guessed complete.
+            if !state.connection.is_autocommit() {
+                state.quarantined = true;
+                return Err(BackendError::Unknown.into());
+            }
+            let result = (|| {
+                let mut statement =
+                    super::prepared::Prepared::new(&state.connection, sql, &state.work, None)
+                        .map_err(E::from)?;
+                if !statement.readonly() {
+                    return Err(BackendError::Integrity.into());
+                }
+                statement.mapped_filter(values, bytes, capacity, decode)
+            })();
+            state.work.borrow_mut().read_snapshot_ns += start.elapsed().as_nanos() as u64;
+            // The statement/cursor have been dropped. A read leaves autocommit
+            // intact; failed I/O or an unexpected transaction retains quarantine.
+            if !state.connection.is_autocommit()
+                || result.as_ref().err().is_some_and(OutcomeError::uncertain)
+            {
+                state.quarantined = true;
+                return Err(BackendError::Unknown.into());
+            }
+            if result.is_ok() {
+                state.work.borrow_mut().read_snapshots += 1;
+            }
+            result
+        })
     }
 
     /// Reads of immutable objects only (#352 F-035): object locations,
@@ -203,30 +205,32 @@ impl Session {
             .state
             .lock()
             .map_err(|_| E::from(BackendError::Unknown))?;
-        if state.quarantined {
-            return Err(BackendError::Unknown.into());
-        }
-        // An earlier uncertain transaction cannot be inherited or guessed done.
-        if !state.connection.is_autocommit() {
-            state.quarantined = true;
-            return Err(BackendError::Unknown.into());
-        }
-        let tx = Transaction {
-            connection: &state.connection,
-            work: &state.work,
-            uncertain: Cell::new(false),
-            owner: self,
-        };
-        let result = body(&tx);
-        let uncertain =
-            tx.uncertain.get() || result.as_ref().err().is_some_and(OutcomeError::uncertain);
-        // Every statement and BLOB handle has been released: a read leaves
-        // autocommit intact, anything else keeps the session quarantined.
-        if uncertain || !state.connection.is_autocommit() {
-            state.quarantined = true;
-            return Err(BackendError::Unknown.into());
-        }
-        result
+        super::thread_work::attributed(&mut state, |state| {
+            if state.quarantined {
+                return Err(BackendError::Unknown.into());
+            }
+            // An earlier uncertain transaction cannot be inherited or guessed done.
+            if !state.connection.is_autocommit() {
+                state.quarantined = true;
+                return Err(BackendError::Unknown.into());
+            }
+            let tx = Transaction {
+                connection: &state.connection,
+                work: &state.work,
+                uncertain: Cell::new(false),
+                owner: self,
+            };
+            let result = body(&tx);
+            let uncertain =
+                tx.uncertain.get() || result.as_ref().err().is_some_and(OutcomeError::uncertain);
+            // Every statement and BLOB handle has been released: a read leaves
+            // autocommit intact, anything else keeps the session quarantined.
+            if uncertain || !state.connection.is_autocommit() {
+                state.quarantined = true;
+                return Err(BackendError::Unknown.into());
+            }
+            result
+        })
     }
 
     pub(crate) fn run<T, E: From<BackendError> + OutcomeError>(
@@ -243,88 +247,90 @@ impl Session {
             .state
             .lock()
             .map_err(|_| E::from(BackendError::Unknown))?;
-        if s.quarantined {
-            return Err(BackendError::Unknown.into());
-        }
-        // A held publication lane already owns the writer for its nested work.
-        if writable && !turn.nested {
-            // State owns this before BEGIN, including across a poisoned unwind.
-            s.writer_hold =
-                Some(super::writer_admission::Writer::acquire(&self.path).map_err(E::from)?);
-        }
-        let tx = Transaction {
-            connection: &s.connection,
-            work: &s.work,
-            uncertain: Cell::new(false),
-            owner: self,
-        };
-        if let Err(e) = tx.query(if writable { "BEGIN IMMEDIATE" } else { "BEGIN" }, vec![]) {
-            if e == BackendError::Unknown {
-                s.quarantined = true;
+        super::thread_work::attributed(&mut s, |s| {
+            if s.quarantined {
+                return Err(BackendError::Unknown.into());
             }
-            s.finish_writer().map_err(E::from)?;
-            s.work.borrow_mut().transaction_ns += start.elapsed().as_nanos() as u64;
-            return Err(e.into());
-        }
-        tx.work.borrow_mut().transactions += 1;
-        if writable {
-            tx.work.borrow_mut().write_transactions += 1;
-        }
-        let result = body(&tx);
-        let uncertain =
-            tx.uncertain.get() || result.as_ref().err().is_some_and(OutcomeError::uncertain);
-        if uncertain {
-            s.quarantined = true;
-            s.finish_writer().map_err(E::from)?;
-            s.work.borrow_mut().transaction_ns += start.elapsed().as_nanos() as u64;
-            return Err(BackendError::Unknown.into());
-        }
-        let result = match result {
-            Ok(value) => match query::run(&s.connection, "COMMIT", vec![], &s.work) {
-                Ok(_) => {
-                    s.work.borrow_mut().commits += 1;
-                    if writable {
-                        s.work.borrow_mut().write_commits += 1;
-                    }
-                    Ok(value)
+            // A held publication lane already owns the writer for its nested work.
+            if writable && !turn.nested {
+                // State owns this before BEGIN, including across a poisoned unwind.
+                s.writer_hold =
+                    Some(super::writer_admission::Writer::acquire(&self.path).map_err(E::from)?);
+            }
+            let tx = Transaction {
+                connection: &s.connection,
+                work: &s.work,
+                uncertain: Cell::new(false),
+                owner: self,
+            };
+            if let Err(e) = tx.query(if writable { "BEGIN IMMEDIATE" } else { "BEGIN" }, vec![]) {
+                if e == BackendError::Unknown {
+                    s.quarantined = true;
                 }
-                Err(e) => {
-                    if e == BackendError::Unknown {
-                        s.quarantined = true;
-                        Err(e.into())
-                    } else if !s.connection.is_autocommit()
-                        && query::run(&s.connection, "ROLLBACK", vec![], &s.work).is_err()
-                    {
-                        s.quarantined = true;
-                        Err(BackendError::Unknown.into())
-                    } else {
-                        s.work.borrow_mut().rollbacks += 1;
-                        Err(e.into())
-                    }
-                }
-            },
-            Err(e) => {
-                // A SQL I/O error is marked in the transaction facade before returning.
-                if s.quarantined {
-                    Err(BackendError::Unknown.into())
-                } else if !s.connection.is_autocommit() {
-                    match query::run(&s.connection, "ROLLBACK", vec![], &s.work) {
-                        Ok(_) => {
-                            s.work.borrow_mut().rollbacks += 1;
-                            Err(e)
+                s.finish_writer().map_err(E::from)?;
+                s.work.borrow_mut().transaction_ns += start.elapsed().as_nanos() as u64;
+                return Err(e.into());
+            }
+            tx.work.borrow_mut().transactions += 1;
+            if writable {
+                tx.work.borrow_mut().write_transactions += 1;
+            }
+            let result = body(&tx);
+            let uncertain =
+                tx.uncertain.get() || result.as_ref().err().is_some_and(OutcomeError::uncertain);
+            if uncertain {
+                s.quarantined = true;
+                s.finish_writer().map_err(E::from)?;
+                s.work.borrow_mut().transaction_ns += start.elapsed().as_nanos() as u64;
+                return Err(BackendError::Unknown.into());
+            }
+            let result = match result {
+                Ok(value) => match query::run(&s.connection, "COMMIT", vec![], &s.work) {
+                    Ok(_) => {
+                        s.work.borrow_mut().commits += 1;
+                        if writable {
+                            s.work.borrow_mut().write_commits += 1;
                         }
-                        Err(_) => {
+                        Ok(value)
+                    }
+                    Err(e) => {
+                        if e == BackendError::Unknown {
+                            s.quarantined = true;
+                            Err(e.into())
+                        } else if !s.connection.is_autocommit()
+                            && query::run(&s.connection, "ROLLBACK", vec![], &s.work).is_err()
+                        {
                             s.quarantined = true;
                             Err(BackendError::Unknown.into())
+                        } else {
+                            s.work.borrow_mut().rollbacks += 1;
+                            Err(e.into())
                         }
                     }
-                } else {
-                    Err(e)
+                },
+                Err(e) => {
+                    // A SQL I/O error is marked in the transaction facade before returning.
+                    if s.quarantined {
+                        Err(BackendError::Unknown.into())
+                    } else if !s.connection.is_autocommit() {
+                        match query::run(&s.connection, "ROLLBACK", vec![], &s.work) {
+                            Ok(_) => {
+                                s.work.borrow_mut().rollbacks += 1;
+                                Err(e)
+                            }
+                            Err(_) => {
+                                s.quarantined = true;
+                                Err(BackendError::Unknown.into())
+                            }
+                        }
+                    } else {
+                        Err(e)
+                    }
                 }
-            }
-        };
-        s.finish_writer().map_err(E::from)?;
-        s.work.borrow_mut().transaction_ns += start.elapsed().as_nanos() as u64;
-        result
+            };
+            s.finish_writer().map_err(E::from)?;
+            s.work.borrow_mut().transaction_ns += start.elapsed().as_nanos() as u64;
+            result
+        })
     }
 }

@@ -814,7 +814,10 @@ The fixer follows these steps when a range ends as optimize or stop.
 - `sql`, on every call: `writer` and `readers` (all reader sessions, live and
   closed, summed), each the 27 scalar `SqlWork` counters as the session group's
   totals after the exchange minus before it. Concurrent exchanges' work on the
-  same sessions is included, so read it from a call that ran alone;
+  same sessions is included, so read it from a call that ran alone. `call`
+  (#367, fix 057) has the same counters for the calling thread's own work on
+  any Store session: for an in-process SDK call that is the whole call, alone
+  or contended;
 - `delta`, on a call that finished a Save (a Commit or a merge): the
   daemon's Save selection totals after it minus before it. `payload` has the
   whole-file and chunk selection counts, the bases refused at the depth cap
