@@ -55,3 +55,4 @@
 | 048 | 65 | 58,088 | **optimize** | Counters | 37.0 MiB | [range-048](ranges/range-048.md) |
 | 049 | 77 | 59,295 | **optimize** | Scaling | 36.0 MiB | [range-049](ranges/range-049.md) |
 | 050 | 60 | 60,450 | **optimize** | Counters | 42.6 MiB | [range-050](ranges/range-050.md) |
+| 051 | 62 | 61,383 | **watch** | Speed | 26.4 MiB | [range-051](ranges/range-051.md) |
