@@ -63,12 +63,13 @@
 | 054 | `32eda22d` (line p3-main-x) | a1 | 334.9 | 11934.0 | 1,586 | 1,694 | 456 | 10 | 1 | 3,747 | 149,649 | 1,393 | 64,801 | 5 | 8 | 4 / 4 | 235 | 25,472,758 | 35,832,023 | 1,806,349,486 |
 | 055 | `32eda22d` (line p3-main-x) | a1 | 377.2 | 12311.2 | 876 | 1,183 | 444 | 9 | 1 | 2,513 | 152,162 | 741 | 65,542 | 4 | 9 | 3 / 3 | 171 | 16,219,273 | 26,496,212 | 1,832,845,698 |
 | 056 | `32eda22d` (line p3-main-x) | a1 | 363.5 | 12674.7 | 1,417 | 1,629 | 455 | 10 | 1 | 3,512 | 155,674 | 1,190 | 66,732 | 5 | 9 | 3 / 3 | 235 | 26,030,100 | 34,582,244 | 1,867,427,942 |
+| 057 | `32eda22d` (line p3-main-x) | a1 | 339.9 | 13014.6 | 1,405 | 1,122 | 450 | 9 | 1 | 2,987 | 158,661 | 1,194 | 67,926 | 4 | 8 | 3 / 3 | 156 | 23,532,858 | 33,405,977 | 1,900,833,919 |
 
 ## Cumulative
 
 | Ranges | Time s | fs | sandbox | branch | project | operator | Calls | Commits | Branches | Agents (sum per range) | Conflicts hit / planned | Steps | Bytes written (since the Overview) | New stored |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 57 | 12674.7 | 77,792 | 60,223 | 17,177 | 425 | 57 | 155,674 | 66,732 | 232 | 423 | 160 / 160 | 9,901 | 1,021,232,714 ‡ | 1,867,427,942 |
+| 58 | 13014.6 | 79,197 | 61,345 | 17,627 | 434 | 58 | 158,661 | 67,926 | 236 | 431 | 163 / 163 | 10,057 | 1,044,765,572 ‡ | 1,900,833,919 |
 
 ## Conflicts per range
 
@@ -131,33 +132,34 @@
 | 054 | 1 / 1 | 1 / 1 | 1 / 1 | 1 / 1 | 0 |
 | 055 | 1 / 1 | 1 / 1 | 1 / 1 | 0 / 0 | 0 |
 | 056 | 1 / 1 | 1 / 1 | 1 / 1 | 0 / 0 | 0 |
+| 057 | 1 / 1 | 1 / 1 | 1 / 1 | 0 / 0 | 0 |
 
 ## SDK calls per method (running total)
 
 | Method | Category | Calls | Bytes in | Bytes out |
 | --- | --- | --- | --- | --- |
-| branch.diff_branches | branch | 553 | 0 | 30,158,979 |
-| branch.diff_commits | branch | 15,063 | 0 ‡ | 860,172,058 ‡ |
-| branch.fork | branch | 1,100 | 0 ‡ | 0 ‡ |
-| branch.list_commits | project | 425 | 0 | 3,972,061 |
-| branch.merge | branch | 394 | 0 | 0 |
-| branch.publish | branch | 67 | 0 ‡ | 0 ‡ |
-| fs.apply | fs | 3,383 | 107,903,737 ‡ | 0 ‡ |
-| fs.diff_files | fs | 2,820 | 0 ‡ | 22,113,991 ‡ |
-| fs.glob | fs | 3,104 | 0 ‡ | 2,792,312 ‡ |
-| fs.grep | fs | 3,135 | 0 ‡ | 10,984,320 ‡ |
-| fs.list | fs | 3,251 | 0 ‡ | 11,794,301 ‡ |
-| fs.read | fs | 2,874 | 0 ‡ | 9,487,259 ‡ |
-| fs.rm | fs | 5,348 | 0 ‡ | 0 ‡ |
-| fs.stat | fs | 2,959 | 0 ‡ | 624,677 ‡ |
-| fs.write | fs | 50,918 | 786,593,543 ‡ | 0 ‡ |
-| operator.store.stats | operator | 57 | 0 ‡ | 0 ‡ |
-| sandbox.commit | sandbox | 10,418 | 0 ‡ | 0 ‡ |
+| branch.diff_branches | branch | 566 | 0 | 30,869,463 |
+| branch.diff_commits | branch | 15,468 | 0 ‡ | 883,570,134 ‡ |
+| branch.fork | branch | 1,123 | 0 ‡ | 0 ‡ |
+| branch.list_commits | project | 434 | 0 | 4,058,513 |
+| branch.merge | branch | 402 | 0 | 0 |
+| branch.publish | branch | 68 | 0 ‡ | 0 ‡ |
+| fs.apply | fs | 3,420 | 109,491,814 ‡ | 0 ‡ |
+| fs.diff_files | fs | 2,877 | 0 ‡ | 22,483,410 ‡ |
+| fs.glob | fs | 3,163 | 0 ‡ | 2,847,444 ‡ |
+| fs.grep | fs | 3,198 | 0 ‡ | 11,239,418 ‡ |
+| fs.list | fs | 3,310 | 0 ‡ | 12,096,715 ‡ |
+| fs.read | fs | 2,929 | 0 ‡ | 9,664,810 ‡ |
+| fs.rm | fs | 5,394 | 0 ‡ | 0 ‡ |
+| fs.stat | fs | 3,013 | 0 ‡ | 636,920 ‡ |
+| fs.write | fs | 51,893 | 806,363,068 ‡ | 0 ‡ |
+| operator.store.stats | operator | 58 | 0 ‡ | 0 ‡ |
+| sandbox.commit | sandbox | 10,613 | 0 ‡ | 0 ‡ |
 | sandbox.create | sandbox | 5 | — | — |
-| sandbox.exec | sandbox | 28,402 | 126,735,434 ‡ | 199,594,019 ‡ |
-| sandbox.mount | sandbox | 10,603 | 0 ‡ | 0 ‡ |
+| sandbox.exec | sandbox | 28,929 | 128,910,690 ‡ | 205,899,842 ‡ |
+| sandbox.mount | sandbox | 10,801 | 0 ‡ | 0 ‡ |
 | sandbox.service | sandbox | 11 | 0 ‡ | 0 ‡ |
-| sandbox.status | sandbox | 181 | 0 | 0 |
-| sandbox.unmount | sandbox | 10,603 | 0 ‡ | 0 ‡ |
+| sandbox.status | sandbox | 185 | 0 | 0 |
+| sandbox.unmount | sandbox | 10,801 | 0 ‡ | 0 ‡ |
 
 — no byte data: every range of the row is derived (†). ‡ bytes of the measured ranges only; the derived ranges' bytes are unknown.
