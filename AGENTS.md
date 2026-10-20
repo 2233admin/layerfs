@@ -132,6 +132,14 @@ remains a separate MEMORY/OFF/EXCLUSIVE database file.
   retired, not extended. See the
   [integration contract](core/docs/issues/303/06-cluster-one-integration.md)
   and [direct Store access](core/docs/issues/352/DIRECT_STORE.md).
+  **Exception (owner, 2026-10-20, revised the same day): dsh Live on macOS
+  only.** The dsh-layerfs plugin may give macOS processes a ported SDK with
+  the SDK's API whose calls run in one long-lived worker per LayerFS box: a
+  Linux container running the real SDK, which opens each project's Store
+  directly and keeps it and its daemon connections open while the project is
+  in use (closed after a quiet minute). The worker listens on loopback only,
+  behind a secret. The product SDK and daemon do not change. Nothing else may
+  route Store calls this way.
 - **One global database, one writer, short holds (owner decision 2026-10-18).**
   All committed state lives in one SQLite Store file; no sharding, second
   database, concurrent-writer engine or objects outside it. Writes go one at a
@@ -173,16 +181,16 @@ For documentation/release work, read the
 For measurements, read the [agent measurement workflow](docs/general/agent-measurement-policy.md),
 [benchmark rules](docs/general/benchmark_rules.md),
 [report template](benchmark_agent_report.md) and owning harness/family contract.
-Core routing is [core/benchmark/fs-bench-pro/AGENTS.md](core/benchmark/fs-bench-pro/AGENTS.md).
+Core routing is [benchmark/fs-bench-pro/AGENTS.md](benchmark/fs-bench-pro/AGENTS.md).
 **fs-bench-pro is frozen and left broken (owner, 2026-10-18).** Do not edit,
 build, run or repair it, and leave it out of workspace builds and checks. Its
 call sites broken by #352 F-020 (`ProjectApi` fork and commits,
 `ForkRequest`, a `SandboxCreate` without `connect_host`; listed in the F-020
 fix record) stay broken; a product change never adapts it. Only an
 explicit owner instruction reopens it.
-Root [benchmark/AGENTS.md](benchmark/AGENTS.md) and its
-[Quickstart](benchmark/fs-bench-pro/QUICKSTART.md) are historical: that harness
-built the retired reference and is not runnable at HEAD.
+The root `benchmark/` harness that built and measured the retired reference was
+removed from HEAD; read it at tag `reference-v0.1.6-final`. Released
+fs-bench-pro results (v0.1.4–v0.1.6) are in [benchmark/data/fs-bench-pro](benchmark/data/fs-bench-pro/README.md).
 
 ## 1. A warm cache must never credit a measured phase
 

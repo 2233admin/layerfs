@@ -86,7 +86,7 @@ The LayerFS tab is the only LayerFS UI. The standalone HTML pages that used to l
   - the project terminal with agent tags;
   - Branches and Sandboxes;
   - History and Files;
-  - the status bar and the avatars.
+  - the agents' avatars.
 
   An unbound session shows Setup: pick one of the folder's projects, or Init.
 

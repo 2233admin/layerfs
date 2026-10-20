@@ -32,14 +32,8 @@ LIFECYCLE_FILES = {"CHANGELOG.md", "src/lib.rs", "src/session.rs", "src/session/
 BUFFER_PROVENANCE_CHECKSUM = "f3c129457d4eadaf41574c2c1b8da40fb80724e5f42602d3766ab140fdd6d39a"
 BUFFER_PATCH_CHECKSUM = "7af34aeed231619f4757e40614c13b5f5393aa966bd8545a169f1e9fa746303f"
 BUFFER_FILES = {"src/read_buf.rs", "src/session.rs", "src/session/lifecycle.rs"}
-PATCH_MANIFESTS = {
-    "core/Cargo.toml": "vendor/fuser-0.18.0",
-    "core/benchmark/cluster-two/platform/Cargo.toml": "../../../vendor/fuser-0.18.0",
-    "core/benchmark/cluster-two/passthrough/Cargo.toml": "../../../vendor/fuser-0.18.0",
-}
-PATCH_LOCKS = {"core/Cargo.lock", "core/benchmark/cluster-two/platform/Cargo.lock",
-               "core/benchmark/cluster-two/passthrough/Cargo.lock",
-               "core/vendor/fuser-0.18.0/Cargo.lock"}
+PATCH_MANIFESTS = {"core/Cargo.toml": "vendor/fuser-0.18.0"}
+PATCH_LOCKS = {"core/Cargo.lock", "core/vendor/fuser-0.18.0/Cargo.lock"}
 
 
 def is_fuser(name, value):
