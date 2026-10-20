@@ -1,4 +1,4 @@
-# LayerFS demo assets
+# LayerFS official release assets
 
 > **Status:** Current general guide.
 

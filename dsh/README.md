@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="../docs/assets/demo/page3-demo.gif" alt="The LayerFS demo: agents on several Branches run tool calls in Sandboxes and fs, each call becomes a Commit, and the history tree grows" width="860">
+  <img src="../docs/assets/official_release/page3-demo.gif" alt="The LayerFS demo: agents on several Branches run tool calls in Sandboxes and fs, each call becomes a Commit, and the history tree grows" width="860">
 </p>
 
 <p align="center">
