@@ -630,3 +630,56 @@ It also checks that the build commit contains `2de43d0a02`.
 
 Pre-fix reference, r049.a1 (`p3-main-w`, daemon `27a769a4`): 139 lane git
 Commits, chunk FULL 782 / PREFIX 0.
+
+### Re-baseline for ranges 51–100 from recent ranges (owner 2026-10-20)
+
+Owner, 2026-10-20: "Re-baseline for 51-100 on a fresh main build (with fixes
+056-061), measured on recent ranges (e.g. replaying 48-50 from snapshots), so
+ratios reflect today's tree size." This is the split procedure (§13) with
+recent ranges in place of the pilot's 2–4. It forks `p3-main-w`'s r046
+snapshot, the newest even snapshot whose next three ranges are calibrated and
+terminal, and measures r47, r48 and r49 on the new binaries.
+
+- **Binaries:** built from main `6928ca809d` (fixes 056–067 included, and F-063
+  `2de43d0a02`) in image `378b799ef433` with `--release --locked --offline -j 2`
+  (QUIET present) and `--network none`.
+  - Daemon `32eda22d657d…` and addon `4c52d23cd1b4…`, pinned at
+    `core/target/lead51/{daemon-32eda22d,sdk-linux-4c52d23c}/` with a `SOURCE`
+    file.
+  - SDK JS: `core/target/lead51/sdk-js-6928ca80` (sha256 `f58788de…`, as the
+    harness hashes it).
+  - The cargo registry cache was refreshed once with `cargo fetch --locked`
+    in the same image (network on, fetch only).
+- **Isolation:**
+  - Prefix `LFS_RESOURCE_PREFIX=layerfs-issue352-prep51`.
+  - Run `rb-p3-32eda22d-4c52d23c`, label `baseline`.
+  - Its own copies: `~/lfs-history/plan-rb51` (of plan-r31, with r47–49's
+    `tests-NNN.json`), `~/lfs-history/oracle-rb51` (of oracle-r31) and the
+    pnpm store volume `layerfs-issue352-prep51-pnpm-store` (of
+    `layerfs-issue352-pnpm-store`).
+  - `--native-states none`: the fork never reads `layerfs-issue352-lead31-*`.
+    Nothing writes to `p3-main-w`; its snapshot blocks and manifest are only
+    read.
+- **Node:** the fork keeps `p3-main-w`'s git and Node settings, so lanes,
+  points and the repair play as in r47–49. Native proofs are not run (no
+  native states), so the Node proofs row is NOT_RUN, which is watch (F8). The
+  native-first checks for these trees passed on `p3-main-w`. A baseline needs
+  every range at pass or watch (`baselineRows`).
+- **Per range k = 47, 48, 49,** each command under its alarm, as §15:
+  1. `closure.mjs oracle --range k --run <run>`. The chain differs from
+     `p3-main-w`'s (install, not native-state, after r47), so r48 and r49
+     compute their own oracle.
+  2. `play --until lead`, `--resume --until lanes [--cut N]`, `--resume
+     --until lanes`, `--until repair` (200 s), `--until verified` (70 s),
+     `--resume` (65 s). All in measured mode.
+  3. `f063.mjs --run <run> --range k --build 6928ca809d`. Exit 4 stops the
+     procedure; I report to the liaison before anything else.
+- **Write:** `rebaseline --write --phase p3 --daemon … --addon … --run <run>
+  --range 46 --ranges 47-49` writes `baseline-32eda22d657d-4c52d23cd1b4-p3.json`.
+  The only exception it can take is the named Reinstall growth row, and only
+  with the liaison's word.
+- **Checks after the write:**
+  - per-call `sql.call` in the traces (fix 067's Contended work reads "per call");
+  - whether the compact vitest workaround is still needed with the new addon (fix 056).
+- **One sample per range, no reruns.** Host 1-minute load is recorded. r50
+  plays on `p3-main-w` at the same time, so the two runs share the host.

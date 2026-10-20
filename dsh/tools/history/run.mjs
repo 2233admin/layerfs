@@ -8,6 +8,8 @@
 //   node dsh/tools/history/run.mjs rebaseline --prepare --phase p3 --git --daemon <path> --addon <path> [--plan <dir>] [--run <id>]
 //     then play ranges 2-4 one at a time (… --until lead, --resume --until lanes, --resume), then
 //   node dsh/tools/history/run.mjs rebaseline --write --phase p3 --daemon <path> --addon <path> [--run <id>]
+//     recent ranges (51-100): --prepare … --from-run <id> --range 46 --ranges 47-49 [--oracle <dir>] [--pnpm-store <v>] [--native-states none|<v>],
+//     then play 47-49, then --write … --ranges 47-49
 //     [--accept-storage-row "Reinstall growth" --accept-ranges 3,4 --reason <text>]   (a named exception, baselineRows)
 // Every command that touches the Store (new, play, fork, rebaseline) runs in the runner container (runner.mjs): Store calls run in
 // this process against the run's volume at /layerfs-store (F-020), Linux only.
@@ -859,34 +861,49 @@ async function cmdRebaseline(o) {
  * ranges 2-4 are then played one by one with `play` (each in commands under 120 s); `--write` checks the run
  * stands at range 5, clean, and writes the baseline. A range that stops leaves the run dirty and no baseline.
  */
+/**
+ * The measured ranges of a split re-baseline: `--ranges a-b` (owner 2026-10-20, ranges 51-100: recent ranges on a
+ * fork of `--range a-1`'s snapshot), else the pilot's 2-4 from range 1. Three consecutive ranges after the fork point.
+ */
+export function baselineRanges(o) {
+  if (o.ranges == null) return { from: 1, ranges: [2, 3, 4] };
+  const m = /^(\d+)-(\d+)$/.exec(String(o.ranges));
+  if (!m || Number(m[2]) - Number(m[1]) !== 2) throw new Error(`--ranges ${o.ranges}: three consecutive ranges a-b`);
+  const a = Number(m[1]), from = o.range != null ? Number(o.range) : a - 1;
+  if (from !== a - 1) throw new Error(`--ranges ${o.ranges} starts after the fork range ${from}: it must start at ${from + 1}`);
+  return { from, ranges: [a, a + 1, a + 2] };
+}
+
 async function cmdRebaselineSplit(o) {
   if (!o.phase || !o.daemon) return usage();
   const id = o.run ?? rebaselineId(o);
+  const { from: at, ranges } = baselineRanges(o);
   if (o.prepare) {
     const daemon = resolve(o.daemon), addon = resolve(o.addon ?? ADDON);
     const from = o["from-run"] ?? REBASELINE_SOURCES.find((r) => existsSync(join(HISTORY, "runs", r, "run.json"))
       && existsSync(manifestPath(new Run(join(HISTORY, "runs", r)).manifest.outputs.snapshots, 1, r)));
     if (!from) { console.error(`no pilot range-1 snapshot in ${REBASELINE_SOURCES.join(", ")}`); return EXIT.usage; }
-    await cmdFork({ run: id, "from-run": from, range: 1, label: "baseline", daemon, addon, sdk: o.sdk, ...(o.plan ? { plan: o.plan } : {}) });
+    await cmdFork({ run: id, "from-run": from, range: at, label: "baseline", daemon, addon, sdk: o.sdk, ...(o.plan ? { plan: o.plan } : {}), ...(o.oracle ? { oracle: o.oracle } : {}),
+      ...(o["pnpm-store"] ? { "pnpm-store": o["pnpm-store"] } : {}), ...(o["native-states"] ? { "native-states": o["native-states"] } : {}) });
     const run = new Run(join(HISTORY, "runs", id));
     // one phase at a time (p1 → p2 → p3), each move recorded at range 2
     const order = Object.keys(PHASES).sort((a, b) => PHASES[a].order - PHASES[b].order);
     for (const ph of order.slice(order.indexOf(run.manifest.phase) + 1, order.indexOf(o.phase) + 1)) if (cmdPhase({ run: id, phase: ph }) !== EXIT.done) return EXIT.usage;
-    if (o.git && cmdGit({ run: id, on: true }) !== EXIT.done) return EXIT.usage;
-    console.log(JSON.stringify({ run: id, from, phase: o.phase, git: !!o.git, next: "play ranges 2-4, then rebaseline --write" }));
+    if (o.git && !run.manifest.git?.on && cmdGit({ run: id, on: true }) !== EXIT.done) return EXIT.usage;
+    console.log(JSON.stringify({ run: id, from, range: at, phase: o.phase, git: !!o.git, next: `play ranges ${ranges[0]}-${ranges[2]}, then rebaseline --write` }));
     return EXIT.done;
   }
   const run = new Run(join(HISTORY, "runs", id));
   if (run.manifest.label !== "baseline" || run.manifest.phase !== o.phase) { console.error(`rebaseline ${id}: not a ${o.phase} baseline run`); return EXIT.usage; }
-  if (run.state.dirty != null || run.state.next !== 5) { console.error(`rebaseline ${id}: stands at range ${run.state.next}${run.state.dirty != null ? `, dirty at ${run.state.dirty}` : ""}; no baseline written`); return EXIT.stop; }
+  if (run.state.dirty != null || run.state.next !== ranges[2] + 1) { console.error(`rebaseline ${id}: stands at range ${run.state.next}${run.state.dirty != null ? `, dirty at ${run.state.dirty}` : ""}; no baseline written`); return EXIT.stop; }
   // as the one-command form: a range whose latest attempt does not pass or watch gives no baseline
   const { writeBaseline, loadAttempts } = await import("./report.mjs");
   const latest = loadAttempts(run.manifest.outputs.metrics);
   const accept = o["accept-storage-row"] ? { row: o["accept-storage-row"], ranges: String(o["accept-ranges"] ?? "").split(",").filter(Boolean).map(Number), reason: o.reason } : null;
-  const judged = baselineRows([2, 3, 4].map((k) => [k, latest.get(k)?.at(-1)]), accept);
+  const judged = baselineRows(ranges.map((k) => [k, latest.get(k)?.at(-1)]), accept);
   if (judged.refused.length) { console.error(`rebaseline ${id}: ${judged.refused.join("; ")}; no baseline written`); return EXIT.stop; }
   const note = judged.accepted.length ? { ...(o.note ? { text: o.note } : {}), acceptedRows: judged.accepted, reason: accept.reason } : o.note;
-  const r = writeBaseline({ metricsDir: run.manifest.outputs.metrics, ranges: [2, 3, 4], out: join(HISTORY, "metrics"), run: id, phase: o.phase, ...(note ? { note } : {}) });
+  const r = writeBaseline({ metricsDir: run.manifest.outputs.metrics, ranges, out: join(HISTORY, "metrics"), run: id, phase: o.phase, ...(note ? { note } : {}) });
   run.note({ kind: "baseline", name: r.file, phase: o.phase, from: run.manifest.source });
   console.log(JSON.stringify({ run: id, phase: o.phase, file: r.file, ops: Object.keys(r.baseline.ops).length }));
   return EXIT.done;
@@ -974,7 +991,7 @@ async function cmdFork(o) {
     if (!got) throw new Error(`range ${k} of ${source.manifest.run}: no metrics with storage parts; the fork's storage figures would start from range ${k - 1}`);
     Object.assign(p3.state, got); p3.from = `snapshot; parts from range-${pad(k)}.a${own.at(-1).attempt} metrics`;
   }
-  const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), addon: resolve(o.addon ?? source.manifest.env.LAYERFS_NATIVE ?? ADDON), sdk: resolve(o.sdk ?? source.manifest.env.LAYERFS_SDK_JS ?? SDK_JS), source: { run: source.manifest.run, range: k }, pnpmStore: o["pnpm-store"] ?? source.manifest.env.LAYERFS_PNPM_STORE ?? null, nativeStates: o["native-states"] ?? source.manifest.env.LFS_NATIVE_STATES ?? null,
+  const { dir, volume, env, manifest: runManifest } = create({ id: o.run, phase: source.manifest.phase, label: o.label ?? "dev", policy: source.manifest.policyName, image: source.manifest.env.LAYERFS_IMAGE, daemon: resolve(o.daemon ?? source.manifest.env.LAYERFS_DAEMON), addon: resolve(o.addon ?? source.manifest.env.LAYERFS_NATIVE ?? ADDON), sdk: resolve(o.sdk ?? source.manifest.env.LAYERFS_SDK_JS ?? SDK_JS), source: { run: source.manifest.run, range: k }, pnpmStore: o["pnpm-store"] ?? source.manifest.env.LAYERFS_PNPM_STORE ?? null, nativeStates: o["native-states"] === "none" ? null : o["native-states"] ?? source.manifest.env.LFS_NATIVE_STATES ?? null,
     // a dev slice (slice.mjs): its own plan and oracle folders; never a measured run
     // a full plan (plan.mjs, e.g. plan-r1) for any label; a dev slice's plan and oracle for dev runs only
     ...(o.plan || o.oracle ? forkPlan(o) : {}) });
@@ -999,7 +1016,10 @@ async function cmdFork(o) {
   execFileSync("cp", ["-p", record, join(env.LAYERFS_HOME, runManifest.project, "project.record")]);
   run.state = { ...manifest.state, ...p3.state, heads: {}, layers: {}, dirty: null, sinceMs: [], lastSnapshotMs: null, growth: [], storeBytes: manifest.size, probeFixture: true, forkedFrom: { run: source.manifest.run, range: k, sha256: manifest.sha256, p3StateFrom: p3.from } };
   // the fork's own native-state volume (--native-states): the chain's snapshot tars are copied there, one cp each
+  // `--native-states none` (51-100 re-baseline): no volume and no copy, so the fork never reads another run's states;
+  // its native proofs cannot run (NOT_RUN), and its play needs none
   const own = env.LFS_NATIVE_STATES;
+  if (o["native-states"] === "none") run.note({ kind: "native-states", name: "none: proofs NOT_RUN" });
   if (own) for (const e of run.state.closureChain ?? []) {
     const from = e.state?.volume ?? (e.state ? NATIVE_STATES : null);
     if (!from || from === own) continue;
