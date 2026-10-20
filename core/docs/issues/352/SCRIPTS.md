@@ -519,15 +519,15 @@ each runs under (`perl -e 'alarm N; exec @ARGV'`):
 | Oracle | `closure.mjs oracle --run R --range k …` (host) | 115 s |
 | Native first | `nodeproof.mjs calibrate --run R --range k` until every point is done, then once more: the predicted repair natively; exit 4 and `NATIVE REFERENCE BROKEN` stop the range before any LayerFS attempt | 115 s each |
 | Lead and lanes | `play … --until lead`, `--resume --until lanes --cut N` …, `--resume --until lanes` | 118 s each |
-| Repair | `play … --resume --until repair`: merges, lead git, the closure (repair install, build, tests), publish | 130 s |
-| Verify | `play … --resume --until verified`: the checkpoint check | 115 s |
-| Finish | `play … --resume`: probes, version, metrics, snapshot, report | 50 s |
+| Repair | `play … --resume --until repair`: merges, lead git, the closure (repair install, build, tests), publish | 200 s from r34 (owner 2026-10-20: "increase it to 200s", after r32's 130 s of 160 s); 160 s r24–r33; 130 s r21–r23 |
+| Verify | `play … --resume --until verified`: the checkpoint check | 70 s from r24 (115 s r21–r23) |
+| Finish | `play … --resume`: probes, version, metrics, snapshot, report | 65 s from r24 (50 s r21–r23) |
 | Proofs | `nodeproof.mjs proofs --run R --range k --budget-s 20` until `"left":0` | 115 s each |
 | Control | `control.mjs --run R --range k`; releases QUIET | 118 s |
 | Native state | after a terminal range: `nodeproof.mjs savestate --run R`, then `--adopt` | 115 s |
 
 - **Steps resume.** The repair, verify and finish steps share the old final
-  command's 295 s; a kill inside verify or finish resumes at that step
+  command's 295 s (335 s from r34, each step its own command under the 5-minute ceiling); a kill inside verify or finish resumes at that step
   (`halves.mjs` `LATE_STAGES`): the trace is cut back to its length at the
   save and nothing before it runs again. A kill inside the repair step ends
   the attempt.
