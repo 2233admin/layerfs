@@ -143,7 +143,10 @@ canonical bytes that authenticate against that ID.
 Identical logical file bytes do not imply identical canonical roots across every
 construction history. Representation choice and localized edit structure matter.
 Advisory predecessor hints do not change the canonical ID of an already finalized
-object; they influence physical selection.
+object; they influence physical selection. A caller that must decide whether two
+files hold the same bytes therefore cannot stop at unequal roots: the Commit and
+file differences use [`same_file_bytes`](core/crates/layerfs-content/src/compare/bytes.rs)
+(#352 F-073).
 
 Source: [ObjectId](core/crates/layerfs-content/src/object/id.rs),
 [canonical envelope](core/crates/layerfs-content/src/object/codec.rs),
