@@ -3,12 +3,13 @@
 // (backend "sim") is imported into the simulator (sim/) instead: no Docker,
 // no deployment settings.
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { lstat, opendir } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as pause } from "node:timers/promises";
 import { promisify } from "node:util";
+import { ensureBox } from "./box.js";
 import { missingDeployment } from "./config.js";
 import { clientFor, isSim, release } from "./layerfs-client.js";
 
@@ -93,11 +94,13 @@ export function prepareInit(spec, bindings, { folder, source = folder, name, bac
 
 /**
  * Runs a prepared Init: counts the source, makes the volume, imports the
- * source (LayerFS's Host Init, which seals the Store under the LayerFS home;
- * the project's first Sandbox installs it into the volume) and binds the
- * project to `folder`. `report` sees each step (scan, volume, import) and,
- * while LayerFS imports, its counts as `imported`. One attempt; a failure
- * leaves no binding, and the volume it made is removed.
+ * source (LayerFS's Host Init, which seals the Store under the LayerFS home),
+ * installs the Store into the volume (a live project's first Sandbox does,
+ * and Store calls need it there) and binds the project to `folder`. `report`
+ * sees each step (scan, volume, import, install) and, while LayerFS imports
+ * in this process, its counts as `imported`. On macOS the import runs in the
+ * LayerFS box (box.js), where no counts are read. One attempt; a failure
+ * leaves no binding, and the volume and project entry it made are removed.
  */
 export async function runInit(spec, bindings, { folder, project }, report = () => {}) {
   report({ step: "scan" });
@@ -106,12 +109,20 @@ export async function runInit(spec, bindings, { folder, project }, report = () =
   const docker = ["-H", `unix://${spec.docker}`];
   if (!isSim(project)) await run("docker", [...docker, "volume", "create", project.volume]);
   report({ step: "import" });
-  let client;
+  let client, made = false;
   try {
+    if (spec.box && !isSim(project)) await ensureBox(spec);
     client = await clientFor(spec, project);
-    await watching(client, report, () => client.layerfs.project.init(project.source));
+    const init = () => client.layerfs.project.init(project.source);
+    await (spec.box && !isSim(project) ? init() : watching(client, report, init));
+    made = true;
+    if (!isSim(project)) {
+      report({ step: "install" });
+      await client.layerfs.sandbox.create(`init-${project.created.toString(36)}`, project.name, project.image ?? spec.image);
+    }
   } catch (error) {
     if (client) await release(client).catch(() => {});
+    if (made && !isSim(project)) rmSync(join(spec.home, project.name), { recursive: true, force: true });
     if (!isSim(project)) await run("docker", [...docker, "volume", "rm", project.volume]).catch(() => {});
     throw error;
   }

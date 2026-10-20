@@ -128,6 +128,12 @@ remains a separate MEMORY/OFF/EXCLUSIVE database file.
   retired, not extended. See the
   [integration contract](core/docs/issues/303/06-cluster-one-integration.md)
   and [direct Store access](core/docs/issues/352/DIRECT_STORE.md).
+  **Exception (owner, 2026-10-20): dsh Live on macOS only.** The dsh-layerfs
+  plugin may give macOS processes a ported SDK with the SDK's API that runs
+  each call as one real SDK process in a Linux container (`docker exec`); that
+  process opens the Store directly and exits. No long-lived server, no Store
+  held between calls, and the product SDK and daemon do not change. Nothing
+  else may route Store calls this way.
 - **One global database, one writer, short holds (owner decision 2026-10-18).**
   All committed state lives in one SQLite Store file; no sharding, second
   database, concurrent-writer engine or objects outside it. Writes go one at a

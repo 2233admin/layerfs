@@ -4,20 +4,25 @@
 // project's settings are set for that synchronous step only. A simulated
 // project (backend "sim") has a client of the simulator instead (sim/).
 import { Mirror } from "@dsh-layerfs/model/mirror.js";
+import { DAEMON_HOST, storePathOf } from "./box.js";
 import { simClient } from "./sim/client.js";
 
 export const isSim = (project) => project.backend === "sim";
 
 /** The environment one project's SDK client and its agents' bash calls use. */
 export function deploymentEnv(spec, project) {
-  // the SDK asks for every deployment setting; a simulated project uses none
-  if (isSim(project)) return { HOME: spec.home, DOCKER: "sim", IMAGE: "sim", DAEMON: "sim", VOLUME: project.volume };
+  // the SDK asks for every deployment setting and, for Store calls, a Store
+  // path (#352 F-020); a simulated project uses none of them
+  if (isSim(project)) return { HOME: spec.home, DOCKER: "sim", IMAGE: "sim", DAEMON: "sim", VOLUME: project.volume, STORE_PATH: "sim" };
   return {
     HOME: spec.home,
     DOCKER: spec.docker,
     IMAGE: project.image ?? spec.image ?? "",
     DAEMON: spec.daemon ?? "",
     VOLUME: project.volume,
+    // macOS: the calls run in the LayerFS box, which sees the volume under
+    // Docker's volume directory and Sandbox daemons at the Docker host
+    ...(spec.box ? { STORE_PATH: storePathOf(project.volume), DAEMON_HOST, BOX: spec.box, BUNDLE: spec.bundle } : {}),
   };
 }
 
@@ -25,7 +30,7 @@ export function deploymentEnv(spec, project) {
 export async function clientFor(spec, project) {
   if (isSim(project)) return simClient(spec.home, project.name);
   const { LayerFS } = await import(spec.sdk);
-  const { LayerFSOperator } = await import(new URL("../operator/index.js", spec.sdk).href);
+  const { LayerFSOperator } = await import(spec.operator);
   const env = deploymentEnv(spec, project), saved = {};
   for (const [name, value] of Object.entries(env)) { saved[name] = process.env[`LAYERFS_${name}`]; process.env[`LAYERFS_${name}`] = value; }
   try {

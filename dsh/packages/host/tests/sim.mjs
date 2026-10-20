@@ -34,7 +34,7 @@ try {
   assert.deepEqual(steps, ["scan", "volume", "import"]);
   assert.equal(project.backend, "sim");
   assert.equal(bindings.byName(NAME).backend, "sim");
-  assert.deepEqual(deploymentEnv(spec, project), { HOME: home, DOCKER: "sim", IMAGE: "sim", DAEMON: "sim", VOLUME: `sim-${NAME}` });
+  assert.deepEqual(deploymentEnv(spec, project), { HOME: home, DOCKER: "sim", IMAGE: "sim", DAEMON: "sim", VOLUME: `sim-${NAME}`, STORE_PATH: "sim" });
 
   // The SDK on the simulator, with the environment the Host gives a simulated project's bash calls.
   for (const [name, value] of Object.entries(deploymentEnv(spec, project))) process.env[`LAYERFS_${name}`] = value;

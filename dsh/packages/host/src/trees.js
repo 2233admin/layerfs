@@ -139,8 +139,12 @@ const done = (tree, notes) => ({ tree, partial: notes.size ? `Partial tree: ${[.
 async function text(layerfs, ref, path) {
   let content = "", nextLine = 1;
   do {
-    const window = await layerfs.fs.read(ref, path, nextLine);
-    if (window.text == null) return `(${window.size} bytes, binary)`;
+    // the SDK refuses a binary file's text (Binary); the simulator answers null
+    const window = await layerfs.fs.read(ref, path, nextLine).catch((error) => {
+      if (error?.code === "Binary") return { text: null, size: null };
+      throw error;
+    });
+    if (window.text == null) return window.size == null ? "(binary)" : `(${window.size} bytes, binary)`;
     content += window.text;
     if (window.lineTruncated) content += "\n[huge-line remainder omitted]\n";
     nextLine = content.length > MAX_FILE ? null : window.nextLine;

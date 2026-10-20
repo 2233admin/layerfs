@@ -34,7 +34,7 @@ function session(id, cwd, parentSession) {
 }
 
 function host() {
-  const spec = resolveConfig({ image: "sha256:img", daemon: "/d/layerfs-daemon", home: join(dir, "home"), traceDir: join(dir, "traces") }, { dir: join(dir, "profile") });
+  const spec = resolveConfig({ image: "sha256:img", daemon: "/d/layerfs-daemon", bundle: "/b", home: join(dir, "home"), traceDir: join(dir, "traces") }, { dir: join(dir, "profile") });
   const live = new Map();
   const ctx = { sessions: { get: (id) => live.get(id) } };
   const bindings = new BindingStore(spec.stateDir);
@@ -58,8 +58,16 @@ try {
   const vars = h.env.resolve({ agent: { session: child }, callId: "c1", rootCallId: "r1" });
   assert.equal(vars.DSH_LAYERFS_PROJECT, "website");
   assert.equal(vars.DSH_LAYERFS_VOLUME, "dsh-layerfs-website-1");
+  if (process.platform === "darwin") {
+    // macOS: the SDK is ported, its calls run in the LayerFS box (src/port/, src/box.js)
+    assert.match(vars.DSH_LAYERFS_SDK, /\/port\/sdk\.js$/);
+    assert.equal(vars.DSH_LAYERFS_STORE_PATH, "/var/lib/docker/volumes/dsh-layerfs-website-1/_data/global/store.sqlite");
+    assert.equal(vars.DSH_LAYERFS_DAEMON_HOST, "host.docker.internal");
+    assert.match(vars.DSH_LAYERFS_BOX, /^dsh-layerfs-box-[0-9a-f]{12}$/);
+    assert.equal(vars.DSH_LAYERFS_BUNDLE, "/b");
+  }
   assert.equal(vars.DSH_LAYERFS_IMAGE, "sha256:img");
-  assert.match(vars.DSH_LAYERFS_OPERATOR, /^file:.*\/operator\/index\.js$/);
+  assert.match(vars.DSH_LAYERFS_OPERATOR, process.platform === "darwin" ? /^file:.*\/port\/operator\.js$/ : /^file:.*\/operator\/index\.js$/);
   assert.equal(vars.DSH_LAYERFS_TRACE_STEP, "r1");
   assert.equal(vars.DSH_LAYERFS_TRACE, join(h.spec.traceDir, "child-1.jsonl"));
   assert.ok(Object.keys(vars).every((key) => key in h.env.variables), "every value is a declared variable");
@@ -113,14 +121,19 @@ try {
   rmSync(h.spec.traceDir, { recursive: true, force: true });
   assert.deepEqual(host().collector.snapshot("session-root").lines.map((l) => l.method), ["sandbox.create", "sandbox.exec"]);
 
-  // saved trees: dependency folders stay closed, long files are cut, a tree is read once
+  // saved trees: dependency folders stay closed, long files are cut, a binary file
+  // (the SDK refuses its text) is named, a tree is read once
   const REF = "a".repeat(64), reads = [], closed = [];
   const fakeFs = {
     async list(ref, dir) {
-      const items = { "/": [{ path: "/node_modules", type: "dir", inode: 2 }, { path: "/src", type: "dir", inode: 3 }, { path: "/big.txt", type: "file", inode: 4 }], "/src": [{ path: "/src/a.js", type: "file", inode: 5 }, { path: "/src/link", type: "symlink", inode: 6 }] }[dir] ?? [];
+      const items = { "/": [{ path: "/node_modules", type: "dir", inode: 2 }, { path: "/src", type: "dir", inode: 3 }, { path: "/big.txt", type: "file", inode: 4 }, { path: "/.DS_Store", type: "file", inode: 7 }], "/src": [{ path: "/src/a.js", type: "file", inode: 5 }, { path: "/src/link", type: "symlink", inode: 6 }] }[dir] ?? [];
       return { items, hasMore: false };
     },
-    async read(ref, path, line) { reads.push(path); return path === "/big.txt" ? { text: "x".repeat(100_000), nextLine: line + 1 } : { text: "ok\n", nextLine: null }; },
+    async read(ref, path, line) {
+      reads.push(path);
+      if (path === "/.DS_Store") throw Object.assign(new Error("Binary: text contains NUL or invalid UTF-8"), { code: "Binary" });
+      return path === "/big.txt" ? { text: "x".repeat(100_000), nextLine: line + 1 } : { text: "ok\n", nextLine: null };
+    },
   };
   const trees = new TreeReader(h.spec, async () => ({ layerfs: { fs: fakeFs, sandboxes: new Set(["sb_service"]), sandbox: { close: async (id) => closed.push(id) } } }));
 
@@ -152,9 +165,10 @@ try {
   assert.equal((await call("GET", "/layerfs/nope")).status, 404);
   assert.equal((await call("GET", "/layerfs/session/child-1/tree?ref=main")).status, 400);
   const tree = await call("GET", `/layerfs/session/child-1/tree?ref=${REF}`);
-  assert.deepEqual(Object.keys(tree.body.tree).sort(), ["/big.txt", "/node_modules", "/src", "/src/a.js", "/src/link"]);
+  assert.deepEqual(Object.keys(tree.body.tree).sort(), ["/.DS_Store", "/big.txt", "/node_modules", "/src", "/src/a.js", "/src/link"]);
   assert.match(tree.body.tree["/big.txt"].content, /\[cut at 128 KB\]\n$/);
   assert.equal(tree.body.tree["/src/link"].content, "→ symlink");
+  assert.equal(tree.body.tree["/.DS_Store"].content, "(binary)");
   assert.match(tree.body.partial, /node_modules folders are not opened.*over 128 KB/);
   const count = reads.length;
   await call("GET", `/layerfs/session/child-1/tree?ref=${REF}`);
