@@ -507,6 +507,55 @@ Storage and watch items:
 - **`fs.rm` (#367).** Fix 057 (on main, not in these binaries) found that the contended SQL counters included overlapping calls, and that a call's own work is flat at about 7.9k VM steps and 150 statements from r20 to r32. By that reading the r31 → r32 rise in time (6.4 → 18.2 ms) was host load on the same binaries, not more work per call. The recorded VM steps per call stay between 4,699 and 9,376 across r31–r35 with no trend, and the time returned to 6.0–9.8 ms in r33–r35. Host 1-min load across the play commands was 7.1–9.8 at r31 and 6.5–10.7 at r32.
 - Space amplification rose from 1.11× (r30) to 1.28× (r35); the Store grew 142.5 MiB over five ranges.
 
+### Ranges 36–40, the ranges 31–50 session (2026-10-20)
+
+Fast mode, the same binaries as 31–35 (daemon `27a769a4`, addon `0611f3e0`, SDK JS `e990c25c`, image `d3773b4e`), against `baseline-27a769a48998-0611f3e0cf81-p3.json`. Ranges 36–37 and r38 a1 ran on `p3-main-u`. From r38 a2 the run is `p3-main-v`, a fork of `p3-main-u`'s r037 snapshot with the same volumes. One sample per attempt; no QUIET overlap was recorded in any range.
+
+| Range | Attempts | Terminal verdict | Stops and causes | Repair build s | Final commands s (repair / verify / finish) |
+| --- | --- | --- | --- | --- | --- |
+| 36 | 1 | watch | — (a docs-only range: no build, no tests; Speed judged, `diff_branches` p95 watch) | — | 79 / 11 / 35 |
+| 37 | 1 | watch | — (P5 n/a at 2 hybrid lane trees) | 20.1 | 104 / 16 / 45 |
+| 38 | 2 | watch (a2) | a1: checkpoint, an extra gitignored test output `.sessions/session-query.db` ([058](fixes/058-r038-a1-gitignored-test-output.md)); a2 none | 20.9 | 104 / 15 / 43 |
+| 39 | 1 | optimize, counters recorded | — (`diff_files.statements` chain-bounded 1.125×) | 21.1 | 109 / 12 / 37 |
+| 40 | 1 | optimize, counters recorded | — (the same row as r39) | 21.7 | 105 / 17 / 46 |
+
+- **One stop, an oracle cause.** r38 a1's checkpoint check read a gitignored test output as an extra path; every tracked path matched git and every Node proof passed. Fix 058 (liaison-accepted) exempts, in P3 only, paths the checkpoint's own `.gitignore` files ignore. A checkpoint stop leaves the run dirty, so a2 replayed r38 on a fork. No LayerFS product defect.
+- **Paths fix 058 exempted, r38–r40 (liaison condition):** r38 a2 `.sessions/session-query.db` (derived; a2 ran before the metrics kept the list), r39 none, r40 `.sessions/session-query.db`. That is one path in all: the SQLite file a session-query test writes at the repository root. It is test output, not a LayerFS-relevant area.
+- **P5 n/a at hybrid lane trees** (r34, r37 ×2, r39): a lane applies only its own areas, so vitest cannot load natively or in LayerFS; the merged checkpoint builds and tests clean in each range.
+- **Counters:** `diff_files.statements` (chain-bounded) reached its first full cap period at r39: 108 against 96 statements (1.125×). `oneshot_mount_unmount.vm_steps`, 0.947 at r35, read 0.093 at r38 (watch) and did not return as an optimize row.
+- Repair steps took 79–109 s under the owner's 200 s alarm.
+
+Uncontended p50 in ms (calls), against the re-baseline:
+
+| Class | baseline | r36 | r37 | r38 | r39 | r40 |
+| --- | --- | --- | --- | --- | --- | --- |
+| fs.write ≤1 KiB | 6.4 (147) | 4.9 (463) | 6.9 (143) | 6.6 (74) | 8.8 (112) | 7.5 (67) |
+| fs.write ≤8 KiB | 7.2 (353) | 5.2 (561) | 6.5 (389) | 6.8 (259) | 7.8 (218) | 7.8 (173) |
+| fs.read ≤8 KiB | 2.1 (85) | 2.4 (12) | 2.3 (41) | 2.0 (20) | 2.4 (19) | 2.6 (16) |
+| sandbox.mount | 11.2 (368) | 9.1 (91) | 9.9 (180) | 9.8 (133) | 10.0 (135) | 9.4 (119) |
+| sandbox.commit 0 files · Committed | 20.8 (218) | 22.3 (44) | 24.2 (111) | 23.1 (77) | 23.5 (90) | 23.3 (74) |
+| sandbox.commit "—" · Committed (p95) | 69.0 (9) | 82.9 (2; 83) | 95.2 (12; 914) | 36.0 (10; 856) | 81.3 (12; 868) | 87.6 (11; 886) |
+| branch.diff_commits >64 entries | 17.2 (285) | 18.8 (330) | 19.0 (349) | 18.4 (346) | 18.6 (361) | 19.5 (361) |
+| branch.merge >64 entries · new Commit | 91.9 (6) | 293.2 (2) | 401.2 (3) | 96.2 (2) | 416.5 (3) | 299.3 (4) |
+| fs.rm 1 file | 6.7 (208) | 6.1 (452) | 6.4 (114) | 6.5 (97) | 12.7 (15) | 11.9 (104) |
+
+- **Speed** is "not judged" as a whole for the reason given at r31–r35, except at r36, a docs-only range with no build Commit. There it was judged once: watch on `branch.diff_branches` at p95, 289 ms (5.58×; p50 1.05×). That p95 stayed at 288–351 ms from r31 to r36. The thin class's p95 is still the repair's build Commit, 856–914 ms.
+- **Merge** 96–417 ms, in the band of r23–r35 (229–495 ms; r38's 96 ms is a small merge). `diff_commits` 18.4–19.5 ms. The other classes are within 1.0–1.3× of the baseline or under the 5 ms floor.
+
+Storage and watch items:
+
+| Range | Added | Store on disk | Space amplification | Commits | Index rows (#366) | `fs.rm` uncontended p50 / calls / statements / VM steps (#367) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 36 | 39.9 MiB | 983.6 MiB | 1.32× | 2,990 | 310.3 MiB live (index + waste + other) | 6.07 ms / 452 / 127 / 6,410 |
+| 37 | 44.4 MiB | 1,021.6 MiB | 1.37× | 1,894 | 271.5 MiB (sealed) | 6.38 ms / 114 / 129 / 6,713 |
+| 38 (a2) | 28.6 MiB | 1.02 GiB | 1.40× | 981 | 281.8 MiB (sealed) | 6.48 ms / 97 / 134 / 6,904 |
+| 39 | 41.4 MiB | 1.06 GiB | 1.42× | 1,437 | 350.4 MiB live (index + waste + other) | 12.66 ms / 15 / 254 / 19,238 |
+| 40 | 34.1 MiB | 1.09 GiB | 1.45× | 1,361 | 306.1 MiB (sealed) | 11.88 ms / 104 / 192 / 15,765 |
+
+- **Index rows (#366)** on sealed snapshots: 246.8 MiB at r35, then 271.5 (r37), 281.8 (r38) and 306.1 (r40). That is 11.9 MiB per range, as in r21–r30 (12.0) and above r31–r35 (10.1).
+- **`fs.rm` (#367): new from r39.** The time per uncontended call doubled (6.1–6.5 → 11.9–12.7 ms). The SQL counters per call rose too: 127–134 → 192–254 statements and 6.4–6.9k → 15.8–19.2k VM steps. These binaries still count process-wide (fix 057's per-call counter is not in them), so overlapping work may be included. But these are uncontended calls, and the statements rose with the time. It is recorded, not acted on, and flagged for #367.
+- Space amplification rose from 1.28× (r35) to 1.45× (r40); the Store passed 1 GiB at r38.
+
 ## P4 · Recovery and demo
 
 Pending.
