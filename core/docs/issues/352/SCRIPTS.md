@@ -691,3 +691,43 @@ terminal, and measures r47, r48 and r49 on the new binaries.
   - whether the compact vitest workaround is still needed with the new addon (fix 056).
 - **One sample per range, no reruns.** Host 1-minute load is recorded. r50
   plays on `p3-main-w` at the same time, so the two runs share the host.
+
+#### As run (2026-10-20)
+
+- **Run:** `rb-p3-32eda22d-4c52d23c-b`. The first fork,
+  `rb-p3-32eda22d-4c52d23c`, lost r047 a1 when Docker Desktop crashed at
+  07:28:57Z. It is a dead run, and none of its numbers are used.
+- **Isolation:** after each fork, the run's chain entries were pointed at an
+  empty volume, `layerfs-issue352-prep51-native-states`. A native replay
+  then fails loudly instead of reading `lead31`, and r47's oracle did fail
+  that way.
+- **Oracle aliases** (liaison, under owner delegation). The fork's chain is
+  r46's pre-adopt chain, so it misses `p3-main-w`'s oracle keys. Each
+  range's sequence oracle was copied under the fork's key, in `oracle-rb51`
+  only, and checked for range, checkpoint and install command:
+
+  | Range | p3-main-w file | Fork's key | sha256 |
+  | --- | --- | --- | --- |
+  | 47 | `seq-7ea232f40b92765f668f8c97` | `seq-b95a31f093bd723b41145510` | `5bda09dc30a2…` |
+  | 48 | `seq-ac1af8fe636a8aea72611917` | `seq-26a4a0a128e7e6de1fc8e2f2` | `724f70dbd021…` |
+  | 49 | `seq-12aaa72a54532963638e09b6` | `seq-09722d69d5790c26a2aa3f88` | `fa8690f2919a…` |
+
+  The baseline report reads correctness and oracle-dependent rows (Node
+  proofs, Reinstall growth, install inputs) as "not judged: aliased oracle
+  (speed baseline)".
+- **Cuts:** as `p3-main-w` played these ranges. r47 at 18, 37, 48, 61 and
+  75; r48 at 12, 32 and 46; r49 at 44, 55 and 66.
+- **Repair:** 128 / 124 / 135 s.
+- **Verdicts:** r47 watch, r48 watch, r49 optimize: Counters
+  `oneshot_mount_unmount.statements`, depth exponent 0.68.
+  - The row was accepted with `--accept-counter
+    oneshot_mount_unmount.statements --accept-ranges 49` (liaison under owner
+    delegation; `baselineRows`).
+  - Statements were 64 / 66 / 66 and VM steps 2,235 / 2,290 / 2,290, over
+    depth 56,578 → 59,295.
+  - `p3-main-w` shows the same step on the old binaries.
+  - The counter stays judged from r51.
+- **Written:** `baseline-32eda22d657d-4c52d23cd1b4-p3.json`, 112 classes,
+  with the note and `acceptedRows`.
+- **F-063:** active in all three ranges (RESULTS 2026-10-20).
+
