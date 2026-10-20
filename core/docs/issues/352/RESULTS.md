@@ -774,3 +774,112 @@ Uncontended p50 in ms (calls), against the 51–100 baseline:
 | fs.grep 5–16 files | 5.5 (40) | 6.0 (17) | 5.5 (9) | 4.0 (4) | 5.3 (8) | 4.9 (10) |
 | fs.glob 17–64 files | 5.7 (36) | 3.8 (14) | 7.1 (12) | 4.2 (6) | 7.9 (14) | 7.6 (3) |
 | sandbox.exec 0 files | 35.0 (620) | 37.2 (176) | 32.4 (170) | 35.1 (165) | 34.3 (227) | 34.6 (220) |
+
+### Ranges 56–60, the ranges 51–60 session (2026-10-20)
+
+r56–r57 ran on `p3-main-x` with the 51–100 binaries: daemon `32eda22d`, addon `4c52d23c`, built at main `6928ca809d`.
+
+r58 stopped twice on those binaries. The owner then chose to rebuild from main `d06a2b81fa`, which has fix 073 (F-073), and re-baseline. The new binaries are daemon `c41a86d2`, addon `a1078e69` and SDK JS `d06a2b81`. The re-baseline measured r55–r57 from the r54 fork, as run `rb-p3-c41a86d2-a1078e69`; it is described in SCRIPTS §16.
+
+r58 a3 to r60 ran on `p3-main-x-c`, a fork of `p3-main-x`'s r57 snapshot with its chain set to the r57 adopted native state (R8). They were read against `baseline-c41a86d23822-a1078e6935cd-p3.json`.
+
+Every range ran in fast mode: one sample per attempt, a snapshot every range, and a 90 s finish alarm. The owner ended the replay at range 60.
+
+| Range | Attempts | Terminal verdict | Stops and causes | Repair s (install / build / tests) | Final commands s (repair / verify / finish) |
+| --- | --- | --- | --- | --- | --- |
+| 56 | 1 | optimize, row recorded | — (Counters `oneshot_mount_unmount.statements`; Scaling `diff_commits` checkpoint ms, exponent 1.52) | 146 (44.3 / 33.2 / 2.8) | 146 / 22 / 64 |
+| 57 | 1 | optimize, row recorded | — (the same counter) | 131 (38.1 / 32.2 / 2.3) | 131 / 21 / 62 |
+| 58 | 3 | stop (P5, timing-sensitive test; liaison ruling), closed | a1, a2: checkpoint paths, `diff_commits` listed `api-catalog.ts` with equal bytes (F-073, a product fix); a3: P5 `skill-local-watcher.spec.ts` | a3 156 (45.6 / 35.2 / 2.8) | 156 / 24 / 66 |
+| 59 | 1 | watch | — | 138 (41.2 / 32.6 / 2.5) | 138 / 21 / 62 |
+| 60 | 1 | optimize, row recorded | — (Snapshot time, size exponent 1.226) | 148 (44.4 / 32.0 / 2.6) | 148 / 23 / 65 |
+
+- **One product finding and its fix: r58, F-073.** In a1 and a2, LayerFS `diff_commits` from r57 to r58 listed `packages/cordis/tool-cordis/src/api-catalog.ts`, whose bytes are the same at both heads.
+  - Cause: a lane wrote other bytes and the reconcile wrote the checkpoint's bytes back. The two in-place edit histories gave the same bytes different canonical roots (`ee055170` against `b03d5e9b`), and `diff_commits` read a root difference as a content change.
+  - git-storage-rca fixed it (main `5b32a15773`, `366f23222b`, `d06a2b81fa`): diffs and merges treat equal bytes as no content change, and the publication lane compares bytes up to 1 MiB.
+  - On a3's Store, read only, the item is `{kind: Modified, content: false, identity: false, metadata: true}`. The roots still differ (`ee055170` against `40ba3671`), and the item matches the control path `apps/cli/src/tui.ts`. Metadata-only with content false is the contract.
+  - The paths check passed with no exemption. a1 and a2 stay as stop evidence; `p3-main-x-b` keeps a2's state.
+- **r58 a3's P5 stop: a timing-sensitive test, not a content difference (liaison ruling (a)).** `skill-local-watcher.spec.ts` asserts the rewatch that follows a watcher error after two `setTimeout(0)` settles. It passed on a1 and a2 on the same point.
+  - It is on the SCRIPTS §16 timing-sensitive list and stays judged. It was in no calibrated run list at r59 or r60.
+- **Lane exec on the new binaries (liaison condition).**
+  - a3's lane vitest ran +53–67% and tsc +24–39% against a1 on the same points, with host load 7.6–10 against 5.8–7.2.
+  - On the native same-tree control, r59 and r60 (7 points) read vitest 1.46–3.59× and tsc 1.14–2.80× native, at load 6–10. The old binaries read 1.21–3.86× and 1.20–2.57× at r55–r57, load 8–12. Only r60 apps-web tsc (2.80×) is above the old range.
+  - Conclusion: no new-binary slowdown above 25%. r58 a3 reads as a load episode.
+- **F-063 active in every range:**
+
+  | Range | 56 | 57 | 58 a3 | 59 | 60 |
+  | --- | --- | --- | --- | --- | --- |
+  | PREFIX / FULL chunks | 714 / 300 | 501 / 227 | 482 / 154 | 446 / 213 | 628 / 306 |
+  | Lane git Commits | 152 | 103 | 95 | 99 | 145 |
+
+- **`fs.apply` ≤8 KiB (liaison comparison).**
+  - On the old binaries it read 1.57–1.88× p50 in every range r51–r57: 10.7–12.8 ms against the old baseline's 6.8 ms. The work per call was the same as the baseline (statements, VM steps, edit and target sizes). The time was about 3× the SQL statement time, in lane calls only; the identical solo probe edit ran at baseline speed.
+  - The new binaries' re-baseline on the same r55–r57 trees gives 9.1 ms (14 calls). r58 a3 and r60 read 9.2 and 9.4 ms (1.01× and 1.03×); r59 had no call.
+  - Part of the old excess was the old baseline's earlier, smaller trees. Samples are thin (1–9 calls per range).
+- **Storage:**
+
+  | Range | Store added | `.git` stored | Index rows (#366) | Snapshot new |
+  | --- | --- | --- | --- | --- |
+  | 56 | 29.6 MiB | 11.6 MiB | 504.5 MiB (+12.2) | 1,403 MiB |
+  | 57 | 28.7 MiB | 11.1 MiB | 516.3 MiB (+11.8) | 1,432 MiB |
+  | 58 a3 | 29.6 MiB | 10.7 MiB | 528.7 MiB (+12.4) | 1,461 MiB |
+  | 59 | 23.1 MiB | 7.8 MiB | 539.5 MiB (+10.8) | 1,466 MiB |
+  | 60 | 30.6 MiB | 12.2 MiB | 551.7 MiB (+12.2) | 1,499 MiB |
+
+  The Store went from 1.57 GiB after r55 to 1.71 GiB (amplification 1.99× at r60). Index rows grew 11.9 MiB per range.
+- **`-d` clean:** r56 removed 88 files and r57 104, all `tool-cordis` emitted files in `src/`. git clean found 4 untracked, unignored files at r58 a3, and 88 at each of r59 and r60. No folder in any range.
+- **Optimize rows, recorded:**
+  - **Cold-mount counter (r56–r57):** the same as r53–r55; an open item.
+  - **r56 Scaling `diff_commits` checkpoint ms, tree-files exponent 1.52:** per entry it stayed 0.10–0.12 ms and 1.53–1.60 statements, while the tree grew 6% over the window.
+  - **r60 Snapshot time, exponent 1.226:** 3.65–3.88 ms per new MiB over a 2.6% size spread.
+- **Repair** took 131–156 s, under the 170 s notify line. **Finish** took 62–66 s of 90 s.
+- **QUIET overlaps:** none during a play.
+
+Uncontended p50 in ms (calls). r56–r57 are against the 51–100 baseline (`32eda22d`); r58 a3–r60 are against the d06a2b81fa re-baseline (`c41a86d2`):
+
+| Class | old baseline | r56 | r57 | new baseline | r58 a3 | r59 | r60 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| fs.apply ≤8 KiB | 6.8 (84) | 11.3 (1) | 12.0 (8) | 9.1 (14) | 9.2 (5) | — | 9.4 (2) |
+| fs.write ≤1 KiB | 7.6 (237) | 10.7 (83) | 8.3 (93) | 8.9 (243) | 8.0 (159) | 9.3 (62) | 9.6 (84) |
+| fs.write ≤8 KiB | 7.5 (1156) | 10.3 (244) | 8.4 (315) | 8.4 (732) | 7.8 (570) | 9.3 (130) | 9.4 (325) |
+| fs.read ≤8 KiB | 2.6 (99) | 3.0 (33) | 2.9 (31) | 3.1 (90) | 2.8 (24) | 3.3 (12) | 3.3 (28) |
+| sandbox.mount — | 10.0 (503) | 11.6 (158) | 10.0 (119) | 11.0 (464) | 10.5 (117) | 10.2 (134) | 10.3 (176) |
+| sandbox.commit 0 files · Committed | 25.1 (286) | 31.5 (93) | 32.0 (69) | 27.3 (261) | 30.0 (70) | 27.4 (75) | 28.3 (112) |
+| sandbox.commit 0 files · UpToDate | 3.4 (129) | 4.1 (53) | 3.5 (33) | 3.8 (135) | 3.8 (26) | 3.7 (35) | 4.0 (49) |
+| branch.diff_commits >64 entries | 20.9 (1195) | 22.7 (397) | 20.5 (398) | 22.5 (1190) | 21.9 (396) | 20.0 (398) | 23.1 (400) |
+| branch.merge >64 entries · Merged (new Commit) | 491.1 (5) | 472.5 (3) | 513.6 (2) | 457.1 (7) | 469.9 (2) | 432.2 (2) | 473.4 (3) |
+| fs.rm 1 files | 9.0 (333) | 12.3 (39) | 8.0 (43) | 9.1 (88) | 8.6 (87) | 12.2 (5) | 13.2 (11) |
+| fs.grep 5–16 files | 5.5 (40) | 7.9 (10) | 4.6 (9) | 5.4 (29) | 7.5 (11) | 4.4 (12) | 5.7 (11) |
+| fs.glob 17–64 files | 5.7 (36) | 7.1 (9) | 4.1 (8) | 5.9 (18) | 8.6 (6) | 7.2 (7) | 6.3 (8) |
+| sandbox.exec 0 files | 35.0 (620) | 32.9 (181) | 32.1 (151) | 37.5 (544) | 39.2 (142) | 36.2 (141) | 36.0 (189) |
+
+### Ranges 51–60 final report (the replay ends at range 60, owner 2026-10-20)
+
+- **Outcome:** all ten ranges are terminal.
+  - Watch: r51, r52 and r59.
+  - Optimize, rows recorded under fast mode: r53–r57 and r60.
+  - r58 is closed as a P5 stop under a liaison ruling.
+  - Every terminal attempt's checkpoint matches git (tree, paths, ids, full compare). Every Node proof passed except r58 a3's one timing-sensitive test. Every control passed. Every report check was F1–F8 PASS.
+- **Product finding:** one, F-073 (equal bytes reported as changed by `diff_commits`). It was found at r58 and fixed on main before r58 replayed. The contract result was confirmed on a3's Store.
+- **Harness fixes:**
+  - 071: snapshots every range.
+  - 072: test-fixture folders are not packages.
+  - 074: `--accept-counter` takes a per-unit counter, for the d06a2b81fa re-baseline's r57 row.
+- **Binaries:**
+  - r51–r58 a2: `32eda22d` / `4c52d23c` (main `6928ca809d`).
+  - r58 a3–r60: `c41a86d2` / `a1078e69` (main `d06a2b81fa`).
+  - Both are pinned in the 51–60 worktree's `core/target/lead51` and `lead58`.
+- **Storage over 51–60:**
+  - The Store went from 1.45 GiB at r51 to 1.71 GiB at r60, adding 22.8–41.9 MiB per range.
+  - With F-063 active, `.git` stored 7.2–12.2 MiB per range, against 13.1–23.1 MiB on r46–r50.
+  - Index rows grew 11–12 MiB per range (446 → 552 MiB); this is #366.
+- **Recorded open items:** none of these is a next block's to-do list, since the replay ends here.
+  1. **Cold-mount metadata blob count** (`oneshot_mount_unmount.statements`, Counters optimize r53–r57). About 45–46 statements plus 2 per metadata blob opened; blob opens were 4–11 over r45–r57 with no depth trend. What sets the count is not identified. The F-016 chain-bound proposal is withdrawn.
+  2. **glob_tree statements per tree file (the r57 re-baseline row).** A fit over r31–r57 shows steps, not growth:
+     - Statements stay at 111–179 with no trend in tree size (log-log slope −0.008, r² 0.00).
+     - VM steps follow returned rows at 9–10 per row.
+  3. **`fs.apply` ≤8 KiB lane-call excess** on the old binaries (about 3× SQL statement time in lane calls). It is at baseline on the new binaries and baseline; samples are thin.
+  4. **Lane exec timing on the new binaries.** Not more than 25% slower over r59–r60. r58 a3 is a load episode.
+  5. **Timing-sensitive tests:** `skill-local-watcher.spec.ts` (SCRIPTS §16), judged and not skipped.
+  6. **The fix 056 compact vitest report workaround** is still in.
+  7. **Lane points with no natively passing test** (P3 coverage lost): `r055-3-root.end` and `r056-4-packages-client.end`.
+  8. **#366 index-row growth** continues at about 12 MiB per range.
