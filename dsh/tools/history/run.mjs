@@ -655,7 +655,9 @@ async function playRange(run, k, mode, half = null, until = null, cut = null) {
   const pathsOk = proof?.paths?.ok, idsOk = proof?.ids?.ok;
   m.checks = {
     tree: proof ? { ok: proof.ok, files: proof.tree?.files ?? proof.paths.git, missing: [...proof.paths.missing, ...proof.ids.missing, ...(proof.tree?.missing ?? [])], extra: [...proof.paths.extra, ...(proof.tree?.extra ?? [])],
-      content: [...proof.ids.content, ...(proof.tree?.content ?? [])], mode: [...proof.ids.mode, ...(proof.tree?.mode ?? [])], paths: pathsOk, ids: idsOk, full: !!proof.tree } : { ok: false, files: 0, missing: [], extra: [], content: [], mode: [] },
+      content: [...proof.ids.content, ...(proof.tree?.content ?? [])], mode: [...proof.ids.mode, ...(proof.tree?.mode ?? [])], paths: pathsOk, ids: idsOk, full: !!proof.tree,
+      // fix 058: the untracked paths exempted because the checkpoint's .gitignore files ignore them, kept for review
+      gitIgnored: proof.paths.gitIgnored ?? [] } : { ok: false, files: 0, missing: [], extra: [], content: [], mode: [] },
     history: { ok: !!layer },
     steps: { matched: failure ? Math.max(run.tally.calls - 1, 0) : run.tally.calls, total: run.tally.calls },
     conflicts: { planned: p2 ? plan.conflicts.length : 0, hit: p2 ? m.overview.conflicts.reduce((n, c) => n + c.hit, 0) : 0, unplanned: 0,
