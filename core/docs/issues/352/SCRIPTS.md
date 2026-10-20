@@ -811,3 +811,16 @@ change in diffs and merges.
   `--accept-counter` name a per-unit counter.
 - **Written:** `baseline-c41a86d23822-a1078e6935cd-p3.json`, 108 classes,
   with `acceptedRows` and the reason.
+
+### Timing-sensitive tests (judged, not skipped; liaison 2026-10-20)
+
+Some test files pass or fail depending on how fast the run is, not on the
+tree. Each one is named here when a liaison ruling accepts a P5 stop on it.
+It stays in the calibrated run list and P5 judges it in every later range.
+Nothing skips it. If it fails again, the lead stops and sends the liaison the
+same evidence: the assertion, the run's vitest and tsc ms against an earlier
+pass on the same point or tree, and the host load.
+
+| Test file | First stop | Why it is timing-sensitive |
+| --- | --- | --- |
+| `packages/skill/skill-local/tests/skill-local-watcher.spec.ts` | r58 a3 `r058-1-root.end` (passed a1, a2) | asserts the rewatch and invalidation that follow a watcher error after two `setTimeout(0)` settles, racing real async I/O in tmpdir |
