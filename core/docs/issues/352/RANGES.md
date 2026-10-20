@@ -47,3 +47,4 @@
 | 040 | 72 | 48,092 | **optimize** | Counters | 34.1 MiB | [range-040](ranges/range-040.md) |
 | 041 | 65 | 48,936 | **optimize** | Counters | 30.9 MiB | [range-041](ranges/range-041.md) |
 | 042 | 70 | 50,146 | **optimize** | Counters | 41.4 MiB | [range-042](ranges/range-042.md) |
+| 043 | 66 | 51,610 | **optimize** | Counters | 42.8 MiB | [range-043](ranges/range-043.md) |
