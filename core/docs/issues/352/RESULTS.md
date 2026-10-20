@@ -854,32 +854,95 @@ Uncontended p50 in ms (calls). r56–r57 are against the 51–100 baseline (`32e
 
 ### Ranges 51–60 final report (the replay ends at range 60, owner 2026-10-20)
 
-- **Outcome:** all ten ranges are terminal.
-  - Watch: r51, r52 and r59.
-  - Optimize, rows recorded under fast mode: r53–r57 and r60.
-  - r58 is closed as a P5 stop under a liaison ruling.
-  - Every terminal attempt's checkpoint matches git (tree, paths, ids, full compare). Every Node proof passed except r58 a3's one timing-sensitive test. Every control passed. Every report check was F1–F8 PASS.
-- **Product finding:** one, F-073 (equal bytes reported as changed by `diff_commits`). It was found at r58 and fixed on main before r58 replayed. The contract result was confirmed on a3's Store.
-- **Harness fixes:**
-  - 071: snapshots every range.
-  - 072: test-fixture folders are not packages.
-  - 074: `--accept-counter` takes a per-unit counter, for the d06a2b81fa re-baseline's r57 row.
-- **Binaries:**
-  - r51–r58 a2: `32eda22d` / `4c52d23c` (main `6928ca809d`).
-  - r58 a3–r60: `c41a86d2` / `a1078e69` (main `d06a2b81fa`).
-  - Both are pinned in the 51–60 worktree's `core/target/lead51` and `lead58`.
-- **Storage over 51–60:**
-  - The Store went from 1.45 GiB at r51 to 1.71 GiB at r60, adding 22.8–41.9 MiB per range.
-  - With F-063 active, `.git` stored 7.2–12.2 MiB per range, against 13.1–23.1 MiB on r46–r50.
-  - Index rows grew 11–12 MiB per range (446 → 552 MiB); this is #366.
-- **Recorded open items:** none of these is a next block's to-do list, since the replay ends here.
-  1. **Cold-mount metadata blob count** (`oneshot_mount_unmount.statements`, Counters optimize r53–r57). About 45–46 statements plus 2 per metadata blob opened; blob opens were 4–11 over r45–r57 with no depth trend. What sets the count is not identified. The F-016 chain-bound proposal is withdrawn.
-  2. **glob_tree statements per tree file (the r57 re-baseline row).** A fit over r31–r57 shows steps, not growth:
-     - Statements stay at 111–179 with no trend in tree size (log-log slope −0.008, r² 0.00).
-     - VM steps follow returned rows at 9–10 per row.
-  3. **`fs.apply` ≤8 KiB lane-call excess** on the old binaries (about 3× SQL statement time in lane calls). It is at baseline on the new binaries and baseline; samples are thin.
-  4. **Lane exec timing on the new binaries.** Not more than 25% slower over r59–r60. r58 a3 is a load episode.
-  5. **Timing-sensitive tests:** `skill-local-watcher.spec.ts` (SCRIPTS §16), judged and not skipped.
-  6. **The fix 056 compact vitest report workaround** is still in.
-  7. **Lane points with no natively passing test** (P3 coverage lost): `r055-3-root.end` and `r056-4-packages-client.end`.
-  8. **#366 index-row growth** continues at about 12 MiB per range.
+The owner ended the #352 replay at range 60. This report covers the ranges 51–60 session's block.
+
+**Per range:**
+
+| Range | Run | Daemon | Attempts | Terminal verdict | Store added | `.git` stored | F-063 PREFIX / FULL | Repair s | Finish s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 51 | `p3-main-x` | `32eda22d` | 1 | watch | 24.0 MiB | 8.2 MiB | 401 / 179 | 128 | 59 |
+| 52 | `p3-main-x` | `32eda22d` | 1 | watch (native first fixed by 072) | 41.9 MiB | 10.8 MiB | 558 / 188 | 133 | 57 |
+| 53 | `p3-main-x` | `32eda22d` | 1 | optimize, rows recorded | 23.0 MiB | 7.9 MiB | 448 / 222 | 138 | 60 |
+| 54 | `p3-main-x` | `32eda22d` | 1 | optimize, row recorded | 30.7 MiB | 11.7 MiB | 694 / 295 | 124 | 57 |
+| 55 | `p3-main-x` | `32eda22d` | 1 | optimize, row recorded | 22.8 MiB | 7.2 MiB | 434 / 245 | 154 | 64 |
+| 56 | `p3-main-x` | `32eda22d` | 1 | optimize, row recorded | 29.6 MiB | 11.6 MiB | 714 / 300 | 146 | 64 |
+| 57 | `p3-main-x` | `32eda22d` | 1 | optimize, row recorded | 28.7 MiB | 11.1 MiB | 501 / 227 | 131 | 62 |
+| 58 | a1 `p3-main-x`, a2 `p3-main-x-b`, a3 `p3-main-x-c` | a1, a2 `32eda22d`; a3 `c41a86d2` | 3 | stop (P5, timing-sensitive test; liaison ruling), closed at a3 | 29.6 MiB | 10.7 MiB | 482 / 154 | 156 | 66 |
+| 59 | `p3-main-x-c` | `c41a86d2` | 1 | watch | 23.1 MiB | 7.8 MiB | 446 / 213 | 138 | 62 |
+| 60 | `p3-main-x-c` | `c41a86d2` | 1 | optimize, row recorded | 30.6 MiB | 12.2 MiB | 628 / 306 | 148 | 65 |
+
+- Every terminal attempt's checkpoint matches git: tree, paths, ids and full compare.
+- Every Node proof passed except r58 a3's one timing-sensitive test. Every repair P6, every control and every report check (F1–F8) passed.
+- Repair stayed under the 170 s notify line, and finish under the 90 s alarm.
+
+**Fixes 061–074:** 063 and 073 are product changes; the rest are harness changes.
+
+| Fix | What it did |
+| --- | --- |
+| [061](fixes/061-prep51-speed-thin-class-listed.md) | A baseline class with fewer than 5 calls is listed as thin instead of turning the whole Speed row to "not judged" |
+| [062](fixes/062-prep51-window-max-named.md) | A chain-bounded window maximum names the one call that set it, so one event is not re-read as a finding every range |
+| [063](fixes/063-git-index-rename-predecessor.md) | **Product (F-063):** a file saved by rename-over (git's index, packs) uses the replaced file as its chunk delta predecessor instead of storing every changed chunk FULL |
+| [064](fixes/064-prep51-range-prescan.md) | A pre-scan of each range from the dsh history (transient packages, .gitignore changes, writers outside sources, new top-level packages) |
+| [065](fixes/065-r049-calibration-batch.md) | Test calibration sizes its own batch to fit one 115 s command |
+| [066](fixes/066-prep51-f063-active-check.md) | `f063.mjs` proves F-063 active from the run's own traces (PREFIX vs FULL chunks); exit 4 stops everything |
+| [067](fixes/067-prep51-contended-per-call-sql.md) | Contended work reads the call's own SQL (`sql.call`), not the session's writer and readers |
+| [068](fixes/068-r050-native-first-probe-home.md) | Test calibration probes under the same HOME as the replay |
+| [069](fixes/069-r050-a1-milestone-oracle-start-chain.md) | A milestone clean install's oracle starts from the chain, not a fresh checkout |
+| [070](fixes/070-r049-rebaseline-accept-counter.md) | A re-baseline may accept one named counter row (`--accept-counter`, `--accept-ranges`) |
+| [071](fixes/071-r051-snapshots-every-range.md) | A snapshot after every range (run switch), so a stop never replays a gap |
+| [072](fixes/072-r052-fixture-packages-not-built.md) | Test-fixture folders (`fixtures`, `__fixtures__`) are not built as packages |
+| [073](fixes/073-r058-written-back-content-flag.md) | **Product (F-073):** a file written away and back to equal bytes is no content change in diffs and merges; the publication lane compares bytes up to 1 MiB |
+| [074](fixes/074-rb57-accept-per-unit-counter.md) | `--accept-counter` takes a per-unit counter name such as `glob_tree.statements per tree file` |
+
+**The two re-baselines (SCRIPTS §16):**
+
+1. **51–100 baseline, main `6928ca809d`:** daemon `32eda22d`, addon `4c52d23c`.
+   - Run `rb-p3-32eda22d-4c52d23c-b`, measuring r47–r49 from the r46 fork. The first fork was lost to a Docker Desktop crash and none of its numbers are used.
+   - Repair took 128, 124 and 135 s. Verdicts: watch, watch, optimize.
+   - The r49 Counters row `oneshot_mount_unmount.statements` was accepted under fix 070.
+   - Written: `baseline-32eda22d657d-4c52d23cd1b4-p3.json`, 112 classes. Used for r51–r58 a2.
+2. **d06a2b81fa baseline (owner's option 1 after r58):** daemon `c41a86d2`, addon `a1078e69`.
+   - Run `rb-p3-c41a86d2-a1078e69`, measuring r55–r57 from the r54 fork, with three oracle aliases.
+   - Verdicts: watch, watch, optimize. F-063 was active in all three ranges.
+   - The r57 Counters row `glob_tree.statements per tree file` (exponent 3.52; statements 139, 136, 163 against 138, 134, 164 on the old binaries) was accepted under fix 074.
+   - Written: `baseline-c41a86d23822-a1078e6935cd-p3.json`, 108 classes. Used for r58 a3–r60.
+
+**F-063 storage effect** (owner 2026-10-20: "the .git improvements should be ported into the 51-100 lane"):
+
+| | r46–r50 (before) | r51–r60 (with F-063) |
+| --- | --- | --- |
+| `.git` stored per range | 13.1–23.1 MiB | 7.2–12.2 MiB |
+
+- PREFIX chunks outnumbered FULL by 2.0–3.4 times in every range, over 95–159 lane git Commits.
+- The Store grew 22.8–41.9 MiB per range, from 1.45 GiB after r51 to 1.71 GiB at r60.
+- Index rows (#366) are unaffected at 11–12 MiB per range (446 → 552 MiB).
+
+**F-073, the r58 finding and fix:**
+- **Symptom (r58 a1, a2):** `diff_commits` r57→r58 listed `packages/cordis/tool-cordis/src/api-catalog.ts` as a content change, with the same bytes at both heads.
+- **Cause:** a lane wrote other bytes and the reconcile wrote the checkpoint's bytes back. The two in-place edit histories gave equal bytes different canonical roots, and a root difference was read as a content change.
+- **Fix:** git-storage-rca, main `5b32a15773`, `366f23222b` and `d06a2b81fa`.
+- **Confirmed on a3's Store, read only:** the item is `{kind: Modified, content: false, identity: false, metadata: true}`, the same as the control path `apps/cli/src/tui.ts`. That is the contract. The roots still differ (`ee055170` against `40ba3671`). r58 a3's paths check passed with no exemption.
+
+**Lane exec, new against old binaries:**
+
+| | Points | vitest / native | tsc / native | Host load |
+| --- | --- | --- | --- | --- |
+| Old binaries, r55–r57 | 8 | 1.21–3.86× | 1.20–2.57× | 8–12 |
+| New binaries, r59–r60 | 7 | 1.46–3.59× | 1.14–2.80× | 6–10 |
+
+- r58 a3 against a1 on the same points: vitest +53–67%, tsc +24–39%, at host load 7.6–10 against 5.8–7.2.
+- Only r60 apps-web tsc (2.80×) is above the old range, by 9%.
+- Conclusion: no new-binary slowdown above 25%; r58 a3 reads as a load episode.
+
+**Recorded open items:** none of these is a next block's to-do list, since the replay ends here.
+
+1. **Cold-mount metadata blob count** (`oneshot_mount_unmount.statements`, Counters optimize r53–r57). About 45–46 statements plus 2 per metadata blob opened; blob opens were 4–11 over r45–r57 with no depth trend. What sets the count is not identified. The F-016 chain-bound proposal is withdrawn.
+2. **glob_tree statements per tree file (the r57 re-baseline row).** A fit over r31–r57 shows steps, not growth:
+   - Statements stay at 111–179 with no trend in tree size (log-log slope −0.008, r² 0.00).
+   - VM steps follow returned rows at 9–10 per row.
+3. **`fs.apply` ≤8 KiB:** 1.57–1.88× on the old binaries in lane calls only. It reads 1.01–1.03× against the new baseline (9.1 ms); samples are thin.
+4. **Lane exec timing on the new binaries:** not more than 25% slower over r59–r60.
+5. **Timing-sensitive tests:** `skill-local-watcher.spec.ts` (SCRIPTS §16), judged and not skipped.
+6. **The fix 056 compact vitest report workaround** is still in.
+7. **Lane points with no natively passing test** (P3 coverage lost): `r055-3-root.end` and `r056-4-packages-client.end`.
+8. **#366 index-row growth:** about 12 MiB per range.
