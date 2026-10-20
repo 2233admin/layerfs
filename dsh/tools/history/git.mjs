@@ -2,9 +2,11 @@
 // never the owner's checkout. Raw diffs and trees are parsed from git's own
 // output; file contents come from one long-lived `git cat-file --batch`
 // process (BlobCache), so a step costs a pipe round trip, not a process.
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
 export const ZERO = "0000000000000000000000000000000000000000";
 
@@ -83,6 +85,29 @@ export function lsTree(repo, treeish) {
     files.set(unquote(line.slice(tab + 1)), { mode, blob });
   }
   return { files, gitlinks };
+}
+
+/**
+ * The paths among `paths` that `commit`'s own .gitignore files ignore (fix 058, r038 a1): git's check-ignore over
+ * a scratch repository holding only those .gitignore files, so git's own rules (directory patterns, negations,
+ * nested files) decide. Paths need not exist.
+ */
+export function gitIgnored(repo, commit, paths) {
+  if (!paths.length) return [];
+  const rules = [...lsTree(repo, commit).files].filter(([p]) => p === ".gitignore" || p.endsWith("/.gitignore"));
+  if (!rules.length) return [];
+  const dir = mkdtempSync(join(tmpdir(), "lfs352-ignore-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    for (const [p, { blob }] of rules) {
+      mkdirSync(dirname(join(dir, p)), { recursive: true });
+      writeFileSync(join(dir, p), execFileSync("git", ["--git-dir", repo, "cat-file", "blob", blob], { maxBuffer: 1 << 26 }));
+    }
+    const r = spawnSync("git", ["-C", dir, "check-ignore", "--no-index", "--stdin", "-z"], { input: `${paths.join("\0")}\0`, maxBuffer: 1 << 30 });
+    if (r.status === 1) return [];
+    if (r.status !== 0) throw new Error(`git check-ignore exit ${r.status}: ${String(r.stderr).slice(0, 300)}`);
+    return String(r.stdout).split("\0").filter(Boolean);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
 /** Sizes of many blobs in one `--batch-check` call: id -> bytes (missing -> absent). */

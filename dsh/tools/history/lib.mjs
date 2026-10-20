@@ -17,7 +17,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BlobCache, diffTrees, lsTree } from "./git.mjs";
+import { BlobCache, diffTrees, gitIgnored, lsTree } from "./git.mjs";
 import { compareTree, IGNORE } from "./oracle.mjs";
 import { GIT_ALLOWED } from "./gitlanes.mjs";
 import { compareResults, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
@@ -425,12 +425,21 @@ export async function verify(run, k, { prevHead, head, layer, prevCommit, full }
     if (!page.nextCursor || page.nextCursor === cursor) throw new Error(`diff_commits answered hasMore without a new nextCursor (${cursor ?? "first page"})`);
     cursor = page.nextCursor;
   }
-  const outputs = PHASES[run.manifest.phase]?.closure ? CLOSURE_OUTPUT : null;
+  // P3: what the closure writes and git does not track is no extra: the known outputs (CLOSURE_OUTPUT), and any
+  // path the checkpoint's own .gitignore files ignore (fix 058: a test's .sessions/session-query.db at r038 a1)
+  const closureOn = !!PHASES[run.manifest.phase]?.closure, ignored = new Set();
+  const outputs = closureOn ? { test: (p) => CLOSURE_OUTPUT.test(p) || ignored.has(p) } : null;
+  const notGit = (paths, inGit) => paths.filter((p) => !inGit(p) && !IGNORE.some((i) => p.startsWith(i)) && !CLOSURE_OUTPUT.test(p));
+  const changed = new Set(changes.map((c) => c.path));
+  if (closureOn) for (const p of gitIgnored(run.repo, plan.checkpoint, notGit(items.filter((i) => i.type !== "dir").map((i) => i.path.replace(/^\//, "")), (p) => changed.has(p)))) ignored.add(p);
   const paths = comparePaths(items, changes, IGNORE, outputs);
   const expected = lsTree(run.repo, plan.checkpoint).files;
   const present = [...changes.filter((c) => !c.gitlink && c.mode !== "000000").map((c) => c.path), ...paths.metadataOnly];
   const ids = compareIds(present, present.length ? await readIds(run, layer, present, `r${pad(k)}-ids`) : new Map(), expected);
-  const tree = full ? compareTree(expected, await readIds(run, layer, null, `r${pad(k)}-tree`), IGNORE, outputs) : null;
+  const actual = full ? await readIds(run, layer, null, `r${pad(k)}-tree`) : null;
+  if (actual && closureOn) for (const p of gitIgnored(run.repo, plan.checkpoint, notGit([...actual.keys()], (p) => expected.has(p)))) ignored.add(p);
+  const tree = actual ? compareTree(expected, actual, IGNORE, outputs) : null;
+  paths.gitIgnored = [...ignored].sort();
   // F-031: the range's net change under .git/ (skipped by the tree check) may only touch the files the design names
   const gitStray = items.filter((i) => i.type !== "dir").map((i) => i.path.replace(/^\//, "")).filter((p) => p.startsWith(".git/") && !GIT_ALLOWED.test(p));
   return { ok: paths.ok && ids.ok && (!tree || tree.ok) && !gitStray.length, paths, ids, tree, gitStray, changedDirs: changedDirs(items.map((i) => i.path)), items };

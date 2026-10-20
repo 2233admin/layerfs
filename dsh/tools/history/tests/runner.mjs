@@ -12,7 +12,7 @@ import {
   placeEntries, sameAsTree, sandboxCommands, sandboxExpect, sqlCounters, callOf, traceLines, Tree, TREE_IDS, viaSandbox,
   addDelta, deltaSummary, deltaWork,
 } from "../steps.mjs";
-import { blobId as blobOf } from "../git.mjs";
+import { blobId as blobOf, gitIgnored } from "../git.mjs";
 import { safeCut } from "../agents.mjs";
 import { baselineRows, caps, forkPlan, nextAttempt, options, outputs, POLICIES, SWITCHABLE } from "../run.mjs";
 import { PLAN_VERSION } from "../plan.mjs";
@@ -283,6 +283,23 @@ test("a lanes cut: any plan order outside a held sequence (commit-conflict, stal
 });
 
 let failed = 0;
+test("gitIgnored: the checkpoint's own .gitignore files decide; an ignored test output is no extra (fix 058, r038 a1)", () => {
+  const work = join(dir, "ign-work"), bare = join(dir, "ign.git");
+  mkdirSync(join(work, "sub"), { recursive: true });
+  const g = (...a) => execFileSync("git", ["-C", work, ...a], { encoding: "utf8" });
+  g("init", "-q"); writeFileSync(join(work, ".gitignore"), ".sessions/\nexamples/*/.sessions/\n"); writeFileSync(join(work, "sub", ".gitignore"), "*.db\n!keep.db\n");
+  writeFileSync(join(work, "a.txt"), "a\n");
+  g("add", "-A"); g("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "c");
+  execFileSync("git", ["clone", "-q", "--bare", work, bare]);
+  const head = execFileSync("git", ["--git-dir", bare, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  const ign = gitIgnored(bare, head, [".sessions/session-query.db", "examples/acp-agent/.sessions/x", "sub/y.db", "sub/keep.db", "packages/a/src/x.ts"]).sort();
+  assert.deepEqual(ign, [".sessions/session-query.db", "examples/acp-agent/.sessions/x", "sub/y.db"]);
+  assert.deepEqual(gitIgnored(bare, head, []), []);
+  const set = new Set(ign), outputs = { test: (p) => set.has(p) };
+  const items = [{ path: "/.sessions/session-query.db", kind: "Added" }, { path: "/packages/a/src/x.ts", kind: "Added" }];
+  const r = comparePaths(items, [], [], outputs);
+  assert.deepEqual(r.extra, ["packages/a/src/x.ts"], "an ignored output is no extra; an unignored new file still is");
+});
 for (const [name, fn] of tests) {
   try { await fn(); console.log(`ok   ${name}`); } catch (error) { failed++; console.log(`FAIL ${name}\n${error.stack}`); }
 }
