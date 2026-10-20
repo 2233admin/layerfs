@@ -43,6 +43,11 @@ impl<'a> PredecessorBase<'a> {
     pub const fn root(self) -> ObjectId {
         self.root
     }
+
+    /// The provider that serves the offered root and its mapping.
+    pub(crate) fn reader(self) -> &'a dyn AuthenticatedObjects {
+        self.reader
+    }
 }
 
 /// Forward correspondence cursor over one stored chunked mapping.

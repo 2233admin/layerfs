@@ -278,6 +278,31 @@ pub(crate) fn values<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Si
         if digests.len() != followed.len() {
             return Err(ContentError::InvalidRecord("captured digest page"));
         }
+        // The files a rename put in place of others, large enough to be
+        // chunked: their predecessors are offered as delta bases (#352 F-063).
+        let threshold = builder.policy.small_file_threshold_bytes();
+        let replacing: Vec<u64> = rows
+            .iter()
+            .filter(|inode| {
+                inode.kind == InodeKind::File
+                    && inode.nlink != 0
+                    && inode.size >= threshold
+                    && inode.serial != facts.root_serial
+                    && facts.reader.created_above(inode.born)
+            })
+            .map(|inode| inode.serial)
+            .collect();
+        let predecessors = if replacing.is_empty() {
+            Vec::new()
+        } else {
+            provider
+                .captured_predecessors(facts.reader, &replacing)
+                .map_err(|original| shared.borrow_mut().original(original))?
+        };
+        if predecessors.len() != replacing.len() {
+            return Err(ContentError::InvalidRecord("captured predecessor page"));
+        }
+        let mut predecessors = replacing.into_iter().zip(predecessors).peekable();
         // The saved roots that already hold those bytes, one Store demand
         // per window.
         let contents: Vec<([u8; 32], u64)> = digests
@@ -338,7 +363,11 @@ pub(crate) fn values<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Si
                     .transpose()?,
                 None => None,
             };
-            let value = builder.value(inode, record, fresh, reuse, consumer, timing)?;
+            let predecessor = predecessors
+                .next_if(|(serial, _)| *serial == inode.serial)
+                .and_then(|(_, predecessor)| predecessor);
+            let value =
+                builder.value(inode, record, fresh, reuse, predecessor, consumer, timing)?;
             // A root built from all of this file's bytes is recorded.
             if let (Some(captured), None) = (captured, reuse) {
                 pending.push(FileDigestRow {

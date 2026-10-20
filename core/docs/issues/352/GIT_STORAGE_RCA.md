@@ -1,8 +1,8 @@
 # #352 · Why `.git` costs so much in the Store (RCA, 2026-10-20)
 
-> **Status:** investigation only, for the liaison and the owner. No product
-> code changed and nothing was built. The direction in §4 is a proposal; it
-> needs the owner's approval before anyone builds it.
+> **Status:** investigation, for the liaison and the owner. The owner
+> approved the direction in §4 on 2026-10-20. It is built as
+> [fix 063](fixes/063-git-index-rename-predecessor.md), measured in §6.
 
 The range reports put `.git` at 3.8–4.6× its latest version (r20: 87.5 MiB
 for 23.0 MiB; r46: 454.2 MiB for 98.6 MiB), the largest single source in
@@ -159,8 +159,9 @@ predecessor, the F-005 mechanism, instead of `no_hint`.
   selector still makes one trial, stores PREFIX only when it is strictly
   smaller, and keeps the depth cap (chunk depth 8) and the chain budgets
   (512 KiB canonical, 256 KiB encoded). Canonical identity, the format and
-  the Store layout are unchanged. There is no new table, no second
-  database and no new limit.
+  the Store layout are unchanged. There is no new Store table, no second
+  database and no new limit. (As built, the record lives in one new table
+  of the per-Workspace overlay, `fs_predecessor`, schema 39.)
 
 **Estimated saving.** I simulated it on the windows' real index chunks:
 each chunk is compressed with zstd level 3, window log 20 (the chunk
@@ -225,3 +226,23 @@ defect. Reducing them needs either git-aware storage of zlib streams (a
 large format project; I do not recommend it for this saving) or a change
 to the replay's git settings, which is the owner's call under the
 no-workload-changes rule.
+
+## 6. Measured as built (fix 063)
+
+r42 sealed Store, a clone per arm, 25 replay-shaped lane steps, one sample
+per arm. Each step is a mount, the lane's git commands, a Commit and an
+unmount. Details are in [fix 063](fixes/063-git-index-rename-predecessor.md).
+
+| Steps 2–25 (24 lane Commits) | Old (`6e8986ff46`) | New |
+| --- | --- | --- |
+| Stored payload bytes | 1,463,988 | 297,095 (−80%) |
+| Index chunks FULL / PREFIX | 120 / 0 | 10 / 110 |
+| Commit p50 / p95 | 19.2 / 25.5 ms | 20.1 / 24.9 ms |
+| Fresh-mount `git status` p50 | 480 ms | 440 ms |
+
+- **Index bytes over all 25 steps:** 1,511,399 → 344,931 (−77%).
+- **Steps 2–25:** −80%, against the estimated 85–87%. The real
+  predecessor is a little less close than the best earlier chunk, as the
+  caveat in §4 expected.
+- **Per range**, this scales to about 3.8–5.1 MiB saved.
+- **Time:** added time is under 1 ms, against the 1–3 ms estimated.

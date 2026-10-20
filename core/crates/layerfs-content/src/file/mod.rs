@@ -26,5 +26,7 @@ pub use edit::{
 };
 pub use mapping::{Extent, ExtentBuilder, ExtentCursor, PredecessorBase, ReadCounters};
 pub use read::{read_all, read_all_bounded, read_range};
-pub use runs::{construct_runs, FileRun, FileRuns, RunConstruction};
+pub use runs::{
+    construct_runs, construct_runs_with_predecessor, FileRun, FileRuns, RunConstruction,
+};
 pub use view::FileView;

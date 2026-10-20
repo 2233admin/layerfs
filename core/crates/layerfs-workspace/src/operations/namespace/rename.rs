@@ -132,6 +132,13 @@ pub(crate) fn rename(
             touched(&to, now, Some(moved.kind), lost)?,
         ]
     };
+    // A regular file put in place of another offers that one to its Commit
+    // as a delta base (#352 F-063): writers that save by writing a new file
+    // and renaming it over the old leave no base file of the same inode.
+    let predecessor = replaced
+        .as_ref()
+        .filter(|old| old.kind == InodeKind::File && moved.kind == InodeKind::File)
+        .map(|old| (moved.serial, old.serial));
     if let Some(old) = &replaced {
         inodes.push(dereferenced(old));
     }
@@ -158,5 +165,6 @@ pub(crate) fn rename(
         cell: None,
         write: None,
         claims: None,
+        predecessor,
     })))
 }

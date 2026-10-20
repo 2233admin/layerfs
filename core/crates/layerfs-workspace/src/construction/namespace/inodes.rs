@@ -48,14 +48,17 @@ fn canonical(kind: InodeKind) -> CanonicalKind {
 impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_, '_, P> {
     /// `stored` is the immutable base record of a live base inode and None for
     /// a fresh one; `reuse` is a saved root holding a fresh file's exact
-    /// bytes. Base roots are kept except a file's constructed content and
+    /// bytes; `predecessor` is the file a rename put a fresh file in place
+    /// of. Base roots are kept except a file's constructed content and
     /// the patched metadata; the supplied count is derived again by Content.
+    #[allow(clippy::too_many_arguments)]
     pub fn value(
         &self,
         inode: &Inode,
         stored: Option<InodeValue>,
         fresh: bool,
         reuse: Option<ObjectId>,
+        predecessor: Option<u64>,
         consumer: &mut dyn FinalizedConsumer,
         timing: &TimingScope<'_, Active>,
     ) -> ContentResult<InodeValue> {
@@ -81,9 +84,13 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
                 add(&mut self.shared.borrow_mut().work.files_reused, 1);
                 root
             }
-            (InodeKind::File, _, _) => {
-                self.file(inode.serial, stored.is_none(), consumer, timing)?
-            }
+            (InodeKind::File, _, _) => self.file(
+                inode.serial,
+                stored.is_none(),
+                predecessor,
+                consumer,
+                timing,
+            )?,
             (InodeKind::Symlink, None, _) => self.symlink(inode.serial, consumer)?,
             // Content builds a fresh directory's page from its header and
             // replaces this root; the zero identity names no object.
@@ -170,11 +177,13 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
     /// The existing changed-file constructor under its own file scope. It
     /// returns the base root when the content is unchanged. A fresh file has
     /// no base, so it takes the direct route with no edit records. A failure
-    /// keeps the file's whole custody.
+    /// keeps the file's whole custody. A fresh file is offered its recorded
+    /// predecessor as a delta base.
     fn file(
         &self,
         serial: u64,
         fresh: bool,
+        predecessor: Option<u64>,
         consumer: &mut dyn FinalizedConsumer,
         timing: &TimingScope<'_, Active>,
     ) -> ContentResult<ObjectId> {
@@ -191,6 +200,7 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
                 self.facts.reader,
                 serial,
                 scope,
+                predecessor,
                 self.policy,
                 self.capacities,
                 consumer,

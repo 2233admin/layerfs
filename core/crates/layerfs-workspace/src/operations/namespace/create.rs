@@ -100,6 +100,7 @@ pub(crate) fn create(
         cell,
         write: None,
         claims: None,
+        predecessor: None,
     };
     Ok(Some((changes, inode)))
 }
@@ -143,6 +144,7 @@ pub(crate) fn link(
         cell: None,
         write: None,
         claims: None,
+        predecessor: None,
     };
     Ok(Some((changes, file)))
 }

@@ -125,6 +125,10 @@ pub struct Changes {
     /// become reference pieces; every other byte of the window is stored.
     /// Boxed: most jobs carry none, and the job value stays small.
     pub claims: Option<Box<WriteClaims>>,
+    /// A regular file a rename put in place of another: the moved serial and
+    /// the replaced one. Advisory: it offers the moved file's Commit the
+    /// replaced file as a delta base and states nothing about its bytes.
+    pub predecessor: Option<(u64, u64)>,
 }
 /// Bytes of one bounded write job. Shared, so job rounds never copy them.
 #[derive(Clone, Debug, Eq, PartialEq)]

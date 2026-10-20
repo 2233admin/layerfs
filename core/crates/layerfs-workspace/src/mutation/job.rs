@@ -39,7 +39,7 @@ type Planned = Option<(Option<Changes>, Option<Inode>)>;
 pub(crate) enum Decided {
     Final(JobOutcome),
     Publish {
-        changes: Changes,
+        changes: Box<Changes>,
         inode: Option<Inode>,
     },
 }
@@ -162,7 +162,10 @@ impl NamespaceJob {
                         .find(|i| i.nlink == 0 && i.serial != self.root)
                         .map(|i| i.serial);
                 }
-                Ok(Decided::Publish { changes, inode })
+                Ok(Decided::Publish {
+                    changes: Box::new(changes),
+                    inode,
+                })
             }
         }
     }

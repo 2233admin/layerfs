@@ -1,13 +1,16 @@
 //! Hole-aware complete construction through the ordinary canonical builder.
 use crate::file::{
     cdc::MAXIMUM_CHUNK_BYTES,
-    chunk_runs::{no_hint, ChunkRuns},
-    construct_bytes, mapping, ConstructedFile,
+    chunk_runs::ChunkRuns,
+    construct_bytes,
+    mapping::{self, Aligner, PredecessorBase},
+    ConstructedFile, FileContent,
 };
 use crate::{
     ConstructionCapacities, ConstructionPolicy, ContentError, ContentResult, FinalizedConsumer,
+    ObjectId,
 };
-use layerfs_telemetry::timer::TimingScope;
+use layerfs_telemetry::timer::{Active, TimingScope};
 
 /// One result of a bounded run-source read.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -60,8 +63,36 @@ pub fn construct_runs(
     consumer: &mut dyn FinalizedConsumer,
     scope: TimingScope<'_>,
 ) -> ContentResult<RunConstruction> {
+    construct_runs_with_predecessor(policy, capacities, source, None, consumer, scope)
+}
+
+/// Constructs exactly the root `construct_runs` does, offering a stored earlier
+/// version of the file as the delta-base correspondence of its new chunks.
+///
+/// `base` is a file this one replaced, such as the target of a rename that put
+/// it in place. Each new chunk is offered the base payload its byte range
+/// corresponds to, through the same alignment an edit uses, re-anchored at
+/// every chunk equal to a base payload. The base is read only when the result
+/// is chunked: its root once, then its mapping pages as the alignment walks
+/// forward, never a payload. A whole-file base offers nothing. The hints are
+/// advisory, so the constructed root is byte for byte the one `construct_runs`
+/// returns; with no base this is `construct_runs`.
+pub fn construct_runs_with_predecessor(
+    policy: ConstructionPolicy,
+    capacities: &ConstructionCapacities,
+    source: &mut dyn FileRuns,
+    base: Option<PredecessorBase<'_>>,
+    consumer: &mut dyn FinalizedConsumer,
+    scope: TimingScope<'_>,
+) -> ContentResult<RunConstruction> {
     policy.validated()?;
     scope.run(|active| {
+        let mut hints = Hints {
+            base,
+            aligner: None,
+            active,
+        };
+        let mut hint = |start: u64, len: u64, id: ObjectId| hints.offer(start, len, id);
         let cutoff = policy.small_file_threshold_bytes() as usize;
         let mut prefix = Vec::with_capacity(cutoff);
         let mut input = [0; MAXIMUM_CHUNK_BYTES];
@@ -92,21 +123,17 @@ pub fn construct_runs(
                     prefix.extend_from_slice(&input[..used as usize]);
                 }
                 if prefix.len() == cutoff {
-                    chunks.data(&prefix, &mut no_hint, consumer)?;
+                    chunks.data(&prefix, &mut hint, consumer)?;
                     prefix.clear();
                     chunked = true;
                 }
             }
             if chunked && used < length {
                 if zero {
-                    let processed = chunks.zero(length - used, &mut no_hint, consumer)?;
+                    let processed = chunks.zero(length - used, &mut hint, consumer)?;
                     zeros_processed = add(zeros_processed, processed)?;
                 } else {
-                    chunks.data(
-                        &input[used as usize..length as usize],
-                        &mut no_hint,
-                        consumer,
-                    )?;
+                    chunks.data(&input[used as usize..length as usize], &mut hint, consumer)?;
                 }
             }
         }
@@ -128,7 +155,7 @@ pub fn construct_runs(
                 peak_pending: 0,
             });
         }
-        let build = chunks.finish(&mut no_hint, consumer)?;
+        let build = chunks.finish(&mut hint, consumer)?;
         let summary = build
             .root
             .ok_or(ContentError::InvalidRecord("empty run mapping"))?;
@@ -151,6 +178,41 @@ pub fn construct_runs(
             peak_pending: build.peak_pending,
         })
     })
+}
+
+/// The base a run construction offers its chunks, opened at the first chunk.
+struct Hints<'b, 's, 'r> {
+    base: Option<PredecessorBase<'b>>,
+    aligner: Option<Aligner>,
+    active: &'s TimingScope<'r, Active>,
+}
+impl Hints<'_, '_, '_> {
+    fn offer(&mut self, start: u64, len: u64, id: ObjectId) -> ContentResult<Option<ObjectId>> {
+        let Some(base) = self.base else {
+            return Ok(None);
+        };
+        let active = self.active;
+        let read = &mut |page: ObjectId, _root: bool| {
+            base.reader()
+                .read_canonical_scoped(page, active.child("mapping.predecessor"))
+        };
+        let aligner = match &mut self.aligner {
+            Some(aligner) => aligner,
+            None => {
+                // The first chunk opens the base: a whole-file base offers no
+                // chunk anything, and is not read again.
+                let canonical = read(base.root(), true)?;
+                match crate::file::classify(&canonical)? {
+                    FileContent::Chunked(state) => self.aligner.insert(Aligner::new(state)),
+                    FileContent::WholeFile { .. } => {
+                        self.base = None;
+                        return Ok(None);
+                    }
+                }
+            }
+        };
+        aligner.offer(start, len, id, read)
+    }
 }
 
 fn add(a: u64, b: u64) -> ContentResult<u64> {

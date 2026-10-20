@@ -139,6 +139,18 @@ impl Overlay {
                 return Err(OverlayError::Invalid("compound write window"));
             }
         }
+        if changes.predecessor.is_some_and(|(moved, replaced)| {
+            moved == replaced
+                || !changes.directory_entries.iter().any(|entry| {
+                    matches!(entry.binding, Binding::Bound { serial, .. } if serial == moved)
+                })
+                || !changes
+                    .inodes
+                    .iter()
+                    .any(|inode| inode.serial == replaced && inode.kind == crate::InodeKind::File)
+        }) {
+            return Err(OverlayError::Invalid("rename predecessor"));
+        }
         crate::payload::pieces::check_claims(changes)?;
         Ok(CheckedChanges {
             keys,
@@ -234,6 +246,13 @@ impl Overlay {
                         .put(key, (mount, *parent as u64));
                 }
             }
+        }
+        if let Some((moved, replaced)) = changes.predecessor {
+            let fresh = changes
+                .inodes
+                .iter()
+                .any(|inode| inode.serial == replaced && source.created_above(inode.born));
+            self.record_predecessor(moved, replaced, fresh)?;
         }
         if let Some((serial, cell)) = &changes.cell {
             self.put_cell(integer(*serial)?, layer(*serial)?, cell)?;

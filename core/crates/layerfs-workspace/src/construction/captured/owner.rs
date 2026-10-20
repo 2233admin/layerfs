@@ -10,10 +10,10 @@ use crate::{
     OverlayOperationRecords, Workspace, WorkspaceError,
 };
 use layerfs_content::{
-    apply_indexed_edits_view_backed, construct_runs,
+    apply_indexed_edits_view_backed, construct_runs, construct_runs_with_predecessor,
     filesystem::{InodeIdentity, InodeScope},
     ConstructedFile, ConstructionCapacities, ConstructionPolicy, ContentError, ContentResult,
-    FileView, FinalizedConsumer, IndexedEditRequest, ObjectId,
+    FileView, FinalizedConsumer, IndexedEditRequest, ObjectId, PredecessorBase,
 };
 use layerfs_overlay::{CapturedReader, IndexedOperationRecordScope, InodeKind, OverlayError};
 use layerfs_telemetry::timer::TimingScope;
@@ -169,6 +169,11 @@ impl<'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> CapturedFile
     /// written, read or reclaimed. The caller's attempt guards that each
     /// serial is constructed once. Failed binding or construction returns the
     /// original custody, as `construct` does.
+    ///
+    /// `predecessor` is the file a rename put this one in place of (#352
+    /// F-063). When the base holds it as a regular file, its chunks are
+    /// offered as the new chunks' delta bases; a predecessor the base no
+    /// longer holds, or holds as another kind, offers nothing.
     #[allow(clippy::too_many_arguments)]
     pub fn construct_new(
         workspace: &Workspace,
@@ -176,6 +181,7 @@ impl<'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> CapturedFile
         reader: CapturedReader,
         serial: u64,
         records_scope: IndexedOperationRecordScope,
+        predecessor: Option<u64>,
         policy: ConstructionPolicy,
         capacities: &ConstructionCapacities,
         consumer: &mut dyn FinalizedConsumer,
@@ -206,7 +212,7 @@ impl<'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> CapturedFile
         let result = match bound {
             Ok(facts) => {
                 owner.facts = Some(facts);
-                owner.run_new(policy, capacities, consumer, scope)
+                owner.run_new(predecessor, policy, capacities, consumer, scope)
             }
             Err(original) => Err(owner.shared.borrow_mut().original(original)),
         };
@@ -220,6 +226,7 @@ impl<'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> CapturedFile
     }
     fn run_new(
         &self,
+        predecessor: Option<u64>,
         policy: ConstructionPolicy,
         capacities: &ConstructionCapacities,
         consumer: &mut dyn FinalizedConsumer,
@@ -248,7 +255,21 @@ impl<'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> CapturedFile
             position: 0,
             sealed: false,
         };
-        construct_runs(policy, capacities, &mut runs, consumer, scope).map(|result| result.file)
+        let base = self
+            .base
+            .as_ref()
+            .ok_or(ContentError::InvalidRecord("captured base binding"))?;
+        let view = match predecessor {
+            Some(serial) => predecessor_view(base, serial)
+                .map_err(|original| self.shared.borrow_mut().original(original))?,
+            None => None,
+        };
+        let client = base.client();
+        let offered = view
+            .as_ref()
+            .map(|view| PredecessorBase::new(client.as_ref(), view.root()));
+        construct_runs_with_predecessor(policy, capacities, &mut runs, offered, consumer, scope)
+            .map(|result| result.file)
     }
     fn bind(
         &mut self,
@@ -404,5 +425,16 @@ impl<'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> CapturedFile
             failure: state.failure,
             work: state.work,
         }
+    }
+}
+
+/// The base's regular file `serial`, offered as a delta base. A serial the
+/// base does not hold, or holds as another kind, is no candidate; any other
+/// failure is the base's own and is returned.
+fn predecessor_view(base: &BaseView, serial: u64) -> Result<Option<FileView>, WorkspaceError> {
+    match base.captured_file(serial) {
+        Ok(file) => Ok(file.map(|file| file.view)),
+        Err(WorkspaceError::Content(ContentError::WrongLogicalRole)) => Ok(None),
+        Err(original) => Err(original),
     }
 }

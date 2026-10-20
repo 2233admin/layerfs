@@ -75,6 +75,13 @@ CREATE TABLE fs_digest (
     length INTEGER NOT NULL CHECK(length>=0),
     digest BLOB NOT NULL CHECK(length(digest)=32)
 ) STRICT;
+-- The file a rename put this one in place of (#352 F-063): an advisory
+-- delta base for this file's Commit construction, never a fact about its
+-- bytes. A chain of replacements keeps one row, ending at the oldest file.
+CREATE TABLE fs_predecessor (
+    inode INTEGER PRIMARY KEY CHECK(inode>0),
+    predecessor INTEGER NOT NULL CHECK(predecessor>0 AND predecessor<>inode)
+) STRICT;
 CREATE INDEX fs_data_generation ON fs_data(generation,inode,cell_offset);
 CREATE INDEX fs_truncate_generation ON fs_truncate(generation,inode,depth);
 
@@ -104,4 +111,4 @@ CREATE TABLE commit_record (
     PRIMARY KEY(operation,file_scope,kind,key)
 ) STRICT, WITHOUT ROWID;
 
-PRAGMA user_version=38;
+PRAGMA user_version=39;

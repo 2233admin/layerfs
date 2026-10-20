@@ -54,6 +54,16 @@ pub trait OverlayCapturedNamespace: OverlayCapturedRuns {
     ) -> WorkspaceResult<Vec<Option<layerfs_overlay::CapturedDigest>>> {
         Ok(vec![None; serials.len()])
     }
+    /// Each serial's recorded predecessor: the file a rename put it in place
+    /// of (#352 F-063), offered to its construction as a delta base; at most
+    /// PAGE_ROWS serials. A provider that keeps none answers None for each.
+    fn captured_predecessors(
+        &self,
+        _reader: CapturedReader,
+        serials: &[u64],
+    ) -> WorkspaceResult<Vec<Option<u64>>> {
+        Ok(vec![None; serials.len()])
+    }
 }
 
 impl OverlayCapturedNamespace for layerfs_overlay::Overlay {
@@ -112,5 +122,12 @@ impl OverlayCapturedNamespace for layerfs_overlay::Overlay {
         serials: &[u64],
     ) -> WorkspaceResult<Vec<Option<layerfs_overlay::CapturedDigest>>> {
         layerfs_overlay::Overlay::captured_digests(self, reader, serials).map_err(Into::into)
+    }
+    fn captured_predecessors(
+        &self,
+        reader: CapturedReader,
+        serials: &[u64],
+    ) -> WorkspaceResult<Vec<Option<u64>>> {
+        layerfs_overlay::Overlay::captured_predecessors(self, reader, serials).map_err(Into::into)
     }
 }

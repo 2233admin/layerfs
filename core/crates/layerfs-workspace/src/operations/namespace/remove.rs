@@ -62,5 +62,6 @@ pub(crate) fn remove(
         cell: None,
         write: None,
         claims: None,
+        predecessor: None,
     }))
 }

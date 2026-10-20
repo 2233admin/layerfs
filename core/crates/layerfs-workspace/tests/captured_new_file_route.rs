@@ -44,6 +44,7 @@ fn direct(
             reader,
             serial,
             scope,
+            None,
             policy,
             &policy.capacities(),
             emitted,

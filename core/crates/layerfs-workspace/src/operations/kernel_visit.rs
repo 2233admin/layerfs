@@ -354,7 +354,7 @@ impl KernelMutationVisit {
                     }
                     Ok(Decided::Publish { changes, inode }) => {
                         published = Some(inode);
-                        return Ok(Some((changes, effect(&job.operation, job.serial, open))));
+                        return Ok(Some((*changes, effect(&job.operation, job.serial, open))));
                     }
                     Err(WorkspaceError::Overlay(error)) => return Err(error),
                     Err(error) => {

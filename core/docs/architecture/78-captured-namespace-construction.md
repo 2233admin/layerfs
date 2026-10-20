@@ -221,6 +221,36 @@ answers only roots in `object_location`, so such a file takes the full
 path and its row takes the new root. A root saved earlier in the same,
 unfinished Commit is not reused either.
 
+### Rename predecessors (#352 F-063)
+
+Owner approval 2026-10-20. git (`index.lock` → `index`), editors and
+package managers save by writing a new file and renaming it over the old one.
+The result is a fresh inode, so it has no base file of its own and its chunks
+were stored FULL. The replaced file is now offered as their delta base.
+
+- **Write path (Overlay, schema 39).** A rename whose moved and replaced
+  inodes are both regular files carries `Changes::predecessor`. Its job
+  writes `fs_predecessor(inode, predecessor)` for the moved serial. When the
+  replaced file was itself created since the installed base, its own
+  predecessor is inherited, so a chain of renames before one Commit ends at
+  the file the base holds. A replaced base file is the predecessor itself.
+  The replaced serial's row is removed either way, and a file is never its
+  own predecessor. It is one statement pair in the rename's job, with no
+  Store I/O.
+  [namespace/predecessor.rs](../../crates/layerfs-overlay/src/namespace/predecessor.rs).
+- **Inodes pass.** Per captured inode page, one overlay job reads the
+  predecessors of the fresh live files at or above the chunking cutoff
+  (`captured_predecessors`). `CapturedFileEdits::construct_new` binds the
+  base's regular file of that serial and calls Content
+  `construct_runs_with_predecessor`. The base root is read at the first
+  chunk, then its mapping pages as the edit route's `Aligner` walks forward,
+  never a payload. A serial the base does not hold, or holds as another kind,
+  offers nothing; any other base failure is the Commit's own.
+
+The hint is advisory: the constructed root is the one a plain fresh build
+gives. Storage still makes one PREFIX trial per chunk, under the chunk depth
+cap and chain budgets, and keeps it only when the record is strictly smaller.
+
 ### Custody
 
 `construct` returns `CapturedNamespaceAttempt { result, custody }` and releases
