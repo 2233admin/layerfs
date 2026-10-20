@@ -10,6 +10,7 @@ use layerfs_telemetry::timer::{Active, TimingScope};
 use super::lww::Rules;
 use super::text::{deletion_markers, merge3, Hunk};
 use super::{Conflict, ConflictKind, LwwDecision};
+use crate::compare::bytes::same_content;
 use crate::compare::text::{as_text, MAXIMUM_TEXT_BYTES};
 use crate::compare::tree::{EntryFacts, TreeTable};
 use crate::error::{ContentError, ContentResult};
@@ -125,24 +126,35 @@ pub(super) struct Decider<'a> {
     pub(super) lww: Vec<LwwDecision>,
 }
 
-/// Same entry: both absent, or same kind and, below a directory, same content.
-fn same(x: Option<EntryFacts>, y: Option<EntryFacts>) -> bool {
-    match (x, y) {
-        (None, None) => true,
-        (Some(a), Some(b)) => {
-            a.value.kind == b.value.kind
-                && (a.value.kind == InodeKind::Directory
-                    || a.value.content_root == b.value.content_root)
-        }
-        _ => false,
-    }
-}
-
 fn is_file(entry: Option<EntryFacts>) -> bool {
     entry.is_some_and(|entry| entry.value.kind == InodeKind::RegularFile)
 }
 
 impl Decider<'_> {
+    /// Same entry: both absent, or same kind and, below a directory, same
+    /// content. A regular file's content is its bytes, whatever its root
+    /// (#352 F-073): two sides that wrote the same bytes did not both change it.
+    fn same(
+        &self,
+        reader: &dyn AuthenticatedObjects,
+        x: Option<EntryFacts>,
+        y: Option<EntryFacts>,
+    ) -> ContentResult<bool> {
+        match (x, y) {
+            (None, None) => Ok(true),
+            (Some(a), Some(b)) if a.value.kind == InodeKind::Directory => {
+                Ok(b.value.kind == InodeKind::Directory)
+            }
+            (Some(a), Some(b)) => same_content(
+                reader,
+                &a.value,
+                &b.value,
+                self.timing.child("merge.compare"),
+            ),
+            _ => Ok(false),
+        }
+    }
+
     /// Text of a regular file within the text bound, else `None`.
     pub(super) fn text(
         &self,
@@ -202,10 +214,11 @@ impl Decider<'_> {
         write: &mut dyn FnMut(Vec<u8>) -> ContentResult<u64>,
     ) -> ContentResult<Pick> {
         let ours = || o.map_or(Pick::Absent, Pick::Take);
-        if same(o, t) || same(b, o) {
+        let reader = resolver.reader;
+        if self.same(reader, o, t)? || self.same(reader, b, o)? {
             return Ok(Pick::Keep);
         }
-        if same(b, t) {
+        if self.same(reader, b, t)? {
             return Ok(ours());
         }
         if let Some(rule) = self.rules.matching(path) {
@@ -219,7 +232,6 @@ impl Decider<'_> {
             });
             return Ok(if kept_ours { ours() } else { Pick::Keep });
         }
-        let reader = resolver.reader;
         let conflict = |kind, hunks: Vec<Hunk>| Conflict {
             path: path.to_owned(),
             kind,

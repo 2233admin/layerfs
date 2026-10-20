@@ -1,15 +1,16 @@
-# F-073 · r058: diff_commits called a file written away and back a content change
+# F-073 · r058: a file written away and back counted as a content change in diffs and merges
 
-> **Status:** Current fix record (#352 range 058, a1 and a2 stop). Product
-> change in `layerfs-content` (`compare/bytes.rs`) and `layerfs-store-service`
-> (`read/compare.rs`). Store format, overlay schema and construction are
-> unchanged. Not an F-063 interaction.
+> **Status:** Current fix record (#352 range 058, a1 and a2 stop), two
+> commits: the difference, then merge. Product change in `layerfs-content`
+> (`compare/bytes.rs`, `merge/decide.rs`, `merge/units.rs`) and
+> `layerfs-store-service` (`read/compare.rs`). Store format, overlay schema
+> and construction are unchanged. Not an F-063 interaction.
 
 | | |
 | --- | --- |
 | Trigger | [range 058](../ranges/range-058.md): the checkpoint's path check listed `packages/cordis/tool-cordis/src/api-catalog.ts` (git 361, LayerFS 537 paths). Its bytes were git's at both heads (blob `4d986582`, 234,915 B); ids and the full tree compare passed |
 | Issue | #352 |
-| Kind | code path: `diff_commits` and `diff_branches` items, and `fs.diff_files` `contentEqual`, decided "content changed" from unequal content roots |
+| Kind | code path: `diff_commits` and `diff_branches` items, `fs.diff_files` `contentEqual`, merge's three-way decision and merge-unit classification decided "content changed" from unequal content roots |
 | Binaries | the run's SDK addon `4c52d23c` (with F-063); pre-F-063 addon `bf1cd303` (origin/main `6e8986ff46`); fixed addon `7a35c33c` (Linux, pinned image `378b799ef433`); runtime image `d3773b4e` |
 | Commits | this commit; regression tests `core/crates/layerfs-api/tests/sdk_written_back.rs` |
 | Recovery | none: no attempt reran. Probes ran on clones of `p3-main-x-b`'s Store, copied through a read-only mount (sha256 `e8c61042…`) |
@@ -96,20 +97,42 @@ whose roots differ:
 - `fs.diff_files`' `contentEqual` for files that are not text. Text files
   were already compared by their text.
 
-**Why not make the write reproduce the old root?**
+### Merge (second commit)
 
-- The root depends on the edit's predecessor by design. Making a write
-  canonical would mean rebuilding without the localized-edit structure, which
-  makes edit cost depend on file size again (owner requirement, #316). The
-  alternative is a full-bytes digest lookup on every in-place write.
-- Even then, the earlier version's root was not recorded in `file_digest`:
-  it was built by an edit, and fix 044 records only fresh, appended files.
-- Fixing the comparison covers every route (Store edit, rename-over,
-  Workspace in-place write) and keeps F-063's and F-005's storage savings.
+Merge had the same false difference, in two places. Both now use
+`compare::same_content` (kind and root, or for two regular files, the bytes).
+
+- **`merge/decide.rs`, `Decider::same`.** This is the three-way rule:
+  ours equal to theirs, or ours equal to the base, keeps ours; theirs equal
+  to the base takes ours. Before, sides with equal bytes under different
+  roots went on to the text merge. Text merged back to the same bytes, but
+  the file was rewritten. A file that is not text, or text over 1 MiB,
+  became a `Binary` conflict, and the merge was refused. The by-serial merge
+  (#355 M1) reaches its "both changed" serials through this same rule.
+- **`merge/units.rs`, `changed`** (F-057 merge units). A side counted a path
+  as changed in its unit if its root differed from the base's. A side that
+  only wrote a file away and back could therefore make a unit "changed by
+  both". If that side's write was later, the other side's real changes in
+  the unit were reverted. A metadata change (the write-back's time) still
+  counts as a change, as before.
+
+### Options weighed
+
+| Option | Cost | Verdict |
+| --- | --- | --- |
+| (a) Store a whole-file digest for every file version and compare digests when roots differ | Every in-place edit must hash the whole file. A localized edit reads only its windows today (#316 requirement: edit cost independent of file size). Chunk ids cannot be combined into a whole-file BLAKE3, so this is O(file size) per edit, or a format change to a chunk-level digest tree. It needs a new per-version table, and older versions have no digest, so (b) is still needed for them | rejected: it moves the cost onto every write, the common case, for a rare comparison |
+| (b) Compare bytes when roots differ | Only when two regular files have different roots and the same length. Shared extents are skipped, and it stops at the first differing window | **chosen** |
+| (c) Make the edit path produce the plain-build root for the same bytes | It changes what a root identifies. Every edit would have to rebuild the CDC layout over the whole file: O(size), and the predecessor's extent reuse (F-005) would be lost | rejected: changes identity and edit cost |
+
+Measured for (b): r58's own checkpoint diff, below, took 11.3 → 9.5 s,
+one sample each. For the cost (a) would move onto writes: the r58
+reconcile's 234,915 B in-place `fs.write` spent 3.5 ms in `files.change`.
+A whole-file hash adds O(size) to every such write and grows with the
+file. (b) pays only when roots differ and lengths are equal.
 
 ## Proof
 
-**`sdk_written_back.rs`** (two tests). In each, Init saves a 400 KiB file,
+**`sdk_written_back.rs`** (three tests). In each, Init saves a 400 KiB file,
 and an edit gives the start version an edit-built root, as r57's reconcile
 did. Then:
 
@@ -126,9 +149,18 @@ did. Then:
      `content: false`.
    - `contentEqual` is true.
 
-Without the `read/compare.rs` change, both tests fail with the run's item
-shape: `content: true`, plus `identity: true` for the rename. With it, both
-pass.
+3. **Merge**: two Branches from the start version both end at the same
+   bytes, built over different predecessors (one edit; or another edit, then
+   that one). The bytes are not text.
+   - `fs.diff_files` reports them equal.
+   - `branch.merge` succeeds (`Merged`), and the merged file holds those
+     bytes.
+
+Without the `read/compare.rs` change, tests 1 and 2 fail with the run's item
+shape: `content: true`, plus `identity: true` for the rename. Without the
+merge change, test 3 fails:
+`Conflict: ours + theirs conflict in 1 file(s); nothing was created`. With
+the changes, all three pass.
 
 **The run's own checkpoint.** `diff_commits` `12dbfee1…` → `12286c64…`, all
 pages, on the r58 clone, one sample per addon, host 1-min load 5.4:
@@ -151,18 +183,19 @@ same logic.
   - content: 485 passed, 2 ignored;
   - store-service: 3 passed;
   - layerfs-api: all 42 integration binaries pass (they share the changed
-    test support), including `sdk_written_back` (2).
+    test support), including `sdk_written_back` (3).
 - Boundary guard: the same 57 violations as origin/main. Tool self-tests:
   50 ok.
 - rustfmt: the changed files are clean.
 
 ## Left open
 
-- **Merge** (`merge/decide.rs` and `merge/units.rs`) still decides
-  "unchanged" by root. Two sides that both rewrote a file to the same bytes
-  under different roots are treated as both changed. For text this
-  three-way merges to the same bytes. For binary it may conflict. No range
-  has shown it.
+- **`root_changes`** (`commit_merge.rs`, the paths a conflicted Commit
+  merge wrote) still compares roots. It is informational, in a reply that
+  already reports conflicts.
+- **The daemon's `operator.workspace.changes`** still compares roots. It
+  is a diagnostic.
+- **`sandbox.status`** reports dirty overlay counts and compares no roots.
 - **`operator.files.history`, `files.stats` and `fs.blame`** count a
   rewrite to the same bytes under a new root as a revision. That is a
   history listing, not a correctness check, and is left as is.

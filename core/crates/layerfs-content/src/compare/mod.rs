@@ -10,7 +10,7 @@ pub mod sorted;
 pub mod text;
 pub mod tree;
 
-pub use bytes::same_file_bytes;
+pub use bytes::{same_content, same_file_bytes};
 pub use changes::{BindingHints, ChangeWalk, Pair, Plan, MAXIMUM_CHANGED};
 pub use memo::{Memo, MEMO_PAGES};
 pub use named::{name_from_hints, NamingWork};

@@ -70,7 +70,11 @@ places:
 - whether a same-inode pair whose metadata is unchanged is listed at all;
 - `fs.diff_files`'s `contentEqual` for files that are not text.
 
-Merge's three-way decision still compares roots.
+Merge uses `compare::same_content`, the same check on inode values, in two
+places:
+- the three-way decision (`Decider::same`): sides with equal bytes did not
+  both change a file;
+- merge-unit classification (`units.rs` `changed`).
 
 Text is a regular file of at most `MAXIMUM_TEXT_BYTES` (1 MiB) that is valid
 UTF-8 with no NUL byte. Lines are the `\n`-separated pieces, as the simulator

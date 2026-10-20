@@ -155,3 +155,45 @@ fn a_file_saved_away_and_back_by_rename_over_is_no_content_change() {
     assert!(diff_files(&fixture, &start, &back).get_bool("contentEqual"));
     fixture.cleanup();
 }
+
+#[test]
+fn a_merge_of_two_sides_that_wrote_the_same_bytes_does_not_conflict() {
+    let Start {
+        fixture,
+        bytes: original,
+        ..
+    } = fixture("sdk-written-back-merge");
+    for side in ["ours", "theirs"] {
+        fixture.call(
+            "branch.fork",
+            vec![
+                ("name", SdkValue::text(side)),
+                ("from", SdkValue::text("work")),
+            ],
+        );
+    }
+    // Both sides end at the same bytes, built over different predecessors:
+    // the same bytes under two roots. Not text, so a false difference would
+    // be a binary conflict.
+    let same = edited(&original, 300_000, 9);
+    let ours = head(&fixture.apply("ours", vec![write(PATH, same.clone())]));
+    fixture.apply("theirs", vec![write(PATH, edited(&original, 100_000, 10))]);
+    let theirs = head(&fixture.apply("theirs", vec![write(PATH, same)]));
+    let files = diff_files(&fixture, &ours, &theirs);
+    assert!(files.get_bool("contentEqual"), "{files:?}");
+
+    let merged = fixture
+        .try_call(
+            "branch.merge",
+            vec![
+                ("branch", SdkValue::text("ours")),
+                ("with", SdkValue::text("theirs")),
+                ("name", SdkValue::text("merged")),
+            ],
+        )
+        .unwrap_or_else(|refusal| panic!("equal sides conflicted: {refusal:?}"));
+    assert_eq!(merged.get_text("kind"), Some("Merged"), "{merged:?}");
+    let files = diff_files(&fixture, &ours, "merged");
+    assert!(files.get_bool("contentEqual"), "{files:?}");
+    fixture.cleanup();
+}

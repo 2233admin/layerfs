@@ -11,6 +11,7 @@ use layerfs_telemetry::timer::{Active, TimingScope};
 
 use crate::error::{ContentError, ContentResult};
 use crate::file::{Extent, ExtentCursor, FileView};
+use crate::object::inode_leaf::{InodeKind, InodeValue};
 use crate::object::{AuthenticatedObjects, ObjectId};
 
 /// Bytes read from each side per comparison.
@@ -80,6 +81,27 @@ pub fn same_file_bytes(
         }
         Ok(from >= length || sides.same(from..length)?)
     })
+}
+
+/// Whether two inode values hold the same content: the same kind and root,
+/// or two regular files whose different roots hold the same bytes. Other
+/// kinds compare their roots.
+pub fn same_content(
+    reader: &dyn AuthenticatedObjects,
+    left: &InodeValue,
+    right: &InodeValue,
+    scope: TimingScope<'_>,
+) -> ContentResult<bool> {
+    if left.kind != right.kind {
+        return Ok(false);
+    }
+    if left.content_root == right.content_root {
+        return Ok(true);
+    }
+    if left.kind != InodeKind::RegularFile {
+        return Ok(false);
+    }
+    same_file_bytes(reader, left.content_root, right.content_root, scope)
 }
 
 struct Sides<'a, 's> {
