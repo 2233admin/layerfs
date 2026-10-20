@@ -45,3 +45,4 @@
 | 038 | 66 | 45,294 | **watch** | Speed | 28.6 MiB | [range-038](ranges/range-038.md) |
 | 039 | 71 | 46,731 | **optimize** | Counters | 41.4 MiB | [range-039](ranges/range-039.md) |
 | 040 | 72 | 48,092 | **optimize** | Counters | 34.1 MiB | [range-040](ranges/range-040.md) |
+| 041 | 65 | 48,936 | **optimize** | Counters | 30.9 MiB | [range-041](ranges/range-041.md) |
