@@ -40,3 +40,4 @@
 | 033 | 61 | 37,184 | **optimize** | Counters | 24.6 MiB | [range-033](ranges/range-033.md) |
 | 034 | 61 | 38,594 | **watch** | Speed | 32.7 MiB | [range-034](ranges/range-034.md) |
 | 035 | 49 | 39,429 | **optimize** | Counters | 28.6 MiB | [range-035](ranges/range-035.md) |
+| 036 | 63 | 42,419 | **watch** | Speed | 39.9 MiB | [range-036](ranges/range-036.md) |
