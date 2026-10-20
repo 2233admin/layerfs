@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fetchScript } from "../fetch-store.mjs";
 import { addedBySource, changedGroupBytes, cumulative, liveParts, sealedParts, seedBySource, stepSource, storageFigures, storageProblems } from "../storage.mjs";
 import { CLEAN_REMOVE, installCommand, STORE_MOUNT, parseLister, rootless, verifiedAges, buildBytes, buildListCommand, changedPackages, CLOSURE_OUTPUT, closureSteps, studyMeasurements, compareInstalled, rawChangedBytes, storeSetup, installInputsChanged, listerCommand, normalizeOutput, nothingToBuild, playClosure, tscStates, buildCommand } from "../closure.mjs";
@@ -1007,6 +1007,16 @@ test("closure (INSTALLS): install, build and test steps; the node_modules lister
   // folder the checkpoint no longer has, its emptied folder pruned (r019 a2: an orphan's lib/ bundled by tsdown)
   assert.equal(repairClean(files), `rm -rf 'packages/a/lib' 'packages/b/lib' packages/*/*/lib && find . -path ./.git -prune -o -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f && ${PRUNE_EMPTY}`);
   assert.equal(repairClean(new Map([["vendor/v/package.json", {}], ["vendor/v/tsconfig.json", {}]])), "rm -rf 'vendor/v/lib' && find . -path ./.git -prune -o -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f", "no packages/ folder, no orphan sweep");
+  // fix 060 (r044 a1): a packages/<group>/<name> folder the checkpoint does not track goes whole, ignored or emitted
+  // files and all (git clean -f never enters it); tracked folders keep their files
+  {
+    const tmp = mkdtempSync(join(tmpdir(), "fix060-")), at = (p) => join(tmp, p);
+    for (const p of ["packages/g/a/src/x.ts", "packages/g/a/node_modules/m/i.js", "packages/g/gone/src/index.js", "packages/g/gone/src/index.d.ts", "packages/g/bare/README.md"]) { mkdirSync(dirname(at(p)), { recursive: true }); writeFileSync(at(p), "x"); }
+    const tracked = new Map([["packages/g/a/package.json", {}], ["packages/g/a/tsconfig.json", {}], ["packages/g/bare/README.md", {}]]);
+    execFileSync("sh", ["-c", repairClean(tracked).replace(` && ${PRUNE_EMPTY}`, "")], { cwd: tmp }); // PRUNE_EMPTY is GNU xargs (the image)
+    assert.deepEqual(["packages/g/a/src/x.ts", "packages/g/a/node_modules/m/i.js", "packages/g/gone", "packages/g/bare/README.md"].map((p) => existsSync(at(p))), [true, true, false, true]);
+    rmSync(tmp, { recursive: true, force: true });
+  }
   assert.equal(closureSteps({ packages, tsconfigs, run: [], changed: ["packages/a/src/x.ts"], installed: true, milestone: false }).find((s) => s.kind === "build").command, buildCommand(["packages/a"]), "only the repair cleans");
   const kinds = (o) => closureSteps({ packages, tsconfigs, run: [], ...o }).map((s) => s.kind);
   assert.deepEqual(kinds({ changed: ["packages/a/src/x.ts"], installed: false, milestone: false }), ["install", "build"]);

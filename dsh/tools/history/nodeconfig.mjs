@@ -51,7 +51,13 @@ export function repairClean(files) {
   // every *.tsbuildinfo in the tree, not only under the packages: a tsconfig may put it elsewhere (fix 051, r022:
   // packages/examples/cli-demo's `tsBuildInfoFile` is ../../../.typecheck/cli-demo.tsbuildinfo; kept, it made
   // `tsc -b` skip cli-demo and tsdown fail on its lib/types/bin.js, natively the same)
-  return `rm -rf ${dirs.map((d) => quote(`${d}/lib`)).join(" ")}${orphans ? " packages/*/*/lib" : ""} && find . -path ./.git -prune -o -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f${orphans ? ` && ${PRUNE_EMPTY}` : ""}`;
+  // and every such folder the checkpoint does not track at all goes whole (fix 060, r044 a1): `git clean -f` (decision
+  // B, no -d) never enters an untracked folder, so the .js/.d.ts a lane's tsc emitted there beside the reconcile's
+  // removed sources stayed, and tsdown took the folder as a package (packages/subagent/subagent-subprocess, no
+  // package.json: "[@deepseek-ai/dsh-root] Cannot find entry", natively the same)
+  const kept = [...new Set([...files.keys()].map((p) => p.split("/")).filter((s) => s[0] === "packages" && s.length > 3).map((s) => s.slice(0, 3).join("/")))].sort();
+  const sweep = orphans && kept.length ? ` && for d in packages/*/*/; do [ -d "$d" ] || continue; case "\${d%/}" in ${kept.map(quote).join("|")}) ;; *) rm -rf -- "$d" ;; esac; done` : "";
+  return `rm -rf ${dirs.map((d) => quote(`${d}/lib`)).join(" ")}${orphans ? " packages/*/*/lib" : ""} && find . -path ./.git -prune -o -name node_modules -prune -o -name '*.tsbuildinfo' -type f -print0 | xargs -0 -r rm -f${sweep}${orphans ? ` && ${PRUNE_EMPTY}` : ""}`;
 }
 /**
  * The lead repair's build: its clean (repairClean), then dsh's whole build (wholeBuild), since tsdown bundles
