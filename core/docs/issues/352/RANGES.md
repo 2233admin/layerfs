@@ -48,4 +48,4 @@
 | 041 | 65 | 48,936 | **optimize** | Counters | 30.9 MiB | [range-041](ranges/range-041.md) |
 | 042 | 70 | 50,146 | **optimize** | Counters | 41.4 MiB | [range-042](ranges/range-042.md) |
 | 043 | 66 | 51,610 | **optimize** | Counters | 42.8 MiB | [range-043](ranges/range-043.md) |
-| 044 | 60 | 52,847 | **stop** | Correctness | 24.4 MiB | [range-044](ranges/range-044.md) |
+| 044 | 60 | 52,850 | **optimize** | Counters | 36.4 MiB | [range-044](ranges/range-044.md) |

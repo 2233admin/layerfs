@@ -253,6 +253,8 @@ export const SYNC_TREE = "const fs=require(`fs`),p=require(`path`);const [src,ds
 export const LANE_MERGE_VERSION = 3;
 export const oracleKey = ({ tree, inputs, states, tail, image }) => createHash("sha256").update(JSON.stringify({ v: LISTER_VERSION, chain: CHAIN_VERSION, tree, inputs, states, tail, image,
   laneMerge: states?.some((st) => st.lane) ? LANE_MERGE_VERSION : undefined,
+  // the native clean's own command (fix 060 part 2, -d): an oracle cleaned by an older command is not reused
+  cleanCommand: states?.some((st) => st.clean) ? createHash("sha256").update(nativeClean(0, "/i")).digest("hex").slice(0, 16) : undefined,
   // the tail's own commands (r028 a1, fix 053): an oracle built with an older emitted-id or vitest command is not reused
   tailCommands: tail?.build || tail?.tests?.length ? tailCommands() : undefined })).digest("hex").slice(0, 24);
 const tailCommands = () => createHash("sha256").update(`${EMITTED}\0${vitestCommand(["f"], 1)}`).digest("hex").slice(0, 16);
