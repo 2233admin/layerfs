@@ -34,7 +34,7 @@ export { BUILD_GROUPS };
 import { selectTests, vitestCommand } from "./unit-tests.mjs";
 import { devSteps } from "./devcheck.mjs";
 import { decoyBytes, pad, Tree } from "./steps.mjs";
-import { UNTRACKED_LIST } from "./gitlanes.mjs";
+import { UNTRACKED_DIRS, UNTRACKED_LIST } from "./gitlanes.mjs";
 import { installCommand } from "./closure.mjs";
 import { checkStates, isNativeState, provenRun, restoreCommand, saveCommand, stateCommand, stateMounts, NATIVE_STATES } from "./nativestate.mjs";
 
@@ -99,7 +99,7 @@ export function modelDelta(plan, base, pt) {
  * normalizes the earlier roots, as the LayerFS lister does.
  */
 /** The native `git clean -f` of state i in the current folder (decision B): `idx` holds `git ls-tree -r -z` of its tree. */
-export const nativeClean = (i, idx, scratch = "/tmp") => `if rm -rf ${scratch}/cg && git init -q ${scratch}/cg && GIT_DIR=${scratch}/cg/.git GIT_WORK_TREE=$PWD git update-index -z --index-info < ${idx} && (export GIT_DIR=${scratch}/cg/.git GIT_WORK_TREE=$PWD; ${UNTRACKED_LIST}) > ${scratch}/cl${i}; then echo "@@cleaned ${i} $(tr -cd '\\0' < ${scratch}/cl${i} | wc -c | tr -d ' ')"; xargs -0 rm -f -- < ${scratch}/cl${i}; else echo "@@cleaned ${i} -1"; fi`;
+export const nativeClean = (i, idx, scratch = "/tmp") => `if rm -rf ${scratch}/cg && git init -q ${scratch}/cg && GIT_DIR=${scratch}/cg/.git GIT_WORK_TREE=$PWD git update-index -z --index-info < ${idx} && (export GIT_DIR=${scratch}/cg/.git GIT_WORK_TREE=$PWD; ${UNTRACKED_LIST} > ${scratch}/cl${i} && ${UNTRACKED_DIRS} > ${scratch}/cd${i}); then echo "@@cleaned ${i} $(tr -cd '\\0' < ${scratch}/cl${i} | wc -c | tr -d ' ')"; tr '\\0' '\\n' < ${scratch}/cd${i} | sed 's/^/@@cleandir ${i} /'; xargs -0 rm -f -- < ${scratch}/cl${i}; xargs -0 -r -I{} find {} -depth -type d -empty -delete < ${scratch}/cd${i}; else echo "@@cleaned ${i} -1"; fi`;
 
 /**
  * Option A (owner 2026-10-19, fix 042): the lane points' states (`lane`, `merge` = the lane's place in the
@@ -225,7 +225,7 @@ export function nativeChain({ repo, states, tail = {}, image, volume, name, save
       exit: Number(String(pick("@@exit ")[0] ?? "NaN").split(" ")[0]), installMs: Number(String(pick("@@exit ")[0] ?? "").split(" ")[1] ?? NaN), output: normalizeOutput(pick("@@out ").join("\n")), ...parseLister(r.stdout),
       tsc: tsc ? { exit: tsc[0], ms: tsc[1], output: pick("@@tscout ").join("\n") } : null,
       emitted: tail.build ? parseEmitted(pick("@@emit ").join("\n")) : null, vitest, ms: Date.now() - t0, root: at, installRoot,
-      cleaned: pick("@@cleaned ").map((l) => { const [i, files] = l.split(" ").map(Number); return { i, files }; }),
+      cleaned: pick("@@cleaned ").map((l) => { const [i, files] = l.split(" ").map(Number); return { i, files, dirs: pick(`@@cleandir ${i} `) }; }),
       ...(lanes.lanes ? { lanes: pick("@@lanecap ").map((l) => { const [n, changed, removed] = l.split(" ").map(Number); return { n, changed, removed }; }),
         twoSided: { n: Number(pick("@@twosided ")[0] ?? NaN), paths: pick("@@twopath ") }, ...(lanes.units ? { units: pick("@@unit ").map((l) => JSON.parse(l)) } : {}) } : {}),
       ran: proven.ran, ...(saved ? { saved: { volume: saveState.volume ?? NATIVE_STATES, file: saveState.file, sha256: saved[0], bytes: Number(saved[1]) } } : {}),

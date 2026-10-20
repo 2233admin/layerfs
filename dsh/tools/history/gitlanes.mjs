@@ -110,28 +110,34 @@ export const statusLines = (stdout) => {
 };
 
 /**
- * The untracked, unignored files `git clean -f` removes (liaison decision B, 2026-10-19, owner-delegated 16–20 run):
- * untracked files outside every ignore rule, never in an untracked folder (no -d) and never ignored ones (no -x), so
- * node_modules and build output under .gitignore stay. A lane's build can emit beside its sources on a tree the
- * plan's lane split makes (r016.a1: dsh 72bb02e68e's move split over two lanes), and the lead's merge carries every
- * file of a Branch into main. `list` prints NUL-separated paths relative to the work tree.
+ * The untracked, unignored files `git clean -f -d` removes (liaison decision B, 2026-10-19, owner-delegated 16–20
+ * run; `-d` added by the liaison's ruling of 2026-10-20, fix 060): untracked files outside every ignore rule, also
+ * inside a wholly untracked folder, and never ignored ones (no -x), so node_modules and build output under
+ * .gitignore stay. A lane's build can emit beside its sources on a tree the plan's lane split makes (r016.a1: dsh
+ * 72bb02e68e's move split over two lanes; r044.a1: a package added and removed in the range, its folder left with
+ * only emitted files), and the lead's merge carries every file of a Branch into main. Prints NUL-separated paths
+ * relative to the work tree.
  */
-export const UNTRACKED_LIST = "git ls-files -z --others --exclude-standard --directory --no-empty-directory | tr '\\0' '\\n' | grep -v '/$' | tr '\\n' '\\0'";
-/** The lead's clean before the status checks: what it removes (count, bytes, the first 200 paths), checked, then `git clean -f`. */
+export const UNTRACKED_LIST = "git ls-files -z --others --exclude-standard";
+/** The wholly untracked folders (no tracked file, not ignored) `-d` reaches, NUL-separated, each without its `/`. */
+export const UNTRACKED_DIRS = "git ls-files -z --others --exclude-standard --directory --no-empty-directory | tr '\\0' '\\n' | grep '/$' | sed 's#/$##' | tr '\\n' '\\0'";
+/** The lead's clean before the status checks: what it removes (count, bytes, the first 200 paths, every folder), checked, then `git clean -f -d`. */
 export const cleanScript = () => [
-  `cl=/tmp/lfs352-clean.$$; ${UNTRACKED_LIST} > $cl`,
+  `cl=/tmp/lfs352-clean.$$; ${UNTRACKED_LIST} > $cl; ${UNTRACKED_DIRS} > $cl.d`,
+  "echo \"@@cleanedDirs $(tr -cd '\\0' < $cl.d | wc -c)\"",
+  "echo @@cleanedDirList; tr '\\0' '\\n' < $cl.d; echo @@end",
   "echo \"@@cleanedFiles $(tr -cd '\\0' < $cl | wc -c)\"",
   "echo \"@@cleanedBytes $(xargs -0 -r cat -- < $cl | wc -c)\"",
   // the guard: none is tracked by the checkpoint, none is ignored
   "echo \"@@cleanedTracked $(xargs -0 -r git ls-files -- < $cl | wc -l)\"",
   "echo \"@@cleanedIgnored $( (xargs -0 -r git check-ignore --no-index -- < $cl || true) | wc -l)\"",
   "echo @@cleaned; tr '\\0' '\\n' < $cl | head -200; echo @@end",
-  "git clean -f -q",
-  `echo "@@cleanLeft $(${UNTRACKED_LIST} | tr -cd '\\0' | wc -c)"; rm -f $cl`,
+  "git clean -f -d -q",
+  `echo "@@cleanLeft $(${UNTRACKED_LIST} | tr -cd '\\0' | wc -c)"; rm -f $cl $cl.d`,
 ].join("\n");
-/** The lines between `@@cleaned` and the next mark. */
-export const cleanedPaths = (stdout) => {
-  const lines = String(stdout).split("\n"), at = lines.indexOf("@@cleaned");
+/** The lines between `@@cleaned` (or `mark`) and the next mark. */
+export const cleanedPaths = (stdout, mark = "@@cleaned") => {
+  const lines = String(stdout).split("\n"), at = lines.indexOf(mark);
   if (at < 0) return [];
   const out = [];
   for (const l of lines.slice(at + 1)) { if (l.startsWith("@@")) break; if (l) out.push(l); }

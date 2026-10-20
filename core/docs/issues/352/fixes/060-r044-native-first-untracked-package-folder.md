@@ -1,14 +1,14 @@
-# Range 044 (native first) · the repair clean keeps a package folder the checkpoint no longer tracks
+# Range 044 · a package folder the checkpoint no longer tracks: kept by the repair clean (native first) and by decision B's `git clean -f` (a1 stop)
 
 > **Status:** Current fix record. Harness workload fix in `dsh/tools/history`; no product change. Caught by the step-0 native-first repair check, before any LayerFS attempt.
 
 | | |
 | --- | --- |
-| Trigger | `nodeproof.mjs calibrate --range 44` (run `p3-main-v`): NATIVE REFERENCE BROKEN, build exit 1, tsdown `[@deepseek-ai/dsh-root] Cannot find entry: ["lib/types/{index,invariant}.js"]` |
+| Trigger | (1) `nodeproof.mjs calibrate --range 44` (run `p3-main-v`): NATIVE REFERENCE BROKEN, build exit 1, tsdown `[@deepseek-ai/dsh-root] Cannot find entry: ["lib/types/{index,invariant}.js"]`. (2) r044 a1 after part 1: STOP `r044.git-main: git status --porcelain lists 1 lines at the checkpoint: ?? packages/subagent/subagent-subprocess/` |
 | Playbook step | D0 (oracle checked before the product) |
 | Kind | none: the repair's clean command (F-059, `repairClean`); daemon `27a769a4`, addon `0611f3e0` and Store format unchanged |
-| Commits | this commit: `nodeconfig.mjs` `repairClean`; test in `tests/p2.mjs` |
-| Recovery | none needed: range 44 a1 plays with the fix |
+| Commits | `45ea9ee411`: `nodeconfig.mjs` `repairClean`, test in `tests/p2.mjs`. Part 2: `gitlanes.mjs` (`UNTRACKED_LIST`, `UNTRACKED_DIRS`, `cleanScript`), `nodeproof.mjs` `nativeClean`, `gitplay.mjs` (metrics), `p3.mjs` (report line); test in `tests/p3.mjs` |
+| Recovery | r44 a1 stays a stop (git); a2 plays on a fork of the r43 snapshot with both parts |
 
 ## What went wrong
 
@@ -40,3 +40,31 @@
 - Test: `tests/p2.mjs` runs the clean in a scratch folder. It removes an untracked
   folder's emitted files and keeps tracked folders' sources and node_modules
   (70/70). `tests/p3.mjs` 35/35.
+
+## Part 2 · decision B with `-d` (liaison ruling 2026-10-20)
+
+- With part 1, the native reference passed, but r044 a1 stopped at the lead's git
+  check. On LayerFS the folder held the same emitted files. `git clean -f`
+  (decision B, no `-d`) cleaned 0 files: its list drops a wholly untracked
+  folder's `dir/` entry. `git status` then listed `?? packages/subagent/subagent-subprocess/`.
+- The liaison's ruling, quoted in part: "approved. The lead's clean becomes `git clean
+  -f -d`, still without `-x`." Its conditions: identical in the LayerFS lead and in the
+  native chain, and in no other step; every removed path, files and folders, recorded
+  in the range metrics, with the count cited in each range comment; the removed folders
+  listed in the 41–45 and 46–50 summaries, and any folder that held a file tracked at
+  an earlier checkpoint, or that is not a leftover of a removed package or failed
+  build, flagged to the liaison.
+- The fix:
+  - `UNTRACKED_LIST` is every untracked, unignored file at any depth, including
+    inside an untracked folder.
+  - `UNTRACKED_DIRS` lists the wholly untracked folders that `-d` reaches.
+  - The lead runs `git clean -f -d -q`. Its metrics `git.lead.cleaned` add `dirs`
+    and `dirPaths`, and the report's Git line names the folders.
+  - The native clean removes the same files, then the emptied folders
+    (`find -depth -type d -empty -delete`), and records them as `@@cleandir`
+    (`proofs["lead.repair"].nativeCleaned[].dirs`).
+  - Ignored files and node_modules stay on both sides, so a folder that also holds
+    ignored output keeps it.
+- Test: `tests/p3.mjs` decision B case. It covers a folder left with only emitted
+  files, one that also holds ignored `lib/`, and an untracked `newdir/`, on both
+  the lead and the native side (35/35). `tests/p2.mjs` 70/70, `tests/runner.mjs` 20/20.

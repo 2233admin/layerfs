@@ -96,7 +96,7 @@ export function p3Headline(m) {
 export function p3CorrectnessRows(m) {
   const p3 = m.p3 ?? {}, g = p3.git, git = gitOutcome(g), cc = p3.conflicts, inp = p3.node?.inputs;
   return [
-    ["Git", git ? (git.ok ? `**HEAD = checkpoint \`${String(g.checkpoint).slice(0, 9)}\`** · ${int(g.commitsWritten)} commits written for ${int(g.dshCommits)} dsh commits · status clean · fresh mount read back 0 · lane guard 0${g.cleaned ? ` · git clean ${int(g.cleaned.files)} untracked, unignored (${int(g.cleaned.bytes)} B)` : ""}` : `**${git.bad.join("; ")}**`) : NOT_RECORDED],
+    ["Git", git ? (git.ok ? `**HEAD = checkpoint \`${String(g.checkpoint).slice(0, 9)}\`** · ${int(g.commitsWritten)} commits written for ${int(g.dshCommits)} dsh commits · status clean · fresh mount read back 0 · lane guard 0${g.cleaned ? ` · git clean ${int(g.cleaned.files)} untracked, unignored (${int(g.cleaned.bytes)} B)${g.cleaned.dirs ? `, ${int(g.cleaned.dirs)} folders (${g.cleaned.dirPaths.map((d) => `\`${d}\``).join(", ")})` : ""}` : ""}` : `**${git.bad.join("; ")}**`) : NOT_RECORDED],
     ["Install inputs (NODE_RULE §3; reported, not gated)", inp ? `${int(inp.consistent)} of ${int(inp.total)} lane steps consistent` : NOT_RECORDED],
     ["Conflicts by path class", cc ? CONFLICT_CLASSES.map(([k, name]) => `${name} ${int(cc[k] ?? 0)}`).join(" · ") : NOT_RECORDED],
   ];
