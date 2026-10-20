@@ -300,11 +300,14 @@ export async function startRange(run, k, plan, measured) {
   // NODE_RULE §2: the lead's first install (and at milestones its clean reinstall) on its Branch, before any lane forks
   ctx.node = ctx.untracked ? nodeContext(run, plan) : null;
   if (ctx.node) {
+    // fix 069 (liaison ruling 2026-10-20): the chain the milestone's clean install runs on, before it restarts the
+    // chain; nodeproof.mjs replays it natively under the lead's clean install (the live tree keeps its build output)
+    const chainBefore = run.state.installed && plan.milestone ? (run.state.closureChain ?? []).map((e) => ({ tree: git(run.repo, ["rev-parse", `${e.checkpoint}^{tree}`]).trim(), command: e.command, kind: e.kind, ...(e.state ? { state: e.state } : {}) })) : null;
     const r = await leadInstall(run, k, plan, ctx);
     if (r) run.progress?.(`lead install ${r.install.exitCode} ${r.install.ms} ms, tsc ${r.tsc?.exitCode} ${r.tsc?.ms} ms, point ${r.ms} ms`);
     // the chain every lane point starts from (nodeproof.mjs replays it natively): as trees, with the range base's
     const treeOf = (c) => git(run.repo, ["rev-parse", `${c}^{tree}`]).trim();
-    Object.assign(ctx.node, { baseTree: treeOf(run.state.prevCommit), chainInputs: inputsHash(base), chain: (run.state.closureChain ?? []).map((e) => ({ tree: treeOf(e.checkpoint), command: e.command, kind: e.kind, ...(e.state ? { state: e.state } : {}) })) });
+    Object.assign(ctx.node, { baseTree: treeOf(run.state.prevCommit), chainInputs: inputsHash(base), chain: (run.state.closureChain ?? []).map((e) => ({ tree: treeOf(e.checkpoint), command: e.command, kind: e.kind, ...(e.state ? { state: e.state } : {}) })), ...(chainBefore ? { chainBefore } : {}) });
   }
   const from = ctx.git?.seed || ctx.node?.points.length ? ctx.lead : "main";
   for (const l of plan.lanes) await expectCall(run, `r${pad(k)} fork ${l.name}`, () => run.lf.branch.fork(l.name, from), "Forked");

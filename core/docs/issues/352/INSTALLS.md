@@ -198,8 +198,11 @@ Proof:
     git's deletions removed, untracked output kept), then the step's command
     runs. It is cached per chain as `seq-<key>.json`, where the key hashes
     every checkpoint and command.
-  - First installs, milestone clean installs and the dev reinstall check keep
-    the clean native oracle of the lockfile.
+  - First installs and the dev reinstall check keep the clean native oracle of
+    the lockfile. A milestone clean install's `lead.initial` oracle starts from
+    the run's chain state, `lib/` included, and runs the lead's own removal,
+    install and build commands (fix 069, liaison ruling 2026-10-20). The
+    fresh-checkout diff is kept as an information line.
   - The earlier steps' mount roots are listed substitutions (the table
     above). Any other difference is a mismatch.
   - Dev runs also run `./node_modules/.bin/tsc --version` in the new mount

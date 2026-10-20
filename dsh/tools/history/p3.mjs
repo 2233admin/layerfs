@@ -110,7 +110,9 @@ export function p3Proofs(m) {
   return [PROOFS_HEADING, "", "Each proof runs the same command natively on the identical tree id (NODE_RULE §6); a proof not run is `NOT_RUN`, never pass.", "",
     pts.length ? table(["Lane", "Point", "Tree", "Install inputs", ...PROOFS], pts.map((p) => [p.lane, p.point, `\`${String(p.tree).slice(0, 12)}\``, `\`${String(p.inputs).slice(0, 12)}\``, ...PROOFS.map((id) => cell(p, id))]))
       : "No test point recorded: every proof NOT_RUN.", "",
-    `P5 skip list (failing natively, set at calibration): ${skips.length ? skips.join(" · ") : "none"}.`].join("\n");
+    `P5 skip list (failing natively, set at calibration): ${skips.length ? skips.join(" · ") : "none"}.`,
+    // fix 069: at a milestone the oracle starts from the run's chain; the old fresh-checkout diff stays visible, not gated
+    ...pts.filter((p) => p.cleanOracleInfo).map((p) => `\n${p.lane} ${p.point}, the fresh-checkout oracle (information, not gated; fix 069): ${p.cleanOracleInfo.error ? `not run: ${p.cleanOracleInfo.error}` : ["P1", "P2"].map((id) => `${id} ${p.cleanOracleInfo[id].result}${p.cleanOracleInfo[id].result === "pass" ? "" : ` (${String(p.cleanOracleInfo[id].detail ?? "").slice(0, 300)})`}`).join(" · ")}.`)].join("\n");
 }
 
 /** Activity: execs split, then git and Node per lane. */

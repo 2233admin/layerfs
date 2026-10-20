@@ -386,6 +386,19 @@ export function judgeRepair(closure, nativeBuild, { groups = null } = {}) {
 /** Each state at the mount path LayerFS ran it at (nativeChain): the lead's chain at the lead's root, and an earlier
  * point as its lane ran it, its install and then its build (its lib/ output stays in the lane's tree, as the lead's
  * build does in chain0; R1 slice f031-r1-slice-e r015-1-docs-rfc.end). */
+/**
+ * The native states of the lead's install point (`lead.initial`). A first install: the fresh checkout and the lead's
+ * command. A milestone's clean install (fix 069, liaison ruling 2026-10-20): the chain before the range (`chainBefore`,
+ * its native state with node_modules and lib/), then the lead's own command byte for byte, as LayerFS runs it on the
+ * live tree; with no chain recorded, `error` (its proofs NOT_RUN), never the fresh oracle.
+ */
+export function leadStates(pt, chainBefore, tree) {
+  const at = pt.root ? { root: pt.root } : {}, own = { tree, command: pt.install.command, ...at };
+  if (pt.kind !== "clean-install") return { milestone: false, chain: null, states: [own], error: null };
+  if (!chainBefore?.length) return { milestone: true, chain: null, states: [own], error: "the milestone's chain before the range is not recorded (m.node.chainBefore, fix 069)" };
+  return { milestone: true, chain: chainBefore, states: [...chainBefore.map((e) => ({ tree: e.tree, command: e.command, ...(e.state ? { state: e.state } : {}), ...at })), own], error: null };
+}
+
 function chainParts(m) {
   const at = (root) => (root ? { root } : {}), leadRoot = m.node.points.find((q) => q.lane === "lead")?.root ?? null;
   const chain0 = m.node.chain.map((e) => ({ tree: e.tree, command: e.command, ...(e.state ? { state: e.state } : {}), ...at(leadRoot) }));
@@ -700,15 +713,27 @@ async function cmdProofs(o) {
       if (Date.now() - t0 > budget) { left++; continue; }
       const tree = pt.lane === "lead" ? pt.tree : await materialize(repo, baseTree, pt.delta, blobs);
       const treeOk = !pt.treeLfs || pt.treeLfs === tree;
-      const states = pt.lane === "lead" ? [{ tree, command: pt.install.command, ...at(pt.root) }] : [...chain0, ...m.node.points.filter((q) => q.lane === pt.lane && q.order < pt.order).flatMap(pointStates), { tree, command: pt.install.command, ...at(pt.root) }];
+      // fix 069 (liaison ruling 2026-10-20): a milestone's clean install runs on the live tree, which keeps the earlier
+      // builds' ignored lib/ (a package `bin` into lib/ is then linked: r050, dsh-cli-demo); natively it starts from the
+      // chain before the range (m.node.chainBefore) and runs the lead's own command, byte for byte. A first install
+      // keeps the fresh-checkout oracle. With no chain recorded, the proofs are NOT_RUN, never the fresh oracle.
+      const lead = pt.lane === "lead" ? leadStates(pt, m.node.chainBefore, tree) : null, milestone = !!lead?.milestone, before0 = lead?.chain ?? null;
+      const own = { tree, command: pt.install.command, ...at(pt.root) };
+      const states = lead ? lead.states : [...chain0, ...m.node.points.filter((q) => q.lane === pt.lane && q.order < pt.order).flatMap(pointStates), own];
       const tail = { build: pt.tsc?.command ?? null, packages: pt.tsc?.packages ?? [], tests: pt.vitest?.files ?? [], vitestTimeoutS: 90 };
-      const { native, error } = treeOk ? tryNative({ repo, states, tail, inputs: pt.inputs, image: run.manifest.env.LAYERFS_IMAGE, volume: pnpmStore(run), name: nativeName() }) : { native: null, error: null };
+      const { native, error } = lead?.error ? { native: null, error: lead.error }
+        : treeOk ? tryNative({ repo, states, tail, inputs: pt.inputs, image: run.manifest.env.LAYERFS_IMAGE, volume: pnpmStore(run), name: nativeName() }) : { native: null, error: null };
       const groups = existsSync(groupsFile(run, k, pt.id)) ? JSON.parse(readFileSync(groupsFile(run, k, pt.id), "utf8")) : null;
       const before = pt.lane === "lead" ? null : [m.node.points.find((q) => q.lane === "lead"), ...m.node.points.filter((q) => q.lane === pt.lane && q.order < pt.order)].filter(Boolean).at(-1);
       const prev = pt.lane === "lead" ? null : before?.inputs ?? m.node.chainInputs ?? null;
       const cal = m.node.calibration?.points?.find((c) => c.id === pt.id) ?? null;
+      // fix 069 condition 3: the old fresh-checkout oracle's P1/P2 diff, kept visible as information, never a gate
+      const cleanInfo = milestone && treeOk ? (() => { const o = tryNative({ repo, states: [own], tail, inputs: pt.inputs, image: run.manifest.env.LAYERFS_IMAGE, volume: pnpmStore(run), name: nativeName() });
+        if (!o.native) return { error: o.error };
+        const j = judgePoint({ ...pt, tree }, o.native, { groups: existsSync(groupsFile(run, k, pt.id)) ? JSON.parse(readFileSync(groupsFile(run, k, pt.id), "utf8")) : null, prevInputs: null, calibration: null, treeOk: true });
+        return { P1: { result: j.P1.result, detail: j.P1.detail ?? null }, P2: { result: j.P2.result, detail: j.P2.detail ?? null } }; })() : null;
       pt.treeNative = tree;
-      proofs[pt.id] = { tree, treeOk, kind: pt.kind, cached: !!native?.cached, key: native?.key ?? null, nativeMs: native?.ms ?? null, nativeInstallMs: native?.installMs ?? null, nativeTscMs: native?.tsc?.ms ?? null, nativeVitestMs: native?.vitest?.ms ?? null, proofs: notRun(judgePoint({ ...pt, tree }, native, { groups, prevInputs: prev, calibration: cal, treeOk }), error),
+      proofs[pt.id] = { tree, treeOk, kind: pt.kind, ...(milestone ? { startChain: (before0 ?? []).map((e) => e.state?.file ?? e.kind ?? e.command.slice(0, 40)), ...(cleanInfo ? { cleanOracleInfo: cleanInfo } : {}) } : {}), cached: !!native?.cached, key: native?.key ?? null, nativeMs: native?.ms ?? null, nativeInstallMs: native?.installMs ?? null, nativeTscMs: native?.tsc?.ms ?? null, nativeVitestMs: native?.vitest?.ms ?? null, proofs: notRun(judgePoint({ ...pt, tree }, native, { groups, prevInputs: prev, calibration: cal, treeOk }), error),
         native: native ? { install: native.exit, tsc: native.tsc?.exit ?? null, vitest: native.vitest?.exit ?? null } : null, ran: native?.ran ?? null, ...(error ? { nativeError: error } : {}) };
       console.error(`${pt.id}: ${Object.entries(proofs[pt.id].proofs).map(([id, r]) => `${id} ${r.result}`).join(" · ")} (native ${error ? `FAILED: ${error}` : native?.cached ? "cached" : `${native?.ms ?? 0} ms`}${native?.ran ? `; ran ${JSON.stringify(native.ran)}` : ""})`);
     }

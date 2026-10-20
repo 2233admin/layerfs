@@ -56,7 +56,7 @@ export function fillP3(m, { groupsOf = () => null } = {}) {
   // Node: each point with its proofs (NOT_RUN until the native side ran), per lane, the repair
   const points = (n?.points ?? []).map((pt) => {
     const pr = proofs[pt.id];
-    return { lane: pt.lane, point: pt.point, tree: pr?.tree ?? pt.treeLfs ?? pt.tree ?? null, inputs: pt.inputs ?? null, cached: !!pr?.cached,
+    return { lane: pt.lane, point: pt.point, tree: pr?.tree ?? pt.treeLfs ?? pt.tree ?? null, inputs: pt.inputs ?? null, cached: !!pr?.cached, ...(pr?.cleanOracleInfo ? { cleanOracleInfo: pr.cleanOracleInfo } : {}),
       proofs: pr?.proofs ?? Object.fromEntries(PROOFS.map((id) => [id, { result: id === "P6" ? "n/a" : "NOT_RUN", detail: "native oracle not run yet (nodeproof.mjs proofs)" }])) };
   });
   const repair = proofs["lead.repair"] ?? null;

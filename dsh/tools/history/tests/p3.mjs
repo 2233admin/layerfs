@@ -582,6 +582,22 @@ test("store generation: a fetch batch in the ledger changes it (fix 048)", async
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("fix 069: a milestone's lead.initial oracle starts from the chain before the range and runs the lead's own command; a first install keeps the fresh checkout", async () => {
+  const { leadStates } = await import("../nodeproof.mjs");
+  const install = { command: "PRUNE && CLEAN_REMOVE && pnpm install --offline" };
+  const first = leadStates({ kind: "install", install, root: "/w" }, [{ tree: "t0", command: "x" }], "t1");
+  assert.deepEqual([first.milestone, first.error, first.states], [false, null, [{ tree: "t1", command: install.command, root: "/w" }]], "a first install: the fresh checkout only");
+  const chain = [{ tree: "t0", command: "native-state abc", state: { file: "state-49.tar" } }];
+  const ms = leadStates({ kind: "clean-install", install, root: "/w" }, chain, "t1");
+  assert.deepEqual(ms.states, [{ tree: "t0", command: "native-state abc", state: { file: "state-49.tar" }, root: "/w" }, { tree: "t1", command: install.command, root: "/w" }]);
+  assert.equal(ms.states.at(-1).command, install.command, "the lead's command byte for byte");
+  const none = leadStates({ kind: "clean-install", install }, null, "t1");
+  assert.ok(none.milestone && /not recorded/.test(none.error), "no chain: NOT_RUN, never the fresh oracle");
+  const { p3Proofs } = await import("../p3.mjs");
+  const text = p3Proofs({ p3: { node: { points: [{ lane: "lead", point: "initial", tree: "t1", inputs: "i", proofs: {}, cleanOracleInfo: { P1: { result: "stop", detail: "differ 2" }, P2: { result: "pass" } } }] } } });
+  assert.match(text, /fresh-checkout oracle \(information, not gated; fix 069\): P1 stop \(differ 2\) · P2 pass/);
+});
+
 test("the calibration probe runs with the replay's HOME (fix 068, r050: fs-sandbox.spec passed under /root, failed under /tmp)", async () => {
   const { probeEnv, vitestCommand } = await import("../unit-tests.mjs");
   const env = probeEnv({ HOME: "/root", PATH: "/bin" });
