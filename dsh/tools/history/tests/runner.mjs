@@ -272,6 +272,18 @@ test("a baseline takes pass or watch ranges, and one named storage row at optimi
   assert.equal(baselineRows([[3, r]], { ...accept, reason: undefined }).refused.length, 1, "a reason is required");
 });
 
+test("a baseline takes one named counter at optimize, never Counters in general (liaison 2026-10-20, r049)", () => {
+  const at = (value) => ({ attempt: 1, gate: { verdict: "optimize", checks: [{ name: "Speed", result: "watch", value: "v" }, { name: "Counters", result: "optimize", value }] } });
+  const r49 = at("oneshot_mount_unmount.statements: depth exponent 0.68");
+  const accept = { row: "Counters", counter: "oneshot_mount_unmount.statements", ranges: [49], reason: "liaison 2026-10-20" };
+  assert.deepEqual(baselineRows([[49, r49]], accept), { refused: [], accepted: [{ range: 49, attempt: 1, row: "Counters", counter: "oneshot_mount_unmount.statements", result: "optimize", value: "oneshot_mount_unmount.statements: depth exponent 0.68", reinstall: null }] });
+  assert.equal(baselineRows([[49, at("oneshot_mount_unmount.vm_steps: depth exponent 0.4")]], accept).refused.length, 1, "another counter of the same probe is refused");
+  assert.equal(baselineRows([[49, at("merge.returned_rows (chain-bounded): max …")]], accept).refused.length, 1, "another probe is refused");
+  assert.equal(baselineRows([[48, r49]], accept).refused.length, 1, "only the listed range");
+  assert.equal(baselineRows([[49, r49]], { ...accept, counter: undefined }).refused.length, 1, "Counters without a named counter is refused");
+  assert.equal(baselineRows([[49, r49]], { row: "Reinstall growth", ranges: [49], reason: "x" }).refused.length, 1, "the storage form does not take a counter row");
+});
+
 test("a lanes cut: any plan order outside a held sequence (commit-conflict, stale-clean-merge)", () => {
   const plan = { steps: [["s1", 1], ["s2", 2], ["s3", 2.5], ["s4", 3], ["s5", 4], ["s6", 5]].map(([id, order]) => ({ id, order })),
     conflicts: [{ kind: "commit-conflict", lane: "L1", steps: ["s2", "s3", "s4"] }, { kind: "stale-clean-merge", lane: "L2", steps: ["s5", "x", "s6"] }, { kind: "lww", lane: "L1", steps: ["s1", "s6"] }] };

@@ -11,6 +11,7 @@
 //     recent ranges (51-100): --prepare … --from-run <id> --range 46 --ranges 47-49 [--oracle <dir>] [--pnpm-store <v>] [--native-states none|<v>],
 //     then play 47-49, then --write … --ranges 47-49
 //     [--accept-storage-row "Reinstall growth" --accept-ranges 3,4 --reason <text>]   (a named exception, baselineRows)
+//     [--accept-counter <probe.counter> --accept-ranges 49 --reason <text>]   (one named Counters row only)
 // Every command that touches the Store (new, play, fork, rebaseline) runs in the runner container (runner.mjs): Store calls run in
 // this process against the run's volume at /layerfs-store (F-020), Linux only.
 // --sdk <dir> picks the SDK's JavaScript (default sdk/js of this checkout);
@@ -899,7 +900,9 @@ async function cmdRebaselineSplit(o) {
   // as the one-command form: a range whose latest attempt does not pass or watch gives no baseline
   const { writeBaseline, loadAttempts } = await import("./report.mjs");
   const latest = loadAttempts(run.manifest.outputs.metrics);
-  const accept = o["accept-storage-row"] ? { row: o["accept-storage-row"], ranges: String(o["accept-ranges"] ?? "").split(",").filter(Boolean).map(Number), reason: o.reason } : null;
+  const ranges_ = String(o["accept-ranges"] ?? "").split(",").filter(Boolean).map(Number);
+  const accept = o["accept-storage-row"] ? { row: o["accept-storage-row"], ranges: ranges_, reason: o.reason }
+    : o["accept-counter"] ? { row: "Counters", counter: o["accept-counter"], ranges: ranges_, reason: o.reason } : null;
   const judged = baselineRows(ranges.map((k) => [k, latest.get(k)?.at(-1)]), accept);
   if (judged.refused.length) { console.error(`rebaseline ${id}: ${judged.refused.join("; ")}; no baseline written`); return EXIT.stop; }
   const note = judged.accepted.length ? { ...(o.note ? { text: o.note } : {}), acceptedRows: judged.accepted, reason: accept.reason } : o.note;
@@ -909,8 +912,13 @@ async function cmdRebaselineSplit(o) {
   return EXIT.done;
 }
 
-/** The storage rows a baseline may take at optimize as a named exception (`--accept-storage-row`). */
+/**
+ * The storage rows a baseline may take at optimize as a named exception (`--accept-storage-row`). A Counters row is
+ * accepted only for one named counter (`--accept-counter <probe.counter>`, liaison 2026-10-20, rb-p3-32eda22d-…-b
+ * r049: `oneshot_mount_unmount.statements`), never Counters in general; the counter stays judged in later ranges.
+ */
 export const ACCEPTABLE_STORAGE_ROWS = new Set(["Reinstall growth"]);
+const acceptsRow = (accept, c) => c.name === accept.row && (accept.row !== "Counters" || String(c.value).startsWith(`${accept.counter}: `));
 
 /**
  * Which baseline ranges may make a baseline. Each latest attempt must pass or watch. The one exception is a named
@@ -920,13 +928,14 @@ export const ACCEPTABLE_STORAGE_ROWS = new Set(["Reinstall growth"]);
  */
 export function baselineRows(attempts, accept = null) {
   const refused = [], accepted = [];
-  if (accept && (!ACCEPTABLE_STORAGE_ROWS.has(accept.row) || !accept.ranges.length || !accept.reason)) return { refused: [`--accept-storage-row needs one of ${[...ACCEPTABLE_STORAGE_ROWS].join(", ")}, --accept-ranges and --reason`], accepted };
+  const named = accept && (ACCEPTABLE_STORAGE_ROWS.has(accept.row) || (accept.row === "Counters" && /^[a-z_]+\.[a-z_]+$/.test(accept.counter ?? "")));
+  if (accept && (!named || !accept.ranges.length || !accept.reason)) return { refused: [`--accept-storage-row needs one of ${[...ACCEPTABLE_STORAGE_ROWS].join(", ")} (or --accept-counter <probe.counter>), --accept-ranges and --reason`], accepted };
   for (const [k, m] of attempts) {
     const v = m?.gate?.verdict ?? "none";
     if (v === "pass" || v === "watch") continue;
     const off = (m?.gate?.checks ?? []).filter((c) => c.result !== "pass" && c.result !== "watch");
-    const ok = accept && v === "optimize" && accept.ranges.includes(k) && off.length === 1 && off[0].name === accept.row && off[0].result === "optimize";
-    if (ok) accepted.push({ range: k, attempt: m.attempt, row: off[0].name, result: off[0].result, value: off[0].value, reinstall: m.storage?.reinstall ?? null });
+    const ok = accept && v === "optimize" && accept.ranges.includes(k) && off.length === 1 && acceptsRow(accept, off[0]) && off[0].result === "optimize";
+    if (ok) accepted.push({ range: k, attempt: m.attempt, row: off[0].name, ...(accept.counter ? { counter: accept.counter } : {}), result: off[0].result, value: off[0].value, reinstall: m.storage?.reinstall ?? null });
     else refused.push(`range ${k} ${v}${off.length ? ` (${off.map((c) => `${c.name} ${c.result}`).join(", ")})` : ""}`);
   }
   return { refused, accepted };
