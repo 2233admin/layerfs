@@ -30,7 +30,7 @@ import { dirname, join } from "node:path";
 import { lsTree } from "./git.mjs";
 import { checkStates, provenRun, restoreCommand, stateMounts } from "./nativestate.mjs";
 import { compareResults, packageOf, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
-import { BUILD_GROUPS, diagUnits, emittedCommand, nodeOf, parseEmitted, PRUNE_EMPTY, repairBuild, wholeBuild } from "./nodeconfig.mjs";
+import { BUILD_GROUPS, diagUnits, emittedCommand, isFixture, nodeOf, parseEmitted, PRUNE_EMPTY, repairBuild, wholeBuild } from "./nodeconfig.mjs";
 
 const pad = (n) => String(n).padStart(3, "0");
 const quote = (t) => `'${String(t).replaceAll("'", "'\\''")}'`;
@@ -245,7 +245,8 @@ export function planClosure({ repo, planDir, k, plan, prevCommit, installed, che
   const tree = lsTree(repo, plan.checkpoint).files;
   const lock = tree.get("pnpm-lock.yaml")?.blob;
   if (!lock) return { skipped: "no pnpm-lock.yaml (not a pnpm project at this checkpoint)" };
-  const dirsWith = (name) => new Set([...tree.keys()].filter((p) => p.endsWith(`/${name}`)).map((p) => p.slice(0, -name.length - 1)));
+  // a test fixture's folder is not a package (fix 072, nodeconfig.mjs isFixture)
+  const dirsWith = (name) => new Set([...tree.keys()].filter((p) => p.endsWith(`/${name}`)).map((p) => p.slice(0, -name.length - 1)).filter((d) => !isFixture(d)));
   const calFile = join(planDir, `tests-${pad(k)}.json`);
   if (!existsSync(calFile)) return { missing: `range ${k} has no calibration (${calFile})` };
   const cal = JSON.parse(readFileSync(calFile, "utf8"));

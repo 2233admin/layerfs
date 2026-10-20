@@ -778,6 +778,15 @@ test("snapshots every range (fix 071): the run's switch or the phase's own every
   assert.equal(snapshotsEvery({ snapshot: "due" }, { snapshots: { every: "yes" } }), false);
 });
 
+test("fix 072: a test fixture's folder is not a package: the whole build and a lane's changed packages skip it", () => {
+  const fx = "packages/t/gen/tests/fixtures/m/packages/client";
+  const files = new Map(["packages/t/gen/package.json", "packages/t/gen/tsconfig.json", `${fx}/package.json`, `${fx}/tsconfig.json`, `${fx}/src/index.ts`,
+    "native/run/package.json", "native/run/tsconfig.json"].map((p) => [p, { blob: "x" }]));
+  assert.equal(wholeBuild(files).command, "./node_modules/.bin/tsc -b 'native/run' 'packages/t/gen'");
+  assert.deepEqual(changedPackages(files, [`${fx}/src/index.ts`]), ["packages/t/gen"]);
+  assert.deepEqual(changedPackages(files, ["native/run/src/a.ts"]), ["native/run"]);
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try { await fn(); console.log(`ok ${name}`); } catch (e) { failed++; console.log(`FAIL ${name}\n${e.stack}`); }

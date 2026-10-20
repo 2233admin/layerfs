@@ -81,10 +81,18 @@ export const pointBuild = (files, packages) => ({ command: packages.length ? bun
  */
 export const PRUNE_EMPTY = "find . -mindepth 1 \\( -path ./.git -o -name node_modules \\) -prune -o -type d -empty -print | sed 's#^\\./##' | sort -r | xargs -r -d '\\n' rmdir -p --ignore-fail-on-non-empty";
 
+/**
+ * A test fixture's folder is not a package (fix 072): r052 adds typert's `tests/fixtures/type-model/packages/*`,
+ * each with a package.json and a tsconfig.json, and `tsc -b` of the client project fails TS6310 (it references a
+ * project that may not emit). dsh's own `tsc -b` (the root solution) never builds them. A path under a `fixtures`
+ * or `__fixtures__` folder belongs to the real package around it.
+ */
+export const isFixture = (dir) => dir.split("/").some((s) => s === "fixtures" || s === "__fixtures__");
+
 /** The lead's whole-workspace build (NODE_RULE §2): dsh's own `tsc -b tsconfig.build.json` when the tree has it, else every package with a tsconfig; then the bundler. */
 export function wholeBuild(files) {
   const pk = new Set([...files.keys()].filter((p) => p.endsWith("/package.json")).map((p) => p.slice(0, -13)));
-  const packages = [...files.keys()].filter((p) => p.endsWith("/tsconfig.json")).map((p) => p.slice(0, -14)).filter((d) => pk.has(d)).sort();
+  const packages = [...files.keys()].filter((p) => p.endsWith("/tsconfig.json")).map((p) => p.slice(0, -14)).filter((d) => pk.has(d) && !isFixture(d)).sort();
   if (files.has("tsconfig.build.json")) return { command: bundled(files, "./node_modules/.bin/tsc -b tsconfig.build.json"), packages };
   return { command: bundled(files, `./node_modules/.bin/tsc -b ${packages.map(quote).join(" ")}`), packages };
 }

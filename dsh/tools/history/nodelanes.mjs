@@ -19,7 +19,7 @@ import { INSTALL_INPUT, listerCommand, normalizeOutput, parseLister, pointInstal
 import { GIT_ENV, laneGitDir } from "./gitlanes.mjs";
 import { packageOf, parseVitestJson, vitestCommand } from "./unit-tests.mjs";
 import { decoyBytes, pad } from "./steps.mjs";
-import { emittedCommand, nodeOf, parseEmitted, pointBuild, vitestMessages, wholeBuild } from "./nodeconfig.mjs";
+import { emittedCommand, isFixture, nodeOf, parseEmitted, pointBuild, vitestMessages, wholeBuild } from "./nodeconfig.mjs";
 
 export { EMITTED, emittedCommand, nodeOf, parseEmitted, pointBuild, wholeBuild } from "./nodeconfig.mjs";
 
@@ -120,8 +120,8 @@ export const treeIdCommand = (gitDir = ".git") => [`set -e; ${GIT_ENV}; d=/tmp/l
 
 /** The lane's changed packages that have a tsconfig (closure.mjs closureSteps' rule), from its changed paths. */
 export function changedPackages(files, changed) {
-  const pk = new Set([...files.keys()].filter((p) => p.endsWith("/package.json")).map((p) => p.slice(0, -13)));
-  const ts = new Set([...files.keys()].filter((p) => p.endsWith("/tsconfig.json")).map((p) => p.slice(0, -14)));
+  const pk = new Set([...files.keys()].filter((p) => p.endsWith("/package.json")).map((p) => p.slice(0, -13)).filter((d) => !isFixture(d)));
+  const ts = new Set([...files.keys()].filter((p) => p.endsWith("/tsconfig.json")).map((p) => p.slice(0, -14)).filter((d) => !isFixture(d)));
   return [...new Set(changed.map((p) => packageOf(p, pk)).filter((d) => d && ts.has(d)))].sort();
 }
 
