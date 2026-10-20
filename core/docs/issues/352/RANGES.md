@@ -58,3 +58,4 @@
 | 051 | 62 | 61,383 | **watch** | Speed | 26.4 MiB | [range-051](ranges/range-051.md) |
 | 052 | 63 | 62,546 | **watch** | Speed | 44.7 MiB | [range-052](ranges/range-052.md) |
 | 053 | 64 | 63,409 | **optimize** | Counters | 25.5 MiB | [range-053](ranges/range-053.md) |
+| 054 | 97 | 64,802 | **optimize** | Counters | 34.2 MiB | [range-054](ranges/range-054.md) |
