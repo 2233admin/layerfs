@@ -37,3 +37,4 @@
 | 030 | 65 | 35,023 | **optimize** | Contended work | 35.6 MiB | [range-030](ranges/range-030.md) |
 | 031 | 32 | 35,351 | **watch** | Speed | 33.8 MiB | [range-031](ranges/range-031.md) |
 | 032 | 76 | 36,538 | **watch** | Speed | 35.2 MiB | [range-032](ranges/range-032.md) |
+| 033 | 61 | 37,184 | **optimize** | Counters | 24.6 MiB | [range-033](ranges/range-033.md) |
