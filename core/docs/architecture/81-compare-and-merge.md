@@ -76,6 +76,10 @@ places:
   both change a file;
 - merge-unit classification (`units.rs` `changed`).
 
+In the publication lane, a bounded merge (`MergeInput::bound`) compares bytes
+only for files of at most `MAXIMUM_TEXT_BYTES`, so the hold does not grow with
+a file's size. Larger files are compared by root there.
+
 Text is a regular file of at most `MAXIMUM_TEXT_BYTES` (1 MiB) that is valid
 UTF-8 with no NUL byte. Lines are the `\n`-separated pieces, as the simulator
 splits them.

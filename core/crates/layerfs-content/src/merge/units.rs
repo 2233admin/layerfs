@@ -266,7 +266,7 @@ fn changed(
     // A file written away and back keeps its bytes under a new root (#352 F-073).
     if b.kind != InodeKind::Directory
         && !Timing::disabled("merge.unit", |scope| {
-            same_content(reader, &b, &s, scope.child("compare"))
+            same_content(reader, &b, &s, u64::MAX, scope.child("compare"))
         })
         .0?
     {

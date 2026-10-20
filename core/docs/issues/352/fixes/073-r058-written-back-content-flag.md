@@ -1,7 +1,7 @@
 # F-073 · r058: a file written away and back counted as a content change in diffs and merges
 
-> **Status:** Current fix record (#352 range 058, a1 and a2 stop), two
-> commits: the difference, then merge. Product change in `layerfs-content`
+> **Status:** Current fix record (#352 range 058, a1 and a2 stop), three
+> commits: the difference, merge, then the publication lane's bound. Product change in `layerfs-content`
 > (`compare/bytes.rs`, `merge/decide.rs`, `merge/units.rs`) and
 > `layerfs-store-service` (`read/compare.rs`). Store format, overlay schema
 > and construction are unchanged. Not an F-063 interaction.
@@ -116,6 +116,49 @@ Merge had the same false difference, in two places. Both now use
   the unit were reverted. A metadata change (the write-back's time) still
   counts as a change, as before.
 
+### The publication lane (third commit)
+
+The liaison asked where each compare runs:
+
+1. **Commit merge onto an advanced head: inside the lane.**
+   `commit.rs` calls `merge_in_lane` → `merge_roots` with
+   `bound: Some(LANE_MERGE_PATHS)`, under `publish_lane`. That reaches
+   `Decider::same`, so an unbounded compare would make the hold grow with a
+   file's size.
+   - Now a bounded merge (`MergeInput::bound` set, which only the lane does)
+     compares bytes only for files of at most `MAXIMUM_TEXT_BYTES` (1 MiB).
+     That is the bound the lane's text merge already reads per side.
+   - Above it, different roots count as different, as before F-073. A
+     large binary file both sides rewrote to the same bytes in that short
+     window conflicts as it did before. No pre-lane result exists to reuse
+     there, because the in-lane step decides only what landed after the
+     pre-lane merge.
+   - The pre-lane merge (`merge_candidate`) and `branch.merge` stay
+     unbounded. Neither holds the lane: `branch.merge`'s hold is its one
+     publish write.
+2. **Merge-unit classification: never in the lane.** It runs only in
+   `branch.merge`, before its publish (`history/units.rs`).
+3. **Diffs: reads, no lane.**
+
+Measured: `lane_merge.rs` `the_lane_does_not_compare_a_large_file_byte_by_byte`,
+one sample each, host 1-min load 4.6.
+- The case: 64 MiB files of the same length. The Workspace's and the
+  landed Commit's differ only in the last byte. The base differs from both
+  at the first byte.
+
+| Lane rule | Lane hold | Writer statements | Reply |
+| --- | --- | --- | --- |
+| bounded (this commit) | 0.84 ms | 26 | Conflict (binary) |
+| unbounded (`366f23222b`) | 1.75 ms | 41 | Conflict (binary) |
+
+- **Why the unbounded arm was also cheap.** Content-defined chunks
+  re-synchronize, so the two files share every chunk but the last, and the
+  compare skips shared extents.
+- **The true worst case** is equal bytes under misaligned extents, where
+  every window is read. Two full reads of a 64 MiB chunked file take 142 ms
+  in memory on this host (release, one sample), more from the Store. The
+  bound caps it at 2 × 1 MiB per path.
+
 ### Options weighed
 
 | Option | Cost | Verdict |
@@ -183,13 +226,16 @@ same logic.
   - content: 485 passed, 2 ignored;
   - store-service: 3 passed;
   - layerfs-api: all 42 integration binaries pass (they share the changed
-    test support), including `sdk_written_back` (3).
+    test support), including `sdk_written_back` (3);
+  - layerfs-daemon `lane_merge`: 5 passed, including the new 64 MiB case.
 - Boundary guard: the same 57 violations as origin/main. Tool self-tests:
   50 ok.
 - rustfmt: the changed files are clean.
 
 ## Left open
 
+- **In-lane merge, files over 1 MiB.** These still compare by root, as
+  above. The next Commit's pre-lane merge compares their bytes.
 - **`root_changes`** (`commit_merge.rs`, the paths a conflicted Commit
   merge wrote) still compares roots. It is informational, in a reply that
   already reports conflicts.

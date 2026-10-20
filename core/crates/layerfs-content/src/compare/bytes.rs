@@ -25,6 +25,20 @@ pub fn same_file_bytes(
     right: ObjectId,
     scope: TimingScope<'_>,
 ) -> ContentResult<bool> {
+    same_file_bytes_within(reader, left, right, u64::MAX, scope)
+}
+
+/// [`same_file_bytes`] for files of at most `limit` bytes. Larger files
+/// with different roots answer `false` after the two root reads, as a
+/// root comparison would: a caller with a bounded hold (the publication
+/// lane) keeps its work bounded.
+pub fn same_file_bytes_within(
+    reader: &dyn AuthenticatedObjects,
+    left: ObjectId,
+    right: ObjectId,
+    limit: u64,
+    scope: TimingScope<'_>,
+) -> ContentResult<bool> {
     if left == right {
         return Ok(true);
     }
@@ -32,7 +46,7 @@ pub fn same_file_bytes(
         let a = FileView::open(reader, left, scope.child("compare.open"))?;
         let b = FileView::open(reader, right, scope.child("compare.open"))?;
         let length = a.logical_len();
-        if length != b.logical_len() {
+        if length != b.logical_len() || length > limit {
             return Ok(false);
         }
         let sides = Sides {
@@ -84,12 +98,13 @@ pub fn same_file_bytes(
 }
 
 /// Whether two inode values hold the same content: the same kind and root,
-/// or two regular files whose different roots hold the same bytes. Other
-/// kinds compare their roots.
+/// or two regular files of at most `limit` bytes whose different roots hold
+/// the same bytes. Other kinds compare their roots.
 pub fn same_content(
     reader: &dyn AuthenticatedObjects,
     left: &InodeValue,
     right: &InodeValue,
+    limit: u64,
     scope: TimingScope<'_>,
 ) -> ContentResult<bool> {
     if left.kind != right.kind {
@@ -101,7 +116,7 @@ pub fn same_content(
     if left.kind != InodeKind::RegularFile {
         return Ok(false);
     }
-    same_file_bytes(reader, left.content_root, right.content_root, scope)
+    same_file_bytes_within(reader, left.content_root, right.content_root, limit, scope)
 }
 
 struct Sides<'a, 's> {

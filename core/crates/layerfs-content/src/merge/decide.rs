@@ -124,6 +124,10 @@ pub(super) struct Decider<'a> {
     pub(super) timing: &'a TimingScope<'a, Active>,
     pub(super) conflicts: Vec<Conflict>,
     pub(super) lww: Vec<LwwDecision>,
+    /// The largest file whose bytes [`Self::same`] compares when the roots
+    /// differ: unbounded before the lane; in the publication lane the text
+    /// bound, which the lane's text merge already reads per side.
+    pub(super) compared: u64,
 }
 
 fn is_file(entry: Option<EntryFacts>) -> bool {
@@ -149,6 +153,7 @@ impl Decider<'_> {
                 reader,
                 &a.value,
                 &b.value,
+                self.compared,
                 self.timing.child("merge.compare"),
             ),
             _ => Ok(false),
