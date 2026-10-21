@@ -17,13 +17,15 @@
   <a href="https://layerfs.ai/docs/"><b>Docs</b></a> ·
   <a href="https://layerfs.ai/benchmarks/"><b>Benchmarks</b></a> ·
   <a href="https://layerfs.ai/video/layerfs-v1.0.0-release.mp4"><b>Video</b></a> ·
-  <a href="dsh/README.md"><b>DSH plugin</b></a>
+  <a href="dsh/README.md"><b>DSH plugin</b></a> ·
+  <a href="#community"><b>Community</b></a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
   <a href="docs/roadmap/1.0/README.md"><img src="https://img.shields.io/badge/version-1.0.0-2f6fde.svg" alt="1.0.0"></a>
   <img src="https://img.shields.io/badge/platform-Linux-555.svg" alt="Linux">
+  <a href="https://discord.gg/8mmAMCDc2"><img src="https://img.shields.io/badge/Discord-join-5865F2.svg?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 https://github.com/user-attachments/assets/70c25887-86a1-4d81-bd78-571cf1c09a18
@@ -168,6 +170,25 @@ To set it up by hand, follow the [JavaScript SDK guide](sdk/js/README.md).
 | Concepts | [Core concepts](docs/general/concepts.md) · [Documentation index](docs/README.md) |
 | Benchmarks | [layerfs.ai/benchmarks](https://layerfs.ai/benchmarks/) |
 | Release | [1.0.0 plan](docs/roadmap/1.0/README.md) · Previous: [0.1.7 release record](docs/release-notes/0.1.7/README.md) and its [manual](docs/versioned/0.1.7/README.md) |
+
+## Community
+
+Questions, ideas and show-and-tell are welcome in either place.
+
+<table>
+  <tr>
+    <td align="center" valign="top" width="50%">
+      <b>Discord</b><br><br>
+      <a href="https://discord.gg/8mmAMCDc2"><img src="https://img.shields.io/badge/Discord-join%20the%20server-5865F2.svg?logo=discord&logoColor=white&style=for-the-badge" alt="Join the LayerFS Discord"></a><br><br>
+      <a href="https://discord.gg/8mmAMCDc2">discord.gg/8mmAMCDc2</a>
+    </td>
+    <td align="center" valign="top" width="50%">
+      <b>WeChat · LayerFS的好朋友</b><br><br>
+      <img src="docs/assets/readme/wechat-group.png" alt="QR code for the LayerFS WeChat group" width="220"><br>
+      <sub>Scan in WeChat to join the group.</sub>
+    </td>
+  </tr>
+</table>
 
 ## License
 
