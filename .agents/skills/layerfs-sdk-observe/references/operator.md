@@ -67,7 +67,7 @@ A file's revisions, newest first.
 **Returns:** a page; each item names the `commit` (or Layer) that changed the file and
 its `message`. `newCanonical` and `newStored` are `null` (not attributed per file).
 
-## `operator.workspace.overlay(id, path)`
+## `operator.workspace.overlay(ws)`
 
 What a mounted Workspace holds uncommitted.
 
@@ -82,7 +82,7 @@ What a mounted Workspace holds uncommitted.
 | `metadata` | `null` (no exclusive byte attribution) |
 | `changes` | `{ added, modified, removed }` path counts |
 
-## `operator.workspace.changes(id, path, pageSize?, pagePos?)`
+## `operator.workspace.changes(ws, pageSize?, pagePos?)`
 
 The changed paths in a mounted Workspace, compared with its base.
 
@@ -99,29 +99,38 @@ statistics, with a `version`. Pass the last `version` as `since` to get
 `{ kind: "unchanged", version }` when nothing changed.
 
 It starts no Sandbox. History comes from the Store in this process; Workspaces come
-only from the client's Sandboxes that are running, including the project's service
-Sandbox if one exists (`operator.sandbox.service()` returns its id, or `null`).
-A known Sandbox whose container is gone or stopped is left out of `sandboxes` and
-listed in `gone` as `{ id, detail }`.
+from every running Sandbox of the project, found from its records. A recorded Sandbox
+whose container is gone or stopped is left out of `sandboxes` and listed in `gone` as
+`{ id, detail }`.
 
-## `operator.process.start(id, path, command)`
+## `operator.sandbox.list()`
+
+**Returns:** the project's running Sandboxes, lowest number first, each `{ id, name }`
+(its number and its container name). It inspects each recorded container once and
+dials no daemon. One found stopped or removed, such as a Sandbox that closed itself
+when idle, is reclaimed (its stopped container deleted, its records removed) and left
+out. It starts nothing.
+
+## `operator.process.start(ws, command)`
 
 Starts a background command in a mounted Workspace. Owned by the native executor; the
 filesystem daemon supervises nothing.
 
-**Returns:** `{ kind: "running", process, command }`. Save `process` to cancel it.
+**Returns:** `{ kind: "running", process, command }`. Save `process` to cancel it; its
+id names its Sandbox (`proc_<n>_…`).
 
-## `operator.process.list(id)`
+## `operator.process.list()`
 
-**Returns:** the Sandbox's background processes, each with its `id`, `path`,
-`command` and `status` (`running` or `exited`, with `exitCode` when known).
+**Returns:** `{ items }`, the background processes of every running Sandbox of the
+project, each with its `id`, `sandbox`, `path`, `command` and `status` (`running`,
+`exited` or `stopped`).
 
-## `operator.process.cancel(id, process)`
+## `operator.process.cancel(process)`
 
 Stops a background process group. A cancelled process can leave one unreaped zombie
 (a 0.1.7 limit).
 
 **Refusals:** `NoSuchProcess`.
 
-**Notes:** `sandbox.unmount` refuses with `Busy` while a background process started
+**Notes:** `workspace.unmount` refuses with `Busy` while a background process started
 here still runs in that Workspace.

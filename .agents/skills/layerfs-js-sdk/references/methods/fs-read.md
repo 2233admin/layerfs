@@ -12,7 +12,7 @@ Examples use `layerfs` as connected in [SKILL.md](../../SKILL.md#connect-to-a-pr
 - `ref` is `main`, a Branch name, a Commit id or a Layer id. Paths are absolute
   (`/src/cart.js`).
 - Reads see committed state only: what a Branch or Commit holds, never a mounted
-  Workspace's uncommitted changes. Look inside a Workspace with `sandbox.exec`.
+  Workspace's uncommitted changes. Look inside a Workspace with `workspace.exec`.
 - Single-file answers start with `{ kind: "ok", snapshot, root, path }`; `snapshot`
   labels the state that was read, such as `"work@9f3c0a1b2c4d"`.
 
@@ -63,9 +63,9 @@ Reads a line range of a text file.
 | `size` | File size in bytes |
 
 **Limits:** one answer holds at most 2000 lines and 48 KiB. A huge single line comes
-back as a prefix; the rest of that line can't be read with `fs.read` (use `sandbox.exec`).
+back as a prefix; the rest of that line can't be read with `fs.read` (use `workspace.exec`).
 
-**Refusals:** `IsDirectory`, `Binary` (NUL or invalid UTF-8: inspect it with `sandbox.exec`), plus
+**Refusals:** `IsDirectory`, `Binary` (NUL or invalid UTF-8: inspect it with `workspace.exec`), plus
 the shared ones.
 
 ```js
@@ -206,7 +206,7 @@ This live capture shows the first two of 50 `items`; the raw output retains all 
 ```
 
 **Notes:** searches everything under `path`, `node_modules` included. Keep `path` narrow.
-For regular expressions, run `grep -rn` with `sandbox.exec` in a Workspace.
+For regular expressions, run `grep -rn` with `workspace.exec` in a Workspace.
 
 ## `fs.glob(ref, pattern, path?, pageSize?, pagePos?)`
 

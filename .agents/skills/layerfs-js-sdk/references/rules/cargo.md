@@ -8,7 +8,7 @@
 
 Supply Rust/Rustfmt/Clippy and SQLite build prerequisites in the pinned runtime
 image. On every Bash call set the cache/output variables again: shell exports
-do not persist between calls, and Sandbox commands start with HOME=/tmp.
+do not persist between calls, and Workspace commands start with HOME=/tmp.
 
 ```sh
 timeout 110 bash -c 'set -eu
@@ -33,17 +33,17 @@ as its build cache. The #337 image has no application dependency cache.
 The ordinary default remains one mount/exec/commit/unmount per call. Cargo
 steps may instead keep one Workspace mounted across a declared build sequence,
 calling exec then commit for every step and unmounting at the end. This is the
-existing [longer-lived Workspace behavior](../methods/sandbox.md#workspaces).
-Use the returned path for every call; do not invent a fixed mount path.
+existing [longer-lived Workspace behavior](../methods/workspace.md#workspaces).
+Use the returned Workspace for every call; do not invent a fixed mount path.
 
-A fresh mount has a different path. The #337 probe observed dependency
+A fresh mount is a different Workspace, with a different path. The #337 probe observed dependency
 compilation after fresh mounts, while the unchanged build on a retained mount
 reported no compilation and a source edit rebuilt only project crates. Keep
 paths, toolchain, profile, features, flags and environment recorded; cache reuse
 is an observation to check, not a guarantee inferred from the presence of target/.
 Cargo's dep-info paths are absolute by default; its output layout is internal.
 A source edit that the same Workspace must see before Commit may be performed
-by a bounded command in that Workspace, as documented for sandbox.exec. For
+by a bounded command in that Workspace, as documented for workspace.exec. For
 other targeted edits use fs.* and mount a fresh view before reading/building them.
 
 ## Split and label the work

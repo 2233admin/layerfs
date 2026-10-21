@@ -11,7 +11,7 @@ Examples use `layerfs` as connected in [SKILL.md](../../SKILL.md#connect-to-a-pr
 
 - Each call changes one Branch (never `main`) and publishes **one** Commit, or nothing.
 - An already-mounted Workspace doesn't see the change: mount again, or let its next
-  `sandbox.commit` merge it in.
+  `workspace.commit` merge it in.
 - Parent folders must exist before a write. `fs.mkdir` creates missing parents.
 - `message` is optional UTF-8, at most 4096 bytes; newline and tab are allowed.
 
@@ -30,14 +30,14 @@ Examples use `layerfs` as connected in [SKILL.md](../../SKILL.md#connect-to-a-pr
 | `NoSuchBranch` | No such Branch | `branch.fork` it, or check the name |
 | `HeadMoved` | Another writer published on the Branch during the call; nothing was published | Read the files you changed again, then decide whether to apply your change |
 | `NoSuchPath` | A path or its parent folder is missing | `fs.list` the parent; `fs.mkdir` first |
-| `TooLarge` | The complete encoded request did not fit one control call; nothing was sent | Inspect the input, then choose a smaller call or a larger atomic Sandbox step |
+| `TooLarge` | The complete encoded request did not fit one control call; nothing was sent | Inspect the input, then choose a smaller call or a larger atomic Workspace step |
 | `InvalidInput` | A bad argument (message bytes, relative path, …) | Read `message`; fix the call |
 
 One encoded control request fits at most 65,519 bytes, including paths, metadata
 and tracing fields as well as content. `TooLarge` from this before-send admission
 has null detail, without a change index. Do not estimate the allowance from content
 bytes alone or resend an unchanged failed call. Splitting an `apply` creates
-separate Commits and changes atomicity; use one ordinary Sandbox step when the
+separate Commits and changes atomicity; use one ordinary Workspace step when the
 larger change must stay atomic. The SDK never splits or replays it automatically.
 
 ## `fs.write(branch, path, content, message?)`
@@ -76,7 +76,7 @@ the cheap way to change a few lines of a big file.
 | --- | --- | --- |
 | `NoMatch` | `oldText` doesn't occur | `fs.read` the area; the text differs (whitespace, an earlier edit) |
 | `AmbiguousMatch` | `oldText` occurs more than once | Include more surrounding lines to make it unique |
-| `Binary` | The text being edited contains NUL or invalid UTF-8 | Use the Sandbox for binary changes |
+| `Binary` | The text being edited contains NUL or invalid UTF-8 | Use a Workspace for binary changes |
 | shared | | See above |
 
 ```js

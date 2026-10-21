@@ -1,9 +1,11 @@
 # SDK call channel and operator boundary
 
-> **Status:** Implemented #327/#328 source description, 2026-10-15. Correctness
-> receipts and the component counter screen are distinct from this architecture.
+> **Status:** Implemented #327/#328 source description, 2026-10-15, with the
+> #352 and #373 source updates below. Correctness receipts and the component
+> counter screen are distinct from this architecture.
 
-The JavaScript SDK has 29 positional methods in four groups. The
+The JavaScript SDK has 27 positional methods in four groups (29 before #373
+replaced the `sandbox` group with `workspace`; see the #373 update below). The
 [SDK guide](../../../sdk/js/README.md) lists signatures, environment configuration,
 read/page limits and compatibility. [SPEC](../issues/327/SPEC.md) describes the
 UI/server integration; [VERIFICATION](../issues/327/VERIFICATION.md) owns acceptance.
@@ -23,7 +25,7 @@ stopped before any send, without a received answer or failed fence. Other
 encoding, transport and uncertain failures retain their original custody.
 No request is split or replayed. The complete encoded call includes paths,
 metadata and observation fields as well as content; there is no fixed content
-byte allowance. Larger atomic changes use an ordinary Sandbox Workspace step.
+byte allowance. Larger atomic changes use an ordinary Workspace step.
 This is control-call admission, not a file, namespace or Workspace size limit.
 
 The root public table refuses `operator.*`. `@layerfs/sdk/operator` uses a
@@ -100,16 +102,16 @@ speed/storage screen are in the linked SDK guide and issue checkpoint.
 
 Private LAYERFS_HOME ownership/mode authorizes persistent project/Sandbox records.
 A fresh process validates full saved deployment/container/Noise/daemon identity
-and can use an ID and mount path without Init, reinstall or attach replay.
+and can use a Workspace (`{ sandbox, path }`) without Init, reinstall or attach replay.
 Nonblocking OS locks and persisted create intent prevent guessing after an
 uncertain create. Restart recovery and failed-operation replay are excluded.
 
 `operator.inspect.snapshot` reads history with `operator.inspect.history`, the
 same bounded answer with no Workspaces, from the Store in the calling process,
-and joins the Workspaces of the client's known Sandboxes that are running,
-including each mounted Workspace's real overlay data. It finds an existing
-service Sandbox with `operator.sandbox.service`, which reads the project's record
-and creates nothing, so a snapshot starts no Sandbox; a known Sandbox refused as
+and joins the Workspaces of every running Sandbox of the project, including
+each mounted Workspace's real overlay data. It finds them with
+`operator.sandbox.list`, which reads the project's records and inspects each
+container once, so a snapshot starts no Sandbox; a listed Sandbox refused as
 `NoSuchSandbox` is listed in `gone` with its detail. The bounded answer discloses
 moreBranches/more/moreLayers. Its version includes local publication revision as
 well as history/binding facts; JS combines the history and daemon versions. The demo
@@ -232,3 +234,24 @@ layerfs-store-service/src/        [3706 shown]  (partial: the engine)
     mutation.rs                     224
     recursive.rs                    275
 ```
+
+## Issue #373 source update (2026-10-21)
+
+The public `sandbox` group (`create`, `mount`, `exec`, `status`, `commit`,
+`unmount`, `close`) is replaced by `workspace`: `mount(branch)`,
+`exec(ws, command, message?)`, `status(ws)`, `commit(ws, message?, force?)`,
+`unmount(ws, discard?)`. A Workspace is `{ sandbox, path }`. The binding
+places each mount in the project's numbered Sandboxes under the project's
+placement lock (the lowest-numbered running one with fewer than 16
+Workspaces, else the next number), and a Sandbox's daemon ends itself after
+two idle minutes; the next mount or `operator.sandbox.list` reclaims it.
+There is no service Sandbox and no `operator.sandbox.service`; Import starts
+no Sandbox. Operator `process.start(ws, command)`, project-wide
+`process.list()` and `process.cancel(id)` replace the per-Sandbox forms, and
+a process id names its Sandbox. The native ops are `workspace.*`,
+`operator.sandbox.list` and the operator process ops; the daemon's typed
+control records and its timing names (`sandbox.mount.bind`,
+`sandbox.mount.attach`) are unchanged. Design and owner decisions:
+[#373](../issues/373/README.md); placement and idle close are described in the
+[SDK guide](../../../sdk/js/README.md).
+

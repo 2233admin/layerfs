@@ -8,7 +8,8 @@
 // spooled. Each SDK call goes to the Store container's long-lived worker,
 // which keeps the project's Store open between calls; Init runs in its own
 // container. The Store container is `<prefix>store` with this test's own
-// prefix, so dsh's `layerfs-store` is never touched. It, the volume, the
+// prefix, so dsh's `layerfs-store` is never touched; another home with that
+// prefix is refused it. It, the volume, the
 // containers and the home are removed afterwards.
 // macOS only; under 2 minutes.
 import assert from "node:assert/strict";
@@ -49,6 +50,11 @@ try {
   docker("volume", "create", volume);
   await timed("Store container start", () => ensureBox(spec));
   assert.equal(docker("inspect", "-f", '{{index .Config.Labels "layerfs.role"}}', spec.box), "store");
+  assert.equal(docker("inspect", "-f", '{{index .Config.Labels "layerfs.home"}}', spec.box), home);
+  // another home with the same prefix is refused; this home's container stays
+  const other = await ensureBox({ ...spec, home: join(work, "other") }).catch((e) => e);
+  assert.match(String(other?.message), /serves the LayerFS home .*its own containerPrefix/);
+  assert.equal(docker("inspect", "-f", "{{.State.Running}}", spec.box), "true");
   const { LayerFS, isRefusal } = await import("../src/port/sdk.js");
   const { LayerFSOperator } = await import("../src/port/operator.js");
   layerfs = new LayerFS("shop");

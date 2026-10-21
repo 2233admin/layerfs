@@ -74,9 +74,12 @@ async function start(spec) {
   const old = (await docker("ps", "-aq", "--filter", "label=dsh-layerfs.box=1", "--filter", `volume=${spec.home}`)).split("\n").filter(Boolean);
   if (old.length) await docker("rm", "-f", ...old);
   rmSync(join(spec.home, OLD_FILE), { force: true });
-  let state = await docker("inspect", "-f", '{{.State.Running}} {{index .Config.Labels "layerfs.worker"}} {{index .Config.Labels "layerfs.build"}}', spec.box).catch(() => null);
-  if (state && (state.split(" ")[1] !== version || state.split(" ")[2] !== build)) {
-    // another worker or another build: replaced
+  let state = await docker("inspect", "-f", '{{.State.Running}} {{index .Config.Labels "layerfs.worker"}} {{index .Config.Labels "layerfs.build"}} {{index .Config.Labels "layerfs.home"}}', spec.box).catch(() => null);
+  const home = state?.split(" ").slice(3).join(" ");
+  // another home's: never replaced, since that home's runs use it
+  if (home && home !== spec.home) throw new Error(`the Store container ${spec.box} serves the LayerFS home ${home}; give this home its own containerPrefix`);
+  if (state && (state.split(" ")[1] !== version || state.split(" ")[2] !== build || !home)) {
+    // another worker or another build (or one made before the home label): replaced
     await docker("rm", "-f", spec.box);
     state = null;
   }
@@ -84,7 +87,7 @@ async function start(spec) {
   if (!state) {
     secret = randomBytes(32).toString("hex");
     await docker("run", "-d", "--pull", "never", "--name", spec.box, "--init",
-      "--label", "layerfs.role=store", "--label", `layerfs.worker=${version}`, "--label", `layerfs.build=${build}`,
+      "--label", "layerfs.role=store", "--label", `layerfs.worker=${version}`, "--label", `layerfs.build=${build}`, "--label", `layerfs.home=${spec.home}`,
       "-p", `127.0.0.1::${WORKER_PORT}`, "-e", `DSH_BOX_SECRET=${secret}`, "-e", "UV_THREADPOOL_SIZE=64",
       ...callMounts(spec), "--entrypoint", "node", spec.image, join(PORT, "worker.mjs"));
   } else {

@@ -6,9 +6,8 @@
 ## What the daemon writes
 
 Each Sandbox daemon writes to its stderr, which Docker keeps as the container log. The
-container identifier is in the plain-text file
-`$LAYERFS_HOME/_sandboxes/<sandbox name>/container`; for the service Sandbox the name is
-`_service.<project>`.
+container is `<prefix><project>-<n>` (`layerfs-<project>-<n>` by default), and its
+identifier is in the plain-text file `$LAYERFS_HOME/<project>/sandboxes/<n>/container`.
 
 - **Failures:** a fatal startup cause, or a control-connection failure.
 - **Observation records (tracing on):** for every traced control exchange,
@@ -34,8 +33,9 @@ Each output line is one daemon call: `daemon`, `scope`, `call`, `operation`,
 sections are `null`, never zero. Values are **cumulative** daemon counters at that call:
 subtract the previous call's values to get per-call work.
 
-Save the logs before closing a Sandbox: `sandbox.close` deletes the container and its
-log.
+Save the logs while the Sandbox runs. A Sandbox closes itself two minutes after its
+last Workspace is unmounted (its daemon writes `LAYERFS_DAEMON_IDLE_EXIT` last), and the
+next mount or `operator.sandbox.list()` deletes the stopped container and its log.
 
 ## When a diagnostic write fails
 

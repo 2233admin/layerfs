@@ -29,9 +29,10 @@ For an agent run you want to analyse afterwards:
 2. Record identities: LayerFS commit, daemon binary, runtime image digest, addon build.
 3. Snapshot `operator.store.stats()` at the start, every N Commits if you can, and at
    the end.
-4. After the run, before closing the Sandboxes: page `operator.store.commits(branch)`
-   for every Branch, and save `docker logs <container>` for every Sandbox (the container
-   identifier is in `$LAYERFS_HOME/_sandboxes/<sandbox name>/container`).
+4. After the run, while its Sandboxes still run (each closes itself two minutes after
+   its last Workspace is unmounted): page `operator.store.commits(branch)` for every
+   Branch, and save `docker logs <container>` for every Sandbox (the container
+   identifier is in `$LAYERFS_HOME/<project>/sandboxes/<n>/container`).
 5. Decode and join: see [daemon logs](references/daemon-logs.md). Build the per-step
    table: see [storage metrics](references/storage-metrics.md#one-row-per-step).
 

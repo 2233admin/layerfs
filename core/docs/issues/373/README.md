@@ -347,6 +347,20 @@ records). A call sent in the instant the daemon decides gets no reply; the
 window is the time between the decision and the exit, after two quiet
 minutes.
 
+dsh (step 5): the model keeps its internal `sandbox.*` call vocabulary and
+maps the SDK's `workspace.*` trace lines onto it, so older traces and the
+simulation engine's stories still replay. Recorded runs' `sandbox.create`
+and `sandbox.close` make no call now; the replay notes them, and the run
+checks skip their expectations. The run checks' closed gate waits, bounded
+(150 s by default), for each Sandbox to close itself. The Store container
+carries a `layerfs.home` label: a Host whose prefix names another home's
+Store container is refused with a message to set its own `containerPrefix`,
+and never replaces it. At start the Host removes the containers recorded
+under `<home>/_sandboxes/`, then those records and each `service.record`
+(`migrate.js`). Not moved to the new API: `dsh/tools/history` (the #352
+replay tooling, closed at r60), `import-run` for runs recorded with the
+Workspace API, and the `benchmark/` harnesses.
+
 Each step is one commit, with the production LOC comparison and its tests.
 Disposable Store profile only; every test command under 120 s.
 

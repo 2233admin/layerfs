@@ -10,11 +10,11 @@ LayerFS merges in two places, and each can end in a `Conflict` refusal:
 
 | | Commit conflict | Branch-merge conflict |
 | --- | --- | --- |
-| **Raised by** | `sandbox.commit`, when the Branch moved since the mount and both sides changed the same lines | `branch.merge(a, b, name)`, when `a` and `b` changed the same lines |
+| **Raised by** | `workspace.commit`, when the Branch moved since the mount and both sides changed the same lines | `branch.merge(a, b, name)`, when `a` and `b` changed the same lines |
 | **Left behind** | Nothing committed. Markers are written into the conflicted files **in the Workspace**; the other side's clean changes are installed there too, and the Workspace now follows the new head | Nothing created. `a` and `b` are unchanged; no markers are written anywhere |
 | **`detail`** | `base`, `head`, `conflicts`, `written`, `markers`, `lww` | `sources`, `mergeBase`, `conflicts`, `lww` |
 | **Where you resolve** | In that Workspace, then Commit again | On working forks of the Branches, then merge again |
-| **Overwrite instead** | `sandbox.commit(id, path, message, true)`, only before a conflict is written | Not available |
+| **Overwrite instead** | `workspace.commit(ws, message, true)`, only before a conflict is written | Not available |
 
 Each entry of `conflicts` is `{ path, kind, blocks, hunks }`:
 
@@ -43,7 +43,7 @@ know the other side's change is unwanted.
 
 ## Commit conflicts
 
-Examples use `layerfs`, a Sandbox `id` and a Workspace `path` mounted on `"work"`, as in
+Examples use `layerfs` and a Workspace `ws` mounted on `"work"`, as in
 [SKILL.md](../../SKILL.md#one-script-for-each-group).
 
 ### Scenario 1: both edited the same source lines (fix it)
@@ -57,7 +57,7 @@ Examples use `layerfs`, a Sandbox `id` and a Workspace `path` mounted on `"work"
    Workspace (`exec` with `cat -n`, `grep -rn`) or on `head` with `fs.grep`.
 4. **Decide what the code must do with both changes.** Usually a combination.
 5. **Write the resolved file in the Workspace**
-   ([write a file inside a mounted Workspace](../methods/sandbox.md#sandboxexecid-path-command-message)),
+   ([write a file inside a mounted Workspace](../methods/workspace.md#workspaceexecws-command-message)),
    check no marker is left, and run the tests there.
 6. **Commit again.** While any conflicted file still holds a marker block, Commit
    refuses with `Conflict` and `detail.markers: true`, even with `force`.
@@ -70,13 +70,14 @@ Gathering the reading for one file, with `base` and `head` copied from the refus
 import { LayerFS } from "@layerfs/sdk";
 
 const layerfs = new LayerFS("shop");
-// wsPath: the path of the Workspace whose commit conflicted, from its sandbox.mount. Don't mount
-// again to inspect: a new mount is a new Workspace with a new path, without the markers.
-const [id, wsPath, base, head, path] = process.argv.slice(2);
+// sandbox, wsPath: the Workspace whose commit conflicted, from its workspace.mount. Don't mount
+// again to inspect: a new mount is a new Workspace, without the markers.
+const [sandbox, wsPath, base, head, path] = process.argv.slice(2);
+const ws = { sandbox, path: wsPath };
 
 const theirs = await layerfs.fs.diff_files(base, path, head, path);
 const before = await layerfs.fs.read(base, path);
-const merged = await layerfs.sandbox.exec(id, wsPath, `cat -n '.${path}'`, "read the merged file");
+const merged = await layerfs.workspace.exec(ws, `cat -n '.${path}'`, "read the merged file");
 const why = await layerfs.branch.list_commits("work", 10, 0);
 
 console.log("their change:\n" + theirs.hunks.filter((h) => h.op !== " ").map((h) => h.op + h.text).join(""));
@@ -97,11 +98,11 @@ A lockfile or build output both sides regenerated. Nobody should merge it by han
 3. **Commit.**
 
 ```js
-// path: the Workspace holding your changes. Don't mount again: a new mount is a new Workspace
-// with a new path, without these changes or any conflict markers.
-await layerfs.sandbox.exec(id, path, "rm -f package-lock.json && timeout 110 npm install --no-audit --no-fund 2>&1", "regenerate the lockfile");
-await layerfs.sandbox.exec(id, path, "grep -qx 'package-lock.json' .lww || echo 'package-lock.json' >> .lww", "lww: lockfile");
-await layerfs.sandbox.commit(id, path, "step 14: regenerate lockfile, rule it last-writer-wins");
+// ws: the Workspace holding your changes. Don't mount again: a new mount is a new Workspace,
+// without these changes or any conflict markers.
+await layerfs.workspace.exec(ws, "rm -f package-lock.json && timeout 110 npm install --no-audit --no-fund 2>&1", "regenerate the lockfile");
+await layerfs.workspace.exec(ws, "grep -qx 'package-lock.json' .lww || echo 'package-lock.json' >> .lww", "lww: lockfile");
+await layerfs.workspace.commit(ws, "step 14: regenerate lockfile, rule it last-writer-wins");
 ```
 
 ### Scenario 3: one side deleted a file the other changed
@@ -128,11 +129,11 @@ For example, a full rebuild that supersedes stale output, or a change you know r
 the other side's. Check **before** committing, and force only then:
 
 ```js
-// path: the Workspace holding your changes. Don't mount again: a new mount is a new Workspace
-// with a new path, without these changes or any conflict markers.
-const s = await layerfs.sandbox.status(id, path);
+// ws: the Workspace holding your changes. Don't mount again: a new mount is a new Workspace,
+// without these changes or any conflict markers.
+const s = await layerfs.workspace.status(ws);
 if (s.headMovedSinceMount) {
-  const c = await layerfs.sandbox.commit(id, path, "step 15: full rebuild", true);
+  const c = await layerfs.workspace.commit(ws, "step 15: full rebuild", true);
   console.log(c.kind, "displaced", c.displacedHead);
 }
 ```
@@ -146,7 +147,7 @@ if (s.headMovedSinceMount) {
 
 ### Scenario 6: give up and redo
 
-When the conflict is bigger than your change: `sandbox.unmount(id, path,
+When the conflict is bigger than your change: `workspace.unmount(ws,
 true)`, mount the current head, and redo your change on top of it. Your conflicted
 attempt isn't recorded.
 

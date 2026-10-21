@@ -44,7 +44,7 @@ LayerFS merges in exactly two places, and `/.lww` applies to both:
 
 | Merge | When it happens | Which `/.lww` is read | "ours" / "theirs" |
 | --- | --- | --- | --- |
-| **Commit merge** | `sandbox.commit` when the Branch moved since the mount | The one on the Branch's current head | ours = the Workspace, theirs = the head |
+| **Commit merge** | `workspace.commit` when the Branch moved since the mount | The one on the Branch's current head | ours = the Workspace, theirs = the head |
 | **Branch merge** | `branch.merge(a, b, name)` | The one on `a` | ours = `a`, theirs = `b` |
 
 Nothing else merges, so nothing else reads it: `fs.*` writes are refused with

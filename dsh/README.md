@@ -72,11 +72,11 @@ The LayerFS tab is the only LayerFS UI. The standalone HTML pages that used to l
   | `POST /layerfs/project/<name>/attach {folder}` | attach to a workspace folder, or `null` to detach |
   | `POST /layerfs/project/<name>/remove {confirm}` | remove the project; `confirm` must repeat its name |
 
-  Init first counts the source (every entry, links not followed, as LayerFS reads it), then makes the volume, then runs LayerFS's Host Init, which scans and imports on the Host and seals the Store under the LayerFS home. The project's first Sandbox installs that Store into the volume later. While LayerFS imports, the Host reads its counts every 250 ms (the SDK operator's `project.progress()`: step, entries scanned, files and bytes built) into the job's `imported`. The page reads the job every 300 ms and fills the bar from those counts over the Host's totals: scan 0–15%, files 15–95% (bytes plus 4 KB per file), then tree, publish and seal.
+  Init first counts the source (every entry, links not followed, as LayerFS reads it), then makes the volume, then runs LayerFS Init (on macOS in a container of its own), which scans, imports and installs the Store into the volume in one process; it starts no Sandbox. While LayerFS imports, the Host reads its counts every 250 ms (the SDK operator's `project.progress()`: step, entries scanned, files and bytes built) into the job's `imported`. The page reads the job every 300 ms and fills the bar from those counts over the Host's totals: scan 0–15%, files 15–95% (bytes plus 4 KB per file), then tree, publish and seal.
 
   Removal deletes the project's Docker volume and LayerFS home entry, and drops it from the bindings; sessions on it become unbound. It is refused while any container still uses the volume. Workspace files and transcripts stay. A LayerFS project is its home entry, so a removed name can be initialized again at once.
 
-  The Host reads each project (state and trees) through one shared SDK client, released after a quiet minute. Reading starts no Sandbox: history comes from the project's Store in the box, and Workspaces only from Sandboxes already running, so a project nobody works on shows its history with no container. A service Sandbox whose container is gone or stopped (Docker quit) is closed once to free its name; the next agent call starts a new one. Removing a project closes its service Sandbox too.
+  The Host reads each project (state and trees) through one shared SDK client, released after a quiet minute. Reading starts no Sandbox: history comes from the project's Store (on macOS, in the Store container), and Workspaces only from Sandboxes already running, so a project nobody works on shows its history with no container. LayerFS places agents' Workspaces in the project's numbered Sandboxes, `layerfs-<project>-<n>`, 16 to a Sandbox; each Sandbox closes itself two minutes after its last Workspace is unmounted, and the tab then draws it closed.
 
   Trees are bounded: 4000 entries, 128 KB per file, 8 MB in all. `node_modules`, `.git`, `.next`, `dist` and `build` are listed but not opened.
 
@@ -101,17 +101,17 @@ The LayerFS tab is the only LayerFS UI. The standalone HTML pages that used to l
 
   | Terminal | Prints | Calls |
   | --- | --- | --- |
-  | project (one per project) | the project, its Branches, Sandboxes' lives | `project.*`, `branch.*`, `sandbox.create`, `sandbox.close`, and a mount that failed (it has no pane) |
+  | project (one per project) | the project and its Branches | `project.*`, `branch.*`, and a mount that failed (it has no pane); an older trace's `sandbox.create` and `sandbox.close` |
   | fs (one per Branch) | Store reads and writes on that Branch | `fs.*` |
-  | workspace (one pane per mounted Workspace) | the Workspace's life and the commands run in it | `sandbox.mount`, `sandbox.exec`, `sandbox.status`, `sandbox.commit`, `sandbox.unmount`, operator `process.start` and `process.cancel` |
-  | none | the client's own calls and operator reads | `sandbox.service`, the other operator methods |
+  | workspace (one pane per mounted Workspace) | the Workspace's life and the commands run in it | `workspace.mount`, `workspace.exec`, `workspace.status`, `workspace.commit`, `workspace.unmount` (an older trace's `sandbox.*` forms too), operator `process.start` and `process.cancel` |
+  | none | the client's own calls and operator reads | `operator.sandbox.list`, the other operator methods |
 
-  A command line is `<group> <method> <required args> [--optional value] [-m "message"]`, using the SDK's own group and method names: `branch merge feature try-ui release -m "join"`, `sandbox create tester docs sha256:2d929c6d66c2`, `fs read /app/page.tsx --start-line 5`, `sandbox commit -m "add hero" --force`.
+  A command line is `<group> <method> <required args> [--optional value] [-m "message"]`, using the SDK's own group and method names: `branch merge feature try-ui release -m "join"`, `fs read /app/page.tsx --start-line 5`, `workspace commit -m "add hero" --force`.
   - Required arguments are positional, in SDK order. Optional ones are `--kebab-case` flags shown only when they differ from the SDK default; a true boolean is a bare flag (`--force`, `--discard`).
   - An image is shortened to `sha256:` and 12 hex digits. File content is never printed, and `fs apply` shows its change count.
-  - A line does not repeat what its terminal names. The fs terminal hides the `fs` group and the Branch (`read /app/page.tsx`); a workspace pane hides the `sandbox` group, the Sandbox and the path (`commit -m "add hero"`, `unmount --discard`), but keeps the operator's `process cancel`. The project terminal prints every group. `fs diff_files` prints both of its refs.
+  - A line does not repeat what its terminal names. The fs terminal hides the `fs` group and the Branch (`read /app/page.tsx`); a workspace pane hides the `workspace` group, the Sandbox and the path (`commit -m "add hero"`, `unmount --discard`), but keeps the operator's `process cancel`. The project terminal prints every group. `fs diff_files` prints both of its refs.
   - A command run in a Workspace prints as the shell command itself, and a background start ends with ` &`.
-  - Reads (`list_*`, `diff_*`, `fs read/list/stat/grep/glob/blame/diff_files`, `sandbox status`) and `sandbox mount` are dimmed.
+  - Reads (`list_*`, `diff_*`, `fs read/list/stat/grep/glob/blame/diff_files`, `workspace status`) and `workspace mount` are dimmed.
   - A call with no row prints its own name, dimmed, in the project terminal.
 
   The composer is hidden while the tab shows; switch to Chat to send a message.
@@ -130,7 +130,7 @@ The LayerFS tab is the only LayerFS UI. The standalone HTML pages that used to l
 
 The preset has bash with background jobs, subagents (spawn) with their control tools, and compaction. It has no read, write or edit tools. Its persona carries:
 - an SDK cheat-sheet with a stdin script template;
-- the working rules: one Workspace per agent, merge conflicts belong to whoever merged, only the main agent publishes, run again on `Busy`, close every Sandbox.
+- the working rules: one Workspace per agent, merge conflicts belong to whoever merged, only the main agent publishes, run again on `Busy`, unmount every Workspace.
 
 Run the preset's sessions in Workspace Write mode; subagents inherit it.
 
@@ -144,8 +144,8 @@ The `dsh-layerfs-demo` bundle adds the LayerFS mock model: an LLM provider that 
 | `parallel` | root, header, footer | two subagents on their own Branches; the root publishes one, then asks the other to merge main in first |
 | `conflicts` | root | the Conflicts story, 15 steps: a commit Conflict resolved in the Workspace, a merge Conflict resolved by making the Branches agree |
 | `merge` | root | the Commit & merge story, 21 steps: a clean stale commit, a commit Conflict, merge into a new Branch, a merge Conflict, publish |
-| `sandbox` | root | one Sandbox with two Workspaces, a background build job, and the MountsActive, Busy and Dirty refusals |
-| `agents` | root and five | the 5 agents story, 52 steps (62 bash calls): a Workspace per call in each Branch's shared Sandbox, stale merges, `.lww`, a same-line Conflict fixed in the kept Workspace, a dev server and curl, a try on a fork, merge, publish and blame |
+| `sandbox` | root | two Workspaces placed in one Sandbox, a background build job, and the Busy and Dirty refusals |
+| `agents` | root and five | the 5 agents story, 52 steps (62 bash calls): a Workspace per call, stale merges, `.lww`, a same-line Conflict fixed in the kept Workspace, a dev server and curl, a try on a fork, merge, publish and blame |
 | `shop` | root | Live only. #334's Builder 2 replayed, 19 steps: a small web shop built over six milestones, 12 recorded commands (npm, esbuild, node tests, a server smoke) run again |
 | `depot` | root | Live only. #337's Builder 2 replayed, 103 steps: a Rust inventory service and its browser client, 82 recorded commands (cargo fetch and builds from crates.io, cargo and Python tests, Chromium) run again in Workspaces that stay mounted across steps |
 | `crew` | root + 5 | Live only. #340's Builder 2 r3 replayed, 1,550 steps: a lead and 17 agents playing as 6 roles build one application on Branches of their own; 304 recorded commands, of which the 147 that only verify and belong to a browser proof are disabled (their run files say `"verification": "no-browser"`) and the other 157 run; the roles run at the same time and wait for each other only where they touched the same Branch |
@@ -257,7 +257,7 @@ docker run --rm -v layerfs-target:/t:ro -v "$BUNDLE":/out rust:1.85.1-bookworm s
 cp -R sdk/js/src sdk/js/operator sdk/js/package.json "$BUNDLE/sdk/js/"
 ```
 
-On macOS the Host uses all three parts: the box runs `layerfs-daemon` and loads `layerfs.node`, and the Mac side imports `sdk/js` from the bundle.
+On macOS the Host uses all three parts: the Store container loads `layerfs.node`, Sandboxes run `layerfs-daemon`, and the Mac side imports `sdk/js` from the bundle.
 
 Instead, [`tools/worktree.py`](../tools/worktree.py) ([parallel worktrees](../docs/general/parallel-worktrees.md)) does the same with per-checkout caches, and seals the folder with a `manifest.json`. It needs the runtime image below to exist first, and was not tried for this guide:
 
@@ -270,14 +270,14 @@ python3 tools/worktree.py build --resources <printed resources.json> --platform 
 
 `build` prints the sealed folder, `~/.cache/layerfs-worktrees/<id>/artifacts/build-linux-<hash>`, which serves as `bundle`.
 
-**The runtime image** is the Linux image Sandboxes and the box run. The box runs `node` from it, so it must carry Node, plus whatever your agents' commands run in Workspaces. The one in use is built from [`tools/history/runtime/Dockerfile`](tools/history/runtime/Dockerfile): Node 24.21 on Debian bookworm (the daemon's own base), with corepack's pnpm and yarn prepared offline, and the base's git, python3, gcc and make.
+**The runtime image** is the Linux image Sandboxes and the Store container run. The Store container runs `node` from it, so it must carry Node, plus whatever your agents' commands run in Workspaces. The one in use is built from [`tools/history/runtime/Dockerfile`](tools/history/runtime/Dockerfile): Node 24.21 on Debian bookworm (the daemon's own base), with corepack's pnpm and yarn prepared offline, and the base's git, python3, gcc and make.
 
 ```sh
 docker build -t layerfs-352-runtime:node24 "$LAYERFS/dsh/tools/history/runtime"
 docker image inspect --format '{{.Id}}' layerfs-352-runtime:node24     # the image setting
 ```
 
-Use the ID your machine prints: the same build can get a different ID in another image store. Images are never pulled for LayerFS (the box starts with `--pull never`).
+Use the ID your machine prints: the same build can get a different ID in another image store. Images are never pulled for LayerFS (the Store container starts with `--pull never`).
 
 ### 2. Build the dsh bundle
 
@@ -325,6 +325,7 @@ The Host reads its deployment settings from `layerfs-host` in the profile's `cor
 | `bundle` | not used | required |
 | `docker` | `/var/run/docker.sock` by default | the same |
 | `home`, `traceDir` | `<OS temp>/dsh-layerfs/{home,traces}` by default | the same |
+| `containerPrefix` | `layerfs-` by default: Sandboxes `<prefix><project>-<n>` | the same, and the Store container `<prefix>store` |
 | `stateDir` | `<profile>/dsh-layerfs` by default (bindings, agent names, journals) | the same |
 
 A Live Init without the required settings is refused with "LayerFS is not configured: set … for layerfs-host in the profile patch"; `GET /layerfs/status` lists what is `missing`.
@@ -338,18 +339,19 @@ A Live Init without the required settings is refused with "LayerFS is not config
     # daemon: /path/to/layerfs-daemon           # Linux
 ```
 
-**On macOS** the Mac runs no Store call itself. The Host starts one long-lived Linux container per LayerFS home and bundle, the LayerFS box (`dsh-layerfs-box-<hash>`, [`box.js`](packages/host/src/box.js)), and every SDK call of the Host and of agents' scripts runs there with the bundle's `layerfs.node`. A new `bundle` gets a new box.
+**On macOS** the Mac runs no Store call itself. The Host starts one long-lived Linux container per LayerFS home, the Store container (`<containerPrefix>store`, `layerfs-store` by default, labelled `layerfs.role=store`; [`box.js`](packages/host/src/box.js)), and every SDK call of the Host and of agents' scripts runs there with the bundle's `layerfs.node`. A new `bundle` or worker replaces it when the Host starts it (at Host start and before an Init), so load one only while no dsh run is live. The Host removes an older-named `dsh-layerfs-box-<hash>` container of its home, and the containers of the retired `<home>/_sandboxes` records, when it starts.
 
 **On Linux** the Host and agents' scripts load the SDK in their own process, from `sdk/js` in this repository. It loads the addon from `LAYERFS_NATIVE`, or else `sdk/js/native/layerfs.node`: build it on that machine with `npm --prefix sdk/js run build:native` ([SDK README](../sdk/js/README.md#builds-and-compatibility); it needs Cargo 1.85.1 on the host), or set `LAYERFS_NATIVE` in dsh web's environment to a Linux build's `layerfs.node`. `daemon` is that build's `layerfs-daemon`. The Store must be on a local Linux filesystem (ext4, xfs or btrfs).
 
-**Running two dsh webs on one machine.** The default `home` and `traceDir` are the same for every profile, so two dsh webs would share projects and the box. Give each its own pair under the OS temp area:
+**Running two dsh webs on one machine.** The default `home` and `traceDir` are the same for every profile, so two dsh webs would share projects and the Store container. Give each its own pair under the OS temp area, and its own `containerPrefix`, since container names are per Docker engine (the Store container of another home is refused, never taken over):
 
 ```yaml
     home: /private/var/folders/…/T/dsh-layerfs-<name>/home        # node -p "require('fs').realpathSync(require('os').tmpdir())"
     traceDir: /private/var/folders/…/T/dsh-layerfs-<name>/traces
+    containerPrefix: <name>-
 ```
 
-Keep both in the OS temp area. Bash calls in Workspace Write mode run in dsh's sandbox, which lets them write only there, and a LayerFS call writes both (a `sandbox.create` elsewhere fails `PermissionDenied`).
+Keep both in the OS temp area. Bash calls in Workspace Write mode run in dsh's sandbox, which lets them write only there, and a LayerFS call writes both (a mount elsewhere fails `PermissionDenied`).
 
 ### 5. Start dsh web
 
@@ -394,8 +396,8 @@ node tools/check-session.mjs 'http://127.0.0.1:3090/?token=…' <session id>
 | `pnpm test` | Host tests, the mock model's scenario tests, and the model's trace replay check |
 | `node tools/init-project.mjs <profile dir> <folder> <image> <daemon>` | Init outside dsh |
 | `node tools/demo.mjs [<demo> <folder>]` | lists the demos, or copies the demo website into another folder |
-| `node tools/check-demo.mjs '<dsh web URL with ?token=…>' <session id> <demo> [--wait <s>]` | checks a finished demo session: every agent ran, and each bash step with `expect` left those LayerFS outcomes on the trace. For a replayed run also: no Sandbox of the project is open, every Branch's history is as recorded, and `main`'s tracked files match `final.json` |
-| `node tools/run-scenario.mjs <demo> --out <dir> [--pace] [--keep]` | plays a replayed demo headlessly on Live LayerFS, without dsh web or the mock model, agents at the same time, then runs the same gates and writes `receipt.json`. Pauses are skipped unless `--pace`; order comes only from the recorded order and `until` |
+| `node tools/check-demo.mjs '<dsh web URL with ?token=…>' <session id> <demo> [--wait <s>]` | checks a finished demo session: every agent ran, and each bash step with `expect` left those LayerFS outcomes on the trace. For a replayed run also: every Sandbox of the project closed itself (it waits up to `--wait` seconds, default 150), every Branch's history is as recorded, and `main`'s tracked files match `final.json` |
+| `node tools/run-scenario.mjs <demo> --out <dir> [--pace] [--keep] [--wait <s>]` | plays a replayed demo headlessly on Live LayerFS, without dsh web or the mock model, agents at the same time, then runs the same gates and writes `receipt.json`. Pauses are skipped unless `--pace`; order comes only from the recorded order and `until` |
 | `node tools/restore-store.mjs <id> <folder with global/> <work dir> <project>` | opens a copy of a stopped Store in a new volume and LayerFS home, for `import-run.mjs` (needs `LAYERFS_READER`, a checkout built at the Store's schema) |
 | `node tools/history/plan.mjs --repo <dsh.git> --out <dir> [--seed 352] [--from N]` | the #352 history replay plan: ranges, lanes, agents, steps and planned conflicts, from a full bare clone of deepseek-harness; checks that each range's plan alone reaches its checkpoint. `--from N` rewrites only ranges N and later |
 | `node tools/history/oracle.mjs build\|checkout …` | each range's oracle (checkpoint, tree, expected history and outcomes), and one working tree moved to a range's checkpoint |
