@@ -21,6 +21,7 @@ const { contributor, projectContext } = await import("../src/env.js");
 const { registerRoutes } = await import("../src/route.js");
 const { TreeReader } = await import("../src/trees.js");
 const { removeProject } = await import("../src/remove.js");
+const { migrate } = await import("../src/migrate.js");
 const { prepareInit, randomName, scanSource, watching } = await import("../src/init.js");
 const { InitJobs } = await import("../src/jobs.js");
 const { CALL, PROJECT } = await import("@dsh-layerfs/model/sources/records.js");
@@ -362,6 +363,50 @@ try {
     assert.deepEqual(pages, [["feature", 0], ["feature", 2]]);
     assert.equal(Object.keys(state.s.commits).length, 4, "the cut-off Commit is listed");
     assert.equal(state.s.commits[state.labels[id(2)]].parent, state.labels[id(1)], "and is its child's parent");
+  }
+  // the move to #373's layout: an older Sandbox is removed only when it has
+  // nothing to lose; one running with a mounted Workspace is kept, with every
+  // record, and reported; records go once every older container is gone
+  {
+    const home = join(dir, "migrate-home"), records = join(home, "_sandboxes");
+    const older = (name, container, mounts = 0) => {
+      mkdirSync(join(records, name), { recursive: true });
+      if (container) writeFileSync(join(records, name, "container"), container);
+      for (let i = 0; i < mounts; i++) writeFileSync(join(records, name, `mount-${i}.record`), "");
+    };
+    older("_service.a", "dead", 1); // a container Docker no longer has: removed whatever its records say
+    older("_service.b", "idle"); // running, no Workspace
+    older("named", "busy", 2); // running, two mounted Workspaces
+    older("claimed", null); // a claim that never started
+    mkdirSync(join(home, "a"), { recursive: true });
+    writeFileSync(join(home, "a", "service.record"), "");
+    const state = { dead: null, idle: "true", busy: "true" }, ran = [], warned = [];
+    const docker = async (file, args) => {
+      const [verb, ...rest] = args.slice(2);
+      ran.push(`${verb} ${rest.at(-1)}`);
+      const id = rest.at(-1);
+      if (verb === "inspect" && state[id] === null) throw Object.assign(new Error("exit 1"), { stderr: `Error: No such object: ${id}` });
+      if (verb === "rm" && id === "stuck") throw Object.assign(new Error("permission denied"), { stderr: "permission denied" });
+      return { stdout: verb === "inspect" ? `${state[id]}\n` : "" };
+    };
+    const spec = { home, docker: "/var/run/docker.sock" };
+    const first = await migrate(spec, docker, (text) => warned.push(text));
+    assert.deepEqual(first.kept.map((k) => [k.sandbox, k.container, k.workspaces]), [["named", "busy", 2]]);
+    assert.ok(!ran.includes("rm busy"), "a Sandbox with mounted Workspaces is never removed");
+    assert.ok(ran.includes("rm idle"));
+    assert.match(warned.join("\n"), /named .*left running: 2 mounted Workspaces.*docker rm -f busy/);
+    assert.ok(existsSync(join(records, "_service.b")) && existsSync(join(home, "a", "service.record")), "records stay while one is kept");
+    // the user removed it: the next start finds every older container gone and forgets the records
+    state.busy = null;
+    assert.deepEqual((await migrate(spec, docker, () => {})).kept, []);
+    assert.deepEqual([existsSync(records), existsSync(join(home, "a", "service.record"))], [false, false]);
+    // a removal Docker refuses keeps every record too, reported
+    older("_service.c", "stuck");
+    state.stuck = "false";
+    const refused = await migrate(spec, docker, () => {});
+    assert.deepEqual(refused.kept.map((k) => k.sandbox), ["_service.c"]);
+    assert.match(refused.kept[0].reason, /could not remove/);
+    assert.ok(existsSync(join(records, "_service.c")));
   }
   console.log("host: ok");
 } finally {

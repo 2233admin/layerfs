@@ -45,7 +45,11 @@ export function apply(ctx, config) {
     Object.assign(process.env, { DSH_LAYERFS_STORE_CONTAINER: spec.box, DSH_LAYERFS_BUNDLE: spec.bundle });
     ensureBox(spec).catch((error) => ctx.logger?.warn?.(`layerfs: the Store container did not start: ${error.message}`));
   }
-  migrate(spec).catch((error) => ctx.logger?.warn?.(`layerfs: moving to the #373 layout: ${error.message}`));
+  // older Sandboxes left running (they may hold work) are shown in GET /layerfs/status
+  spec.migration = { kept: [] };
+  migrate(spec, undefined, (text) => ctx.logger?.warn?.(text))
+    .then((result) => { spec.migration = result; })
+    .catch((error) => ctx.logger?.warn?.(`layerfs: moving to the #373 layout: ${error.message}`));
   const bindings = new BindingStore(spec.stateDir);
   const collector = new Collector(ctx, spec, bindings);
   ctx.effect(() => ctx.shellEnv.register(contributor(ctx, spec, bindings, collector)), "layerfs-host: bash environment");
