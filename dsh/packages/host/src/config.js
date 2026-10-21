@@ -3,7 +3,7 @@ import { mkdirSync, realpathSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { storeName } from "./box.js";
+import { storeName, VOLUMES } from "./box.js";
 
 /**
  * @typedef {object} Config
@@ -15,6 +15,9 @@ import { storeName } from "./box.js";
  *   Sandboxes `<prefix><project>-<n>`, the Store container `<prefix>store`. A second home on
  *   the same Docker engine (a test, another checkout) sets its own.
  * @property {string} [docker] Local Docker Engine Unix socket.
+ * @property {string} [volumes] Docker's volumes directory (default `/var/lib/docker/volumes`), for an
+ *   engine whose data-root is elsewhere. On Linux, Init installs the Store into a volume's directory
+ *   there, so the Host's user must be able to write it.
  * @property {string} [home] LayerFS home for discovery records, shared by the Host and agents' bash calls.
  * @property {string} [stateDir] Directory for project bindings and agent names.
  * @property {string} [traceDir] Directory for per-agent SDK trace files; bash calls must be able to write it.
@@ -29,6 +32,7 @@ import { storeName } from "./box.js";
  * @property {string} prefix this home's container name prefix
  * @property {string|null} box the Store container's name, on macOS with a bundle (else null)
  * @property {string} docker
+ * @property {string} volumes
  * @property {string} home
  * @property {string} stateDir
  * @property {string} traceDir
@@ -61,6 +65,7 @@ export function resolveConfig(config, profile) {
     prefix,
     box: ported ? storeName(prefix) : null,
     docker: config.docker || "/var/run/docker.sock",
+    volumes: config.volumes || VOLUMES,
     home,
     stateDir: config.stateDir || join(profile ? profile.dir : join(homedir(), ".dsh"), "dsh-layerfs"),
     traceDir: config.traceDir || join(temp, "traces"),

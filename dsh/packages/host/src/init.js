@@ -3,7 +3,7 @@
 // (backend "sim") is imported into the simulator (sim/) instead: no Docker,
 // no deployment settings.
 import { execFile } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { accessSync, constants, existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { lstat, opendir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
@@ -76,6 +76,27 @@ export function liveOnlyDemo(name, scenarios = SCENARIOS) {
 }
 
 /**
+ * Why this Host process cannot run a Live Init on Linux, or null. Init
+ * installs the Store straight into the new volume's directory under Docker's
+ * volumes directory, which Docker keeps root-only, and the native binding
+ * requires the LayerFS home to belong to this process's user. Either failing
+ * used to surface only after the volume was made, as LayerFS's `Unsupported`
+ * (EACCES) or `Unauthorized`. macOS (the Store container imports) is not checked.
+ * @returns {string|null}
+ */
+export function hostAccess(spec, { platform = process.platform, uid = process.getuid?.() } = {}) {
+  if (platform !== "linux" || spec.box || uid === undefined) return null;
+  try {
+    accessSync(spec.volumes, constants.R_OK | constants.W_OK | constants.X_OK);
+  } catch (error) {
+    if (error.code !== "ENOENT") return `this Host runs as uid ${uid} and cannot write Docker's volumes directory ${spec.volumes} (${error.code}), where Init installs the Store; run dsh as a user that can, such as root`;
+  }
+  const owner = existsSync(spec.home) ? statSync(spec.home).uid : uid;
+  if (owner !== uid) return `the LayerFS home ${spec.home} belongs to uid ${owner}, not this Host's uid ${uid}; set layerfs-host home to a folder this user owns`;
+  return null;
+}
+
+/**
  * Checks an Init request and names its project, without changing anything.
  * `image` gives the project's Sandboxes their own runtime image (a replayed
  * demo's), instead of the Host's.
@@ -91,6 +112,8 @@ export function prepareInit(spec, bindings, { folder, source = folder, name, bac
   if (backend === "sim" && liveOnlyDemo(name)) throw refuse("live-only", `${name} is a demo that runs on Live LayerFS only`);
   const missing = backend === "sim" ? [] : missingDeployment(spec);
   if (missing.length) throw refuse("not-configured", `LayerFS is not configured: set ${missing.join(" and ")} for layerfs-host in the profile patch`);
+  const denied = backend === "sim" ? null : hostAccess(spec);
+  if (denied) throw refuse("host-access", denied);
   for (const path of empty ? [folder] : [folder, source]) {
     if (!isAbsolute(path) || !existsSync(path) || !statSync(path).isDirectory()) throw refuse("invalid-folder", `${path} is not an absolute directory`);
   }
