@@ -1,8 +1,8 @@
 // The LayerFS sidebar page: one project at a time, like an editor. A slim
-// title bar has two tabs: the project, whose name is a switcher (every
-// LayerFS project, then "Import into a workspace", InitDialog), and All
-// projects · Sandboxes (AllSandboxes: every project's Sandboxes and what they
-// run on, whose cards open a project on its Sandboxes tab). Then its one action, New session (in
+// title bar has two tabs: All projects · Sandboxes (AllSandboxes: every
+// project's Sandboxes and what they run on; a project's card opens it, and
+// Import project imports a workspace's folder, InitDialog) and the open
+// project. Then the project's one action, New session (in
 // a workspace picked from its menu, which then uses the project by default),
 // and a menu for Refresh and Remove (RemoveDialog). The project (ProjectBoard)
 // fills the rest: Files' tree in a sidebar, File, History, Storage and
@@ -11,7 +11,7 @@
 // and the Store's size. ellen_joe shows full size where there is nothing else.
 // Colours, borders and radii are dsh's own tokens (--dsw-*, tokens.ts).
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
-import { Button, IconChevronDownOutlineRegular, IconEllipsisOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular, IconTrashOutlineRegular, Menu, type MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconEllipsisOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular, IconTrashOutlineRegular, Menu, type MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import ellen from '../../../../sim/avatars/ellen_joe.gif'
 import { AllSandboxes } from './AllSandboxes.tsx'
 import { api, type Project, type ProjectState, type Status } from './api.ts'
@@ -175,19 +175,13 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
   const importMenu: MenuEntry[] = items.length
     ? [{ type: 'label', id: 'il', text: 'Import into a workspace' }, ...items.map((w) => ({ id: 'import:' + w.workspaceId, label: `${w.title} · ${short(w.path)}`, icon: <IconPlusOutlineRegular size={16} />, disabled: !status?.configured }))]
     : [{ type: 'label', id: 'il', text: 'Add a workspace in dsh first' }]
-  // the switcher: every project, then importing a new one
-  const switchMenu: MenuEntry[] = [
-    ...(projects?.length ? [{ type: 'label', id: 'pl', text: 'Projects' } as MenuEntry] : []),
-    ...(projects ?? []).map((p) => ({ id: 'project:' + p.name, label: `${p.name} · ${p.empty ? 'empty' : short(p.source)}`, icon: p.name === selected ? <LayerFsIcon size={16} /> : undefined })),
-    ...(projects?.length ? [{ type: 'separator', id: 'ps' } as MenuEntry] : []),
-    ...importMenu,
-  ]
-  const onSwitch = (id: string) => {
+  const onImport = (id: string) => {
     setMenuSwitch(false)
-    if (id.startsWith('project:')) { setAll(false); setOpenTab(undefined); setSelected(id.slice(8)) }
-    else if (id.startsWith('import:')) { const w = items.find((x) => x.workspaceId === id.slice(7)); if (w) setInitFor(w) }
+    const w = items.find((x) => 'import:' + x.workspaceId === id)
+    if (w) setInitFor(w)
   }
-  const switcher = (anchor: React.ReactElement) => <Menu open={menuSwitch} onClose={() => setMenuSwitch(false)} items={switchMenu} onSelect={onSwitch} align="start" portal anchor={anchor} />
+  const importer = (anchor: React.ReactElement) => <Menu open={menuSwitch} onClose={() => setMenuSwitch(false)} items={importMenu} onSelect={onImport} align="end" portal anchor={anchor} />
+  const importButton = () => importer(<Button variant="outline" size="sm" icon={<IconPlusOutlineRegular size={16} />} onClick={() => setMenuSwitch(!menuSwitch)}>Import project</Button>)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, fontSize: 13, lineHeight: '20px', color: T.text }}>
@@ -198,7 +192,7 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
           <Notice title="Start your first project">
             <div style={{ display: 'grid', gap: 8, justifyItems: 'start' }}>
               <span>Import a folder from a workspace: LayerFS keeps a versioned copy that agents fork, test and merge.</span>
-              {switcher(<Button variant="outline" size="sm" icon={<IconPlusOutlineRegular size={16} />} onClick={() => setMenuSwitch(!menuSwitch)}>Import project</Button>)}
+              {importButton()}
             </div>
           </Notice>
         )}
@@ -207,20 +201,18 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
             <header style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
               <span style={{ display: 'flex', flex: 'none', color: T.text2 }}><LayerFsIcon size={20} /></span>
               <span role="tablist" aria-label="LayerFS" style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
-                {project && switcher(
-                  <button type="button" role="tab" aria-selected={!all} className="lfs-switch lfs-tab" aria-haspopup="menu" aria-expanded={menuSwitch}
-                    onClick={() => all ? setAll(false) : setMenuSwitch(!menuSwitch)} title={all ? `Back to ${project.name}` : 'Switch project or import one'}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: 320, padding: '0 6px', border: 0, borderRadius: T.sm, color: 'inherit', font: 'inherit', fontSize: 15, fontWeight: 500, lineHeight: '30px' }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</span>
-                    <span style={{ display: 'flex', flex: 'none', color: T.text2 }}><IconChevronDownOutlineRegular size={14} /></span>
-                  </button>,
-                )}
-                <button type="button" role="tab" aria-selected={all || !project} className="lfs-switch lfs-tab" onClick={() => setAll(true)} title="Every project's Sandboxes and what they run on"
+                <button type="button" role="tab" aria-selected={all || !project} className="lfs-switch lfs-tab" onClick={() => setAll(true)} title="Every project and its Sandboxes; a card opens a project"
                   style={{ flex: 'none', padding: '0 8px', border: 0, borderRadius: T.sm, color: 'inherit', font: 'inherit', fontSize: 15, fontWeight: 500, lineHeight: '30px', whiteSpace: 'nowrap' }}>
                   All projects · Sandboxes
                 </button>
+                {project && (
+                  <button type="button" role="tab" aria-selected={!all} className="lfs-switch lfs-tab" onClick={() => setAll(false)} title={project.name}
+                    style={{ minWidth: 0, maxWidth: 320, padding: '0 8px', border: 0, borderRadius: T.sm, color: 'inherit', font: 'inherit', fontSize: 15, fontWeight: 500, lineHeight: '30px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {project.name}
+                  </button>
+                )}
               </span>
-              {(all || !project) && <span style={{ flex: 1 }} />}
+              {(all || !project) && <><span style={{ flex: 1 }} />{importButton()}</>}
               {!all && project && <>
               <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: T.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${project.empty ? 'started empty' : project.source} · volume ${project.volume}`}>
                 {project.empty ? 'started empty' : `from ${short(project.source)}`} · {day(project.created)}
@@ -259,7 +251,7 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
         setRemoving(false)
         void loadProjects().then((list) => setSelected(list[0]?.name ?? null))
       }} />}
-      {initFor && <InitDialog folder={initFor.path} directories={uiWorkspace} onClose={() => setInitFor(null)} onDone={(made) => { setInitFor(null); void loadProjects().then(() => setSelected(made.name)) }} />}
+      {initFor && <InitDialog folder={initFor.path} directories={uiWorkspace} onClose={() => setInitFor(null)} onDone={(made) => { setInitFor(null); void loadProjects().then(() => { setOpenTab(undefined); setSelected(made.name); setAll(false) }) }} />}
     </div>
   )
 }
