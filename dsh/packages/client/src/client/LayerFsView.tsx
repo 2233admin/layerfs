@@ -2,19 +2,23 @@
 // view (@dsh-layerfs/view). It follows
 // the Host's /layerfs/session route while it is shown, and plays each call
 // at its own time, a moment behind the run (playback.ts). A demo's speed is
-// set on its demo strip (DemoStrip.tsx), not here.
+// set on its demo strip (DemoStrip.tsx), not here. The History pane's tabs
+// end with the project's Sandboxes (SandboxesTab), as on the project page.
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import FM from '../../../../sim/simulation_engine/files.js'
 import M from '../../../../sim/simulation_engine/model.js'
 import * as X from '../../../model/src/index.js'
 import { createFilesSource, createView, injectStyle } from '../../../view/src/index.js'
-import { api, type ProjectState, type SessionView } from './api.ts'
+import { api, type ProjectRuntime, type ProjectState, type SessionView } from './api.ts'
 import { CASTS, MAID_AVATARS } from './avatars.ts'
 import { ProjectBoard } from './ProjectBoard.tsx'
 import { Setup } from './Setup.tsx'
 import type { Directories } from './InitDialog.tsx'
 import { Playback, type Step } from './playback.ts'
 import type { FilesSource } from './replay.ts'
+import { POLL_MS as RUNTIME_MS, usePoll } from './runtimeParts.tsx'
+import { SandboxesTab } from './SandboxesTab.tsx'
 import { MESSAGE } from './ui.ts'
 import { useHiddenComposer } from './composer.ts'
 import { storeOf } from './storage.ts'
@@ -113,6 +117,19 @@ function Board({ sessionId, view, error, pane }: { sessionId: string, view: Sess
       board.current?.rerender?.()
     })
   }, [view.lines.length, sessionId])
+  // History's Sandboxes tab: the element the view keeps as its page, and the
+  // project's Sandboxes, read every RUNTIME_MS while History is the pane
+  const name = view.project!.name
+  const sbxEl = useRef<HTMLDivElement>(null as unknown as HTMLDivElement)
+  if (!sbxEl.current) { sbxEl.current = document.createElement('div'); sbxEl.current.className = 'lfs-own'; sbxEl.current.style.height = '100%' }
+  const runtimeRef = useRef<ProjectRuntime | null>(null)
+  const [runtime, setRuntime] = useState<ProjectRuntime | null>(null)
+  const [runtimeError, setRuntimeError] = useState<string | null>(null)
+  const readRuntime = () => api.projectRuntime(name).then((r) => { setRuntime(r); setRuntimeError(null) }, (e: Error) => setRuntimeError(e.message))
+  usePoll(() => { if (pane === 'history') void readRuntime() }, RUNTIME_MS, [name, pane])
+  useEffect(() => { setRuntime(null); setRuntimeError(null) }, [name])
+  useEffect(() => { runtimeRef.current = runtime; board.current?.rerender?.() }, [runtime])
+
   // main's Layer when the session began (undefined until the project's state is read).
   // The board draws from the calls without it, and rebuilds once when it is known.
   const [start, setStart] = useState<string | null | undefined>(undefined)
@@ -157,6 +174,7 @@ function Board({ sessionId, view, error, pane }: { sessionId: string, view: Sess
         const engine: any = new X.ReplayEngine({ project: view.project?.name ?? 'project', files: files.current!.source })
         engine.onchange = () => b.rerender()
         engine.storage = () => store.current
+        if (pane === 'history') engine.sandboxes = () => ({ el: sbxEl.current, level: runtimeRef.current?.level ?? 'ok' })
         if (start) engine.layer(start) // the board starts at main as the session found it
         return X.storyView(engine, { lead: 'main' })
       }
@@ -186,7 +204,12 @@ function Board({ sessionId, view, error, pane }: { sessionId: string, view: Sess
 
   useEffect(() => { if (board.current && error) board.current.note = `LayerFS is not answering: ${error}` }, [error])
 
-  return <div ref={host} style={BAND} />
+  return (
+    <>
+      <div ref={host} style={BAND} />
+      {pane === 'history' && createPortal(<SandboxesTab name={name} runtime={runtime} error={runtimeError} reload={readRuntime} />, sbxEl.current)}
+    </>
+  )
 }
 
 /**

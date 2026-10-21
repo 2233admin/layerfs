@@ -364,7 +364,7 @@ Open the printed `http://127.0.0.1:3090/?token=…` link. Run the preset's sessi
 What you see:
 - **LayerFS × DSH minimalist** is the default preset of a new session. A preset picked in dsh's settings still wins.
 - The New Session row has a **project chip** beside the preset chip. Its menu lists every project (the workspace folder's first) and "No LayerFS", with **New empty project** (a random name, such as calm-otter) and **Import project…** below. Import opens the directory picker and imports the folder as a new project; importing the same folder again gives `name-1`, `name-2`, …. Both make Live projects. Picking a project switches a blank session to the minimalist preset.
-- A session on a project has two more tabs beside Chat and Trajectory: **Work** (the agents' terminals, Branches and Sandboxes) and **History** (History and Files).
+- A session on a project has two more tabs beside Chat and Trajectory: **Work** (the agents' terminals, Branches and Sandboxes) and **History** (File, History, Storage and Sandboxes: the project's Sandboxes tab, as on the LayerFS page).
 - The sidebar's **LayerFS** page shows one project at a time, with a switcher of every project: its Files, History and Storage, a New session action, and Refresh and Remove.
 
 A **Sim project** needs no Docker, image or build, but the chip's Import makes Live projects. Get one either way:
