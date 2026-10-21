@@ -19,7 +19,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadScenario } from "../packages/mock/src/scenario.js";
 import { seedFolder } from "../packages/mock/src/seed.js";
-import { expectedOutcomes, finalTreeFailures, openContainers, orderFailures } from "./checks/gates.mjs";
+import { expectedOutcomes, finalTreeFailures, openContainers, orderFailures, volumeContainers } from "./checks/gates.mjs";
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
@@ -161,6 +161,9 @@ receipt.pass = Object.values(receipt.gates).every((g) => g.pass);
 save();
 log(`${receipt.pass ? "PASS" : "FAIL"} ${id} · receipt ${join(runDir, "receipt.json")}`);
 if (!flag("--keep") && openContainers(volume).length === 0) {
+  // the run's Sandboxes closed themselves; their stopped containers go with the volume
+  const stopped = volumeContainers(volume).map((line) => line.split(" ")[0]);
+  if (stopped.length) execFileSync("docker", ["rm", ...stopped], { stdio: "ignore" });
   execFileSync("docker", ["volume", "rm", volume], { stdio: "ignore" });
   rmSync(join(home, project), { recursive: true, force: true });
   log(`removed ${project} and ${volume}`);

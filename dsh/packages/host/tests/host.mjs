@@ -319,8 +319,9 @@ try {
   await assert.rejects(removeProject(h.spec, h.bindings, fakeTrees, "website", dockerWith("abc running\nold exited\n")), { code: "busy" });
   assert.deepEqual([ran, h.bindings.byName("website") !== null], [["ps -a --filter volume=dsh-layerfs-website-1 --format {{.ID}} {{.State}}"], true]);
   ran.length = 0;
-  assert.deepEqual(await removeProject(h.spec, h.bindings, fakeTrees, "website", dockerWith("old exited\nnew created\n")), { removed: "website", volume: "dsh-layerfs-website-1" });
-  assert.deepEqual(ran, ["ps -a --filter volume=dsh-layerfs-website-1 --format {{.ID}} {{.State}}", "rm old new", "volume rm dsh-layerfs-website-1"]);
+  // idle-closed Sandboxes (exited) and a failed start (created) do not refuse removal; they go with it
+  assert.deepEqual(await removeProject(h.spec, h.bindings, fakeTrees, "website", dockerWith("layerfs-website-1 exited\nlayerfs-website-2 exited\nnew created\n")), { removed: "website", volume: "dsh-layerfs-website-1" });
+  assert.deepEqual(ran, ["ps -a --filter volume=dsh-layerfs-website-1 --format {{.ID}} {{.State}}", "rm layerfs-website-1 layerfs-website-2 new", "volume rm dsh-layerfs-website-1"]);
   assert.deepEqual(forgot, ["website", "website"]);
   mkdirSync(join(dir, "website"), { recursive: true });
   assert.equal(prepareInit(h.spec, h.bindings, { folder: dir, source: join(dir, "website") }).project.name, "website", "a removed name is free again at once");

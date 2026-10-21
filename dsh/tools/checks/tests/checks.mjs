@@ -2,7 +2,7 @@
 // outcomes gate. No Docker, no project.
 //   node tools/checks/tests/checks.mjs
 import assert from "node:assert/strict";
-import { expectedOutcomes } from "../gates.mjs";
+import { expectedOutcomes, openContainers } from "../gates.mjs";
 import { differenceAt, runIndex } from "../refs.mjs";
 
 // a ref counts the record's Commits; skipped optional ones and extra ones shift it
@@ -43,4 +43,8 @@ const lines = [
 ];
 assert.deepEqual(expectedOutcomes(scenario, () => lines).failures, []);
 assert.equal(expectedOutcomes({ agents: { root: [bash("root[1]", ["sandbox.exec:exit:1"])] } }, () => lines).failures.length, 1);
+// the closed check: an idle-closed Sandbox's stopped container has closed; a running one has not
+const ps = (out) => (file, args) => { assert.deepEqual(args.slice(2, 6), ["ps", "-a", "--filter", "volume=v"]); return out; };
+assert.deepEqual(openContainers("v", "/d.sock", ps("layerfs-p-1 exited\nlayerfs-p-2 created\nold dead\n")), []);
+assert.deepEqual(openContainers("v", "/d.sock", ps("layerfs-p-1 exited\nlayerfs-p-2 running\nlayerfs-p-3 restarting\n")), ["layerfs-p-2 running", "layerfs-p-3 restarting"]);
 console.log("checks: ok");

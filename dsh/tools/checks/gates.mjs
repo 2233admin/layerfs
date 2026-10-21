@@ -11,10 +11,11 @@
 //                (`stamp`, matched as a pattern) and files whose format holds
 //                the run's clock or an OS-assigned value (`content`, compared
 //                by presence); variesOf() decides both from the record
-//   closed       no container uses the project's volume: every Sandbox of the
-//                run closed itself, which a Sandbox does two minutes after its
-//                last Workspace is unmounted (#373), so no Workspace is left
-//                mounted. The callers wait for it, bounded.
+//   closed       no container runs on the project's volume: every Sandbox of
+//                the run closed itself, which a Sandbox does two minutes after
+//                its last Workspace is unmounted (#373), so no Workspace is left
+//                mounted. Its stopped container does not count. The callers
+//                wait for it, bounded.
 // Recorded runs name the calls of the older SDK: sandbox.* for a Workspace
 // call (the SDK's workspace.* now), and sandbox.create and sandbox.close,
 // which no longer exist and leave nothing on the trace.
@@ -134,8 +135,15 @@ export async function finalTreeFailures(final, lf) {
   return { failures, files: Object.keys(run.files).length, varies: { stamped: Object.keys(final.main).filter((p) => name(p) !== p).length, content: exempt.size } };
 }
 
-/** The closed check: the containers that still use the project's volume. */
-export function openContainers(volume, docker = "/var/run/docker.sock") {
-  const out = execFileSync("docker", ["-H", `unix://${docker}`, "ps", "-a", "--filter", `volume=${volume}`, "--format", "{{.Names}} {{.State}}"], { encoding: "utf8" });
+/** Container states that hold the volume but run nothing: an idle-closed Sandbox, a failed start. */
+const STOPPED = new Set(["created", "exited", "dead"]);
+/** The containers on the project's volume, `name state` each. */
+export function volumeContainers(volume, docker = "/var/run/docker.sock", run = execFileSync) {
+  const out = run("docker", ["-H", `unix://${docker}`, "ps", "-a", "--filter", `volume=${volume}`, "--format", "{{.Names}} {{.State}}"], { encoding: "utf8" });
   return out.split("\n").filter(Boolean);
+}
+/** The closed check: the containers still running on the project's volume. A stopped one, such as a
+ *  Sandbox that closed itself when idle, has closed; the next listing or project removal deletes it. */
+export function openContainers(volume, docker = "/var/run/docker.sock", run = execFileSync) {
+  return volumeContainers(volume, docker, run).filter((line) => !STOPPED.has(line.split(" ").at(-1)));
 }
