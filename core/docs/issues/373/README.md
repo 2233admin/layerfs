@@ -14,7 +14,7 @@ Agents work with **Workspaces**; LayerFS places them in **Sandboxes**. A
 project has one kind of Sandbox, `layerfs-<project>-<n>`. All of them are
 alike, and every one is optional: none runs until a Workspace is mounted, and
 an idle one closes. Callers no longer create, choose or close Sandboxes. On
-macOS one **Store worker** container serves Store calls and Import for every
+macOS one **Store container**, `layerfs-store`, serves Store calls and Import for every
 project; on Linux the SDK does that in-process. Every name says what a thing
 is and which project it belongs to.
 
@@ -83,20 +83,26 @@ change, every `lfs run` added one more named Sandbox per call.
 4. **Names are per project and say what and whose.** One pattern across the
    API, the records, Docker and the UI.
 5. **Store work never needs a Sandbox.** Views, `fs.*`, `branch.*` and Import's
-   Store install run in-process: in the Store worker on macOS, in the caller on
+   Store install run in-process: in `layerfs-store` on macOS, in the caller on
    Linux.
 
 ### 2.2 Containers
 
 | Container | How many | Name | Runs | Mounts | Lifetime |
 |---|---|---|---|---|---|
-| Store worker (macOS only) | 1 per LayerFS home and build | `layerfs-worker-<12 hex>` | Real SDK: Store calls, Import, Sandbox start and stop for every project | As the box today | While dsh uses LayerFS |
+| Store container (macOS only) | 1 per LayerFS home | `layerfs-store` | Real SDK: Store calls, Import, Sandbox start and stop for every project | As the box today | While dsh uses LayerFS; a new build replaces it |
 | Project Sandbox | 0 to n per project | `layerfs-<project>-<n>` | `layerfs-daemon`, up to 16 Workspaces | Store volume at `/layerfs-store`, plus the project's read-only volumes | From the first mount that needs it until idle |
 
-Every container carries the labels `layerfs.role` (`worker` or `sandbox`),
+Every container carries the labels `layerfs.role` (`store` or `sandbox`),
 `layerfs.project` and `layerfs.sandbox` (`<n>`). A LayerFS home's container
 prefix defaults to `layerfs-`. A second home on the same Docker engine (tests,
 another checkout) sets its own prefix, so names never collide.
+
+`layerfs-store` has no build hash in its name: a home has one at a time. When
+the Host starts with a different build than the running one (recorded in
+`<home>/.layerfs-store.json`), it replaces the container, and only while no dsh
+run is live. The Docker name `layerfs-store` is separate from the in-Sandbox
+mount path `/layerfs-store`, which stays.
 
 ### 2.3 Storage
 
@@ -107,7 +113,7 @@ another checkout) sets its own prefix, so names never collide.
 | Workspace view | FUSE mount | `/workspaces/N` (unchanged) | Committed base plus overlay | Mount to unmount |
 | Project records | Folder | `<home>/<project>/`: `project.record`, `sealed.sqlite`, `ownership.lock`, `create.intent` | The project, including its image and read-only volumes | Until the project is removed |
 | Sandbox records | Folder | `<home>/<project>/sandboxes/<n>/`: `sandbox.record`, `workspace-<hex>.record`, `process-<id>.record` | One Sandbox, its Workspaces and processes | Until the Sandbox closes |
-| Worker file | File | `<home>/.layerfs-worker.json` | How to reach the worker | While the worker runs |
+| Store container file | File | `<home>/.layerfs-store.json` | How to reach `layerfs-store` (port, secret, build) | While it runs |
 | Extra volumes | Docker volume, read-only | Same target rules as today | Caches, tools; set per project | Owned by their creator |
 
 ### 2.4 Calls
@@ -126,14 +132,14 @@ another checkout) sets its own prefix, so names never collide.
 
 | Writer | Writes when | Safe because |
 |---|---|---|
-| Store worker, or the SDK on Linux | `fs.*` writes, fork, merge, publish, Import | All writers share one Linux kernel (Docker's VM on macOS). SQLite's single writer, the Linux directory lock and the publication lane make writes take turns. |
+| `layerfs-store`, or the SDK on Linux | `fs.*` writes, fork, merge, publish, Import | All writers share one Linux kernel (Docker's VM on macOS). SQLite's single writer, the Linux directory lock and the publication lane make writes take turns. |
 | Each project Sandbox daemon | Commit | The same locks; heavy work happens before the lane, as today. |
 
 ### 2.6 Names
 
 | Thing | Today | Target |
 |---|---|---|
-| Store container | `dsh-layerfs-box-<hash>`, "box" | `layerfs-worker-<hash>`, "Store worker" |
+| Store container | `dsh-layerfs-box-<hash>` (one per home and build), "box" | `layerfs-store` (one per home), "Store container" |
 | Project Sandbox | `_service.<project>`, or a caller-chosen name | `<n>` within the project; `layerfs-<project>-<n>` in Docker and the UI |
 | Sandbox container | random Docker name | `layerfs-<project>-<n>`, plus labels |
 | Store volume | `dsh-layerfs-<project>-<created>` | `layerfs-<project>-store-<created>`, for new projects only |
@@ -173,12 +179,12 @@ lines use the new method names.
 |---|---|---|
 | Placement | Under the project's `ownership.lock`, pick the lowest-numbered running Sandbox with a free slot; else start Sandbox `<lowest free n>` and mount there | Pack (fewest containers) or spread (isolation)? Proposal: pack |
 | Full Sandbox | A mount never fails `Capacity` while Docker can start another Sandbox | Upper bound on Sandboxes per project? |
-| Idle close | A Sandbox with no Workspaces and no running processes closes after an idle period (proposed 10 min) | Who closes it: the daemon exits itself (proposed; no supervisor needed on Linux), or the worker or Host sweeps |
+| Idle close | A Sandbox with no Workspaces and no running processes closes after an idle period (proposed 10 min) | Who closes it: the daemon exits itself (proposed; no supervisor needed on Linux), or `layerfs-store` or the Host sweeps |
 | Closed or gone Sandbox | Its records are cleaned the way the gone/stopped path does today (`782dd709e2`); the next mount starts a fresh one | — |
 | Image | `project.record` holds the runtime image digest, set at Import and changeable later | Changing it: new Sandboxes only, or close idle ones? |
 | Read-only volumes | Project setting, mounted in every Sandbox of the project | Needed beyond today's tests? |
 | Isolation | Not offered at first | Later: a mount option that starts a Sandbox for that one Workspace (still the same kind) |
-| Import install | The worker (macOS) or the SDK (Linux) installs `sealed.sqlite` into the volume in-process, as the first Sandbox's daemon does today (`existing_store`) | Confirm the install has no daemon-only step |
+| Import install | `layerfs-store` (macOS) or the SDK (Linux) installs `sealed.sqlite` into the volume in-process, as the first Sandbox's daemon does today (`existing_store`) | Confirm the install has no daemon-only step |
 | Idle Workspaces | Unchanged here; #370 auto-unmount lets idle Sandboxes close sooner | — |
 
 ## 5. What is dropped
@@ -258,7 +264,7 @@ dsh/packages/                      [2739]  (files shown only)
     layerfs-client.js                 68   (release and gone handling without the service)
     collector.js                     172   (no sandboxesOf)
     remove.js                         43   (records under <home>/<project>/sandboxes/)
-    box.js                            75   (Store worker name, file and labels)
+    box.js                            75   (layerfs-store name, file, labels; replace on a new build)
     env.js                            64   (DSH_LAYERFS_BOX, DSH_LAYERFS_IMAGE wording)
     trees.js                          68   (snapshot without a Sandbox list)
     sim/                            [325]
@@ -286,8 +292,8 @@ Docs and skills:
 | `.agents/skills/layerfs-sdk-observe/references/operator.md` | Snapshot and process calls |
 | `sdk/js/README.md` | API |
 | `core/docs/architecture/82-sdk-call-channel.md` | Ops table |
-| `dsh/README.md` | Store worker, project Sandboxes, Import without a Sandbox |
-| `AGENTS.md` (dsh Live exception paragraph) | "box" → Store worker, if the owner agrees |
+| `dsh/README.md` | `layerfs-store`, project Sandboxes, Import without a Sandbox |
+| `AGENTS.md` (dsh Live exception paragraph) | "box" → Store container `layerfs-store`, if the owner agrees |
 
 Not changed by this issue: `dsh/demo/*` system prompts, which still tell agents
 to use `sandbox.create` (untracked; the owner decides), and released or
@@ -300,7 +306,7 @@ historical receipts.
 | Running Sandboxes | Disposable. On upgrade the Host closes every Sandbox of the old kinds once (records under `<home>/_sandboxes/`, plus containers). Stores are untouched. |
 | Old records | `<home>/_sandboxes/` and `service.record` are removed after that close |
 | Existing volumes | Keep their names; `project.record` already stores each project's volume |
-| Old worker | `dsh-layerfs-box-…` is stopped and replaced by `layerfs-worker-…` when the Host next starts it |
+| Old box | `dsh-layerfs-box-…` is stopped and replaced by `layerfs-store` when the Host next starts it |
 | SDK callers | Breaking change; no compatibility layer. dsh, skills and tests move in the same change |
 | Traces | Old trace lines keep their old method names; the model reads both while old sessions exist |
 
@@ -313,7 +319,7 @@ historical receipts.
 | 2 | Per-project numbered Sandboxes, placement, names, labels, prefix | — |
 | 3 | Workspace-first SDK API; drop `create`, `service`, `close` | 2 |
 | 4 | Idle close | 2 |
-| 5 | dsh Host, model, view and simulator on the new API; Store worker naming | 3 |
+| 5 | dsh Host, model, view and simulator on the new API; `layerfs-store` naming | 3 |
 | 6 | Docs and skills | 3, 5 |
 | 7 | Live check on dsh web (3080): Import starts no Sandbox; `lfs run` × 17 starts a second Sandbox; idle close; names and labels in `docker ps` | 1–6 |
 
@@ -327,4 +333,4 @@ Disposable Store profile only; every test command under 120 s.
 - [#372](https://github.com/Ephemeral-AI-Lab/layerfs/issues/372): Store call
   Workspaces (in-process) leak to `Capacity`; out of scope.
 - [#368](https://github.com/Ephemeral-AI-Lab/layerfs/issues/368): macOS
-  support; the Store worker is its container.
+  support; `layerfs-store` is its container.
