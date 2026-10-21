@@ -68,56 +68,54 @@ pub(crate) fn directory(path: &Path) -> Result<()> {
     }
     private(path, true)
 }
-/// Where Sandboxes live: `LAYERFS_HOME/_sandboxes/<name>/`, one directory per
-/// name across every project. `_sandboxes` is never a project name (those
-/// start alphanumeric), and claiming a name is one atomic `mkdir`.
-const SANDBOXES: &str = "_sandboxes";
-/// The prefix of a project's service Sandbox name; no user name starts with it.
-pub(crate) const SERVICE: &str = "_service.";
-
-/// A Sandbox name a caller chooses: as a project name, 1–63 lowercase ASCII
-/// letters, digits, `_`, `-`, `.`, starting and ending alphanumeric.
-pub(crate) fn check_name(name: &str) -> Result<()> {
-    let bytes = name.as_bytes();
-    let edge = |b: &u8| b.is_ascii_lowercase() || b.is_ascii_digit();
-    let ok = (1..=63).contains(&bytes.len())
-        && bytes.first().is_some_and(edge)
-        && bytes.last().is_some_and(edge)
-        && bytes
-            .iter()
-            .all(|b| edge(b) || matches!(b, b'_' | b'-' | b'.'));
-    if !ok {
+/// Where a project's Sandboxes live: `LAYERFS_HOME/<project>/sandboxes/<n>/`
+/// (#373), numbered from 1 within the project.
+fn sandboxes(args: &SdkValue) -> Result<PathBuf> {
+    let root = project_dir(args)?.join("sandboxes");
+    directory(&root)?;
+    Ok(root)
+}
+/// A Sandbox number as text: 1 to 9999, no leading zero.
+fn number(id: &str) -> Option<u32> {
+    let n = id.parse::<u32>().ok()?;
+    ((1..=9999).contains(&n) && n.to_string() == id).then_some(n)
+}
+/// The directory of the project's Sandbox `id`.
+pub(crate) fn sandbox_dir(args: &SdkValue, id: &str) -> Result<PathBuf> {
+    if number(id).is_none() {
         return Err(refused(
             "InvalidInput",
-            "a Sandbox name is 1-63 lowercase letters, digits, _ . - and starts and ends alphanumeric",
+            format!("a Sandbox is a number from 1 to 9999, not {id}"),
         ));
     }
-    Ok(())
+    Ok(sandboxes(args)?.join(id))
 }
-/// The directory of the Sandbox `name` (a caller's name or a service name).
-pub(crate) fn sandbox_dir(args: &SdkValue, name: &str) -> Result<PathBuf> {
-    match name.strip_prefix(SERVICE) {
-        Some(project) => layerfs_history::HistoryName::new(project)
-            .map(|_| ())
-            .map_err(|_| refused("InvalidInput", "service Sandbox name"))?,
-        None => check_name(name)?,
-    }
-    let root = home(args)?.join(SANDBOXES);
-    directory(&root)?;
-    Ok(root.join(name))
-}
-/// Claims `name` for a new Sandbox: its directory, made once. A name in use is `Exists`.
-pub(crate) fn claim(args: &SdkValue, name: &str) -> Result<PathBuf> {
-    let path = sandbox_dir(args, name)?;
-    match fs::DirBuilder::new().mode(0o700).create(&path) {
-        Ok(()) => {}
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-            return Err(refused("Exists", format!("a Sandbox named {name} exists")))
+/// The project's Sandbox numbers that have a directory, lowest first.
+pub(crate) fn sandbox_ids(args: &SdkValue) -> Result<Vec<String>> {
+    let mut ids = Vec::new();
+    for item in fs::read_dir(sandboxes(args)?).map_err(failed)? {
+        let name = item.map_err(failed)?.file_name();
+        if let Some(n) = name.to_str().and_then(number) {
+            ids.push(n);
         }
-        Err(e) => return Err(failed(e)),
     }
+    ids.sort_unstable();
+    Ok(ids.into_iter().map(|n| n.to_string()).collect())
+}
+/// Claims the lowest free Sandbox number: its directory, made once. Called
+/// under the project's guard, so no other claim runs meanwhile.
+pub(crate) fn claim_next(args: &SdkValue) -> Result<(String, PathBuf)> {
+    let root = sandboxes(args)?;
+    let n = (1..=9999u32)
+        .find(|n| !root.join(n.to_string()).exists())
+        .ok_or_else(|| refused("Capacity", "the project has 9999 Sandboxes"))?;
+    let path = root.join(n.to_string());
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&path)
+        .map_err(failed)?;
     private(&path, true)?;
-    Ok(path)
+    Ok((n.to_string(), path))
 }
 pub(crate) fn project_dir(args: &SdkValue) -> Result<PathBuf> {
     let name = registry::text(args, "project")?;
@@ -126,9 +124,12 @@ pub(crate) fn project_dir(args: &SdkValue) -> Result<PathBuf> {
     private(&path, true)?;
     Ok(path)
 }
-/// Calls of this process take turns on one directory before its OS lock; the
-/// wait is readiness, bounded, and nothing has been attempted before it ends.
+/// Calls take turns on one directory: in this process before its OS lock,
+/// and between processes on the lock itself. The wait is readiness, bounded,
+/// and nothing has been attempted before it ends.
 const IN_PROCESS_WAIT: Duration = Duration::from_secs(60);
+/// Between two looks at another process's lock.
+const LOCK_PAUSE: Duration = Duration::from_millis(2);
 static HELD: Mutex<std::collections::BTreeSet<PathBuf>> =
     Mutex::new(std::collections::BTreeSet::new());
 static FREED: std::sync::Condvar = std::sync::Condvar::new();
@@ -151,8 +152,9 @@ impl Drop for Guard {
     }
 }
 
-/// Another call of this process waits its turn; another process holding the
-/// OS lock is refused Busy, never waited for. Busy is not retried.
+/// Another call of this process, or another process holding the OS lock,
+/// is waited for until the bounded wait ends; then the call is refused Busy,
+/// which is not retried.
 pub(crate) fn guard(directory: &Path) -> Result<Guard> {
     let deadline = std::time::Instant::now() + IN_PROCESS_WAIT;
     let mut held = registry::lock(&HELD)?;
@@ -171,7 +173,7 @@ pub(crate) fn guard(directory: &Path) -> Result<Guard> {
     }
     held.insert(directory.to_owned());
     drop(held);
-    match os_lock(directory) {
+    match os_lock(directory, deadline) {
         Ok(file) => Ok(Guard {
             file,
             directory: directory.to_owned(),
@@ -184,8 +186,9 @@ pub(crate) fn guard(directory: &Path) -> Result<Guard> {
         }
     }
 }
-/// A nonblocking OS lock is released even if its process exits.
-fn os_lock(directory: &Path) -> Result<File> {
+/// The OS lock, waited for until `deadline`; it is released even if its
+/// process exits.
+fn os_lock(directory: &Path, deadline: std::time::Instant) -> Result<File> {
     let path = directory.join("ownership.lock");
     let file = OpenOptions::new()
         .read(true)
@@ -196,11 +199,14 @@ fn os_lock(directory: &Path) -> Result<File> {
         .open(&path)
         .map_err(failed)?;
     private(&path, false)?;
-    if unsafe { flock(file.as_raw_fd(), LOCK_EX | LOCK_NB) } != 0 {
-        return Err(refused(
-            "Busy",
-            "another process owns this discovery mutation",
-        ));
+    while unsafe { flock(file.as_raw_fd(), LOCK_EX | LOCK_NB) } != 0 {
+        if std::time::Instant::now() >= deadline {
+            return Err(refused(
+                "Busy",
+                "another process owns this discovery mutation",
+            ));
+        }
+        std::thread::sleep(LOCK_PAUSE);
     }
     Ok(file)
 }
@@ -338,6 +344,7 @@ pub(crate) fn save_sandbox(
         SdkValue::map([
             ("id", SdkValue::text(&state.id)),
             ("project", SdkValue::text(&state.project)),
+            ("name", SdkValue::text(&state.name)),
             (
                 "container",
                 SdkValue::text(state.runtime.identity().to_string()),
@@ -368,14 +375,16 @@ pub(crate) fn save_sandbox(
     )
 }
 /// A Sandbox whose container no longer runs it: the Engine no longer has the
-/// container, or has it stopped (Docker restarted, for instance), which lost
-/// its daemon and every mount in it. Only its records, and a stopped
-/// container, hold its name; `sandbox.close` frees it.
-fn gone(id: &str, container: &str, stopped: bool) -> SdkRefusal {
+/// container, or has it stopped (it closed when idle, or Docker restarted),
+/// which lost its daemon and every mount in it. Only its records, and a
+/// stopped container, hold its number; the next mount reclaims them.
+pub(crate) fn gone(id: &str, container: &str, stopped: bool) -> SdkRefusal {
     let state = if stopped { "stopped" } else { "gone" };
     SdkRefusal {
         code: "NoSuchSandbox".to_owned(),
-        message: format!("the container of Sandbox {id} is {state}; close it to free its name"),
+        message: format!(
+            "the container of Sandbox {id} is {state}, with every Workspace that was in it"
+        ),
         detail: SdkValue::map([
             ("sandbox", SdkValue::text(id)),
             ("container", SdkValue::text(container)),
@@ -426,7 +435,10 @@ pub(crate) fn reopen(args: &SdkValue) -> Result<Arc<SandboxState>> {
     let id = registry::text(args, "sandbox")?;
     let directory = sandbox_dir(args, id)?;
     if !directory.join("sandbox.record").exists() {
-        return Err(refused("NoSuchSandbox", format!("no Sandbox named {id}")));
+        return Err(refused(
+            "NoSuchSandbox",
+            format!("the project has no Sandbox {id}"),
+        ));
     }
     private(&directory, true)?;
     let value = load(&directory.join("sandbox.record"))?;
@@ -454,6 +466,8 @@ pub(crate) fn reopen(args: &SdkValue) -> Result<Arc<SandboxState>> {
     let state = Arc::new(SandboxState {
         id: id.to_owned(),
         project: project.to_owned(),
+        // a record from before #373 has no name
+        name: value.get_text("name").unwrap_or_default().to_owned(),
         directory,
         runtime,
         identity: CommandIdentity { uid: 501, gid: 20 },
@@ -471,7 +485,7 @@ pub(crate) fn refresh(state: &SandboxState) -> Result<()> {
     for item in fs::read_dir(&state.directory).map_err(failed)? {
         let item = item.map_err(failed)?;
         let name = item.file_name().to_string_lossy().into_owned();
-        if name.starts_with("mount-") && name.ends_with(".record") {
+        if name.starts_with("workspace-") && name.ends_with(".record") {
             let Some(value) = present(&item.path())? else {
                 continue;
             };
@@ -549,22 +563,22 @@ fn absent(failure: &layerfs_api::OperationFailure) -> bool {
     matches!(&failure.cause, layerfs_api::OperationCause::Remote(refusal)
         if refusal.code == layerfs_bridge::control::ControlCode::Missing)
 }
-pub(crate) fn mount_file(
+pub(crate) fn workspace_file(
     state: &SandboxState,
     token: layerfs_bridge::control::WorkspaceToken,
 ) -> PathBuf {
     state.directory.join(format!(
-        "mount-{}.record",
+        "workspace-{}.record",
         layerfs_bridge::sdk_values::hex(&token.workspace.to_bytes())
     ))
 }
-pub(crate) fn save_mount(
+pub(crate) fn save_workspace(
     state: &SandboxState,
     mount: &MountedWorkspace,
     branch: &str,
 ) -> Result<()> {
     save(
-        &mount_file(state, mount.bound.token),
+        &workspace_file(state, mount.bound.token),
         SdkValue::map([
             ("path", SdkValue::text(&mount.ready.directory)),
             ("branch", SdkValue::text(branch)),
@@ -667,7 +681,8 @@ mod tests {
 
         drop(held);
         // A second open of ownership.lock, as another process would take it.
-        let taken = os_lock(&directory).map_err(|refusal| (refusal.code, refusal.message));
+        let taken = os_lock(&directory, std::time::Instant::now())
+            .map_err(|refusal| (refusal.code, refusal.message));
         drop(release_write);
         assert!(spawner.join().unwrap().success());
         let _ = fs::remove_dir_all(&directory);

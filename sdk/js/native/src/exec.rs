@@ -8,7 +8,7 @@
 //! from a second command and waits (bounded) until it is gone.
 use crate::job::{failed, refused, Outcome};
 use crate::output::Spool;
-use crate::registry::{lock, sandbox, sandbox_refreshed, text, Process, SandboxState};
+use crate::registry::{lock, naming, sandbox, sandbox_refreshed, text, Process, SandboxState};
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use std::time::Duration;
 
@@ -47,13 +47,14 @@ fn run(
     Ok((code, stdout, stderr))
 }
 
-/// `sandbox.exec(sandbox, path, command, { background?, spool? })`.
+/// `workspace.exec(ws, command, { background?, spool? })`; with
+/// `background`, `operator.process.start(ws, command)`.
 ///
 /// A foreground result is `kind`, `exitCode`, `stdout`, `stderr`, `message`
 /// and `truncated` (always false: no output is cut). A stream over the
 /// inline window (1 MiB), or any non-empty stream with `spool`, is null
 /// here and spooled; the result then also names its `output`, read with
-/// `sandbox.exec_output` and closed with `sandbox.exec_release`, and the
+/// `workspace.exec_output` and closed with `sandbox.exec_release`, and the
 /// `stdoutBytes` and `stderrBytes` sizes.
 pub(crate) fn exec(args: &SdkValue) -> Outcome {
     let state = sandbox(args)?;
@@ -84,8 +85,10 @@ pub(crate) fn exec(args: &SdkValue) -> Outcome {
         ));
     }
     let _guard = crate::discovery::guard(&state.directory)?;
+    // the id names its Sandbox, so `cancel` needs nothing else
     let id = format!(
-        "proc_{}",
+        "proc_{}_{}",
+        state.id,
         layerfs_bridge::sdk_values::hex(&crate::registry::random()?[..12])
     );
     let script = format!("setsid bash -c \"$0\" >/tmp/layerfs-{id}.log 2>&1 </dev/null & echo $!");
@@ -184,9 +187,33 @@ pub(crate) fn running_in(state: &SandboxState, path: &str) -> Result<Vec<String>
     Ok(running)
 }
 
-/// `sandbox.list_processes(sandbox)`: the processes this binding started.
+/// `operator.process.list()`: the background processes started in the
+/// project's Sandboxes that still run (a gone Sandbox's went with it), each
+/// with its `sandbox`.
 pub(crate) fn processes(args: &SdkValue) -> Outcome {
-    let state = sandbox_refreshed(args)?;
+    let mut items = Vec::new();
+    for id in crate::discovery::sandbox_ids(args)? {
+        let named = naming(args, &id);
+        if !crate::discovery::sandbox_dir(&named, &id)?
+            .join("sandbox.record")
+            .exists()
+        {
+            continue;
+        }
+        match sandbox_refreshed(&named) {
+            Ok(state) => items.extend(listed(&state)?),
+            Err(refusal) if crate::discovery::gone_container(&refusal).is_some() => {}
+            Err(refusal) => return Err(refusal),
+        }
+    }
+    Ok(SdkValue::map([
+        ("kind", SdkValue::text("ok")),
+        ("items", SdkValue::List(items)),
+    ]))
+}
+
+/// One Sandbox's processes, as `processes` lists them.
+fn listed(state: &SandboxState) -> Result<Vec<SdkValue>, SdkRefusal> {
     let listed = lock(&state.processes)?
         .iter()
         .map(|(id, process)| {
@@ -202,9 +229,10 @@ pub(crate) fn processes(args: &SdkValue) -> Outcome {
         .collect::<Vec<_>>();
     let mut items = Vec::new();
     for (id, path, command, pid, stopped, start) in listed {
-        let running = !stopped && owned_alive(&state, pid, &start)?;
+        let running = !stopped && owned_alive(state, pid, &start)?;
         items.push(SdkValue::map([
             ("id", SdkValue::Text(id)),
+            ("sandbox", SdkValue::text(&state.id)),
             ("path", SdkValue::Text(path)),
             ("command", SdkValue::Text(command)),
             (
@@ -219,17 +247,19 @@ pub(crate) fn processes(args: &SdkValue) -> Outcome {
             ),
         ]));
     }
-    Ok(SdkValue::map([
-        ("kind", SdkValue::text("ok")),
-        ("items", SdkValue::List(items)),
-    ]))
+    Ok(items)
 }
 
-/// `process.cancel(sandbox, process)`: TERM to the process group, then a
-/// bounded wait until it is gone.
+/// `operator.process.cancel(process)`: TERM to the process group, then a
+/// bounded wait until it is gone. The process id names its Sandbox.
 pub(crate) fn cancel(args: &SdkValue) -> Outcome {
-    let state = sandbox_refreshed(args)?;
     let id = text(args, "process")?;
+    let sandbox = id
+        .strip_prefix("proc_")
+        .and_then(|rest| rest.split_once('_'))
+        .map(|(sandbox, _)| sandbox)
+        .ok_or_else(|| refused("NoSuchProcess", format!("{id} is not a process id")))?;
+    let state = sandbox_refreshed(&naming(args, sandbox))?;
     let _guard = crate::discovery::guard(&state.directory)?;
     let (pid, start, stopped) = lock(&state.processes)?
         .get(id)

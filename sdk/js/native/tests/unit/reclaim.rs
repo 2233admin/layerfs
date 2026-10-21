@@ -1,7 +1,8 @@
-//! `sandbox.close` of a Sandbox whose container the Engine no longer has: its
-//! records go under its locks, and nothing else counts as gone. Included by
-//! sandbox.rs, so it reaches the private close paths.
-use super::{close, close_gone, service_existing};
+//! #373: a Sandbox whose container the Engine no longer has, or has
+//! stopped, is reclaimed (a stopped container deleted once, then its
+//! records) so its number is free again; nothing else counts as gone.
+//! Included by sandbox.rs.
+use super::reclaim;
 use layerfs_bridge::control::SdkValue;
 use std::{
     io::{BufRead, BufReader, Write},
@@ -13,25 +14,25 @@ use std::{
 };
 
 const CID: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-const ID: &str = "_service.proj";
+const ID: &str = "1";
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 
-/// A private LayerFS home with the service Sandbox of project `proj` recorded
-/// as running in container CID, behind the Engine socket `docker.sock`.
+/// A private LayerFS home with Sandbox 1 of project `proj` recorded as
+/// running in container CID, behind the Engine socket `docker.sock`.
 fn home() -> PathBuf {
     let home = std::env::temp_dir().join(format!(
-        "layerfs-close-gone-{}-{}",
+        "layerfs-reclaim-{}-{}",
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
     ));
     let private = |path: &Path| std::fs::DirBuilder::new().mode(0o700).create(path).unwrap();
     private(&home);
-    private(&home.join("_sandboxes"));
-    private(&home.join("_sandboxes").join(ID));
     private(&home.join("proj"));
+    private(&home.join("proj").join("sandboxes"));
+    private(&dir(&home));
     let bytes = |n: u8| SdkValue::Bytes(vec![n; 32]);
     crate::discovery::save(
-        &home.join("_sandboxes").join(ID).join("sandbox.record"),
+        &dir(&home).join("sandbox.record"),
         SdkValue::map([
             ("id", SdkValue::text(ID)),
             ("project", SdkValue::text("proj")),
@@ -45,19 +46,18 @@ fn home() -> PathBuf {
                 SdkValue::text(format!("sha256:{}", "a".repeat(64))),
             ),
             ("volume", SdkValue::text("lfs-test-borrowed")),
-            ("volumes", SdkValue::List(vec![])),
             ("secret", bytes(1)),
             ("peer", bytes(2)),
             ("instance", bytes(3)),
         ]),
     )
     .unwrap();
-    crate::discovery::save(
-        &home.join("proj").join("service.record"),
-        SdkValue::map([("id", SdkValue::text(ID))]),
-    )
-    .unwrap();
     home
+}
+
+/// Sandbox 1's directory.
+fn dir(home: &Path) -> PathBuf {
+    home.join("proj").join("sandboxes").join(ID)
 }
 
 /// The Engine at `home/docker.sock`, answering one request with `status` and `body`.
@@ -126,30 +126,38 @@ fn exited() -> String {
 fn args(home: &Path) -> SdkValue {
     SdkValue::map([
         ("sandbox", SdkValue::text(ID)),
+        ("project", SdkValue::text("proj")),
         ("home", SdkValue::text(home.to_str().unwrap())),
     ])
 }
 
+/// Reopens Sandbox 1 and, when it is gone, reclaims it, as placement does.
+fn place(home: &Path) -> Result<SdkValue, layerfs_bridge::control::SdkRefusal> {
+    let refusal = crate::discovery::reopen(&args(home))
+        .err()
+        .expect("not running");
+    match crate::discovery::gone_container(&refusal) {
+        Some((container, stopped)) => reclaim(&args(home), ID, container, stopped),
+        None => Err(refusal),
+    }
+}
+
 #[test]
-fn a_gone_container_closes_by_removing_its_records() {
+fn a_gone_container_is_reclaimed_by_removing_its_records() {
     let home = home();
     let engine = engine(
         &home,
         404,
         &format!(r#"{{"message":"No such container: {CID}"}}"#),
     );
-    let closed = close(&args(&home)).unwrap();
-    assert_eq!(closed.get_text("kind"), Some("Closed"));
+    let closed = place(&home).unwrap();
+    assert_eq!(closed.get_text("kind"), Some("Reclaimed"));
     assert_eq!(closed.get_text("id"), Some(ID));
     assert!(engine
         .join()
         .unwrap()
         .starts_with(&format!("GET /v1.54/containers/{CID}/json")));
-    assert!(
-        !home.join("_sandboxes").join(ID).exists(),
-        "its name is free again"
-    );
-    assert!(!home.join("proj").join("service.record").exists());
+    assert!(!dir(&home).exists(), "its number is free again");
     std::fs::remove_dir_all(home).unwrap();
 }
 
@@ -157,35 +165,25 @@ fn a_gone_container_closes_by_removing_its_records() {
 fn another_404_is_a_failure_that_removes_nothing() {
     let home = home();
     let engine = engine(&home, 404, r#"{"message":"page not found"}"#);
-    let refusal = close(&args(&home)).unwrap_err();
+    let refusal = place(&home).unwrap_err();
     assert_eq!(refusal.code, "Failed");
     engine.join().unwrap();
-    assert!(home
-        .join("_sandboxes")
-        .join(ID)
-        .join("sandbox.record")
-        .exists());
-    assert!(home.join("proj").join("service.record").exists());
+    assert!(dir(&home).join("sandbox.record").exists());
     std::fs::remove_dir_all(home).unwrap();
 }
 
 #[test]
-fn a_name_created_again_with_another_container_is_left_alone() {
+fn a_number_started_again_with_another_container_is_left_alone() {
     let home = home();
     let other = "c".repeat(64);
-    let refusal = close_gone(&args(&home), &other, false).unwrap_err();
+    let refusal = reclaim(&args(&home), ID, &other, false).unwrap_err();
     assert_eq!(refusal.code, "Busy");
-    assert!(home
-        .join("_sandboxes")
-        .join(ID)
-        .join("sandbox.record")
-        .exists());
-    assert!(home.join("proj").join("service.record").exists());
+    assert!(dir(&home).join("sandbox.record").exists());
     std::fs::remove_dir_all(home).unwrap();
 }
 
 #[test]
-fn a_stopped_container_is_refused_as_gone_then_closed_by_deleting_it() {
+fn a_stopped_container_is_refused_as_gone_then_reclaimed_by_deleting_it() {
     let home = home();
     let engine = engine(&home, 200, &exited());
     let refusal = crate::discovery::reopen(&args(&home)).err().unwrap();
@@ -206,18 +204,14 @@ fn a_stopped_container_is_refused_as_gone_then_closed_by_deleting_it() {
 
     std::fs::remove_file(home.join("docker.sock")).unwrap();
     let engine = engines(&home, vec![(200, exited()), (204, String::new())]);
-    let closed = close(&args(&home)).unwrap();
-    assert_eq!(closed.get_text("kind"), Some("Closed"));
+    let closed = place(&home).unwrap();
+    assert_eq!(closed.get_text("kind"), Some("Reclaimed"));
     let requests = engine.join().unwrap();
     assert!(requests[0].starts_with(&format!("GET /v1.54/containers/{CID}/json")));
     assert!(requests[1].starts_with(&format!(
         "DELETE /v1.54/containers/{CID}?force=false&v=false"
     )));
-    assert!(
-        !home.join("_sandboxes").join(ID).exists(),
-        "its name is free again"
-    );
-    assert!(!home.join("proj").join("service.record").exists());
+    assert!(!dir(&home).exists(), "its number is free again");
     std::fs::remove_dir_all(home).unwrap();
 }
 
@@ -226,28 +220,9 @@ fn a_stopped_container_the_engine_will_not_delete_keeps_its_records() {
     let home = home();
     let running = r#"{"message":"cannot remove container: container is running"}"#;
     let engine = engines(&home, vec![(200, exited()), (409, running.to_owned())]);
-    let refusal = close(&args(&home)).unwrap_err();
+    let refusal = place(&home).unwrap_err();
     assert_eq!(refusal.code, "Failed");
     assert_eq!(engine.join().unwrap().len(), 2);
-    assert!(home
-        .join("_sandboxes")
-        .join(ID)
-        .join("sandbox.record")
-        .exists());
-    assert!(home.join("proj").join("service.record").exists());
-    std::fs::remove_dir_all(home).unwrap();
-}
-
-#[test]
-fn the_service_lookup_reads_the_record_and_starts_nothing() {
-    let home = home();
-    let project = SdkValue::map([
-        ("project", SdkValue::text("proj")),
-        ("home", SdkValue::text(home.to_str().unwrap())),
-    ]);
-    let found = service_existing(&project).unwrap();
-    assert_eq!(found.get_text("id"), Some(ID));
-    std::fs::remove_file(home.join("proj").join("service.record")).unwrap();
-    assert_eq!(service_existing(&project).unwrap(), SdkValue::Null);
+    assert!(dir(&home).join("sandbox.record").exists());
     std::fs::remove_dir_all(home).unwrap();
 }

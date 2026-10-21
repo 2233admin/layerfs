@@ -1,4 +1,4 @@
-// sandbox.exec: one positional SDK operation.
+// workspace.exec: one command in the Workspace.
 //
 // Output of any size arrives complete. The binding keeps each stream inline
 // up to 1 MiB; a result whose streams fit is returned exactly as the binding
@@ -14,15 +14,15 @@
 // are not ended, and the result's field for each is null. The result then
 // also carries `stdoutBytes` and `stderrBytes`. Page reads are not traced:
 // the call's trace line covers the command's run.
-import { invoke, invokeClient, outcome, sandboxId, checkedMessage } from "../client.js";
+import { invoke, invokeClient, outcome, workspaceArgs, checkedMessage } from "../client.js";
 import { native } from "../native.js";
 import { LayerFSError } from "../errors.js";
 
 const PAGE = 1 << 20;
 
-export async function exec(client, sandbox, path, command, message, sinks) {
+export async function exec(client, ws, command, message, sinks) {
   const to = checkedSinks(sinks);
-  const value = await invokeClient(client, "sandbox.exec", { sandbox: sandboxId(sandbox), path, command, message: checkedMessage(message), ...(to ? { spool: true } : {}) });
+  const value = await invokeClient(client, "workspace.exec", { ...workspaceArgs(ws), command, message: checkedMessage(message), ...(to ? { spool: true } : {}) });
   if (!to && value.output === undefined) return value;
   const { output, ...result } = value;
   result.stdoutBytes ??= Buffer.byteLength(result.stdout ?? "");
@@ -52,7 +52,7 @@ export async function exec(client, sandbox, path, command, message, sinks) {
       if (!sink) result[name] = text;
     }
   } finally {
-    if (output !== undefined) await invoke("sandbox.exec_release", { output }, {});
+    if (output !== undefined) await invoke("workspace.exec_release", { output }, {});
   }
   return result;
 }

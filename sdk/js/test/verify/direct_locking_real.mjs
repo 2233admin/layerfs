@@ -1,5 +1,7 @@
 // Locking (#352 F-020 step 5.1): the in-process SDK and two daemons, each in
-// its own Sandbox on one Store volume, publish to one Store together. Every
+// its own Sandbox on one Store volume, publish to one Store together. The
+// second daemon is the project's second Sandbox, which placement starts once
+// the first holds its 16 Workspaces (#373). Every
 // publish is applied once or refused with its exact outcome, reads during
 // publication succeed, `PRAGMA integrity_check` passes, and every Branch's
 // final tree equals a serial oracle built from the outcomes.
@@ -28,27 +30,29 @@ async function inner() {
   writeFileSync(join(source, "README.md"), "base\n");
   process.env.LAYERFS_HOME = join(work, "home");
   const lf = new LayerFS("site");
-  const image = process.env.LAYERFS_IMAGE;
   const report = { outcomes: {}, reads: { ok: 0, refused: [], maxMs: 0 } };
   try {
     await lf.project.init(source);
-    const A = await lf.sandbox.create("daemon-a", "site", image);
-    const B = await lf.sandbox.create("daemon-b", "site", image);
-    for (const b of ["shared", "lane-a", "lane-b", "lane-c", "m1", "m2"]) await lf.branch.fork(b, "main");
+    for (const b of ["shared", "lane-a", "lane-b", "lane-c", "m1", "m2", "fill"]) await lf.branch.fork(b, "main");
     await lf.fs.write("m1", "/m1.txt", "m1\n", "m1");
     await lf.fs.write("m2", "/m2.txt", "m2\n", "m2");
     // Workspaces, written but not committed.
-    const prepared = async (sandbox, branch, files) => {
-      const path = await lf.sandbox.mount(sandbox, branch);
+    const prepared = async (branch, files) => {
+      const ws = await lf.workspace.mount(branch);
       const command = Object.entries(files).map(([f, t]) => `printf '%s\\n' '${t}' > '${f.slice(1)}'`).join(" && ");
-      const ran = await lf.sandbox.exec(sandbox, path, command);
+      const ran = await lf.workspace.exec(ws, command);
       assert.equal(ran.exitCode, 0, JSON.stringify(ran));
-      return { sandbox, path };
+      return ws;
     };
-    const wsA1 = await prepared(A, "shared", { "/a.txt": "a", "/same.txt": "A" });
-    const wsB1 = await prepared(B, "shared", { "/b.txt": "b" });
-    const wsA2 = await prepared(A, "lane-a", { "/la.txt": "la" });
-    const wsB2 = await prepared(B, "lane-b", { "/lb.txt": "lb" });
+    const wsA1 = await prepared("shared", { "/a.txt": "a", "/same.txt": "A" });
+    const wsA2 = await prepared("lane-a", { "/la.txt": "la" });
+    // Sandbox 1 holds 16 Workspaces; the next mount starts Sandbox 2.
+    const fillers = [];
+    while (fillers.length < 14) fillers.push(await lf.workspace.mount("fill"));
+    const wsB1 = await prepared("shared", { "/b.txt": "b" });
+    const wsB2 = await prepared("lane-b", { "/lb.txt": "lb" });
+    assert.deepEqual([wsA1, wsA2, ...fillers].map((ws) => ws.sandbox), Array(16).fill("1"), "the first 16 in Sandbox 1");
+    assert.deepEqual([wsB1.sandbox, wsB2.sandbox], ["2", "2"], "the 17th and 18th in Sandbox 2");
     const before = {};
     for (const b of ["shared", "lane-a", "lane-b", "lane-c"]) before[b] = (await lf.branch.list_commits(b, 1000)).items.length;
 
@@ -61,10 +65,10 @@ async function inner() {
     const sameDone = new Promise((resolve) => { sameSettled = resolve; });
     // [name, branch, files it adds, the call]
     const ops = [
-      ["daemonA.shared", "shared", { "/a.txt": "a", "/same.txt": "A" }, () => sameDone.then(() => lf.sandbox.commit(wsA1.sandbox, wsA1.path, "A shared"))],
-      ["daemonB.shared", "shared", { "/b.txt": "b" }, () => lf.sandbox.commit(wsB1.sandbox, wsB1.path, "B shared")],
-      ["daemonA.lane-a", "lane-a", { "/la.txt": "la" }, () => lf.sandbox.commit(wsA2.sandbox, wsA2.path, "A lane")],
-      ["daemonB.lane-b", "lane-b", { "/lb.txt": "lb" }, () => lf.sandbox.commit(wsB2.sandbox, wsB2.path, "B lane")],
+      ["daemonA.shared", "shared", { "/a.txt": "a", "/same.txt": "A" }, () => sameDone.then(() => lf.workspace.commit(wsA1, "A shared"))],
+      ["daemonB.shared", "shared", { "/b.txt": "b" }, () => lf.workspace.commit(wsB1, "B shared")],
+      ["daemonA.lane-a", "lane-a", { "/la.txt": "la" }, () => lf.workspace.commit(wsA2, "A lane")],
+      ["daemonB.lane-b", "lane-b", { "/lb.txt": "lb" }, () => lf.workspace.commit(wsB2, "B lane")],
       ["direct.shared", "shared", { "/d.txt": "d" }, () => lf.fs.write("shared", "/d.txt", "d\n", "direct")],
       ["direct.same", "shared", { "/same.txt": "D" }, () => lf.fs.write("shared", "/same.txt", "D\n", "direct same").finally(sameSettled)],
       ["direct.lane-c", "lane-c", { "/lc.txt": "lc" }, () => lf.fs.write("lane-c", "/lc.txt", "lc\n", "direct lane")],
@@ -92,7 +96,7 @@ async function inner() {
       const r = results[i];
       report.outcomes[name] = r.status === "fulfilled" ? { kind: r.value?.kind } : { refused: r.reason?.code, message: String(r.reason?.message).slice(0, 160) };
     });
-    for (const ws of [wsA1, wsB1, wsA2, wsB2]) await lf.sandbox.unmount(ws.sandbox, ws.path, true);
+    for (const ws of [wsA1, wsB1, wsA2, wsB2, ...fillers]) await lf.workspace.unmount(ws, true);
 
     // Serial oracle: the base, then each published op's files in any order
     // (paths are disjoint but /same.txt, which only its one winner may hold).
@@ -125,8 +129,6 @@ async function inner() {
     }
     assert.deepEqual(report.reads.refused, [], "reads during publication");
     assert.ok(report.reads.ok > 0, "reads ran during publication");
-    await lf.sandbox.close(A);
-    await lf.sandbox.close(B);
   } finally {
     await lf.close?.().catch(() => {});
     rmSync(work, { recursive: true, force: true });

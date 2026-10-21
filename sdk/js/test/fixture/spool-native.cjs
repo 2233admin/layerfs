@@ -1,4 +1,4 @@
-// A stand-in binding for sandbox.exec output checks: no Docker or daemon.
+// A stand-in binding for workspace.exec output checks: no Docker or daemon.
 // `exports.outputs[command]` is `{ stdout, stderr }` Buffers; a stream over
 // INLINE bytes (or any non-empty stream with `spool`) is spooled and paged
 // like the real binding (sdk/js/native/src/output.rs) into the caller's
@@ -13,7 +13,7 @@ let next = 0;
 const refused = (code, message) => ({ refused: { code, message, detail: null } });
 exports.call = async (op, args) => {
   exports.calls.push([op, { ...args }]);
-  if (op === "sandbox.exec") {
+  if (op === "workspace.exec") {
     const out = exports.outputs[args.command];
     const fields = [["kind", "exit:0"], ["exitCode", 0]];
     const spooled = {};
@@ -30,7 +30,7 @@ exports.call = async (op, args) => {
     }
     return { value: Object.fromEntries(fields) };
   }
-  if (op === "sandbox.exec_release") return { value: { kind: "ok", released: exports.spooled.delete(args.output) } };
+  if (op === "workspace.exec_release") return { value: { kind: "ok", released: exports.spooled.delete(args.output) } };
   return refused("UnknownMethod", op);
 };
 // Fills the caller's page like the real binding's execOutput.

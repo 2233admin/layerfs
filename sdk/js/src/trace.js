@@ -34,7 +34,7 @@ export function summary(args = {}) {
 }
 
 /** Methods that publish a Commit (or answer UpToDate with the head). */
-const PUBLISHING = new Set(["fs.write", "fs.edit", "fs.apply", "fs.mkdir", "fs.rm", "fs.cp", "fs.mv", "sandbox.commit", "branch.merge", "branch.publish"]);
+const PUBLISHING = new Set(["fs.write", "fs.edit", "fs.apply", "fs.mkdir", "fs.rm", "fs.cp", "fs.mv", "workspace.commit", "branch.merge", "branch.publish"]);
 
 /** The Commit id, and its size counters when the value carries the record. A
  * publishing call names its new Commit (`commit.id`), its merge or UpToDate
@@ -55,19 +55,17 @@ function committed(method, value) {
 }
 
 /** Result ids a viewer needs to follow a call: the Branch and head a fork or
- * merge made, the Sandbox a create made, the Workspace a mount made, and an
+ * merge made, the Workspace a mount made (its Sandbox and path), and an
  * exec's process or exit code. Ids and numbers only, never output text. */
 const RESULT_IDS = {
   "branch.fork": ["branch", "base", "head"],
   "branch.merge": ["branch", "head"],
-  "sandbox.mount": ["path", "branch", "base", "baseLayer"],
+  "workspace.mount": ["sandbox", "path", "branch", "base", "baseLayer"],
 };
 
 function results(method, args, value) {
   if (!value || typeof value !== "object") return {};
   const out = {};
-  if (method === "sandbox.create" || method === "sandbox.service") out.sandbox = value.id;
-  if (method === "sandbox.mount") out.sandbox = args?.sandbox;
   for (const name of RESULT_IDS[method] ?? []) {
     if (typeof value[name] === "string" || value[name] === null) out[name] = value[name];
   }

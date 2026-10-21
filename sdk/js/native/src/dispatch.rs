@@ -1,6 +1,6 @@
 //! Native argument conversion and disjoint public/operator method tables.
 use crate::job::{refused, Job, Outcome};
-use crate::{convert, direct, exec, job, output, project, registry, sandbox};
+use crate::{convert, direct, exec, job, output, project, registry, workspace};
 use layerfs_bridge::control::SdkValue;
 use napi::{bindgen_prelude::AsyncTask, JsUnknown};
 
@@ -27,19 +27,16 @@ fn dispatch(op: &str, args: SdkValue) -> Outcome {
     }
     match op {
         "project.init" => project::init(&args),
-        "sandbox.create" => sandbox::create(&args),
-        "sandbox.service" => sandbox::service(&args),
-        "sandbox.close" => sandbox::close(&args),
-        "sandbox.mount" => sandbox::mount(&args),
-        "sandbox.status" => sandbox::status(&args),
-        "sandbox.commit" => sandbox::commit(&args),
-        "sandbox.unmount" => sandbox::unmount(&args),
-        "sandbox.exec" if args.get_bool("background") => Err(refused(
+        "workspace.mount" => workspace::mount(&args),
+        "workspace.status" => workspace::status(&args),
+        "workspace.commit" => workspace::commit(&args),
+        "workspace.unmount" => workspace::unmount(&args),
+        "workspace.exec" if args.get_bool("background") => Err(refused(
             "InvalidInput",
             "background launch requires the operator process table",
         )),
-        "sandbox.exec" => exec::exec(&args),
-        "sandbox.exec_release" => output::release(&args),
+        "workspace.exec" => exec::exec(&args),
+        "workspace.exec_release" => output::release(&args),
         _ if op.starts_with("operator.") => Err(refused(
             "UnknownMethod",
             "operator methods require operatorCall",
@@ -50,8 +47,8 @@ fn dispatch(op: &str, args: SdkValue) -> Outcome {
     }
 }
 
-/// A daemon operator call through the named Sandbox: its Workspaces and the
-/// read model that lists them. `deploy` only selects how this process dials
+/// A daemon operator call through the named Sandbox of the project: its
+/// Workspaces and the read model that lists them. `deploy` only selects how this process dials
 /// the daemon, so it is not sent on.
 fn daemon_operator(op: &str, args: SdkValue) -> Outcome {
     let state = registry::sandbox(&args)?;
@@ -103,7 +100,7 @@ pub(crate) fn operator_call(op: String, args: JsUnknown) -> napi::Result<AsyncTa
             "operator.process.list" => exec::processes(&args),
             "operator.process.cancel" => exec::cancel(&args),
             "operator.project.progress" => crate::project::progress(&args),
-            "operator.sandbox.service" => crate::sandbox::service_existing(&args),
+            "operator.sandbox.list" => workspace::list(&args),
             "operator.inspect.history"
             | "operator.store.stats"
             | "operator.store.commits"

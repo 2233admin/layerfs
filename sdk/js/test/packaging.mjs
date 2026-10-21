@@ -15,22 +15,23 @@ if (selected === "lazy") {
   const client = new LayerFS("website");
   const operator = new LayerFSOperator(client);
   assert.equal(client.projectName, "website");
-  assert.equal(client.serviceSandbox, null);
-  assert.equal(client.sandboxes.size, 0);
+  assert.equal(client.sandbox, undefined);
+  assert.equal(client.service, undefined);
   assert.equal(client.options.home, "/private/configured-home");
   assert.equal(client.options.deploy.docker, "/configured/docker.sock");
   assert.equal(client.options.deploy.image, "configured-image");
   assert.equal(client.options.deploy.volume, "configured-volume");
   assert.equal(client.options.deploy.daemon, "/configured/daemon");
   assert.equal(client.inspect, undefined);
-  assert.equal(client.sandbox.list_processes, undefined);
-  assert.equal(client.sandbox.cancel, undefined);
+  for (const method of ["mount", "exec", "status", "commit", "unmount"]) {
+    assert.equal(typeof client.workspace[method], "function", method);
+  }
+  assert.equal(client.workspace.cancel, undefined);
   assert.equal(client.project.list_overwritten, undefined);
   assert.equal(typeof operator.store.overwritten, "function");
   assert.equal(typeof operator.inspect.snapshot, "function");
   assert.equal(typeof operator.process.cancel, "function");
   await assert.rejects(client.call("operator.inspect.snapshot", {}), { code: "UnknownMethod" });
-  assert.equal(client.serviceSandbox, null);
   assert.throws(() => new LayerFS("../foreign"), { code: "InvalidInput" });
 } else if (selected === "dispatch") {
   const binding = native();

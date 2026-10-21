@@ -38,10 +38,12 @@ pub(crate) struct Process {
     pub(crate) start: String,
 }
 
-/// One live Sandbox.
+/// One live Sandbox: Sandbox `id` (its number) of `project`.
 pub(crate) struct SandboxState {
     pub(crate) id: String,
     pub(crate) project: String,
+    /// Its container's name, `<prefix><project>-<id>`.
+    pub(crate) name: String,
     pub(crate) directory: std::path::PathBuf,
     pub(crate) runtime: Sandbox,
     pub(crate) identity: CommandIdentity,
@@ -53,7 +55,8 @@ pub(crate) struct SandboxState {
 /// The live counts of each Init still running, by project name.
 pub(crate) static INITS: LazyLock<Mutex<BTreeMap<String, Arc<layerfs_api::InitCounters>>>> =
     LazyLock::new(Default::default);
-pub(crate) static SANDBOXES: LazyLock<Mutex<BTreeMap<String, Arc<SandboxState>>>> =
+/// This process's live Sandboxes, by their record directory.
+pub(crate) static SANDBOXES: LazyLock<Mutex<BTreeMap<std::path::PathBuf, Arc<SandboxState>>>> =
     LazyLock::new(Default::default);
 
 /// A lock, refused when a holder panicked.
@@ -75,21 +78,30 @@ pub(crate) fn text<'a>(args: &'a SdkValue, name: &str) -> Result<&'a str, SdkRef
 /// that needs every mount or process another process may have changed takes
 /// [`sandbox_refreshed`].
 pub(crate) fn sandbox(args: &SdkValue) -> Result<Arc<SandboxState>, SdkRefusal> {
-    let id = text(args, "sandbox")?;
-    let existing = lock(&SANDBOXES)?.get(id).cloned();
-    let state = match existing {
-        Some(state) => state,
+    let directory = crate::discovery::sandbox_dir(args, text(args, "sandbox")?)?;
+    let existing = lock(&SANDBOXES)?.get(&directory).cloned();
+    match existing {
+        Some(state) => Ok(state),
         None => {
             let state = crate::discovery::reopen(args)?;
-            lock(&SANDBOXES)?.insert(id.to_owned(), state.clone());
-            state
+            lock(&SANDBOXES)?.insert(directory, state.clone());
+            Ok(state)
         }
-    };
-    // a Sandbox is found by its name alone; its project comes from its record
-    if state.directory != crate::discovery::sandbox_dir(args, id)? {
-        return Err(refused("Unauthorized", "Sandbox/home mismatch"));
     }
-    Ok(state)
+}
+
+/// `args` naming Sandbox `id` of their project.
+pub(crate) fn naming(args: &SdkValue, id: &str) -> SdkValue {
+    let mut fields = match args {
+        SdkValue::Map(fields) => fields
+            .iter()
+            .filter(|(name, _)| name != "sandbox")
+            .cloned()
+            .collect(),
+        _ => Vec::new(),
+    };
+    fields.push(("sandbox".to_owned(), SdkValue::text(id)));
+    SdkValue::Map(fields)
 }
 
 /// The Sandbox an operation names, its tables read again from the shared
@@ -121,7 +133,7 @@ impl SandboxState {
             .get(path)
             .map(|mount| (mount.workspace.bound.token, pick(mount)));
         match known {
-            Some((token, value)) if crate::discovery::mount_file(self, token).exists() => {
+            Some((token, value)) if crate::discovery::workspace_file(self, token).exists() => {
                 return Ok(value)
             }
             _ => crate::discovery::refresh(self)?,

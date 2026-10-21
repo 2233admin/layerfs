@@ -59,10 +59,10 @@ const sha = (b) => createHash("sha256").update(b).digest("hex");
 const spools = () => readdirSync(tmpdir()).filter((f) => f.startsWith("layerfs-exec-"));
 const mib = (n) => (n / MiB).toFixed(1);
 
-async function check(layerfs, path) {
-  const small = await layerfs.sandbox.exec("box", path, "printf 'hello\\n'; printf 'warn\\n' >&2; exit 3", "Run");
+async function check(layerfs, ws) {
+  const small = await layerfs.workspace.exec(ws, "printf 'hello\\n'; printf 'warn\\n' >&2; exit 3", "Run");
   assert.deepEqual(Object.entries(small), [["kind", "exit:3"], ["exitCode", 3], ["stdout", "hello\n"], ["stderr", "warn\n"], ["message", "Run"], ["truncated", false]]);
-  const empty = await layerfs.sandbox.exec("box", path, "true");
+  const empty = await layerfs.workspace.exec(ws, "true");
   assert.deepEqual(Object.entries(empty), [["kind", "exit:0"], ["exitCode", 0], ["stdout", ""], ["stderr", ""], ["message", null], ["truncated", false]]);
   console.log("SMALL ok");
 
@@ -72,7 +72,7 @@ async function check(layerfs, path) {
   let peak = base;
   const sampler = setInterval(() => { peak = Math.max(peak, process.memoryUsage().rss); }, 5);
   const began = performance.now();
-  const r = await layerfs.sandbox.exec("box", path, command(64 * MiB, "raw"), undefined, sinks);
+  const r = await layerfs.workspace.exec(ws, command(64 * MiB, "raw"), undefined, sinks);
   const ms = performance.now() - began;
   clearInterval(sampler);
   peak = Math.max(peak, process.memoryUsage().rss);
@@ -92,7 +92,7 @@ async function check(layerfs, path) {
   for (const n of [MiB, 8 * MiB, 64 * MiB]) {
     const [out, err] = expected(n, "text");
     const began = performance.now();
-    const r = await layerfs.sandbox.exec("box", path, command(n, "text"));
+    const r = await layerfs.workspace.exec(ws, command(n, "text"));
     const ms = performance.now() - began;
     assert.equal(r.exitCode, 0, r.stderr.slice(0, 300));
     assert.equal(r.truncated, false);
@@ -106,18 +106,18 @@ async function check(layerfs, path) {
   assert.deepEqual(spools(), [], "no spool file is left");
 }
 
-async function time(layerfs, path) {
-  await layerfs.sandbox.exec("box", path, "echo warm"); // unmeasured, both arms
+async function time(layerfs, ws) {
+  await layerfs.workspace.exec(ws, "echo warm"); // unmeasured, both arms
   const ms = [];
   for (let i = 0; i < 30; i++) {
     const began = performance.now();
-    const r = await layerfs.sandbox.exec("box", path, "echo hi");
+    const r = await layerfs.workspace.exec(ws, "echo hi");
     ms.push(performance.now() - began);
     assert.equal(r.stdout, "hi\n");
   }
   ms.sort((a, b) => a - b);
   const began = performance.now();
-  const r = await layerfs.sandbox.exec("box", path, command(8 * MiB, "text"));
+  const r = await layerfs.workspace.exec(ws, command(8 * MiB, "text"));
   const big = performance.now() - began;
   console.log(`TIME ${JSON.stringify({ smallP50: (ms[14] + ms[15]) / 2, smallMin: ms[0], smallMax: ms[29], small: ms.map((v) => +v.toFixed(2)), big8MiB: big, stdoutChars: r.stdout.length, stderrChars: r.stderr.length, truncated: r.truncated })}`);
 }
@@ -129,14 +129,12 @@ async function inner([phase]) {
   writeFileSync(join(source, "README.md"), "workspace file\n");
   await layerfs.project.init(source);
   rmSync(source, { recursive: true, force: true });
-  await layerfs.sandbox.create("box", "site", process.env.LAYERFS_IMAGE);
   await layerfs.branch.fork("work", "main");
-  const path = await layerfs.sandbox.mount("box", "work");
+  const ws = await layerfs.workspace.mount("work");
   try {
-    await (phase === "time" ? time : check)(layerfs, path);
+    await (phase === "time" ? time : check)(layerfs, ws);
   } finally {
-    await layerfs.sandbox.unmount("box", path, true);
-    await layerfs.sandbox.close("box");
+    await layerfs.workspace.unmount(ws, true);
     await layerfs.close();
   }
   console.log("MAIN ok");

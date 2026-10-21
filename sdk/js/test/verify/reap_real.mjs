@@ -27,10 +27,9 @@ async function inner() {
   writeFileSync(join(source, "README.md"), "workspace file\n");
   await layerfs.project.init(source);
   rmSync(source, { recursive: true, force: true });
-  await layerfs.sandbox.create("reap-box", "reap", process.env.LAYERFS_IMAGE);
   await layerfs.branch.fork("feature", "main");
-  const ws = await layerfs.sandbox.mount("reap-box", "feature");
-  const sh = (command) => layerfs.sandbox.exec("reap-box", ws, command);
+  const ws = await layerfs.workspace.mount("feature");
+  const sh = (command) => layerfs.workspace.exec(ws, command);
   // three orphans: each outlives the command that started it, then exits
   const left = await sh("for i in 1 2 3; do (sleep 1 &) ; done; exit 0");
   assert.equal(left.exitCode, 0);
@@ -42,8 +41,7 @@ async function inner() {
   console.log(`PID1 ${init.stdout.trim()}`);
   assert.notEqual(init.stdout.trim(), "layerfs-daemon", "an init, not the daemon, is PID 1");
   assert.equal((await sh("exit 7")).exitCode, 7);
-  await layerfs.sandbox.unmount("reap-box", ws, true);
-  await layerfs.sandbox.close("reap-box");
+  await layerfs.workspace.unmount(ws, true);
   console.log("MAIN ok");
 }
 

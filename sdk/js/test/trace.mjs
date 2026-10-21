@@ -21,6 +21,7 @@ const { LayerFS } = await import("@layerfs/sdk");
 const { LayerFSOperator } = await import("@layerfs/sdk/operator");
 
 const BIG = "x".repeat(10000);
+const WS = { sandbox: "1", path: "/workspaces/w1" };
 /** Every SDK group once, plus one refusal; returns each call's value or code. */
 const pick = (line, fields) => Object.fromEntries(fields.filter((field) => field in line).map((field) => [field, line[field]]));
 
@@ -49,24 +50,22 @@ async function script(client) {
     () => client.branch.diff_branches("main", "feature"),
     () => client.branch.merge("main", "feature", "merged"),
     () => client.branch.publish("feature"),
-    () => client.sandbox.create("box", "website", "sha256:" + "a".repeat(64)),
-    () => client.sandbox.mount("sb_fake", "feature"),
-    () => client.sandbox.exec("sb_fake", "/workspaces/w1", "npm test"),
-    () => client.sandbox.status("sb_fake", "/workspaces/w1"),
-    () => client.sandbox.commit("sb_fake", "/workspaces/w1", "Save"),
-    () => client.sandbox.unmount("sb_fake", "/workspaces/w1"),
-    () => client.sandbox.close("sb_fake"),
+    () => client.workspace.mount("feature"),
+    () => client.workspace.exec(WS, "npm test"),
+    () => client.workspace.status(WS),
+    () => client.workspace.commit(WS, "Save"),
+    () => client.workspace.unmount(WS),
     () => client.fs.read("main", "/missing"),
     () => op.store.stats(),
     () => op.store.commits("feature"),
     () => op.files.stats("main", "/README.md"),
     () => op.files.history("main", "/README.md"),
-    () => op.workspace.overlay("sb_fake", "/workspaces/w1"),
-    () => op.workspace.changes("sb_fake", "/workspaces/w1"),
+    () => op.workspace.overlay(WS),
+    () => op.workspace.changes(WS),
     () => op.inspect.snapshot(),
-    () => op.process.start("sb_fake", "/workspaces/w1", "npm run dev"),
-    () => op.process.list("sb_fake"),
-    () => op.process.cancel("sb_fake", "p1"),
+    () => op.process.start(WS, "npm run dev"),
+    () => op.process.list(),
+    () => op.process.cancel("proc_1_ab"),
   ];
   const results = [];
   for (const step of steps) results.push(await step().then((value) => ({ value }), (error) => ({ code: error.code })));
@@ -104,7 +103,7 @@ try {
     assert.deepEqual(lines.map((line) => line.scope), native.observed.slice(before), "the binding got each line's scope");
     assert.equal(new Set(lines.map((line) => line.id)).size, lines.length);
     const groups = new Set(lines.map((line) => line.method.replace(/^operator\./, "operator:").split(".")[0]));
-    for (const group of ["project", "fs", "branch", "sandbox", "operator:store", "operator:files", "operator:workspace", "operator:inspect", "operator:process"]) assert.ok(groups.has(group), group);
+    for (const group of ["project", "fs", "branch", "workspace", "operator:sandbox", "operator:store", "operator:files", "operator:workspace", "operator:inspect", "operator:process"]) assert.ok(groups.has(group), group);
     const write = lines.find((line) => line.method === "fs.write");
     assert.deepEqual(write.args, { branch: "feature", path: "/big.txt", contentBytes: 10000, message: "Write big" });
     assert.equal(write.commit, "c0ffee");
@@ -113,7 +112,7 @@ try {
     assert.equal(apply.args.changes, 2);
     assert.equal(apply.args.changeBytes, 10000);
     assert.ok(!readFileSync(file, "utf8").includes("xxxx"), "no file contents in the trace");
-    const commit = lines.find((line) => line.method === "sandbox.commit");
+    const commit = lines.find((line) => line.method === "workspace.commit");
     assert.equal(commit.kind, "Committed");
     assert.equal(commit.commit, "c0ffee");
     const [tree] = commit.daemon[0].timing;
@@ -126,9 +125,9 @@ try {
     // SQL work passes through on every exchange; opcode counts on status and unmount.
     assert.deepEqual(commit.daemon[0].sql, { writer: { statements: 3, fullscan_steps: 0 }, readers: { statements: 2, vm_steps: 40 } });
     for (const line of lines.filter((line) => line.daemon)) {
-      assert.equal("fuse" in line.daemon[0], ["sandbox.status", "sandbox.unmount"].includes(line.method), line.method);
+      assert.equal("fuse" in line.daemon[0], ["workspace.status", "workspace.unmount"].includes(line.method), line.method);
     }
-    assert.equal(lines.find((line) => line.method === "sandbox.status").daemon[0].fuse.getattr, 7);
+    assert.equal(lines.find((line) => line.method === "workspace.status").daemon[0].fuse.getattr, 7);
     const refused = lines.find((line) => line.args.path === "/missing");
     assert.equal(refused.ok, false);
     assert.equal(refused.code, "NoSuchPath");
@@ -139,7 +138,7 @@ try {
     assert.deepEqual([publish.commit, publish.layer], ["pub1", "lay1"]);
     const rm = lines.find((line) => line.method === "fs.rm");
     assert.deepEqual([rm.kind, rm.commit], ["UpToDate", "h3ad"]);
-    const PUBLISHING = ["fs.write", "fs.edit", "fs.apply", "fs.mkdir", "fs.rm", "fs.cp", "fs.mv", "sandbox.commit", "branch.merge", "branch.publish"];
+    const PUBLISHING = ["fs.write", "fs.edit", "fs.apply", "fs.mkdir", "fs.rm", "fs.cp", "fs.mv", "workspace.commit", "branch.merge", "branch.publish"];
     for (const line of lines) assert.equal("commit" in line, PUBLISHING.includes(line.method) && line.ok, line.method);
     // Unset, no line has a step.
     assert.ok(lines.every((line) => !("step" in line)));
@@ -159,12 +158,12 @@ try {
     // The client option overrides the environment.
     const other = join(dir, "option.jsonl");
     await new LayerFS("website", { trace: other }).project.list_branches();
-    assert.equal(readFileSync(other, "utf8").trimEnd().split("\n").length, 1, "a Store call needs no service Sandbox");
+    assert.equal(readFileSync(other, "utf8").trimEnd().split("\n").length, 1, "a Store call needs no Sandbox");
   } else if (selected === "off") {
     // A step label alone traces nothing.
     process.env.LAYERFS_TRACE_STEP = "unused step";
     const results = await script(new LayerFS("website"));
-    assert.equal(results.at(29).code, "NoSuchPath");
+    assert.equal(results.at(27).code, "NoSuchPath");
     assert.equal(existsSync(file), false);
     assert.deepEqual(readdirSync(dir), []);
   } else if (selected === "failure") {
@@ -179,7 +178,7 @@ try {
     process.env.DSH_LAYERFS_TRACE_STEP = "call_7";
     const results = await script(new LayerFS("website"));
     const lines = read(file);
-    assert.equal(lines.length, results.length + 2, "one line per call; the read model makes three: history, the service Sandbox lookup and its Workspaces");
+    assert.equal(lines.length, results.length + 2, "one line per call; the read model makes three: history, the Sandbox listing and the one Sandbox's Workspaces");
     assert.ok(lines.every((line) => line.step === "call_7" && line.phase === "end"));
     // The LAYERFS_ names win over their DSH_ twins.
     const own = join(dir, "own.jsonl");
@@ -223,22 +222,21 @@ try {
     await new LayerFS("website", { trace: other }).project.list_branches();
     assert.ok(read(other).every((line) => line.phase === "end"));
   } else if (selected === "ids") {
-    // Lines name what a call made: Branches, heads, Sandboxes, Workspaces, processes, exit codes.
+    // Lines name what a call made: Branches, heads, Workspaces and their Sandboxes, processes, exit codes.
     process.env.LAYERFS_TRACE = file;
     await script(new LayerFS("website"));
     const lines = read(file);
     const of = (method) => lines.find((line) => line.method === method);
-    assert.equal(of("sandbox.service"), undefined, "a snapshot starts no Sandbox");
+    assert.equal(lines.filter((line) => line.method === "workspace.mount").length, 1, "a snapshot mounts nothing");
     assert.deepEqual(pick(of("branch.fork"), ["branch", "base", "head"]), { branch: "feature", base: "lay0", head: "not-a-publication" });
     assert.deepEqual(pick(of("branch.merge"), ["branch", "head", "commit"]), { branch: "merged", head: "m3rge", commit: "m3rge" });
-    assert.equal(of("sandbox.create").sandbox, "sb_fake");
-    assert.deepEqual(pick(of("sandbox.mount"), ["sandbox", "path", "branch", "base", "baseLayer"]), { sandbox: "sb_fake", path: "/workspaces/w1", branch: "feature", base: "b4se", baseLayer: "lay0" });
-    assert.equal(of("sandbox.exec").exitCode, 3);
-    assert.equal(of("operator.process.start").process, "proc_1");
+    assert.deepEqual(pick(of("workspace.mount"), ["sandbox", "path", "branch", "base", "baseLayer"]), { sandbox: "1", path: "/workspaces/w1", branch: "feature", base: "b4se", baseLayer: "lay0" });
+    assert.equal(of("workspace.exec").exitCode, 3);
+    assert.equal(of("operator.process.start").process, "proc_1_ab");
     assert.equal(of("operator.process.cancel").process, undefined, "a cancel names its process in args only");
     // Calls that make nothing carry no result ids.
     const IDS = ["branch", "base", "head", "sandbox", "path", "baseLayer", "process", "exitCode"];
-    for (const method of ["fs.read", "fs.list", "sandbox.status", "sandbox.unmount", "sandbox.close", "operator.store.stats"]) {
+    for (const method of ["fs.read", "fs.list", "workspace.status", "workspace.unmount", "operator.store.stats"]) {
       assert.deepEqual(pick(of(method), IDS), {}, method);
     }
   } else if (selected === "no-content") {
@@ -254,7 +252,7 @@ try {
     }
   } else if (selected === "store") {
     // Store calls open the client's Store in this process once, and close()
-    // releases it; no service Sandbox is created for them (#352 F-020).
+    // releases it; no Sandbox is started for them (#352 F-020).
     const native = (await import(FAKE)).default;
     const client = new LayerFS("website");
     await client.project.list_branches();
@@ -276,26 +274,29 @@ try {
     await new LayerFS("website3").project.init("/src/website");
     assert.equal("policy" in native.args.at(-1), false);
     // A snapshot reads history from the Store in this process and starts no
-    // Sandbox: with none running it asks no daemon.
-    native.service = null;
+    // Sandbox: with none recorded it asks no daemon.
+    native.sandboxList = [];
     const reader = new LayerFS("website");
     const before = native.calls.length;
     const snap = await new LayerFSOperator(reader).inspect.snapshot();
-    assert.deepEqual(native.calls.slice(before), ["operator.inspect.history", "operator.sandbox.service"]);
+    assert.deepEqual(native.calls.slice(before), ["operator.inspect.history", "operator.sandbox.list"]);
     assert.equal(native.args[before].storePath, "/fake/store.sqlite");
     assert.deepEqual([snap.kind, snap.sandboxes, snap.gone], ["ok", [], []]);
   } else if (selected === "daemon-host") {
-    // A client in a container dials its daemonHost on every call that names
-    // a Sandbox, operator calls included: the binding reopens the Sandbox
-    // with the call's deploy.
+    // A client in a container dials its daemonHost on every call that
+    // reaches a Sandbox, operator calls included: the binding reopens or
+    // starts the Sandbox with the call's deploy.
     const native = (await import(FAKE)).default;
     await script(new LayerFS("website", { daemonHost: "host.docker.internal" }));
     const named = native.calls.filter((_, index) => "sandbox" in native.args[index]);
-    for (const method of ["operator.workspace.overlay", "operator.workspace.changes", "operator.inspect.snapshot", "operator.process.start", "operator.process.list", "operator.process.cancel"]) {
+    for (const method of ["workspace.exec", "workspace.status", "workspace.commit", "workspace.unmount", "operator.workspace.overlay", "operator.workspace.changes", "operator.inspect.snapshot", "operator.process.start"]) {
       assert.ok(named.includes(method), method);
     }
     for (const [index, args] of native.args.entries()) {
-      if ("sandbox" in args) assert.equal(args.deploy?.daemonHost, "host.docker.internal", native.calls[index]);
+      const method = native.calls[index];
+      if ("sandbox" in args || method.startsWith("workspace.") || /^operator\.(process|sandbox)\./.test(method)) {
+        assert.equal(args.deploy?.daemonHost, "host.docker.internal", method);
+      }
     }
   } else {
     console.error("usage: trace.mjs on|off|failure|dsh-env|start|ids|no-content|store|daemon-host");

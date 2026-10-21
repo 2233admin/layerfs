@@ -1,9 +1,11 @@
 // The LayerFS JavaScript SDK. The client is lazy: construction does no I/O,
-// calls name their Branch, and Sandbox calls take the Sandbox (or its id).
-// Calls that are not about a Workspace (fs, branch, project) run in this
-// process against the installed Store at `storePath` (Linux only, #352
-// F-020); there is no other route. `close()` releases the Store.
-import { deployment, invoke, invokeClient, sandboxId, storeClose, storeOpen } from "./client.js";
+// and calls name their Branch. `workspace.mount(branch)` returns a Workspace,
+// `{ sandbox, path }`, placed by LayerFS in one of the project's Sandboxes;
+// the other Workspace calls take it (#373). Calls that are not about a
+// Workspace (fs, branch, project) run in this process against the installed
+// Store at `storePath` (Linux only, #352 F-020); there is no other route.
+// `close()` releases the Store.
+import { invokeClient, storeClose, storeOpen } from "./client.js";
 import { LayerFSError } from "./errors.js";
 import * as fsMethods from "./fs/index.js";
 import { init } from "./project/init.js";
@@ -14,13 +16,11 @@ import { fork } from "./branch/fork.js";
 import { list_commits } from "./branch/list_commits.js";
 import { merge } from "./branch/merge.js";
 import { publish } from "./branch/publish.js";
-import { close } from "./sandbox/close.js";
-import { commit } from "./sandbox/commit.js";
-import { create } from "./sandbox/create.js";
-import { exec } from "./sandbox/exec.js";
-import { mount } from "./sandbox/mount.js";
-import { status } from "./sandbox/status.js";
-import { unmount } from "./sandbox/unmount.js";
+import { commit } from "./workspace/commit.js";
+import { exec } from "./workspace/exec.js";
+import { mount } from "./workspace/mount.js";
+import { status } from "./workspace/status.js";
+import { unmount } from "./workspace/unmount.js";
 
 export { LayerFSError, isRefusal, CODES } from "./errors.js";
 
@@ -33,9 +33,9 @@ export class LayerFS {
    * then DSH_LAYERFS_TRACE); `options.traceStep` labels its lines
    * (overrides LAYERFS_TRACE_STEP, then DSH_LAYERFS_TRACE_STEP). Deployment
    * settings read LAYERFS_HOME, _DOCKER, _IMAGE, _VOLUME and _DAEMON, each
-   * else its DSH_LAYERFS_ twin; LAYERFS_CONTAINER_PREFIX (default
-   * `layerfs-`) names every container this client creates
-   * `<prefix><project>-<Sandbox>`.
+   * else its DSH_LAYERFS_ twin; a Sandbox this client starts runs _IMAGE
+   * on _VOLUME. LAYERFS_CONTAINER_PREFIX (default `layerfs-`) names every
+   * container it starts `<prefix><project>-<n>`.
    * `options.daemonHost` (else LAYERFS_DAEMON_HOST) is the host this process
    * dials for a daemon's port, published on the Docker host's 127.0.0.1 only;
    * set it when the client runs in a container (`host.docker.internal` on
@@ -43,8 +43,7 @@ export class LayerFS {
    * `options.storePath` (else LAYERFS_STORE_PATH) is the installed Store
    * file this client's Store calls open in this process; it must be on a
    * local Linux filesystem the daemons share, or the calls fail
-   * `Unsupported`. `options.sandbox` selects an existing Sandbox for the
-   * operator read model. `options.storePolicy` ({ smallFileThreshold, wholeFileDepth,
+   * `Unsupported`. `options.storePolicy` ({ smallFileThreshold, wholeFileDepth,
    * chunkDepth, metadataDepth }) is the Store policy `project.init` records
    * instead of the default. */
   constructor(projectName, options = {}) {
@@ -71,25 +70,10 @@ export class LayerFS {
       storePath: options.storePath ?? env("STORE_PATH"),
     };
     this.storeOpened = null;
-    const selected = options.sandbox === undefined ? null : sandboxId(options.sandbox);
-    this.sandboxes = new Set(selected ? [selected] : []);
-    this.serviceSandbox = selected ? Promise.resolve(selected) : null;
     this.fs = bind(this, fsMethods);
     this.project = bind(this, { init, list_branches });
     this.branch = bind(this, { list_commits, diff_commits, diff_branches, fork, merge, publish });
-    this.sandbox = bind(this, { create, close, mount, exec, status, commit, unmount });
-  }
-
-  /**
-   * The selected Sandbox, or an automatic service created once on first use.
-   * A refused creation is not kept, so the caller's next call is a new attempt.
-   */
-  service() {
-    this.serviceSandbox ??= invoke("sandbox.service", { project: this.projectName, home: this.options.home, deploy: deployment(this.options.deploy) }, this.options).then(
-      (value) => { this.sandboxes.add(value.id); return value.id; },
-      (error) => { this.serviceSandbox = null; throw error; },
-    );
-    return this.serviceSandbox;
+    this.workspace = bind(this, { mount, exec, status, commit, unmount });
   }
 
   /** Opens this client's Store in this process once; a refused open is not

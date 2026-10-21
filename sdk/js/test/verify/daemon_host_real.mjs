@@ -8,9 +8,9 @@
 //
 // `outer` (on the Docker host) makes a fresh volume and runs `inner` twice in
 // the runtime image, each in its own container with the Docker socket and the
-// volume at /layerfs-store: once with LAYERFS_DAEMON_HOST set (create, mount,
-// exec, unmount and close must succeed) and once without it (the control: the
-// create must fail to connect). Then it removes every container its runs
+// volume at /layerfs-store: once with LAYERFS_DAEMON_HOST set (mount, which
+// starts the project's first Sandbox, exec and unmount must succeed) and once
+// without it (the control: the mount's Sandbox start must fail to connect). Then it removes every container its runs
 // named and the volume. One attempt per step; nothing is retried.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -33,29 +33,27 @@ async function inner(mode) {
   writeFileSync(join(source, "README.md"), "hello from the host test\n");
   process.env.LAYERFS_HOME = join(work, "home");
   const layerfs = new LayerFS("site", { storePath: STORE });
-  const image = process.env.LAYERFS_IMAGE;
   try {
     await layerfs.project.init(source);
+    // main changes only through publish and is never mounted; a fork is.
+    await layerfs.branch.fork("work", "main");
     if (mode === "loopback") {
       let refused = null;
       try {
-        await layerfs.sandbox.create("box", "site", image);
+        await layerfs.workspace.mount("work");
       } catch (error) {
         refused = error;
       }
-      assert.ok(refused, "without the host the create must not reach the daemon");
+      assert.ok(refused, "without the host the Sandbox start must not reach the daemon");
       console.log(`CONTROL refused ${refused.code}: ${refused.message.slice(0, 200)}`);
       return;
     }
-    assert.equal(await layerfs.sandbox.create("box", "site", image), "box");
-    // main changes only through publish and is never mounted; a fork is.
-    await layerfs.branch.fork("work", "main");
-    const path = await layerfs.sandbox.mount("box", "work");
-    const ran = await layerfs.sandbox.exec("box", path, "cat README.md");
+    const ws = await layerfs.workspace.mount("work");
+    assert.equal(ws.sandbox, "1", "the project's first Sandbox");
+    const ran = await layerfs.workspace.exec(ws, "cat README.md");
     assert.equal(ran.exitCode ?? ran.exit_code ?? ran.code, 0, JSON.stringify(ran));
     assert.match(JSON.stringify(ran), /hello from the host test/);
-    await layerfs.sandbox.unmount("box", path, true);
-    await layerfs.sandbox.close("box");
+    await layerfs.workspace.unmount(ws, true);
     console.log(`HOST ok through ${process.env.LAYERFS_DAEMON_HOST}`);
   } finally {
     await layerfs.close?.().catch(() => {});

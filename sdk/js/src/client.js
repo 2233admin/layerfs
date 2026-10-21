@@ -30,17 +30,18 @@ export function outcome(answer) {
   return answer.value;
 }
 
-/** The Sandbox id of a Sandbox value or id. */
-export function sandboxId(sandbox) {
-  const id = typeof sandbox === "string" ? sandbox : sandbox && sandbox.id;
-  if (!id) throw new LayerFSError("InvalidInput", "a Sandbox or its id is required", null);
-  return id;
+/** The call fields of a Workspace, `{ sandbox, path }` as `workspace.mount` returned it. */
+export function workspaceArgs(ws) {
+  if (!ws || typeof ws.sandbox !== "string" || !ws.sandbox || typeof ws.path !== "string" || !ws.path) {
+    throw new LayerFSError("InvalidInput", "a Workspace { sandbox, path } from workspace.mount is required", null);
+  }
+  return { sandbox: ws.sandbox, path: ws.path };
 }
 
 /** Deployment settings from the client options, else the environment
- * (LAYERFS_<NAME>, else DSH_LAYERFS_<NAME>). `needsImage` is false for
- * sandbox.create, which names its own image; the service Sandbox needs it. */
-export function deployment(options = {}, needsImage = true) {
+ * (LAYERFS_<NAME>, else DSH_LAYERFS_<NAME>). A Workspace's Sandbox needs
+ * every one but the container prefix and daemon host. */
+export function deployment(options = {}) {
   const env = (name) => process.env[`LAYERFS_${name}`] || process.env[`DSH_LAYERFS_${name}`] || undefined;
   const deploy = {
     docker: options.docker ?? env("DOCKER") ?? "/var/run/docker.sock",
@@ -51,10 +52,9 @@ export function deployment(options = {}, needsImage = true) {
     daemonHost: options.daemonHost ?? env("DAEMON_HOST"),
   };
   for (const [name, value] of Object.entries(deploy)) {
-    if ((name === "image" && !needsImage) || name === "containerPrefix" || name === "daemonHost") continue;
+    if (name === "containerPrefix" || name === "daemonHost") continue;
     if (!value) throw new LayerFSError("InvalidInput", `deploy.${name} is not configured (LAYERFS_${name.toUpperCase()})`, null);
   }
-  if (!deploy.image) delete deploy.image;
   if (!deploy.containerPrefix) delete deploy.containerPrefix;
   if (!deploy.daemonHost) delete deploy.daemonHost;
   return deploy;
@@ -63,14 +63,14 @@ export function deployment(options = {}, needsImage = true) {
 /** One client's deployment selection, including cross-process discovery
  * home and the Store this process opens. */
 export function invokeClient(client, op, args) {
-  return invoke(op, { ...args, project: client.projectName, home: client.options.home, deploy: client.options.deploy, ...storeArgs(client) }, client.options);
+  return invoke(op, { ...projectArgs(client), ...storeArgs(client), ...args }, client.options);
 }
 
-/** An operator call's fields for a named Sandbox: discovery home and the
- * client's deployment, whose daemonHost the binding dials when it reopens
- * the Sandbox from its record. */
-export function sandboxArgs(client, sandbox) {
-  return { project: client.projectName, home: client.options.home, deploy: client.options.deploy, sandbox: sandboxId(sandbox) };
+/** A call's project fields: the project, discovery home and the client's
+ * deployment, whose daemonHost the binding dials when it reopens a Sandbox
+ * from its record and whose settings start a new one. */
+export function projectArgs(client) {
+  return { project: client.projectName, home: client.options.home, deploy: client.options.deploy };
 }
 
 const storeArgs = (client) => (client.options.storePath ? { storePath: client.options.storePath } : {});

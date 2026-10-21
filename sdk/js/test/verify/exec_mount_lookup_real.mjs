@@ -4,15 +4,15 @@
 //   node sdk/js/test/verify/exec_mount_lookup_real.mjs outer <daemon> <addon> <image>
 //
 // `outer` (on the Docker host) makes a fresh Store volume and runs `inner` in
-// the runtime image. Process A creates a Sandbox and mounts four Workspaces,
-// then traces one `sandbox.exec`: its trace line carries no daemon exchange
+// the runtime image. Process A mounts four Workspaces (placement starts the
+// project's Sandbox 1 for them), then traces one `workspace.exec`: its trace line carries no daemon exchange
 // (before F-029 it carried one status exchange per mount). A child process
 // sharing LAYERFS_HOME mounts a fifth Workspace and unmounts one of A's. A then
 // execs in the fifth (found from the shared records), is refused NotMounted in
 // the one the child removed (after one read of the shared records), and still
 // execs in the others. The child's remount after its unmount gets a new
 // directory: the daemon never reuses one, so a stale path can't name a new
-// Workspace. The Sandbox's container is named `<prefix><project>-<name>` and
+// Workspace. The Sandbox's container is named `<prefix><project>-<n>` and
 // carries its labels (#373). One attempt per step; nothing retried.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -42,11 +42,11 @@ async function inner([phase]) {
   const shared = join(home, "paths.json");
   if (phase === "child") {
     const paths = JSON.parse(readFileSync(shared, "utf8"));
-    const fifth = await layerfs.sandbox.mount("box", "work");
-    await layerfs.sandbox.unmount("box", paths[1], true);
+    const fifth = await layerfs.workspace.mount("work");
+    await layerfs.workspace.unmount(paths[1], true);
     // a remount after that unmount: the daemon never reuses a namespace, so
     // never its directory (layerfs-daemon control/serving.rs)
-    const sixth = await layerfs.sandbox.mount("box", "work");
+    const sixth = await layerfs.workspace.mount("work");
     writeFileSync(shared, JSON.stringify([...paths, fifth, sixth]));
     console.log("CHILD ok");
     return;
@@ -55,22 +55,22 @@ async function inner([phase]) {
   writeFileSync(join(source, "README.md"), "workspace file\n");
   await layerfs.project.init(source);
   rmSync(source, { recursive: true, force: true });
-  await layerfs.sandbox.create("box", "site", process.env.LAYERFS_IMAGE);
-  const container = readFileSync(join(home, "_sandboxes", "box", "container"), "utf8").trim();
-  const seen = await engine(`/v1.54/containers/${container}/json`);
-  assert.equal(seen.Name, `/${process.env.LAYERFS_CONTAINER_PREFIX}site-box`, "the container's name says whose and which");
-  for (const [key, value] of [["layerfs.role", "sandbox"], ["layerfs.project", "site"], ["layerfs.sandbox", "box"]]) {
-    assert.equal(seen.Config.Labels[key], value, `label ${key}`);
-  }
   await layerfs.branch.fork("work", "main");
   const paths = [];
-  for (let i = 0; i < MOUNTS; i++) paths.push(await layerfs.sandbox.mount("box", "work"));
+  for (let i = 0; i < MOUNTS; i++) paths.push(await layerfs.workspace.mount("work"));
+  assert.deepEqual(paths.map((ws) => ws.sandbox), Array(MOUNTS).fill("1"), "every Workspace in Sandbox 1");
+  const container = readFileSync(join(home, "site", "sandboxes", "1", "container"), "utf8").trim();
+  const seen = await engine(`/v1.54/containers/${container}/json`);
+  assert.equal(seen.Name, `/${process.env.LAYERFS_CONTAINER_PREFIX}site-1`, "the container's name says whose and which");
+  for (const [key, value] of [["layerfs.role", "sandbox"], ["layerfs.project", "site"], ["layerfs.sandbox", "1"]]) {
+    assert.equal(seen.Config.Labels[key], value, `label ${key}`);
+  }
   rmSync(trace, { force: true });
-  assert.equal((await layerfs.sandbox.exec("box", paths[0], "cat README.md")).exitCode, 0);
-  await layerfs.sandbox.status("box", paths[0]);
+  assert.equal((await layerfs.workspace.exec(paths[0], "cat README.md")).exitCode, 0);
+  await layerfs.workspace.status(paths[0]);
   const lines = readFileSync(trace, "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((l) => l.phase === "end");
-  const exec = lines.find((l) => l.method === "sandbox.exec");
-  const status = lines.find((l) => l.method === "sandbox.status");
+  const exec = lines.find((l) => l.method === "workspace.exec");
+  const status = lines.find((l) => l.method === "workspace.status");
   // the status call shows what one daemon exchange looks like in the trace
   assert.ok((status.daemon ?? []).length >= 1, `status carries its exchange: ${JSON.stringify(status).slice(0, 300)}`);
   assert.equal((exec.daemon ?? []).length, 0, `exec asks the daemon nothing: ${JSON.stringify(exec.daemon)?.slice(0, 300)}`);
@@ -82,16 +82,15 @@ async function inner([phase]) {
   assert.equal(child.status, 0, "the child process passes");
   const all = JSON.parse(readFileSync(shared, "utf8"));
   const [fifth, sixth] = all.slice(MOUNTS);
-  assert.ok(!paths.includes(sixth) && sixth !== fifth, `a remount gets a new directory: ${sixth}`);
-  assert.equal((await layerfs.sandbox.exec("box", fifth, "cat README.md")).exitCode, 0, "a mount another process made");
+  assert.ok(!paths.some((ws) => ws.path === sixth.path) && sixth.path !== fifth.path, `a remount gets a new directory: ${sixth.path}`);
+  assert.equal((await layerfs.workspace.exec(fifth, "cat README.md")).exitCode, 0, "a mount another process made");
   let refused = null;
-  try { await layerfs.sandbox.exec("box", paths[1], "true"); } catch (e) { refused = e; }
+  try { await layerfs.workspace.exec(paths[1], "true"); } catch (e) { refused = e; }
   // the stale entry sends A to the shared records once; nothing is there now
   assert.equal(refused?.code, "NotMounted", `a mount another process removed: ${refused?.message}`);
-  assert.equal((await layerfs.sandbox.exec("box", sixth, "cat README.md")).exitCode, 0, "the other process's remount");
-  for (const path of [paths[0], paths[2], paths[3]]) assert.equal((await layerfs.sandbox.exec("box", path, "true")).exitCode, 0);
-  for (const path of [paths[0], paths[2], paths[3], fifth, sixth]) await layerfs.sandbox.unmount("box", path, true);
-  await layerfs.sandbox.close("box");
+  assert.equal((await layerfs.workspace.exec(sixth, "cat README.md")).exitCode, 0, "the other process's remount");
+  for (const ws of [paths[0], paths[2], paths[3]]) assert.equal((await layerfs.workspace.exec(ws, "true")).exitCode, 0);
+  for (const ws of [paths[0], paths[2], paths[3], fifth, sixth]) await layerfs.workspace.unmount(ws, true);
   console.log("MAIN ok");
 }
 

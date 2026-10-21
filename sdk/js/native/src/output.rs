@@ -6,7 +6,7 @@
 //! directory (or every non-empty stream does, when the caller asks to spool).
 //! The result then names the spooled output, which `execOutput` reads back
 //! into the caller's page of at most [`PAGE`] bytes until
-//! `sandbox.exec_release` closes it. The Sandbox backend reads the command's stream only as fast as
+//! `workspace.exec_release` closes it. The Sandbox backend reads the command's stream only as fast as
 //! this sink takes it (an 8 KiB window), so a slow disk holds the command
 //! back. No total is capped: a spooled stream is bounded by free space.
 use crate::job::{failed, refused, Outcome};
@@ -193,7 +193,7 @@ pub(crate) fn page(args: &SdkValue, mut page: Buffer) -> Outcome {
     ]))
 }
 
-/// `sandbox.exec_release({ output })`: closes a spooled output's files.
+/// `workspace.exec_release({ output })`: closes a spooled output's files.
 pub(crate) fn release(args: &SdkValue) -> Outcome {
     let id = text(args, "output")?;
     let released = lock(outputs())?.remove(id).is_some();

@@ -111,10 +111,9 @@ mount path `/layerfs-store`, which stays.
 | Store volume `layerfs-<project>-store-<id>` | Docker volume | `/layerfs-store/global/store.sqlite` | The project's committed history | Until the project is removed |
 | Workspace overlay | File on the Sandbox's own disk | `/layerfs-local/overlay/` | One Workspace's uncommitted changes | Mount to unmount |
 | Workspace view | FUSE mount | `/workspaces/N` (unchanged) | Committed base plus overlay | Mount to unmount |
-| Project records | Folder | `<home>/<project>/`: `project.record`, `sealed.sqlite`, `ownership.lock`, `create.intent` | The project, including its image and read-only volumes | Until the project is removed |
+| Project records | Folder | `<home>/<project>/`: `project.record`, `sealed.sqlite`, `ownership.lock`, `create.intent` | The project and its image | Until the project is removed |
 | Sandbox records | Folder | `<home>/<project>/sandboxes/<n>/`: `sandbox.record`, `workspace-<hex>.record`, `process-<id>.record` | One Sandbox, its Workspaces and processes | Until the Sandbox closes |
 | Store container file | File | `<home>/.layerfs-store.json` | How to reach `layerfs-store` (port, secret, build) | While it runs |
-| Extra volumes | Docker volume, read-only | Same target rules as today | Caches, tools; set per project | Owned by their creator |
 
 ### 2.4 Calls
 
@@ -326,7 +325,16 @@ historical receipts.
 Numbering, records and placement moved from step 2 to step 3 during the
 work: placement is what `workspace.mount(branch)` does, and caller-named
 Sandboxes cannot be numbered while `sandbox.create(name)` exists, so doing
-them with the API keeps every commit working.
+them with the API keeps every commit working. dsh still calls the removed
+API between the step 3 and step 5 commits.
+
+Placement holds the project's `ownership.lock` for one mount (place, then
+mount, then the Workspace record), so a Sandbox never holds more than 16;
+Exec, status, Commit and unmount take only their Sandbox's lock. Discovery
+locks now wait for another process's hold, up to 60 seconds, then refuse
+`Busy`; before, a held lock refused `Busy` at once, and agents mounting at
+the same time would fail. The wait is a lock acquisition, not a retry: the
+call's work runs once.
 
 Each step is one commit, with the production LOC comparison and its tests.
 Disposable Store profile only; every test command under 120 s.
