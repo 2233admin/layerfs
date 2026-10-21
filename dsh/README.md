@@ -105,7 +105,7 @@ docker run --rm -v "$LAYERFS":/work:ro -v layerfs-target:/work/core/target/clust
   -p layerfs-node --lib -p layerfs-daemon --bins
 ```
 
-The fetch takes seconds; a cold release build took about 2.5 minutes at `-j 2` on an arm64 Mac with Docker limited to 8 CPUs. Agents in this repository keep every command under 2 minutes: put `timeout 110` before `cargo build` and run the same command again until it prints `Finished`, since Cargo keeps what it compiled.
+The fetch takes about 30 seconds; on an arm64 Mac with Docker limited to 8 CPUs a cold release build took about 2.5 minutes at `-j 2` and 65 seconds at `-j 6`. Agents in this repository keep every command under 2 minutes: put `timeout 110` before `cargo` inside the container (`… rust:1.85.1-bookworm timeout 110 cargo build …`; macOS has no `timeout` command) and run the same command again until it prints `Finished`, since Cargo keeps what it compiled.
 
 Then gather the build into one folder, the `bundle` (any folder Docker Desktop shares, such as one under your home):
 
@@ -217,13 +217,14 @@ Keep both in the OS temp area. Bash calls in Workspace Write mode run in dsh's s
 DSH_HOME=$HOME/dsh-layerfs pnpm --dir "$DSH" dsh web --no-open --port 3090
 ```
 
-Open the printed `http://127.0.0.1:3090/?token=…` link. Run the preset's sessions in Workspace Write mode; subagents inherit it. dsh's own model needs dsh's sign-in or keys, as usual; the mock models need none.
+Open the printed `http://127.0.0.1:3090/?token=…` link. Run the preset's sessions in Workspace Write mode; subagents inherit it. Agents use dsh's own model, which needs dsh's sign-in or keys, as usual. A fresh `DSH_HOME` has neither: sign in from the page's account menu.
 
-What you see:
+What you see ([TUTORIAL.md](TUTORIAL.md) walks through a first run with pictures):
+- A fresh `DSH_HOME` has no workspace. **Add workspace** (the sidebar's folder button, or the new session's workspace chip) picks one; the preset and project chips appear once a workspace is chosen. On macOS, dsh web's folder picker is the system's folder panel, which opens in front of the browser, not in the page.
 - **LayerFS × DSH minimalist** is the default preset of a new session. A preset picked in dsh's settings still wins.
-- The New Session row has a **project chip** beside the preset chip. Its menu lists every project (the workspace folder's first) and "No LayerFS", with **New empty project** (a random name, such as calm-otter) and **Import project…** below. Import opens the directory picker and imports the folder as a new project; importing the same folder again gives `name-1`, `name-2`, …. Both make Live projects. Picking a project switches a blank session to the minimalist preset.
+- The New Session row has a **project chip** beside the preset chip. Its menu lists every project (the workspace folder's first) and "No LayerFS", with **New empty project** (a random name, such as calm-otter) and **Import project…** below. Import opens the same folder picker and imports the folder as a new project, which becomes the workspace folder's default; importing the same folder again gives `name-1`, `name-2`, …. Both make Live projects. Picking a project switches a blank session to the minimalist preset.
 - A session on a project has two more tabs beside Chat and Trajectory: **Work** (the agents' terminals, Branches and Sandboxes) and **History** (File, History, Storage and Sandboxes: the project's Sandboxes tab, as on the LayerFS page).
-- The sidebar's **LayerFS** page shows one project at a time, with a switcher of every project: its Files, History and Storage, a New session action, and Refresh and Remove.
+- The sidebar's **LayerFS** page shows one project at a time: its Files, History, Storage and Sandboxes, a New session action, and Refresh and Remove. Its **All projects · Sandboxes** tab is the switcher: a card per project with its Sandboxes, below Docker, the Store container and free disk.
 
 A **Sim project** needs no Docker, image or build, but the chip's Import makes Live projects. Ask the Host for one directly. The `?token=` link sets the cookie the route needs:
 
@@ -273,7 +274,16 @@ Each record has the task, the spec, the system prompt, the progress ledger, the 
 
 ## 🚀 Your first session
 
+[TUTORIAL.md](TUTORIAL.md) walks through a first run step by step, with 19 screenshots: an import, two subagents on Branches of their own, a merge and a publish.
+
 **1. Start a session on a project.** In dsh web, start a new session. Its row has the preset chip, which reads **LayerFS × DSH minimalist**, and beside it the **project chip**. Open the project chip and pick **New empty project**, or **Import project…** to choose a folder and import it as a new project; a card under the chip shows the import's progress. The session's project is fixed at its first bash call that uses it.
+
+<table>
+  <tr>
+    <td width="50%" valign="top"><img src="media/first-project-menu.jpg" alt="The project chip's menu: every project, No LayerFS, New empty project and Import project…"><br><sub>The project chip's menu.</sub></td>
+    <td width="50%" valign="top"><img src="media/first-importing.jpg" alt="The project chip reads Importing tutorial-site…, with a progress card under it"><br><sub>An import in progress.</sub></td>
+  </tr>
+</table>
 
 **2. Switch to Workspace Write.** Set the session's mode to **Workspace Write**. Bash calls then run in dsh's sandbox, which lets LayerFS write its home and traces; subagents inherit the mode.
 
@@ -302,7 +312,14 @@ Branches into one, fix any Conflict, run the check once more, and publish to mai
 
 <p align="center"><img src="media/history.webp" alt="The History tab: main with Layers L6 to L10, and agents' Branches forking, committing and merging around it" width="860"><br><sub>History: 110 Commits on a dozen Branches, <code>main</code> at L10.</sub></p>
 
-**6. Come back to it later.** The sidebar's **LayerFS** page has one tab per project: where `main` is and what was published last, History and Files side by side (click a History node to see the files at that point), **New LayerFS session** to start another session on the project, and **Remove project…**, which asks for the project's name first.
+**6. Come back to it later.** The sidebar's **LayerFS** page shows one project at a time: where `main` is and what was published last, Files beside File, History, Storage and Sandboxes (click a History node to see the files at that point), **New session** to start another session on the project, and, in its ⋯ menu, **Remove project…**, which asks for the project's name first. Its **All projects · Sandboxes** tab is the switcher: a card per project with its Sandboxes, below Docker, the Store container and free disk.
+
+<table>
+  <tr>
+    <td width="50%" valign="top"><img src="media/first-layerfs-page.jpg" alt="The LayerFS page for tutorial-site: main's files beside its History, two subagent Branches merged and published as L1"><br><sub>A project: <code>main</code>'s files and its History.</sub></td>
+    <td width="50%" valign="top"><img src="media/first-all-projects.jpg" alt="All projects · Sandboxes: Docker, the Store container and free disk, then a card per project"><br><sub>All projects · Sandboxes.</sub></td>
+  </tr>
+</table>
 
 ## ✨ What it adds
 
