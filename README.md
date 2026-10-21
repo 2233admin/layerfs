@@ -41,7 +41,7 @@ https://github.com/user-attachments/assets/70c25887-86a1-4d81-bd78-571cf1c09a18
 ## Try it with LayerFS × DSH
 
 <p align="center">
-  <a href="dsh/README.md"><img src="docs/assets/readme/layerfs-x-dsh.svg" alt="LayerFS × DSH: the LayerFS logo and the DeepSeek Harness logo" width="240"></a>
+  <a href="dsh/README.md"><img src="docs/assets/readme/layerfs-x-dsh.svg" alt="LayerFS × DSH: the LayerFS logo and the DeepSeek Harness logo" width="220"></a>
 </p>
 
 LayerFS runs today through **LayerFS × DSH**, the `dsh-layerfs` plugin for

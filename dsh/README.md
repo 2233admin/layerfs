@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="brand/mark.svg" alt="LayerFS mark" width="80">
-</p>
-
-<h1 align="center">LayerFS × DSH</h1>
+<h1 align="center"><img src="../docs/assets/readme/layerfs-x-dsh.svg" alt="LayerFS × DSH" width="280"></h1>
 
 <p align="center"><strong>Every agent gets its own Branch. You watch them all, live.</strong></p>
 
