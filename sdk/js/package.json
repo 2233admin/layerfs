@@ -1,6 +1,6 @@
 {
   "name": "@layerfs/sdk",
-  "version": "0.1.7",
+  "version": "1.0.0",
   "description": "LayerFS JavaScript SDK: Branch files, Sandboxes and Workspaces over the native layerfs-api binding",
   "private": true,
   "type": "module",
