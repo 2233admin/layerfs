@@ -4,9 +4,11 @@
 //! starts the next Sandbox when every running one is full. A Workspace is
 //! `{ sandbox, path }`; status, Commit and unmount go to its Sandbox's
 //! daemon. Nothing is retried: a refused or failed step is the call's answer.
+//! A Sandbox whose daemon ended itself when idle is found stopped by the
+//! next mount or listing, which reclaims it.
 use crate::job::{failed, Outcome};
 use crate::registry::{
-    lock, naming, random, sandbox, sandbox_refreshed, text, Mount, SandboxState,
+    lock, naming, random, sandbox, sandbox_live, sandbox_refreshed, text, Mount, SandboxState,
 };
 use crate::sandbox::{operation, WORKSPACES};
 use layerfs_api::internal::workspace;
@@ -27,27 +29,6 @@ fn recorded(directory: &Path) -> Result<usize, SdkRefusal> {
     Ok(count)
 }
 
-/// Sandbox `id` when its container still runs it: this process's state,
-/// checked with one Engine inspection, or reopened from its records. A
-/// container found gone or stopped is the refusal of `discovery::gone`.
-fn running(args: &SdkValue, id: &str) -> Result<Arc<SandboxState>, SdkRefusal> {
-    let args = naming(args, id);
-    let state = sandbox(&args)?;
-    if let Err(failure) = state.runtime.endpoint() {
-        lock(&crate::registry::SANDBOXES)?.remove(&state.directory);
-        return Err(if failure.container_gone() || failure.container_stopped() {
-            crate::discovery::gone(
-                id,
-                &state.runtime.identity().to_string(),
-                failure.container_stopped(),
-            )
-        } else {
-            failed(failure)
-        });
-    }
-    Ok(state)
-}
-
 /// The Sandbox for a new Workspace, under the project's guard: the
 /// lowest-numbered running one with a free slot, else a new one.
 fn place(args: &SdkValue, project: &Path) -> Result<Arc<SandboxState>, SdkRefusal> {
@@ -59,7 +40,7 @@ fn place(args: &SdkValue, project: &Path) -> Result<Arc<SandboxState>, SdkRefusa
         {
             continue;
         }
-        match running(args, &id) {
+        match sandbox_live(&naming(args, &id)) {
             Ok(state) => return Ok(state),
             Err(refusal) => match crate::discovery::gone_container(&refusal) {
                 Some((container, stopped)) => {
@@ -104,24 +85,50 @@ pub(crate) fn mount(args: &SdkValue) -> Outcome {
     Ok(value)
 }
 
-/// `operator.sandbox.list()`: the project's Sandboxes from their records,
-/// lowest number first: `{ id, name }`. It reads no container and starts
-/// nothing; a Sandbox that is gone is listed until a mount reclaims it.
+/// `operator.sandbox.list()`: the project's running Sandboxes, lowest
+/// number first: `{ id, name }`. Each recorded container is inspected once
+/// (no daemon is dialed); one found gone or stopped, an idle-closed
+/// Sandbox's, is reclaimed under the project's guard and left out. It starts
+/// nothing.
 pub(crate) fn list(args: &SdkValue) -> Outcome {
     let mut items = Vec::new();
     for id in crate::discovery::sandbox_ids(args)? {
-        let record = crate::discovery::sandbox_dir(args, &id)?.join("sandbox.record");
+        let directory = crate::discovery::sandbox_dir(args, &id)?;
+        let record = directory.join("sandbox.record");
         if !record.exists() {
             continue;
         }
         let value = crate::discovery::load(&record)?;
-        items.push(SdkValue::map([
+        let item = SdkValue::map([
             ("id", SdkValue::text(&id)),
             (
                 "name",
                 SdkValue::text(value.get_text("name").unwrap_or_default()),
             ),
-        ]));
+        ]);
+        let cached = lock(&crate::registry::SANDBOXES)?.get(&directory).cloned();
+        let observed = match cached {
+            Some(state) => state.runtime.endpoint().map(drop),
+            None => {
+                let (docker, selector, request) = crate::discovery::runtime(&value)?;
+                layerfs_sandbox::backend::docker::Sandbox::reopen(docker, selector, request)
+                    .map(drop)
+            }
+        };
+        match observed {
+            Ok(()) => items.push(item),
+            Err(failure) if failure.container_gone() || failure.container_stopped() => {
+                let _placing = crate::discovery::guard(&crate::discovery::project_dir(args)?)?;
+                let container = text(&value, "container")?;
+                match crate::sandbox::reclaim(args, &id, container, failure.container_stopped()) {
+                    Ok(_) => {}
+                    // started again under the number meanwhile
+                    Err(refusal) if refusal.code == "Busy" => items.push(item),
+                    Err(refusal) => return Err(refusal),
+                }
+            }
+            Err(failure) => return Err(failed(failure)),
+        }
     }
     Ok(SdkValue::map([
         ("kind", SdkValue::text("ok")),

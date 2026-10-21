@@ -185,7 +185,7 @@ array; it is never a successful zero-valued snapshot.
 
 The #320 reader implementation removes the fixed read_handles setup field and bumps
 the private DaemonSetup layout to LFSD\x04. Old records are refused, never
-misread. Namespace admission now determines maximum mounted reader population;
+misread. (#373 bumps it to LFSD\x05 for `idle_exit_s`, below.) Namespace admission now determines maximum mounted reader population;
 each has a verified 2 MiB SQLite cache and short provider transactions. Reader
 observations do not keep closed connections alive. Section 39 declares this
 current demand/lock layout; historical pool records keep their own schema.
@@ -292,3 +292,19 @@ The owner subsequently authorized reintroducing that reader architecture with
 independent <=10% time/RSS allowances. Historical rejection/restoration records
 remain unchanged; current runtime qualification is pending. See the
 [reader design](../issues/320/WORKSPACE-READER-DESIGN-20261014.md).
+
+## Idle exit (#373)
+
+`DaemonLimits.idle_exit_s` (a `u32` after `serial_low_water`; record magic
+`LFSD\x05`) selects idle close. When it is not zero, `application/idle.rs`
+reads the state once a second; the daemon is idle while it is ControlReady,
+its control Service has no Workspace bound or binding, and no control call is
+running (each call counts itself in from its decoded record to its answer).
+After `idle_exit_s` seconds idle it writes any retained connection failures
+and `LAYERFS_DAEMON_IDLE_EXIT` to stderr and ends the process with status 0,
+under the state lock every call takes to begin, so no call starts after the
+decision. Open connections do not keep it. The period counts from the last
+check that saw it in use, so the exit comes between `idle_exit_s - 1` and
+`idle_exit_s + 1` seconds after the last Workspace went. The SDK sets 120 s
+for its Sandboxes (owner, 2026-10-21); tests and examples set 0.
+

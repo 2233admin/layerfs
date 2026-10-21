@@ -118,6 +118,7 @@ fn start(f: &support::Fixture, mounts: &Path) -> (Process, SocketAddr) {
             namespaces: 8,
             pager_kib: 1024,
             serial_low_water: 0,
+            idle_exit_s: 0,
         },
         existing_store: None,
     };

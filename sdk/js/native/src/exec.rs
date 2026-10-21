@@ -8,7 +8,7 @@
 //! from a second command and waits (bounded) until it is gone.
 use crate::job::{failed, refused, Outcome};
 use crate::output::Spool;
-use crate::registry::{lock, naming, sandbox, sandbox_refreshed, text, Process, SandboxState};
+use crate::registry::{lock, naming, sandbox, sandbox_live, text, Process, SandboxState};
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use std::time::Duration;
 
@@ -200,8 +200,11 @@ pub(crate) fn processes(args: &SdkValue) -> Outcome {
         {
             continue;
         }
-        match sandbox_refreshed(&named) {
-            Ok(state) => items.extend(listed(&state)?),
+        match sandbox_live(&named) {
+            Ok(state) => {
+                crate::discovery::refresh(&state)?;
+                items.extend(listed(&state)?);
+            }
             Err(refusal) if crate::discovery::gone_container(&refusal).is_some() => {}
             Err(refusal) => return Err(refusal),
         }
@@ -259,7 +262,8 @@ pub(crate) fn cancel(args: &SdkValue) -> Outcome {
         .and_then(|rest| rest.split_once('_'))
         .map(|(sandbox, _)| sandbox)
         .ok_or_else(|| refused("NoSuchProcess", format!("{id} is not a process id")))?;
-    let state = sandbox_refreshed(&naming(args, sandbox))?;
+    let state = sandbox_live(&naming(args, sandbox))?;
+    crate::discovery::refresh(&state)?;
     let _guard = crate::discovery::guard(&state.directory)?;
     let (pid, start, stopped) = lock(&state.processes)?
         .get(id)

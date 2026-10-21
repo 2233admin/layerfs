@@ -336,6 +336,17 @@ locks now wait for another process's hold, up to 60 seconds, then refuse
 the same time would fail. The wait is a lock acquisition, not a retry: the
 call's work runs once.
 
+Idle close (step 4): the daemon reads its state once a second and ends its
+process after 2 minutes with no Workspace bound and no control call running;
+open connections do not keep it. The container then stops. The binding
+checks a known Sandbox's container with one Engine inspection before a
+placement or operator call, so a client that kept connections finds it
+stopped instead of sending on a dead connection. The next mount or
+`operator.sandbox.list()` reclaims it (deletes the stopped container and the
+records). A call sent in the instant the daemon decides gets no reply; the
+window is the time between the decision and the exit, after two quiet
+minutes.
+
 Each step is one commit, with the production LOC comparison and its tests.
 Disposable Store profile only; every test command under 120 s.
 

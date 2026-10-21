@@ -6,6 +6,7 @@ mod connection;
 mod diagnostics;
 mod failure;
 mod filesystem;
+mod idle;
 mod owner;
 mod serve;
 pub use cli::main;

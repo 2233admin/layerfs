@@ -88,13 +88,16 @@ the container id in the plain-text file `container` there (for
 `docker logs`). A Sandbox starts with the image the deployment names then and
 keeps it for its life.
 
-A Workspace whose Sandbox's container no longer runs is refused as
-`NoSuchSandbox` with `detail.containerGone`: Docker no longer has the
-container (removed outside LayerFS), or has it stopped
+A Sandbox closes when idle: its daemon ends itself after 2 minutes with no
+Workspace and no call, and its container stops. Open connections do not keep
+it. The next mount or `operator.sandbox.list()` that meets a stopped or
+removed container reclaims the Sandbox: it deletes a stopped container
+(unforced, once) and removes the Sandbox's records, so the number is used
+again. A Workspace call to a Sandbox whose container no longer runs is
+refused as `NoSuchSandbox` with `detail.containerGone`: Docker no longer has
+the container (removed outside LayerFS), or has it stopped
 (`detail.containerStopped`, after Docker restarted, for instance), which lost
-its daemon and every mount in it. The next mount that meets such a Sandbox
-reclaims it: it deletes a stopped container (unforced, once) and removes the
-Sandbox's records, so the number is used again.
+its daemon and every mount in it.
 
 The same authorized home permits a fresh Node process to use a Workspace
 directly. Reopening validates the full container id, deployment, volume,
@@ -236,7 +239,7 @@ await operator.files.stats("feature", "/README.md");
 await operator.files.history("feature", "/README.md", 20, 0);
 await operator.workspace.overlay(ws);
 await operator.workspace.changes(ws, 20, 0);
-await operator.sandbox.list(); // the project's Sandboxes from their records
+await operator.sandbox.list(); // the project's running Sandboxes; reclaims stopped ones
 await operator.inspect.snapshot();
 await operator.project.progress(); // while layerfs.project.init runs in this process
 const process = await operator.process.start(ws, "npm run dev"); // "proc_1_…"

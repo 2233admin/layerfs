@@ -90,6 +90,31 @@ pub(crate) fn sandbox(args: &SdkValue) -> Result<Arc<SandboxState>, SdkRefusal> 
     }
 }
 
+/// The Sandbox `args` name when its container still runs it: this
+/// process's state, checked with one Engine inspection, or reopened from its
+/// records (which inspects too). A container found gone or stopped (an idle
+/// Sandbox's daemon ends itself, #373) is the refusal of
+/// `discovery::gone`, and this process forgets the state.
+pub(crate) fn sandbox_live(args: &SdkValue) -> Result<Arc<SandboxState>, SdkRefusal> {
+    let directory = crate::discovery::sandbox_dir(args, text(args, "sandbox")?)?;
+    let Some(state) = lock(&SANDBOXES)?.get(&directory).cloned() else {
+        return sandbox(args);
+    };
+    if let Err(failure) = state.runtime.endpoint() {
+        lock(&SANDBOXES)?.remove(&directory);
+        return Err(if failure.container_gone() || failure.container_stopped() {
+            crate::discovery::gone(
+                &state.id,
+                &state.runtime.identity().to_string(),
+                failure.container_stopped(),
+            )
+        } else {
+            crate::job::failed(failure)
+        });
+    }
+    Ok(state)
+}
+
 /// `args` naming Sandbox `id` of their project.
 pub(crate) fn naming(args: &SdkValue, id: &str) -> SdkValue {
     let mut fields = match args {

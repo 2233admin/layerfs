@@ -68,6 +68,10 @@ impl Service {
         };
         workspace.operation().map_err(Failure::Workspace)
     }
+    /// Workspaces bound or binding; None when the registry is poisoned.
+    pub fn workspaces(&self) -> Option<usize> {
+        self.entries.lock().ok().map(|entries| entries.len())
+    }
     pub(super) fn admit(
         &self,
         token: WorkspaceToken,

@@ -44,5 +44,6 @@ fn run() -> Result<(), ApplicationError> {
         listener.local_addr().map_err(ApplicationError::Io)?
     );
     io::stdout().flush().map_err(ApplicationError::Io)?;
+    application.watch_idle().map_err(ApplicationError::Io)?;
     application.serve(listener)
 }

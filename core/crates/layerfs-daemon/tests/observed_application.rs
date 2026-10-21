@@ -47,6 +47,7 @@ fn start(f: &support::Fixture, stderr: File) -> (Process, SocketAddr, Control) {
         mounts: f.directory.join("mounts"),
         serial_low_water: 0,
         existing_store: None,
+        idle_exit_s: 0,
     };
     let (process, address, control, _) = start_with(f, stderr, deployment);
     (process, address, control)
@@ -58,6 +59,7 @@ struct Deployment {
     serial_low_water: u64,
     /// None installs the fixture's Store; Some opens the installed one.
     existing_store: Option<StoreManifest>,
+    idle_exit_s: u32,
 }
 /// The private configuration record of one start, written beside the Store.
 fn configure(f: &support::Fixture, deployment: &Deployment) -> PathBuf {
@@ -78,6 +80,7 @@ fn configure(f: &support::Fixture, deployment: &Deployment) -> PathBuf {
             namespaces: 8,
             pager_kib: 1024,
             serial_low_water: deployment.serial_low_water,
+            idle_exit_s: deployment.idle_exit_s,
         },
         existing_store: deployment.existing_store.clone(),
     };
@@ -699,6 +702,7 @@ fn configured_serial_low_water_reaches_a_mounted_create_on_both_startup_routes()
                 mounts: mounts.clone(),
                 serial_low_water: low_water,
                 existing_store: manifest.clone(),
+                idle_exit_s: 0,
             },
         );
         assert_eq!(manifest.is_some(), route == "existing");
@@ -820,6 +824,7 @@ fn startup_refuses_a_serial_low_water_at_or_above_the_refill_window() {
                 mounts: f.directory.join("mounts"),
                 serial_low_water: refused,
                 existing_store: None,
+                idle_exit_s: 0,
             },
         );
         let log = f.directory.join("refused.log");
@@ -866,5 +871,68 @@ fn startup_refuses_a_serial_low_water_at_or_above_the_refill_window() {
         );
         assert!(!overlay.exists(), "an engine was created");
     }
+    f.cleanup();
+}
+
+/// #373 idle close: a daemon ends itself once it has held no Workspace and
+/// run no call for its idle period. A bound Workspace keeps it however long
+/// it stays; an open connection does not.
+#[test]
+fn an_idle_daemon_exits_and_a_workspace_keeps_it() {
+    let f = support::Fixture::new("observed-idle-exit", None);
+    let log = f.directory.join("stderr.log");
+    let mounts = f.directory.join("mounts");
+    fs::create_dir(&mounts).unwrap();
+    let (mut process, _address, mut control, _) = start_with(
+        &f,
+        File::create(&log).unwrap(),
+        Deployment {
+            overlay: f.directory.join("overlay.sqlite"),
+            mounts: mounts.clone(),
+            serial_low_water: 0,
+            existing_store: None,
+            idle_exit_s: 2,
+        },
+    );
+    let bound = layerfs_api::internal::workspace(&mut control)
+        .bind(
+            WorkspaceId::from_authority([81; 32]).unwrap(),
+            f.project.branch.branch.id,
+        )
+        .unwrap();
+    thread::sleep(Duration::from_secs(4));
+    assert!(
+        process.0.try_wait().unwrap().is_none(),
+        "a Workspace keeps the daemon"
+    );
+    layerfs_api::internal::workspace(&mut control)
+        .unmount(bound.token, false)
+        .unwrap();
+    let unmounted = std::time::Instant::now();
+    // The connection stays open; the daemon still ends within its period
+    // and the one-second check, with a bounded wait here.
+    let deadline = unmounted + Duration::from_secs(10);
+    let status = loop {
+        if let Some(status) = process.0.try_wait().unwrap() {
+            break status;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the idle daemon did not exit"
+        );
+        thread::sleep(Duration::from_millis(50));
+    };
+    assert!(status.success(), "{status:?}");
+    // The period counts from the last check that saw the Workspace, at
+    // most one check before the unmount.
+    let waited = unmounted.elapsed();
+    println!("IDLE exit {waited:?} after the unmount");
+    assert!(waited >= Duration::from_secs(1), "{waited:?}");
+    assert!(fs::read_to_string(&log)
+        .unwrap()
+        .contains("LAYERFS_DAEMON_IDLE_EXIT after 2 s"));
+    drop(control);
+    drop(process);
+    fs::remove_dir(&mounts).unwrap();
     f.cleanup();
 }

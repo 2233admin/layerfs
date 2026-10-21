@@ -34,6 +34,7 @@ fn setup(private: [u8; 32], peer: [u8; 32]) -> DaemonSetup {
             namespaces: 8,
             pager_kib: 1024,
             serial_low_water: 256,
+            idle_exit_s: 0,
         },
         existing_store: None,
     }

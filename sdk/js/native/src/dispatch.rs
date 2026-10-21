@@ -51,7 +51,7 @@ fn dispatch(op: &str, args: SdkValue) -> Outcome {
 /// Workspaces and the read model that lists them. `deploy` only selects how this process dials
 /// the daemon, so it is not sent on.
 fn daemon_operator(op: &str, args: SdkValue) -> Outcome {
-    let state = registry::sandbox(&args)?;
+    let state = registry::sandbox_live(&args)?;
     let args = match args {
         SdkValue::Map(fields) => SdkValue::Map(
             fields
