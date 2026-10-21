@@ -21,6 +21,18 @@ const opened = new Map();
 const setting = (name) => process.env[`LAYERFS_${name}`] || process.env[`DSH_LAYERFS_${name}`];
 const refused = (code, message) => ({ refused: { code, message, detail: null } });
 
+/** Whose calls found the Store container down or unreachable: the Host, which starts it again. */
+const hooks = new Set();
+/** @param {() => void} hook @returns {() => void} removes it */
+export const onUnreachable = (hook) => (hooks.add(hook), () => hooks.delete(hook));
+/** A call's own answer when the Store container is not there or does not answer; the hooks are told, and the call is never sent again. */
+const down = (code, message) => {
+  for (const hook of hooks) hook();
+  return refused(code, message);
+};
+/** The messages of those answers, as an agent's trace line carries them to the Host. */
+export const UNREACHABLE = /the Store container [^\s']+(?:'s worker did not answer| has not started| is not there| did not run project\.init)|the connection to the Store container [^\s']+ was lost/;
+
 /**
  * One binding call in Linux: its answer, `{ value }` or `{ refused }`. A call
  * to a named Sandbox (the operator's) carries no deployment, and the Linux
@@ -63,7 +75,7 @@ function worker(box, home) {
   if (link && !link.closed) return link;
   let info;
   try { info = JSON.parse(readFileSync(storeFile(home), "utf8")); } catch { info = null; }
-  if (!info || info.box !== box) return { call: async () => refused("Failed", `the Store container ${box} has not started for ${home}: start dsh web`) };
+  if (!info || info.box !== box) return { call: async () => down("Failed", `the Store container ${box} has not started for ${home}: dsh starts it; run the call again once it is up`) };
   const pending = new Map(), waiting = [];
   let next = 1, greeted = false;
   const socket = connect({ host: "127.0.0.1", port: info.port });
@@ -88,8 +100,8 @@ function worker(box, home) {
     self.closed = true;
     const why = error ? ` (${error.message})` : "";
     const answer = greeted
-      ? refused("Unknown", `the connection to the Store container ${box} was lost${why}: check the project before going on`)
-      : refused("Failed", `the Store container ${box}'s worker did not answer${why}: restart dsh web`);
+      ? down("Unknown", `the connection to the Store container ${box} was lost${why}: check the project before going on`)
+      : down("Failed", `the Store container ${box}'s worker did not answer${why}: dsh starts it again; run the call again once it is up`);
     for (const p of pending.values()) p.resolve(answer);
     pending.clear();
     waiting.length = 0;
@@ -116,7 +128,7 @@ function worker(box, home) {
 async function initCall(box, bundle, request) {
   const { args } = request;
   let image;
-  try { image = await boxImage(box); } catch { return refused("Failed", `the Store container ${box} is not there to run project.init`); }
+  try { image = await boxImage(box); } catch { return down("Failed", `the Store container ${box} is not there to run project.init`); }
   const env = Object.keys(process.env).filter((k) => /^(DSH_)?LAYERFS_/.test(k) && !k.endsWith("_NATIVE")).flatMap((k) => ["-e", k]);
   const where = ["run", "--rm", "-i", "--init", "--pull", "never", ...callMounts({ home: args.home, bundle }), "-v", `${args.path}:${args.path}:ro`, ...env, "--entrypoint", "node", image, RUN];
   return new Promise((resolve, reject) => {

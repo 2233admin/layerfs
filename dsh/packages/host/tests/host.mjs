@@ -22,6 +22,7 @@ const { registerRoutes } = await import("../src/route.js");
 const { TreeReader } = await import("../src/trees.js");
 const { removeProject } = await import("../src/remove.js");
 const { migrate } = await import("../src/migrate.js");
+const { UNREACHABLE } = await import("../src/port/binding.js");
 const { prepareInit, randomName, scanSource, watching } = await import("../src/init.js");
 const { InitJobs } = await import("../src/jobs.js");
 const { CALL, PROJECT } = await import("@dsh-layerfs/model/sources/records.js");
@@ -409,6 +410,24 @@ try {
     assert.match(refused.kept[0].reason, /could not remove/);
     assert.ok(existsSync(join(records, "_service.c")));
   }
+  // an agent's call that found the Store container down tells the Host, which starts it again; other failures do not
+  {
+    const healing = host();
+    let heals = 0;
+    healing.collector.onUnreachable = () => heals++;
+    const file = healing.collector.track({ id: "heal-1", root: "heal-root" }, { name: "website" });
+    const failed = (id, message) => JSON.stringify({ layerfs_trace: 1, id, method: "fs.read", start: new Date().toISOString(), ms: 1, ok: false, code: "Failed", message }) + "\n";
+    appendFileSync(file, failed("u-1", "the Store container layerfs-store's worker did not answer (connect ECONNREFUSED 127.0.0.1:55012): dsh starts it again; run the call again once it is up")
+      + failed("u-2", "NoSuchPath: /nope.js"));
+    healing.collector.poll();
+    assert.equal(heals, 1);
+  }
+  // the ported binding's answers when the Store container is down, as trace lines carry them
+  for (const message of ["the Store container layerfs-store has not started for /h: dsh starts it; run the call again once it is up",
+    "the Store container layerfs-store's worker did not answer (connect ECONNREFUSED 127.0.0.1:1): dsh starts it again",
+    "the connection to the Store container layerfs-store was lost (read ECONNRESET): check the project before going on",
+    "the Store container layerfs-store is not there to run project.init"]) assert.match(message, UNREACHABLE);
+  assert.doesNotMatch("NoSuchPath: the Store container docs is a folder", UNREACHABLE);
   console.log("host: ok");
 } finally {
   rmSync(dir, { recursive: true, force: true });

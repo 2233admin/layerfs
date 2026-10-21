@@ -8,8 +8,11 @@
 // project's Store: the worker opens it once and keeps it open while calls use
 // it, closing it after a quiet minute. Each call is made once.
 import { timingSafeEqual } from "node:crypto";
+import { readdirSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { made, storeOf } from "./call.mjs";
 import { frame, readFrames } from "./frames.mjs";
 
@@ -19,6 +22,12 @@ if (secret.length < 16) {
   console.error("layerfs store worker: DSH_BOX_SECRET is not set");
   process.exit(2);
 }
+// The binding opens each Store with a folder /tmp/layerfs-store-<pid>-<n>. A
+// container Docker started again keeps its /tmp, and this worker may get the
+// same pid, so an earlier run's folders would refuse the open (File exists).
+// This worker is the only process here that opens Stores, and none is open
+// yet: they are its own earlier run's.
+for (const name of readdirSync(tmpdir())) if (name.startsWith("layerfs-store-")) rmSync(join(tmpdir(), name), { recursive: true, force: true });
 const binding = createRequire(import.meta.url)(process.env.LAYERFS_NATIVE);
 
 /** Open Stores by path: { opening, users, timer }. */

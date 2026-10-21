@@ -87,6 +87,8 @@ async function start(spec) {
   if (!state) {
     secret = randomBytes(32).toString("hex");
     await docker("run", "-d", "--pull", "never", "--name", spec.box, "--init",
+      // Docker starts it again after its own restart; the Host's readiness check then finds its new port
+      "--restart", "unless-stopped",
       "--label", "layerfs.role=store", "--label", `layerfs.worker=${version}`, "--label", `layerfs.build=${build}`, "--label", `layerfs.home=${spec.home}`,
       "-p", `127.0.0.1::${WORKER_PORT}`, "-e", `DSH_BOX_SECRET=${secret}`, "-e", "UV_THREADPOOL_SIZE=64",
       ...callMounts(spec), "--entrypoint", "node", spec.image, join(PORT, "worker.mjs"));

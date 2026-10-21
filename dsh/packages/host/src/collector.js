@@ -6,6 +6,7 @@
 // live in temporary storage.
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { UNREACHABLE } from "./port/binding.js";
 import { appendCall } from "./records.js";
 
 const MAX_CHUNK = 1 << 20;
@@ -120,6 +121,8 @@ export class Collector {
     const view = this.view(agent.root);
     const own = { ...stripped(line), agent: agent.name, agentId: sessionId, project };
     if (line.phase === "start") { view.running.set(line.id, own); return; }
+    // an agent's call found the Store container down: the Host starts it again (the call keeps its answer)
+    if (live && line.ok === false && UNREACHABLE.test(String(line.message ?? ""))) this.onUnreachable?.();
     view.running.delete(line.id);
     if (!this.keep(view, own)) return;
     if (!live) return;

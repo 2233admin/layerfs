@@ -12,6 +12,7 @@
 import { BindingStore } from "./binding.js";
 import { ensureBox } from "./box.js";
 import { migrate } from "./migrate.js";
+import { onUnreachable } from "./port/binding.js";
 import { Collector } from "./collector.js";
 import z from "@deepseek-ai/schemastery";
 import { resolveConfig } from "./config.js";
@@ -45,6 +46,10 @@ export function apply(ctx, config) {
     Object.assign(process.env, { DSH_LAYERFS_STORE_CONTAINER: spec.box, DSH_LAYERFS_BUNDLE: spec.bundle });
     ensureBox(spec).catch((error) => ctx.logger?.warn?.(`layerfs: the Store container did not start: ${error.message}`));
   }
+  // a call of the Host's or an agent's that finds the Store container stopped, missing or
+  // unreachable starts it again, one start at a time; the failed call keeps its own answer
+  const heal = spec.box ? () => ensureBox(spec).catch((error) => ctx.logger?.warn?.(`layerfs: the Store container did not start again: ${error.message}`)) : null;
+  if (heal) ctx.effect(() => onUnreachable(heal), "layerfs-host: Store container self-heal");
   // older Sandboxes left running (they may hold work) are shown in GET /layerfs/status
   spec.migration = { kept: [] };
   migrate(spec, undefined, (text) => ctx.logger?.warn?.(text))
@@ -52,6 +57,7 @@ export function apply(ctx, config) {
     .catch((error) => ctx.logger?.warn?.(`layerfs: moving to the #373 layout: ${error.message}`));
   const bindings = new BindingStore(spec.stateDir);
   const collector = new Collector(ctx, spec, bindings);
+  collector.onUnreachable = heal;
   ctx.effect(() => ctx.shellEnv.register(contributor(ctx, spec, bindings, collector)), "layerfs-host: bash environment");
   ctx.effect(() => collector.start(), "layerfs-host: trace collection");
   ctx.on("session/event", (session, event) => collector.observe(session, event));

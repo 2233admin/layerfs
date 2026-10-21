@@ -5,7 +5,9 @@
 // installs the Store, starting no Sandbox), Store calls (fork, write, read,
 // list, publish), Workspace calls (mount, which starts the project's
 // Sandbox 1, exec, commit, unmount), a refusal and an exec whose output is
-// spooled. Each SDK call goes to the Store container's long-lived worker,
+// spooled; then the Store container is stopped, and later removed, and a
+// call's own failure starts it again (the Host's self-heal). Each SDK call
+// goes to the Store container's long-lived worker,
 // which keeps the project's Store open between calls; Init runs in its own
 // container. The Store container is `<prefix>store` with this test's own
 // prefix, so dsh's `layerfs-store` is never touched; another home with that
@@ -51,6 +53,7 @@ try {
   await timed("Store container start", () => ensureBox(spec));
   assert.equal(docker("inspect", "-f", '{{index .Config.Labels "layerfs.role"}}', spec.box), "store");
   assert.equal(docker("inspect", "-f", '{{index .Config.Labels "layerfs.home"}}', spec.box), home);
+  assert.equal(docker("inspect", "-f", "{{.HostConfig.RestartPolicy.Name}}", spec.box), "unless-stopped");
   // another home with the same prefix is refused; this home's container stays
   const other = await ensureBox({ ...spec, home: join(work, "other") }).catch((e) => e);
   assert.match(String(other?.message), /serves the LayerFS home .*its own containerPrefix/);
@@ -87,6 +90,25 @@ try {
   assert.equal((await timed("branch.publish", () => layerfs.branch.publish("work"))).kind, "Added");
   const branches = await timed("project.list_branches", () => layerfs.project.list_branches());
   assert.deepEqual(branches.items.map((b) => b.name).sort(), ["main", "work"]);
+  // self-heal, as the Host wires it: a call that finds the Store container stopped
+  // or missing reports its own error, and the hook starts it again; the next call works
+  const { onUnreachable } = await import("../src/port/binding.js");
+  let healing = null;
+  const unhook = onUnreachable(() => { healing ??= ensureBox(spec); });
+  try {
+    for (const [what, stop] of [["stopped", () => docker("stop", "-t", "1", spec.box)], ["missing", () => docker("rm", "-f", spec.box)]]) {
+      stop();
+      healing = null;
+      const lost = await layerfs.fs.read("work", "/hello.js").catch((e) => e);
+      assert.ok(isRefusal(lost, "Failed") || isRefusal(lost, "Unknown"), `${what}: the call keeps its own answer: ${lost}`);
+      assert.ok(healing, `${what}: the call started the heal`);
+      await timed(`heal (${what})`, () => healing);
+      assert.equal(docker("inspect", "-f", "{{.State.Running}}", spec.box), "true");
+      assert.equal((await timed(`fs.read after heal (${what})`, () => layerfs.fs.read("work", "/hello.js"))).text, "console.log('hello, shop');\n");
+    }
+  } finally {
+    unhook();
+  }
   console.log("port: ok");
 } finally {
   await layerfs?.close().catch(() => {});
