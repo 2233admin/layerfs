@@ -56,47 +56,47 @@ try {
   assert.equal(edit.commit.message, "headline");
   await refused(() => lf.fs.write("main", "/x", "x"), "ReadOnly");
 
-  const sb = await lf.sandbox.create(`${NAME}-a`, NAME, "sim");
-  assert.equal(sb, `${NAME}-a`);
-  await refused(() => lf.sandbox.create(sb, NAME, "sim"), "Exists");
-  const ws = await lf.sandbox.mount(sb, "feature");
-  assert.equal(ws, "/workspaces/1");
-  const built = await lf.sandbox.exec(sb, ws, "sh install.sh && sh build.sh");
+  // LayerFS places the Workspace: the project's first Sandbox, numbered 1
+  const ws = await lf.workspace.mount("feature");
+  assert.deepEqual(ws, { sandbox: "1", path: "/workspaces/1" });
+  const sb = ws.sandbox;
+  const built = await lf.workspace.exec(ws, "sh install.sh && sh build.sh");
   assert.equal(built.kind, "exit:0", built.stdout + built.stderr);
   assert.match(built.stdout, /Compiled successfully: 2 pages/);
-  const sed = await lf.sandbox.exec(sb, ws, "sed -i 's/Home/Welcome/' app/page.tsx && grep h1 app/page.tsx");
+  const sed = await lf.workspace.exec(ws, "sed -i 's/Home/Welcome/' app/page.tsx && grep h1 app/page.tsx");
   assert.match(sed.stdout, /<h1>Welcome<\/h1>/);
-  assert.equal((await lf.sandbox.exec(sb, ws, "exit 3")).kind, "exit:3");
+  assert.equal((await lf.workspace.exec(ws, "exit 3")).kind, "exit:3");
 
   // A background process keeps the Workspace busy until it is stopped.
-  const server = await op.process.start(sb, ws, "sleep 30");
+  const server = await op.process.start(ws, "sleep 30");
   assert.equal(server.kind, "running");
-  const busy = await refused(() => lf.sandbox.unmount(sb, ws), "Busy");
+  assert.match(server.process, /^proc_1_[0-9a-f]+$/, "a process id names its Sandbox");
+  const busy = await refused(() => lf.workspace.unmount(ws), "Busy");
   assert.deepEqual(busy.detail.processes, [server.process]);
-  const listed = await op.process.list(sb);
-  assert.equal(listed.items[0].status, "running");
+  const listed = await op.process.list();
+  assert.deepEqual([listed.items[0].status, listed.items[0].sandbox], ["running", "1"]);
   const pid = JSON.parse(readFileSync(join(home, NAME, "sim", "state.json"), "utf8")).sim.sandboxes[sb].processes[server.process].pid;
   assert.ok(alive(pid));
-  assert.equal((await op.process.cancel(sb, server.process)).status, "stopped");
+  assert.equal((await op.process.cancel(server.process)).status, "stopped");
 
   // The head moves under the Workspace: commit writes the merge's markers and refuses, twice.
   await lf.fs.edit("feature", "/app/page.tsx", "<h1>Home</h1>", "<h1>Hi</h1>", "greeting");
-  assert.equal((await lf.sandbox.status(sb, ws)).headMovedSinceMount, true);
-  const conflict = await refused(() => lf.sandbox.commit(sb, ws, "welcome"), "Conflict");
+  assert.equal((await lf.workspace.status(ws)).headMovedSinceMount, true);
+  const conflict = await refused(() => lf.workspace.commit(ws, "welcome"), "Conflict");
   assert.equal(conflict.message, "Conflict: the head moved and 1 file(s) conflict with this Workspace; markers are written and nothing was committed");
   assert.deepEqual(conflict.detail.conflicts.map((c) => c.path), ["/app/page.tsx"]);
   assert.deepEqual(conflict.detail.conflicts[0].hunks[0], { line: 4, ours: ["      <h1>Welcome</h1>"], theirs: ["      <h1>Hi</h1>"] });
-  const marked = await lf.sandbox.exec(sb, ws, "cat app/page.tsx");
+  const marked = await lf.workspace.exec(ws, "cat app/page.tsx");
   assert.match(marked.stdout, /^>>>>>>> feature@12[0-9a-f]{64}$/m);
-  const markers = await refused(() => lf.sandbox.commit(sb, ws, "welcome"), "Conflict");
+  const markers = await refused(() => lf.workspace.commit(ws, "welcome"), "Conflict");
   assert.equal(markers.message, "Conflict: 1 file(s) still contain conflict markers; nothing committed");
-  await lf.sandbox.exec(sb, ws, "sed -i '/^<<<<<<< /d; /^=======$/,/^>>>>>>> /d' app/page.tsx");
-  const saved = await lf.sandbox.commit(sb, ws, "welcome");
+  await lf.workspace.exec(ws, "sed -i '/^<<<<<<< /d; /^=======$/,/^>>>>>>> /d' app/page.tsx");
+  const saved = await lf.workspace.commit(ws, "welcome");
   assert.equal(saved.kind, "Committed");
   assert.equal(saved.commit.via, "exec");
-  assert.equal((await lf.sandbox.unmount(sb, ws)).kind, "Unmounted");
+  assert.equal((await lf.workspace.unmount(ws)).kind, "Unmounted");
   assert.ok(!existsSync(join(home, NAME, "sim", "ws", sb, "1")), "an unmounted Workspace's folder is removed");
-  assert.equal((await lf.sandbox.close(sb)).kind, "Closed");
+  assert.deepEqual((await op.sandbox.list()).map((x) => [x.id, x.name]), [["1", `layerfs-${NAME}-1`]]);
 
   // Publish, then read main.
   const published = await lf.branch.publish("feature");
@@ -117,18 +117,18 @@ try {
   const both = await lf.branch.merge("feature", "main", "both");
   assert.equal(both.kind, "Merged");
   assert.equal(both.fastForward, true);
-  if (lf.serviceSandbox) await lf.sandbox.close(await lf.serviceSandbox);
 
   // The SDK's own trace lines, with ids in LayerFS's formats.
   const lines = readFileSync(trace, "utf8").trim().split("\n").map((l) => JSON.parse(l));
-  const codes = lines.filter((l) => l.method === "sandbox.commit").map((l) => (l.ok ? l.kind : l.code));
+  const codes = lines.filter((l) => l.method === "workspace.commit").map((l) => (l.ok ? l.kind : l.code));
   assert.deepEqual(codes, ["Conflict", "Conflict", "Committed"]);
-  assert.match(lines.find((l) => l.method === "sandbox.commit" && l.ok).commit, ID.commit);
-  assert.equal(lines.find((l) => l.method === "sandbox.create").sandbox, sb);
+  assert.match(lines.find((l) => l.method === "workspace.commit" && l.ok).commit, ID.commit);
+  assert.deepEqual([lines.find((l) => l.method === "workspace.mount").sandbox, lines.find((l) => l.method === "workspace.exec").args.sandbox], ["1", "1"]);
 
   // The Host's views read the simulator: the state, Files reads of saved ids and the Store.
   const trees = new TreeReader(spec);
-  const state = await trees.state(project, [sb]);
+  const state = await trees.state(project);
+  assert.deepEqual(state.s.sandboxOrder, [`layerfs-${NAME}-1`]);
   assert.deepEqual(Object.keys(state.s.branches).sort(), ["both", "feature"]);
   assert.equal(Object.keys(state.s.commits).length, 3, "headline, greeting, welcome; the merge with main fast-forwards");
   const head = Object.entries(state.labels).find(([, label]) => label === state.s.branches.feature.head)[0];
@@ -142,27 +142,30 @@ try {
   assert.equal(typeof storage.store.dedupe, "number");
   assert.equal(storage.commits.length, 3);
 
-  // `lfs run`: each call mounts a Workspace in the project's service Sandbox and
-  // unmounts it, creating no Sandbox; the service stays for the next call.
+  // `lfs run`: each call mounts a Workspace, which LayerFS places in the
+  // project's Sandbox 1, and unmounts it; the Sandbox stays for the next call.
   const cli = fileURLToPath(new URL("../src/lfs.js", import.meta.url));
   const lfs = (...args) => execFileSync(process.execPath, [cli, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, DSH_LAYERFS_PROJECT: NAME, DSH_LAYERFS_SDK: spec.simSdk } });
   const before = readFileSync(trace, "utf8").trim().split("\n").length;
   assert.equal(lfs("run", "feature", "echo hi > note.txt && cat note.txt", "note"), "hi\n");
   assert.equal(lfs("run", "feature", "cat note.txt", "--discard"), "hi\n");
   const runs = readFileSync(trace, "utf8").trim().split("\n").slice(before).map((l) => JSON.parse(l));
-  const service = `_service.${NAME}`;
-  assert.deepEqual(runs.filter((l) => l.method === "sandbox.create" || l.method === "sandbox.close"), []);
-  assert.deepEqual(runs.filter((l) => l.method === "sandbox.service").map((l) => l.sandbox), [service, service]);
-  assert.deepEqual(runs.filter((l) => ["sandbox.mount", "sandbox.unmount"].includes(l.method)).map((l) => [l.method, l.ok]), [["sandbox.mount", true], ["sandbox.unmount", true], ["sandbox.mount", true], ["sandbox.unmount", true]]);
-  const kept = JSON.parse(readFileSync(join(home, NAME, "sim", "state.json"), "utf8")).sim.sandboxes[service];
-  assert.equal(kept.closed, false, "the service Sandbox stays for the next call");
+  assert.deepEqual(runs.filter((l) => ["workspace.mount", "workspace.unmount"].includes(l.method)).map((l) => [l.method, l.ok, l.sandbox ?? l.args.sandbox]), [["workspace.mount", true, "1"], ["workspace.unmount", true, "1"], ["workspace.mount", true, "1"], ["workspace.unmount", true, "1"]]);
+  const kept = JSON.parse(readFileSync(join(home, NAME, "sim", "state.json"), "utf8")).sim.sandboxes["1"];
+  assert.equal(kept.closed, false, "the Sandbox stays for the next call");
   assert.deepEqual(Object.values(kept.workspaces).filter((w) => w.mounted), [], "no Workspace is left mounted");
 
   // Removal stops the project's background processes and deletes its home entry.
-  const sb2 = await lf.sandbox.create(`${NAME}-b`, NAME, "sim");
-  const ws2 = await lf.sandbox.mount(sb2, "feature");
-  await op.process.start(sb2, ws2, "sleep 30");
-  const running = Object.values(JSON.parse(readFileSync(join(home, NAME, "sim", "state.json"), "utf8")).sim.sandboxes[sb2].processes)[0].pid;
+  // placement: a 17th Workspace starts Sandbox 2
+  const held = [];
+  for (let i = 0; i < 16; i++) held.push(await lf.workspace.mount("feature"));
+  assert.deepEqual([...new Set(held.map((w) => w.sandbox))], ["1"]);
+  const ws2 = await lf.workspace.mount("feature");
+  assert.equal(ws2.sandbox, "2");
+  await lf.workspace.unmount(held[3], true);
+  assert.equal((await lf.workspace.mount("feature")).sandbox, "1", "the lowest-numbered Sandbox with room");
+  await op.process.start(ws2, "sleep 30");
+  const running = Object.values(JSON.parse(readFileSync(join(home, NAME, "sim", "state.json"), "utf8")).sim.sandboxes["2"].processes)[0].pid;
   assert.ok(alive(running));
   assert.deepEqual(await removeProject(spec, bindings, trees, NAME, () => assert.fail("a simulated project runs no docker")), { removed: NAME, volume: `sim-${NAME}` });
   for (let i = 0; i < 50 && alive(running); i++) await new Promise((resolve) => setTimeout(resolve, 20));

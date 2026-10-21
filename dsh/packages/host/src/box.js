@@ -1,10 +1,13 @@
-// The LayerFS box of ported Live projects (macOS; port/binding.js): one
-// long-lived Linux container whose main process is the worker (port/
+// The Store container of ported Live projects (macOS; port/binding.js),
+// `<prefix>store` (`layerfs-store` by default, #373): one long-lived Linux
+// container per LayerFS home whose main process is the worker (port/
 // worker.mjs) that makes every ported SDK call with the real Linux binding
 // (owner direction of 2026-10-20, AGENTS.md). The worker's port is published
 // to the Mac's loopback only, and its secret and port are written to the
-// LayerFS home (boxFile) for the Host's and agents' processes. The box is
-// labelled with its worker's code, so a changed worker gets a new box.
+// LayerFS home (storeFile) for the Host's and agents' processes. It is
+// labelled with its worker's code and its build, so the Host replaces it when
+// either changes; the Host starts it when it starts, before any dsh run.
+// A box of the older naming (`dsh-layerfs-box-…`) on the same home goes then.
 // It mounts only what the calls use, each at its own path so a path means the
 // same inside as outside, for Docker too: the Docker socket, Docker's volume
 // directory (inside Docker's VM), the LayerFS home (writable), the LayerFS
@@ -14,7 +17,7 @@
 // folder, runs in its own container with that folder (binding.js).
 import { execFile } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,12 +27,12 @@ import { frame, readFrames } from "./port/frames.mjs";
 const run = promisify(execFile);
 export const VOLUMES = "/var/lib/docker/volumes";
 export const PORT = dirname(fileURLToPath(new URL("./port/run.mjs", import.meta.url)));
-/** Where a box process reaches a daemon's loopback-published port: the Mac. */
+/** Where a Store container process reaches a daemon's loopback-published port: the Mac. */
 export const DAEMON_HOST = "host.docker.internal";
 const WORKER_PORT = 7070;
 const READY_MS = 15_000;
 
-/** `docker run` mounts and settings of a ported call's process: the box's worker, or Init's own. */
+/** `docker run` mounts and settings of a ported call's process: the Store container's worker, or Init's own. */
 export const callMounts = ({ home, bundle }) => [
   "-v", "/var/run/docker.sock:/var/run/docker.sock", "-v", `${VOLUMES}:${VOLUMES}`,
   "-v", `${home}:${home}`, "-v", `${bundle}:${bundle}:ro`, "-v", `${PORT}:${PORT}:ro`,
@@ -39,13 +42,18 @@ export const callMounts = ({ home, bundle }) => [
 /** Where a ported call opens the Store of the project volume `volume`. */
 export const storePathOf = (volume) => `${VOLUMES}/${volume}/_data/global/store.sqlite`;
 
-/** The box's name: one per LayerFS home and build, so a new build gets a new box. */
-export const boxName = (home, bundle) => `dsh-layerfs-box-${createHash("sha256").update(`${home}\n${bundle}`).digest("hex").slice(0, 12)}`;
+/** The Store container's name: one per LayerFS home, whose container prefix sets it apart. */
+export const storeName = (prefix) => `${prefix}store`;
 
-/** The file that tells a home's processes how to reach its box's worker: { box, port, secret }. */
-export const boxFile = (home) => join(home, ".dsh-layerfs-box.json");
+/** The file that tells a home's processes how to reach its Store container's worker: { box, port, secret }. */
+export const storeFile = (home) => join(home, ".layerfs-store.json");
+/** The file of the older naming, removed when the Store container starts. */
+const OLD_FILE = ".dsh-layerfs-box.json";
 
-/** The worker's code, as the box's label: a changed worker needs a new box. */
+/** A short id of a build folder, as the Store container's label. */
+const buildOf = (bundle) => createHash("sha256").update(bundle).digest("hex").slice(0, 12);
+
+/** The worker's code, as the Store container's label: a changed worker replaces it. */
 const workerVersion = () => {
   const hash = createHash("sha256");
   for (const file of ["worker.mjs", "call.mjs", "frames.mjs"]) hash.update(readFileSync(join(PORT, file)));
@@ -53,7 +61,7 @@ const workerVersion = () => {
 };
 
 let starting = null;
-/** Starts the box and its worker unless they run, and writes boxFile; one start at a time. */
+/** Starts the Store container and its worker unless they run, and writes storeFile; one start at a time. */
 export function ensureBox(spec) {
   starting ??= start(spec).finally(() => { starting = null; });
   return starting;
@@ -61,10 +69,14 @@ export function ensureBox(spec) {
 
 async function start(spec) {
   const docker = (...args) => run("docker", ["-H", `unix://${spec.docker}`, ...args]).then((r) => r.stdout.trim());
-  const version = workerVersion();
-  let state = await docker("inspect", "-f", '{{.State.Running}} {{index .Config.Labels "dsh-layerfs.worker"}}', spec.box).catch(() => null);
-  if (state && state.split(" ")[1] !== version) {
-    // a box of another worker (or of the per-call port before it): replaced
+  const version = workerVersion(), build = buildOf(spec.bundle);
+  // the older naming's box on this home (its home folder is mounted): replaced
+  const old = (await docker("ps", "-aq", "--filter", "label=dsh-layerfs.box=1", "--filter", `volume=${spec.home}`)).split("\n").filter(Boolean);
+  if (old.length) await docker("rm", "-f", ...old);
+  rmSync(join(spec.home, OLD_FILE), { force: true });
+  let state = await docker("inspect", "-f", '{{.State.Running}} {{index .Config.Labels "layerfs.worker"}} {{index .Config.Labels "layerfs.build"}}', spec.box).catch(() => null);
+  if (state && (state.split(" ")[1] !== version || state.split(" ")[2] !== build)) {
+    // another worker or another build: replaced
     await docker("rm", "-f", spec.box);
     state = null;
   }
@@ -72,20 +84,20 @@ async function start(spec) {
   if (!state) {
     secret = randomBytes(32).toString("hex");
     await docker("run", "-d", "--pull", "never", "--name", spec.box, "--init",
-      "--label", "dsh-layerfs.box=1", "--label", `dsh-layerfs.worker=${version}`,
+      "--label", "layerfs.role=store", "--label", `layerfs.worker=${version}`, "--label", `layerfs.build=${build}`,
       "-p", `127.0.0.1::${WORKER_PORT}`, "-e", `DSH_BOX_SECRET=${secret}`, "-e", "UV_THREADPOOL_SIZE=64",
       ...callMounts(spec), "--entrypoint", "node", spec.image, join(PORT, "worker.mjs"));
   } else {
     if (state.startsWith("false")) await docker("start", spec.box);
     const env = await docker("inspect", "-f", "{{range .Config.Env}}{{println .}}{{end}}", spec.box);
     secret = /^DSH_BOX_SECRET=([0-9a-f]+)$/m.exec(env)?.[1];
-    if (!secret) throw new Error(`the LayerFS box ${spec.box} has no secret`);
+    if (!secret) throw new Error(`the Store container ${spec.box} has no secret`);
   }
   // "127.0.0.1:55012" (a second line for IPv6 when Docker adds one)
   const port = Number(/:(\d+)$/m.exec(await docker("port", spec.box, `${WORKER_PORT}/tcp`))?.[1]);
-  if (!port) throw new Error(`the LayerFS box ${spec.box} publishes no worker port`);
+  if (!port) throw new Error(`the Store container ${spec.box} publishes no worker port`);
   await listening(port, secret, spec.box);
-  const file = boxFile(spec.home);
+  const file = storeFile(spec.home);
   writeFileSync(`${file}.tmp`, JSON.stringify({ box: spec.box, port, secret }), { mode: 0o600 });
   renameSync(`${file}.tmp`, file);
 }
@@ -102,7 +114,7 @@ async function listening(port, secret, box) {
       socket.on("close", () => done(false));
     });
     if (ok) return;
-    if (Date.now() > until) throw new Error(`the LayerFS box ${box}'s worker did not answer within ${READY_MS / 1000} s`);
+    if (Date.now() > until) throw new Error(`the Store container ${box}'s worker did not answer within ${READY_MS / 1000} s`);
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 }

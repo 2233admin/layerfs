@@ -12,8 +12,12 @@
 //                the run's clock or an OS-assigned value (`content`, compared
 //                by presence); variesOf() decides both from the record
 //   closed       no container uses the project's volume: every Sandbox of the
-//                run, the service Sandbox included, is closed, so no Workspace
-//                is mounted
+//                run closed itself, which a Sandbox does two minutes after its
+//                last Workspace is unmounted (#373), so no Workspace is left
+//                mounted. The callers wait for it, bounded.
+// Recorded runs name the calls of the older SDK: sandbox.* for a Workspace
+// call (the SDK's workspace.* now), and sandbox.create and sandbox.close,
+// which no longer exist and leave nothing on the trace.
 import { execFileSync } from "node:child_process";
 import { compareHistory, historyOf } from "./history.mjs";
 import { trackedChanges, trackedHashes } from "./tree.mjs";
@@ -27,8 +31,10 @@ const matches = (code, want) => {
   return want.slice(head.length).split("|").some((kind) => matches(code, head + kind));
 };
 /** Whether `want` appears in `codes` in order. */
+/** A recorded create or close, which no call makes now. */
+const retired = (want) => /^sandbox\.(create|close):/.test(want);
 const inOrder = (codes, want) => { let i = 0; for (const c of codes) if (i < want.length && matches(c, want[i])) i++; return i === want.length; };
-export const codeOf = (line) => `${line.method}:${line.ok ? line.kind ?? "ok" : line.code}`;
+export const codeOf = (line) => `${line.method.replace(/^workspace\./, "sandbox.")}:${line.ok ? line.kind ?? "ok" : line.code}`;
 
 /**
  * @param {object} scenario compiled scenario
@@ -48,7 +54,8 @@ export function expectedOutcomes(scenario, linesOf) {
     // bash calls in the order they began: a background call's first line may
     // end after a later call's (the lines arrive as their calls end)
     groups.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
-    const expecting = steps.filter((s) => s.kind === "call" && s.call.name === "bash" && s.expect);
+    const expecting = steps.filter((s) => s.kind === "call" && s.call.name === "bash" && s.expect)
+      .map((s) => ({ ...s, expect: s.expect.filter((w) => !retired(w)) })).filter((s) => s.expect.length);
     if (expecting.length && !groups.length) { failures.push(`${agent}: no LayerFS calls on the trace`); continue; }
     let next = 0;
     for (const step of expecting) {
@@ -97,8 +104,8 @@ export function variesOf(main) {
 }
 
 /** The final-tree check: main's tracked files against final.json's. */
-export async function finalTreeFailures(final, lf, sandbox) {
-  const run = await trackedHashes(lf, sandbox), failures = [];
+export async function finalTreeFailures(final, lf) {
+  const run = await trackedHashes(lf), failures = [];
   const varies = final.varies ?? { stamp: null, content: {} };
   const stamp = varies.stamp ? new RegExp(varies.stamp, "g") : null;
   const name = (path) => (stamp ? path.replace(stamp, "<stamp>") : path);

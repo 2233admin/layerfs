@@ -3,8 +3,10 @@
 // scenarios/<scenario>/run/NNN.json in their recorded order:
 //   fork, merge, publish          the Branch calls, with the recorded arguments
 //   write                         one fs.apply with the recorded Commit's changes
-//   create, close                 the agent's own Sandbox
-//   mount, exec, commit, unmount  a Workspace in it; exec runs the recorded
+//   create, close                 the agent's own Sandbox in the record; since
+//                                 #373 LayerFS places Workspaces and closes
+//                                 idle Sandboxes, so these make no call
+//   mount, exec, commit, unmount  a Workspace; exec runs the recorded
 //                                 command verbatim ($PWD is the Workspace)
 // Each call's outcome must be the recorded one (`expect`; "a|b" allows
 // either), and each command's exit code the recorded one. A Commit the record
@@ -19,8 +21,8 @@
 // differs ends the step with exit code 1, which stops the demo there: a run
 // is never patched up. Nothing waits or retries; order between agents comes
 // from the scenario's own waits.
-// What later steps need (the agent's Sandbox, its mounted Workspaces by
-// their recorded path) is kept under the project's LayerFS home entry,
+// What later steps need (the agent's recorded Sandbox, its mounted
+// Workspaces by their recorded path) is kept under the project's LayerFS home entry,
 // which is removed with the project.
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -42,8 +44,8 @@ function keep(key, value) {
 
 class Mismatch extends Error {}
 const outcome = (value) => (value?.kind ?? "ok");
-// create and mount answer only the Sandbox's name or the Workspace's path, and only when Ready or Mounted
-const ANSWERED = { "sandbox.create": "Ready", "sandbox.mount": "Mounted" };
+// a mount answers only the Workspace, and only when Mounted
+const ANSWERED = { "sandbox.mount": "Mounted" };
 // alternatives share what comes before the last ":" ahead of the first "|"
 // ("sandbox.exec:exit:1|0" allows exit:1 and exit:0), as check-demo reads them
 const allowed = (expect, got) => {
@@ -70,6 +72,8 @@ async function expectCall(call, method, work) {
 
 const tail = (text, lines = 12) => String(text ?? "").trimEnd().split("\n").slice(-lines).join("\n");
 const short = (id) => String(id ?? "").slice(0, 12);
+/** A kept Workspace as the SDK takes it. */
+const wsArg = (ws) => ({ sandbox: ws.sandbox, path: ws.path });
 
 /** A recorded ref ("main", "orders#2", "L3": main's fourth Layer, or a Branch by name) as this run's id. */
 async function resolveRef(lf, ref) {
@@ -116,10 +120,7 @@ export async function step(scenario, number) {
   const file = new URL(`../${scenario}/run/${number}.json`, import.meta.url);
   const run = JSON.parse(readFileSync(file, "utf8"));
   const agent = run.agent, boxKey = `sandbox-${agent}`, wsKey = `workspaces-${agent}`;
-  const own = note(boxKey);
-  // the agent's own Sandbox serves its Store calls once it has one
-  let lf = own ? new LayerFS(project, { sandbox: own }) : new LayerFS(project);
-  const first = lf;
+  const lf = new LayerFS(project);
   const workspaces = note(wsKey) ?? {};
   try {
     for (const call of run.calls) {
@@ -149,33 +150,25 @@ export async function step(scenario, number) {
           break;
         }
         case "create": {
-          // `for`: the lead creates a worker's Sandbox, which the worker then uses and closes
+          // `for`: the lead created a worker's Sandbox in the record, which the worker then used and closed
           const owner = call.for ?? agent;
-          const name = `${project}-${owner}`.slice(0, 63).replace(/[^a-z0-9]+$/, "");
-          const id = await expectCall(call, "sandbox.create", () => lf.sandbox.create(name, project, process.env.DSH_LAYERFS_IMAGE));
-          keep(`sandbox-${owner}`, id);
-          if (owner === agent) lf = new LayerFS(project, { sandbox: id });
-          console.log(`● Sandbox ${name}${owner === agent ? "" : ` for ${owner}`}`);
+          keep(`sandbox-${owner}`, true);
+          console.log(`● (recorded: a Sandbox${owner === agent ? "" : ` for ${owner}`}; LayerFS places Workspaces now)`);
           break;
         }
         case "close": {
-          const id = note(boxKey);
-          if (!id) throw new Mismatch("the agent has no Sandbox to close");
-          const r = await expectCall(call, "sandbox.close", () => lf.sandbox.close(id));
-          if (r?.refused) { console.log(`✓ close refused ${r.refused.code}, as recorded`); break; }
+          if (!note(boxKey)) throw new Mismatch("the agent has no Sandbox to close");
           keep(boxKey, null);
-          console.log(`✓ closed ${id}`);
+          console.log("✓ (recorded: Sandbox closed; it closes itself when idle now)");
           break;
         }
         case "mount": {
-          const id = note(boxKey);
-          if (!id) throw new Mismatch("the agent has no Sandbox to mount in");
-          const r = await expectCall(call, "sandbox.mount", () => lf.sandbox.mount(id, call.branch));
+          if (!note(boxKey)) throw new Mismatch("the agent has no Sandbox to mount in");
+          const r = await expectCall(call, "sandbox.mount", () => lf.workspace.mount(call.branch));
           if (r?.refused) { console.log(`✓ mount ${call.branch} refused ${r.refused.code}, as recorded`); break; }
-          const path = r;
-          workspaces[call.ws] = { sandbox: id, path, branch: call.branch };
+          workspaces[call.ws] = { sandbox: r.sandbox, path: r.path, branch: call.branch };
           keep(wsKey, workspaces);
-          console.log(`⟳ mount ${call.branch} → ${path}`);
+          console.log(`⟳ mount ${call.branch} → Sandbox ${r.sandbox} ${r.path}`);
           break;
         }
         case "exec": {
@@ -185,7 +178,7 @@ export async function step(scenario, number) {
             break;
           }
           console.log(`$ ${call.command.length > 300 ? `${call.command.slice(0, 300)}…` : call.command}`);
-          const r = await expectCall(call, "sandbox.exec", () => lf.sandbox.exec(ws.sandbox, ws.path, call.command, call.message ?? undefined));
+          const r = await expectCall(call, "sandbox.exec", () => lf.workspace.exec(wsArg(ws), call.command, call.message ?? undefined));
           const out = tail(`${r.stdout ?? ""}${r.stderr ?? ""}`);
           if (out) console.log(out);
           console.log(`[exit ${r.exitCode}] (recorded exit ${call.exit})`);
@@ -215,7 +208,7 @@ export async function step(scenario, number) {
           break;
         }
         case "commit": {
-          const r = await expectCall(call, "sandbox.commit", () => lf.sandbox.commit(ws.sandbox, ws.path, call.message ?? undefined, call.force));
+          const r = await expectCall(call, "sandbox.commit", () => lf.workspace.commit(wsArg(ws), call.message ?? undefined, call.force));
           if (call.generated && outcome(r) === "Committed") {
             // the record has UpToDate: this Commit may hold only generated (ignored) files
             const { trackedChanges } = await import("../../tools/checks/tree.mjs");
@@ -237,7 +230,7 @@ export async function step(scenario, number) {
           break;
         }
         case "unmount": {
-          await expectCall(call, "sandbox.unmount", () => lf.sandbox.unmount(ws.sandbox, ws.path, call.discard));
+          await expectCall(call, "sandbox.unmount", () => lf.workspace.unmount(wsArg(ws), call.discard));
           delete workspaces[call.ws];
           keep(wsKey, Object.keys(workspaces).length ? workspaces : null);
           console.log(`  unmounted ${ws.path}`);
@@ -251,11 +244,6 @@ export async function step(scenario, number) {
     console.log(`✕ ${run.step}: ${error.message}`);
     process.exitCode = 1;
   } finally {
-    // the converter puts an agent's create before its first Store call, so
-    // the service Sandbox is never started here; if it was, that is a fault
-    if (!own && first.serviceSandbox) {
-      console.log("✕ a call went through the project's service Sandbox");
-      process.exitCode = 1;
-    }
+    await lf.close();
   }
 }

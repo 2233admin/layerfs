@@ -215,11 +215,6 @@ export class Collector {
     return out;
   }
 
-  /** Real Sandbox ids the root session's agents created. */
-  sandboxesOf(rootId) {
-    return [...new Set(this.load(rootId).lines.filter((l) => l.method === "sandbox.create" && l.ok).map((l) => l.sandbox))];
-  }
-
   /** Polls on an interval until the returned disposer runs. */
   start() {
     const timer = setInterval(() => {

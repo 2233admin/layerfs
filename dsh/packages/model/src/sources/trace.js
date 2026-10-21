@@ -38,6 +38,7 @@ export class ReplayEngine {
    */
   constructor({ project = "project", files = null } = {}) {
     this.m = new Mirror();
+    this.m.project = project;
     this.project = project;
     this.live = true;
     this.replay = true;
@@ -108,8 +109,8 @@ export class ReplayEngine {
   workspace(sb, path) { const box = this.s.sandboxes[sb]; return box && box.workspaces[path]; }
 
   /** Applies one end line and returns the call's outcome envelope, with display ids. */
-  apply(line) {
-    const a = line.args || {}, s = this.s;
+  apply(raw) {
+    const line = older(raw), a = line.args || {}, s = this.s;
     if (!line.ok) {
       if (line.method === "sandbox.commit" && line.code === "Conflict") {
         const w = this.workspace(this.sandbox(a.sandbox), a.path);
@@ -189,7 +190,7 @@ export class ReplayEngine {
         return ok("running", { process: line.process });
       }
       case "operator.process.cancel": {
-        const box = s.sandboxes[this.sandbox(a.sandbox)], p = box.processes[a.process];
+        const box = s.sandboxes[this.sandbox(processSandbox(a))], p = box.processes[a.process];
         if (p) p.status = "stopped";
         return ok("Stopped", { kind: "Stopped", process: a.process, status: "stopped" });
       }
@@ -231,12 +232,23 @@ export class ReplayEngine {
   }
 }
 
+/**
+ * A line of the Workspace API (#373) under the older SDK's call names, which
+ * the model draws: `workspace.mount` is `sandbox.mount` and so on. Lines name
+ * the Workspace's Sandbox as before (the mount's result, the others' args).
+ */
+const WORKSPACE = new Set(["workspace.mount", "workspace.exec", "workspace.status", "workspace.commit", "workspace.unmount"]);
+const older = (line) => (WORKSPACE.has(line.method) ? { ...line, method: `sandbox.${line.method.slice("workspace.".length)}` } : line);
+/** The Sandbox of a process call: its args', or the one its id names (`proc_<sandbox>_<hex>`). */
+const processSandbox = (a) => a.sandbox ?? /^proc_(\d+)_/.exec(String(a.process))?.[1];
+
 /** Calls that only the client makes for itself, or reads with no line of their own. */
 const SKIP = (method) => method === "sandbox.service" || (method.startsWith("operator.") && method !== "operator.process.start" && method !== "operator.process.cancel");
 
 /** The agent step a trace line stands for, in the story's call names, with
  * its Workspace bound by the ids on the line; null for a line not drawn. */
-export function stepOf(E, line, agent) {
+export function stepOf(E, raw, agent) {
+  const line = older(raw);
   if (SKIP(line.method)) return null;
   const a = line.args || {}, base = { a: line.agent || agent, group: line.step || null };
   const bind = (path) => ({ sandbox: E.m.toLabel.get(a.sandbox) ?? E.sandbox(a.sandbox), path });
@@ -244,12 +256,12 @@ export function stepOf(E, line, agent) {
     case "project.init": return { ...base, call: "project.init", args: { name: E.project, path: a.path } };
     case "branch.fork": return a.from && a.from !== "main" ? { ...base, call: "branch.fork", args: { name: a.name, branch: E.ref(a.from) } } : { ...base, call: "main.fork", args: { name: a.name } };
     case "sandbox.create": return { ...base, call: "sandbox.create", args: { name: a.name, project: E.project, image: a.image } };
-    case "sandbox.mount": return { ...base, call: "sandbox.mount", args: { branch: a.branch, sandbox: E.sandbox(a.sandbox) } };
+    case "sandbox.mount": return { ...base, call: "sandbox.mount", args: { branch: a.branch, sandbox: E.sandbox(a.sandbox ?? line.sandbox) } };
     case "sandbox.close": return { ...base, call: "sandbox.close", args: { sandbox: E.sandbox(a.sandbox) } };
     case "sandbox.exec": return { ...base, sh: a.command, args: {}, bind: bind(a.path) };
     case "operator.process.start": return { ...base, sh: a.command, args: { background: true }, bind: bind(a.path) };
     case "operator.process.cancel": {
-      const id = E.sandbox(a.sandbox), p = E.s.sandboxes[id].processes[a.process];
+      const id = E.sandbox(processSandbox(a)), p = E.s.sandboxes[id].processes[a.process];
       return { ...base, call: "process.cancel", args: { process: a.process }, bind: { sandbox: id, path: p ? p.path : a.path } };
     }
     case "sandbox.commit": case "sandbox.unmount": case "sandbox.status":

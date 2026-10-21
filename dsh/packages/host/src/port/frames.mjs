@@ -1,4 +1,4 @@
-// Frames between the ported binding (binding.js) and the box's worker
+// Frames between the ported binding (binding.js) and the Store container's worker
 // (worker.mjs): a 4-byte big-endian length, then a v8-serialized value.
 import { deserialize, serialize } from "node:v8";
 

@@ -1,6 +1,6 @@
 // The LayerFS SDK of a ported Live project (macOS): the real SDK of the
 // LayerFS build (DSH_LAYERFS_BUNDLE), with its native calls run in the
-// LayerFS box (binding.js). The Host gives Live bash calls on macOS this as
+// Store container (binding.js). The Host gives Live bash calls on macOS this as
 // DSH_LAYERFS_SDK, so their scripts do not change.
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";

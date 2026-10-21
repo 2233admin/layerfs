@@ -2,7 +2,9 @@
 // `inspect.snapshot` and the answers of the calls the server made.
 //
 // Display ids: Commits are C1, C2, … and Layers L0, L1, … in the order they
-// were made; roots are R0, R1, …; Sandboxes sb_01, sb_02, …. Real ids never
+// were made; roots are R0, R1, …; a project's numbered Sandbox n is
+// layerfs-<project>-n, as its container is named (#373), and an older
+// trace's opaque Sandbox id sb_01, sb_02, …. Real ids never
 // reach the UI, and ids the UI sends are mapped back before an SDK call.
 // Commits and Layers are immutable, so the mirror keeps every one it has seen
 // even after a snapshot pages it out.
@@ -14,6 +16,8 @@ export class Mirror {
     this.next = { C: 1, L: 0, R: 0, sb: 1 };
     this.slot = 0;
     this.version = 0;
+    /** The project, for its numbered Sandboxes' labels. */
+    this.project = null;
     this.s = {
       project: null, main: null, roots: {}, commits: {}, layers: {},
       branches: {}, branchOrder: [], sandboxes: {}, sandboxOrder: [],
@@ -27,8 +31,11 @@ export class Mirror {
     const known = this.toLabel.get(real);
     if (known) return known;
     const n = this.next[kind]++;
-    // a named Sandbox keeps its name; an older opaque sb_<hex> id gets sb_01, sb_02, …
-    const label = kind === "sb" ? (/^sb_[0-9a-f]{16,}$/.test(real) ? `sb_${String(n).padStart(2, "0")}` : real) : `${kind}${n}`;
+    // a numbered Sandbox is named as its container; a named one keeps its
+    // name; an older opaque sb_<hex> id gets sb_01, sb_02, …
+    const label = kind !== "sb" ? `${kind}${n}`
+      : /^\d+$/.test(real) && this.project ? `layerfs-${this.project}-${real}`
+      : /^sb_[0-9a-f]{16,}$/.test(real) ? `sb_${String(n).padStart(2, "0")}` : real;
     this.toLabel.set(real, label);
     this.toReal.set(label, real);
     return label;

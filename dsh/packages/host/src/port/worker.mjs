@@ -1,8 +1,8 @@
-// The LayerFS box's worker (macOS Live; owner direction of 2026-10-20 in
-// AGENTS.md): the box's main process, which makes every ported SDK call of
+// The Store container's worker (macOS Live; owner direction of 2026-10-20 in
+// AGENTS.md): the Store container's main process, which makes every ported SDK call of
 // the Mac's host and agents (binding.js) with the real Linux binding. It
 // listens on port 7070, published to the Mac's loopback only; a connection's
-// first frame must carry the box's secret (DSH_BOX_SECRET), answered as id 0,
+// first frame must carry the Store container's secret (DSH_BOX_SECRET), answered as id 0,
 // and then each frame { id, fn, op, args, open } is answered by { id, answer }
 // (`ping` answers at once, for readiness). With `open`, the call needs the
 // project's Store: the worker opens it once and keeps it open while calls use
@@ -16,7 +16,7 @@ import { frame, readFrames } from "./frames.mjs";
 const PORT = 7070, IDLE_MS = 60_000;
 const secret = Buffer.from(process.env.DSH_BOX_SECRET ?? "", "hex");
 if (secret.length < 16) {
-  console.error("layerfs box worker: DSH_BOX_SECRET is not set");
+  console.error("layerfs store worker: DSH_BOX_SECRET is not set");
   process.exit(2);
 }
 const binding = createRequire(import.meta.url)(process.env.LAYERFS_NATIVE);
@@ -43,7 +43,7 @@ async function withStore(args, work) {
     if (--held.users === 0 && stores.get(key) === held) {
       held.timer = setTimeout(() => {
         stores.delete(key);
-        binding.storeClose(storeOf(args)).catch((error) => console.error(`layerfs box worker: closing ${key}: ${error}`));
+        binding.storeClose(storeOf(args)).catch((error) => console.error(`layerfs store worker: closing ${key}: ${error}`));
       }, IDLE_MS);
     }
   }
@@ -76,4 +76,4 @@ createServer((socket) => {
     if (value.fn === "ping") return socket.write(frame({ id: value.id, answer: { value: "ready" } }));
     answer(value).then((result) => { if (!socket.destroyed) socket.write(frame({ id: value.id, answer: result })); });
   }, () => socket.destroy());
-}).listen(PORT, "0.0.0.0", () => console.error(`layerfs box worker: listening on ${PORT}`));
+}).listen(PORT, "0.0.0.0", () => console.error(`layerfs store worker: listening on ${PORT}`));

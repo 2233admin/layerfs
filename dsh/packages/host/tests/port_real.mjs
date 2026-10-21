@@ -3,19 +3,20 @@
 //   node packages/host/tests/port_real.mjs <bundle folder> <image digest>
 // A plain Mac script uses the ported SDK as an agent would: Init (which
 // installs the Store, starting no Sandbox), Store calls (fork, write, read,
-// list, publish), a Sandbox,
-// Workspace calls (mount, exec, commit, unmount), a refusal and an exec whose
-// output is spooled. Each SDK call goes to the box's long-lived worker, which
-// keeps the project's Store open between calls; Init runs in its own
-// container. The box, the volume, the containers and the home are removed
-// afterwards.
+// list, publish), Workspace calls (mount, which starts the project's
+// Sandbox 1, exec, commit, unmount), a refusal and an exec whose output is
+// spooled. Each SDK call goes to the Store container's long-lived worker,
+// which keeps the project's Store open between calls; Init runs in its own
+// container. The Store container is `<prefix>store` with this test's own
+// prefix, so dsh's `layerfs-store` is never touched. It, the volume, the
+// containers and the home are removed afterwards.
 // macOS only; under 2 minutes.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DAEMON_HOST, boxName, ensureBox, storePathOf } from "../src/box.js";
+import { DAEMON_HOST, ensureBox, storeName, storePathOf } from "../src/box.js";
 
 const [bundle, image] = process.argv.slice(2);
 if (process.platform !== "darwin" || !bundle || !image) {
@@ -25,13 +26,13 @@ if (process.platform !== "darwin" || !bundle || !image) {
 const work = mkdtempSync(join(realpathSync(tmpdir()), "lfs-port-"));
 const home = join(work, "home"), source = join(work, "shop"), id = Date.now().toString(36);
 const volume = `lfs-port-test-${id}`, prefix = `lfs-port-test-${id}-`;
-const spec = { docker: "/var/run/docker.sock", home, bundle, image, box: boxName(home, bundle) };
+const spec = { docker: "/var/run/docker.sock", home, bundle, image, prefix, box: storeName(prefix) };
 const docker = (...args) => execFileSync("docker", args, { encoding: "utf8" }).trim();
 mkdirSync(home, { mode: 0o700 });
 mkdirSync(source);
 writeFileSync(join(source, "README.md"), "# Shop\n");
 Object.assign(process.env, {
-  DSH_LAYERFS_BOX: spec.box, DSH_LAYERFS_BUNDLE: bundle, LAYERFS_HOME: home, LAYERFS_DOCKER: spec.docker,
+  DSH_LAYERFS_STORE_CONTAINER: spec.box, DSH_LAYERFS_BUNDLE: bundle, LAYERFS_HOME: home, LAYERFS_DOCKER: spec.docker,
   LAYERFS_IMAGE: image, LAYERFS_VOLUME: volume, LAYERFS_DAEMON: join(bundle, "layerfs-daemon"),
   LAYERFS_STORE_PATH: storePathOf(volume), LAYERFS_DAEMON_HOST: DAEMON_HOST,
   LAYERFS_CONTAINER_PREFIX: prefix, LAYERFS_CONSTRUCTION_WORKERS: "1",
@@ -46,7 +47,8 @@ const timed = async (label, work) => {
 let layerfs;
 try {
   docker("volume", "create", volume);
-  await timed("box start", () => ensureBox(spec));
+  await timed("Store container start", () => ensureBox(spec));
+  assert.equal(docker("inspect", "-f", '{{index .Config.Labels "layerfs.role"}}', spec.box), "store");
   const { LayerFS, isRefusal } = await import("../src/port/sdk.js");
   const { LayerFSOperator } = await import("../src/port/operator.js");
   layerfs = new LayerFS("shop");
@@ -63,19 +65,19 @@ try {
   const refused = await timed("fs.read (missing)", () => layerfs.fs.read("work", "/nope.js").catch((e) => e));
   assert.ok(isRefusal(refused, "NoSuchPath"), `a refusal arrives as the SDK's own: ${refused}`);
   assert.equal(docker("ps", "-aq", "--filter", `volume=${volume}`), "", "Init and Store calls start no Sandbox");
-  const sb = await timed("sandbox.create", () => layerfs.sandbox.create("hello", "shop", image));
+  const ws = await timed("workspace.mount", () => layerfs.workspace.mount("work"));
+  assert.equal(ws.sandbox, "1", "the project's first Sandbox");
+  assert.equal(docker("inspect", "-f", '{{index .Config.Labels "layerfs.sandbox"}}', `${prefix}shop-1`), "1");
   // the operator's Sandbox calls carry no deployment, yet reach the daemon
   const snap = await timed("operator inspect.snapshot", () => operator.inspect.snapshot());
-  assert.equal(snap.kind, "ok");
-  const path = await timed("sandbox.mount", () => layerfs.sandbox.mount(sb, "work"));
-  const ran = await timed("sandbox.exec", () => layerfs.sandbox.exec(sb, path, "node hello.js | tee hello.txt", "run hello"));
+  assert.deepEqual([snap.kind, snap.sandboxes.map((x) => x.name)], ["ok", [`${prefix}shop-1`]]);
+  const ran = await timed("workspace.exec", () => layerfs.workspace.exec(ws, "node hello.js | tee hello.txt", "run hello"));
   assert.equal(ran.exitCode, 0);
   assert.equal(ran.stdout, "hello, shop\n");
-  const big = await timed("sandbox.exec (2 MiB out)", () => layerfs.sandbox.exec(sb, path, "head -c 2097152 /dev/zero | tr '\\0' a"));
+  const big = await timed("workspace.exec (2 MiB out)", () => layerfs.workspace.exec(ws, "head -c 2097152 /dev/zero | tr '\\0' a"));
   assert.equal(big.stdout.length, 2097152, "a spooled output arrives whole");
-  assert.equal((await timed("sandbox.commit", () => layerfs.sandbox.commit(sb, path, "step 1: node hello.js (exit 0)"))).kind, "Committed");
-  await timed("sandbox.unmount", () => layerfs.sandbox.unmount(sb, path));
-  await timed("sandbox.close", () => layerfs.sandbox.close(sb));
+  assert.equal((await timed("workspace.commit", () => layerfs.workspace.commit(ws, "step 1: node hello.js (exit 0)"))).kind, "Committed");
+  await timed("workspace.unmount", () => layerfs.workspace.unmount(ws));
   assert.equal((await timed("branch.publish", () => layerfs.branch.publish("work"))).kind, "Added");
   const branches = await timed("project.list_branches", () => layerfs.project.list_branches());
   assert.deepEqual(branches.items.map((b) => b.name).sort(), ["main", "work"]);
@@ -85,12 +87,12 @@ try {
   // each step on its own, so one failure leaves the rest done; the box made
   // the home's files, so it removes them
   const step = (label, work) => { try { work(); } catch (error) { console.log(`cleanup ${label}: ${error.message.split("\n")[0]}`); } };
+  step("home", () => docker("exec", spec.box, "find", home, "-mindepth", "1", "-delete")); // home is the Store container's mount point
+  // the Sandboxes and the Store container (<prefix>store)
   step("containers", () => {
     const left = docker("ps", "-aq", "--filter", `name=^${prefix}`).split("\n").filter(Boolean);
     if (left.length) docker("rm", "-f", ...left);
   });
-  step("home", () => docker("exec", spec.box, "find", home, "-mindepth", "1", "-delete")); // home is the box's mount point
-  step("box", () => docker("rm", "-f", spec.box));
   step("volume", () => docker("volume", "rm", volume));
   step("work", () => rmSync(work, { recursive: true, force: true }));
 }

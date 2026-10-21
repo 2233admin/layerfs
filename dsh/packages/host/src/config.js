@@ -3,14 +3,17 @@ import { mkdirSync, realpathSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { boxName } from "./box.js";
+import { storeName } from "./box.js";
 
 /**
  * @typedef {object} Config
  * @property {string} [image] LayerFS runtime image digest (`sha256:…`) Sandboxes run; Init refuses without it.
  * @property {string} [daemon] Host path of the built Linux layerfs-daemon; Init refuses without it.
  * @property {string} [bundle] Folder of a sealed Linux LayerFS build (layerfs-daemon, layerfs.node,
- *   sdk/js). On macOS, Live projects need it: their SDK calls run in the LayerFS box (box.js).
+ *   sdk/js). On macOS, Live projects need it: their SDK calls run in the Store container (box.js).
+ * @property {string} [containerPrefix] Prefix of this home's container names (default `layerfs-`):
+ *   Sandboxes `<prefix><project>-<n>`, the Store container `<prefix>store`. A second home on
+ *   the same Docker engine (a test, another checkout) sets its own.
  * @property {string} [docker] Local Docker Engine Unix socket.
  * @property {string} [home] LayerFS home for discovery records, shared by the Host and agents' bash calls.
  * @property {string} [stateDir] Directory for project bindings and agent names.
@@ -23,7 +26,8 @@ import { boxName } from "./box.js";
  * @property {string|null} image
  * @property {string|null} daemon
  * @property {string|null} bundle
- * @property {string|null} box the LayerFS box's container name, on macOS with a bundle (else null)
+ * @property {string} prefix this home's container name prefix
+ * @property {string|null} box the Store container's name, on macOS with a bundle (else null)
  * @property {string} docker
  * @property {string} home
  * @property {string} stateDir
@@ -47,13 +51,15 @@ import { boxName } from "./box.js";
 export function resolveConfig(config, profile) {
   const temp = join(realpathSync(tmpdir()), "dsh-layerfs");
   const bundle = config.bundle || null, home = config.home || join(temp, "home");
-  // macOS runs no Store call itself: a bundle's SDK calls run in the box (port/)
+  // macOS runs no Store call itself: a bundle's SDK calls run in the Store container (port/)
   const ported = process.platform === "darwin" && bundle !== null;
+  const prefix = config.containerPrefix || "layerfs-";
   const spec = {
     image: config.image || null,
     daemon: config.daemon || (bundle && join(bundle, "layerfs-daemon")),
     bundle,
-    box: ported ? boxName(home, bundle) : null,
+    prefix,
+    box: ported ? storeName(prefix) : null,
     docker: config.docker || "/var/run/docker.sock",
     home,
     stateDir: config.stateDir || join(profile ? profile.dir : join(homedir(), ".dsh"), "dsh-layerfs"),

@@ -4,22 +4,24 @@
 // imports this file and awaits these in order (scenario.js).
 //   history("fork checkout" | "fork header from C4" | "merge a b as c" | "publish b")
 //   fs(branch, "write" | "edit" | "mkdir" | "blame", path, ...)   one Commit (or a read)
-//   open(as, branch), split(from, as)        a Sandbox terminal: a new Sandbox, or a
-//                                            second Workspace in `from`'s
+//   open(as, branch), split(from, as)        a Workspace terminal: a new Workspace of
+//                                            the Branch, or a second one of `from`'s
+//                                            (LayerFS places each in one of the
+//                                            project's Sandboxes, #373)
 //   term(as, line)   "commit [--force]", "unmount [--discard]", "stop", or a shell
 //                    line (a trailing & starts a background process)
-//   sandbox(branch)  the Branch's shared Sandbox, for its agents' calls
+//   sandbox(branch)  prints that LayerFS places the Branch's agents' Workspaces
 //   call(agent, branch, line, { type, run }?)   an agent's Bash tool call: a
-//                    Workspace of its own in the Branch's Sandbox, mounted, run,
+//                    Workspace of its own of the Branch, mounted, run,
 //                    committed and unmounted; after a Conflict it is kept and the
 //                    agent's next call runs in it; a trailing & keeps it for the
 //                    server, and "stop" ends the server. It takes the original's
 //                    typing and running time.
-//   closeAll()       closes the Sandboxes these calls opened
+//   closeAll()       prints that the Sandboxes close themselves when idle
 // What a later call needs (a terminal's Workspace, an agent's kept one, C<n>
 // labels) is kept under the project's LayerFS home entry, which is removed
 // with the project.
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const project = process.env.DSH_LAYERFS_PROJECT;
@@ -28,9 +30,6 @@ const { LayerFS, isRefusal } = await import(process.env.DSH_LAYERFS_SDK);
 const lf = new LayerFS(project);
 let operator;
 const op = () => (operator ??= import(process.env.DSH_LAYERFS_OPERATOR).then(({ LayerFSOperator }) => new LayerFSOperator(lf)));
-process.once("beforeExit", () => {
-  if (lf.serviceSandbox) lf.serviceSandbox.then((id) => settle(() => lf.sandbox.close(id))).catch(() => {});
-});
 
 // ------------------------------------------------------------------ notes
 const NOTES = join(process.env.DSH_LAYERFS_HOME, project, "demo-notes");
@@ -133,57 +132,55 @@ export const fs = (branch, verb, path, ...rest) => line(async () => {
 
 // ------------------------------------------------------------------ Sandbox terminals
 const termOf = (as) => { const t = note(`term-${as}`); if (!t) throw new Error(`no terminal ${as}`); return t; };
-const mount = (sandbox, branch) => settle(() => lf.sandbox.mount(sandbox, branch));
+/** A new Workspace of `branch`, `{ sandbox, path }`: LayerFS places it in one of the project's Sandboxes. */
+const mount = (branch) => settle(() => lf.workspace.mount(branch));
+/** A note's Workspace, as the SDK takes it. */
+const wsOf = (t) => ({ sandbox: t.sandbox, path: t.path });
 
 export const open = (as, branch) => line(async () => {
-  const sandbox = await settle(() => lf.sandbox.create(`${project}-${as}`, project, process.env.DSH_LAYERFS_IMAGE));
-  const path = await mount(sandbox, branch);
-  keep(`term-${as}`, { sandbox, path, branch, ran: [] });
-  console.log(`● ${as}: Sandbox ${sandbox} · mount ${branch} → ${path}`);
+  const ws = await mount(branch);
+  keep(`term-${as}`, { ...ws, branch, ran: [] });
+  console.log(`● ${as}: Sandbox ${ws.sandbox} · mount ${branch} → ${ws.path}`);
 });
 
 export const split = (from, as) => line(async () => {
-  const { sandbox, branch } = termOf(from);
-  const path = await mount(sandbox, branch);
-  keep(`term-${as}`, { sandbox, path, branch, ran: [] });
-  console.log(`● ${as}: a second Workspace in ${sandbox} · mount ${branch} → ${path}`);
+  const { branch } = termOf(from);
+  const ws = await mount(branch);
+  keep(`term-${as}`, { ...ws, branch, ran: [] });
+  console.log(`● ${as}: a second Workspace of ${branch} · Sandbox ${ws.sandbox} → ${ws.path}`);
 });
 
 export const term = (as, text) => line(async () => {
   const t = termOf(as), cmd = text.trim(), [verb, flag] = cmd.split(/\s+/);
   if (verb === "commit") {
-    const r = await commit(t.sandbox, t.path, t.ran.length ? `${as}: ${t.ran.join("; ")}` : `${as}: commit`, flag === "--force");
+    const r = await commit(wsOf(t), t.ran.length ? `${as}: ${t.ran.join("; ")}` : `${as}: commit`, flag === "--force");
     if (!r.refused) keep(`term-${as}`, { ...t, ran: [] });
   } else if (verb === "unmount") {
-    await settle(() => lf.sandbox.unmount(t.sandbox, t.path, flag === "--discard"));
+    await settle(() => lf.workspace.unmount(wsOf(t), flag === "--discard"));
     keep(`term-${as}`, null);
     console.log(`✓ unmounted ${t.path} · ${as} closed`);
-    if (!readdirSync(NOTES).some((f) => f.startsWith("term-") && note(f.slice(0, -5))?.sandbox === t.sandbox)) {
-      await settle(() => lf.sandbox.close(t.sandbox));
-      console.log(`✓ closed ${t.sandbox}: no Workspaces left`);
-    }
   } else if (verb === "stop") {
     for (const id of t.processes ?? []) {
-      const r = await (await op()).process.cancel(t.sandbox, id);
+      const r = await (await op()).process.cancel(id);
       console.log(`■ ${id} ${r.status}`);
     }
     keep(`term-${as}`, { ...t, processes: [] });
   } else {
-    const r = await shell(t.sandbox, t.path, cmd);
+    const r = await shell(wsOf(t), cmd);
     keep(`term-${as}`, { ...t, ran: [...t.ran, cmd], processes: [...(t.processes ?? []), ...(r.process ? [r.process] : [])] });
   }
 });
 
-/** A shell line in a Workspace: exec, or a background process for a trailing &. */
-async function shell(sandbox, path, cmd) {
+/** A shell line in Workspace `ws`: exec, or a background process for a trailing &. */
+async function shell(ws, cmd) {
   console.log(`$ ${cmd}`);
   const background = /&\s*$/.test(cmd);
   if (background) {
-    const r = await (await op()).process.start(sandbox, path, cmd.replace(/&\s*$/, "").trim());
-    console.log(`● ${r.process} running · ${path} stays mounted while it runs`);
+    const r = await (await op()).process.start(ws, cmd.replace(/&\s*$/, "").trim());
+    console.log(`● ${r.process} running · ${ws.path} stays mounted while it runs`);
     return r;
   }
-  const r = await lf.sandbox.exec(sandbox, path, cmd);
+  const r = await lf.workspace.exec(ws, cmd);
   const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trimEnd();
   if (out) console.log(out);
   console.log(`[exit ${r.exitCode}]`);
@@ -191,12 +188,12 @@ async function shell(sandbox, path, cmd) {
 }
 
 /** Commit, printed as the terminals did: a stale Workspace merges with the head first; a Conflict is returned as { refused }. */
-async function commit(sandbox, path, message, force = false) {
+async function commit(ws, message, force = false) {
   let r;
-  try { r = await settle(() => lf.sandbox.commit(sandbox, path, message, force)); } catch (error) {
+  try { r = await settle(() => lf.workspace.commit(ws, message, force)); } catch (error) {
     if (!isRefusal(error, "Conflict")) throw error;
     refused(error);
-    console.log(error.detail?.markers ? "  remove every <<<<<<< ======= >>>>>>> block, then commit" : `  nothing committed · the merge is written into ${path} with markers`);
+    console.log(error.detail?.markers ? "  remove every <<<<<<< ======= >>>>>>> block, then commit" : `  nothing committed · the merge is written into ${ws.path} with markers`);
     return { refused: error };
   }
   if (r.kind !== "Committed") { console.log("= nothing to commit"); return r; }
@@ -206,16 +203,8 @@ async function commit(sandbox, path, message, force = false) {
 }
 
 // ------------------------------------------------------------------ agents
-const shared = async (branch) => {
-  const known = note(`sandbox-${branch}`);
-  if (known) return known;
-  const sandbox = await settle(() => lf.sandbox.create(`${project}-${branch}`, project, process.env.DSH_LAYERFS_IMAGE));
-  keep(`sandbox-${branch}`, sandbox);
-  return sandbox;
-};
-
 export const sandbox = (branch) => line(async () => {
-  console.log(`● ${await shared(branch)}: ${branch}'s Sandbox · each agent call mounts a Workspace of its own in it`);
+  console.log(`● ${branch}: each agent call mounts a Workspace of its own; LayerFS places it in the project's Sandboxes`);
 });
 
 // When the original's calls ran (dsh/sim/demo.js schedule): typing, then running.
@@ -231,37 +220,31 @@ export const call = (agent, branch, text, timing = {}) => line(async () => {
   if (cmd === "stop") {
     if (!st.server) return console.log("no background process to stop");
     const { sandbox: sb, path, processes } = st.server;
-    for (const id of processes) await (await op()).process.cancel(sb, id);
-    await settle(() => lf.sandbox.unmount(sb, path, true));
+    for (const id of processes) await (await op()).process.cancel(id);
+    await settle(() => lf.workspace.unmount({ sandbox: sb, path }, true));
     keep(`agent-${agent}`, { ...st, server: null });
     return console.log(`■ stopped · unmounted ${path} · its uncommitted dev cache discarded`);
   }
   let ws = st.sticky;
   if (ws) console.log(`⟳ ${ws.path} · kept after the conflict`);
   else {
-    const sb = await shared(branch);
-    ws = { sandbox: sb, path: await mount(sb, branch) };
+    ws = await mount(branch);
     console.log(`⟳ mount ${branch} → ${ws.path}`);
   }
   if (!FAST) await sleep(timing.type ?? typeMs(cmd));
-  const started = Date.now(), r = await shell(ws.sandbox, ws.path, cmd);
+  const started = Date.now(), r = await shell(ws, cmd);
   if (r.process) return keep(`agent-${agent}`, { ...st, sticky: null, server: { ...ws, processes: [r.process] } });
   if (!FAST) await sleep((timing.run ?? runMs(cmd)) - (Date.now() - started));
-  const c = await commit(ws.sandbox, ws.path, `${agent}: ${cmd}`);
+  const c = await commit(ws, `${agent}: ${cmd}`);
   if (c.refused) {
     keep(`agent-${agent}`, { ...st, sticky: ws });
     return console.log("  this Workspace is kept: the next call runs in it");
   }
   if (st.sticky) keep(`agent-${agent}`, { ...st, sticky: null });
-  await settle(() => lf.sandbox.unmount(ws.sandbox, ws.path));
+  await settle(() => lf.workspace.unmount(ws));
   console.log(`  unmounted ${ws.path}`);
 });
 
 export const closeAll = () => line(async () => {
-  if (!existsSync(NOTES)) return;
-  const names = readdirSync(NOTES, { withFileTypes: true }).filter((f) => f.isFile()).map((f) => f.name).filter((f) => /^(sandbox|term)-.*\.json$/.test(f)).map((f) => note(f.slice(0, -5)));
-  for (const sb of new Set(names.map((n) => (typeof n === "string" ? n : n?.sandbox)).filter(Boolean))) {
-    await settle(() => lf.sandbox.close(sb));
-    console.log(`✓ closed ${sb}`);
-  }
+  console.log("✓ nothing to close: each Sandbox closes itself 2 minutes after its last Workspace is unmounted");
 });

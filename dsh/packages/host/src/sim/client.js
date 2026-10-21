@@ -13,7 +13,6 @@ export function simClient(home, name) {
   };
   const layerfs = {
     projectName: name,
-    sandboxes: new Set(),
     project: {
       init: (path) => send(call, "project.init", { path, name }),
       list_branches: (pageSize = 50, pagePos = 0) => send(call, "project.list_branches", { pageSize, pagePos }),
@@ -29,7 +28,6 @@ export function simClient(home, name) {
       blame: (ref, path, fromLine = 1) => send(call, "fs.blame", { branch: ref, path, fromLine }),
       diff_files: (leftRef, leftPath, rightRef, rightPath) => send(call, "fs.diff_files", { branch: leftRef, left: { commit: leftRef, path: leftPath }, right: { commit: rightRef, path: rightPath } }),
     },
-    sandbox: { close: async () => ({ kind: "Closed" }) },
   };
   const operator = {
     inspect: { snapshot: async () => ({ kind: "ok", ...(await snapshotAll(home, name)) }) },

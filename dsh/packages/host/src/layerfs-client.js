@@ -23,9 +23,11 @@ export function deploymentEnv(spec, project) {
     // the Store in the volume, under Docker's volume directory: Import
     // installs it there and Store calls open it
     STORE_PATH: storePathOf(project.volume),
-    // macOS: the calls run in the LayerFS box, which sees that directory and
+    // the project's Sandboxes are <prefix><project>-<n>
+    CONTAINER_PREFIX: spec.prefix,
+    // macOS: the calls run in the Store container, which sees that directory and
     // Sandbox daemons at the Docker host
-    ...(spec.box ? { DAEMON_HOST, BOX: spec.box, BUNDLE: spec.bundle } : {}),
+    ...(spec.box ? { DAEMON_HOST, STORE_CONTAINER: spec.box, BUNDLE: spec.bundle } : {}),
   };
 }
 
@@ -47,52 +49,31 @@ export async function clientFor(spec, project) {
   }
 }
 
-/**
- * Releases a Host client: closes the Sandboxes it opened and its Store. The
- * project's service Sandbox (`_service.<project>`) is shared with every agent
- * script, so it stays open unless `service` is set: for a removal or a failed
- * Init, whose volume must have no running container.
- */
-export async function release({ layerfs, operator }, { service = false } = {}) {
-  const ids = new Set(layerfs.sandboxes);
-  // reads start no service Sandbox, so this client may not hold the one agents started
-  if (service) { const found = await operator?.sandbox?.service(); if (found) ids.add(found); }
-  for (const id of ids) if (service || !id.startsWith("_service.")) await layerfs.sandbox.close(id);
+/** Releases a Host client: its Store. The project's Sandboxes close themselves when idle (#373). */
+export async function release({ layerfs }) {
   await layerfs.close?.();
 }
 
 /**
- * The project as the views draw it: the mirror of one inspect.snapshot, with
- * the Sandboxes the traced calls created (ids from the trace lines). History
- * comes from the Store and Workspaces from the Sandboxes already running, so
- * reading starts no Sandbox. Read through the Host's shared client for the
+ * The project as the views draw it: the mirror of one inspect.snapshot.
+ * History comes from the Store and Workspaces from the project's running
+ * Sandboxes, found from their records, so reading starts no Sandbox; one
+ * found stopped (closed when idle) is reclaimed by the listing and not
+ * drawn. A Sandbox the listing found running but whose snapshot then found
+ * gone is drawn closed. Read through the Host's shared client for the
  * project (TreeReader.use).
- * @param {object} client a project's client @param {string[]} sandboxes real Sandbox ids
+ * @param {object} client a project's client
  */
-export async function stateOf(client, sandboxes) {
+export async function stateOf(client) {
   const snap = await olderCommits(client.layerfs, await client.operator.inspect.snapshot());
-  await closeGone(client, snap.gone);
-  const m = new Mirror(), boxes = [];
-  for (const real of sandboxes) {
-    const listed = (snap.sandboxes || []).find((x) => x.id === real);
-    boxes.push({ label: m.label("sb", real), real, closed: !listed, workspaces: {}, processes: [] });
-  }
+  const m = new Mirror();
+  m.project = snap.project;
+  const boxes = [
+    ...(snap.sandboxes || []).map((x) => ({ label: m.label("sb", x.id), real: x.id, closed: false, workspaces: {}, processes: [] })),
+    ...(snap.gone || []).map((x) => ({ label: m.label("sb", x.id), real: x.id, closed: true, workspaces: {}, processes: [] })),
+  ];
   m.absorb(snap, boxes);
   return { s: { ...m.s, roots: {} }, labels: Object.fromEntries(m.toLabel) };
-}
-
-/**
- * A service Sandbox the snapshot found gone: its container no longer runs it
- * (removed outside LayerFS, or stopped when Docker quit), so its daemon and
- * mounts are lost and nothing can be using it. Closing it (which deletes a
- * stopped container) frees its name; the next call that needs it starts a
- * new one. An agent's own Sandbox is left to that agent.
- */
-async function closeGone({ layerfs }, gone = []) {
-  for (const { id, detail } of gone) {
-    if (!id.startsWith("_service.") || !detail?.containerGone) continue;
-    await layerfs.sandbox.close(id).catch((error) => console.warn(`LayerFS: could not close ${id}, whose container is gone: ${error.message}`));
-  }
 }
 
 /**

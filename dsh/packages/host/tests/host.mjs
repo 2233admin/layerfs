@@ -63,13 +63,14 @@ try {
   assert.equal(vars.DSH_LAYERFS_VOLUME, "dsh-layerfs-website-1");
   assert.equal(vars.DSH_LAYERFS_STORE_PATH, "/var/lib/docker/volumes/dsh-layerfs-website-1/_data/global/store.sqlite");
   if (process.platform === "darwin") {
-    // macOS: the SDK is ported, its calls run in the LayerFS box (src/port/, src/box.js)
+    // macOS: the SDK is ported, its calls run in the Store container (src/port/, src/box.js)
     assert.match(vars.DSH_LAYERFS_SDK, /\/port\/sdk\.js$/);
     assert.equal(vars.DSH_LAYERFS_DAEMON_HOST, "host.docker.internal");
-    assert.match(vars.DSH_LAYERFS_BOX, /^dsh-layerfs-box-[0-9a-f]{12}$/);
+    assert.equal(vars.DSH_LAYERFS_STORE_CONTAINER, "layerfs-store", "one per home, named by its prefix");
     assert.equal(vars.DSH_LAYERFS_BUNDLE, "/b");
   }
   assert.equal(vars.DSH_LAYERFS_IMAGE, "sha256:img");
+  assert.equal(vars.DSH_LAYERFS_CONTAINER_PREFIX, "layerfs-", "Sandboxes are layerfs-<project>-<n>");
   assert.match(vars.DSH_LAYERFS_OPERATOR, process.platform === "darwin" ? /^file:.*\/port\/operator\.js$/ : /^file:.*\/operator\/index\.js$/);
   assert.equal(vars.DSH_LAYERFS_TRACE_STEP, "r1");
   assert.equal(vars.DSH_LAYERFS_TRACE, join(h.spec.traceDir, "child-1.jsonl"));
@@ -84,15 +85,14 @@ try {
   h.collector.observe(root, { type: "subagent/catalog", data: { childId: "child-1", label: " tester " } });
   assert.equal(h.collector.agentOf(child).name, "tester");
   assert.equal(h.collector.agentOf(root).name, "main");
-  appendFileSync(vars.DSH_LAYERFS_TRACE, trace("a-1", "sandbox.create", "start"));
+  appendFileSync(vars.DSH_LAYERFS_TRACE, trace("a-1", "workspace.mount", "start"));
   h.collector.poll();
   assert.equal(h.collector.snapshot("session-root").running.length, 1);
-  appendFileSync(vars.DSH_LAYERFS_TRACE, trace("a-1", "sandbox.create", "end", { sandbox: "sb_1" }) + trace("a-2", "sandbox.exec", "end").slice(0, 20));
+  appendFileSync(vars.DSH_LAYERFS_TRACE, trace("a-1", "workspace.mount", "end", { sandbox: "1" }) + trace("a-2", "workspace.exec", "end").slice(0, 20));
   h.collector.poll();
   const snap = h.collector.snapshot("session-root");
   assert.deepEqual([snap.running.length, snap.lines.length, snap.lines[0].agent], [0, 1, "tester"]);
   assert.deepEqual(snap.agents, { "session-root": "main", "child-1": "tester" });
-  assert.deepEqual(h.collector.sandboxesOf("session-root"), ["sb_1"]);
   const [record] = child.records;
   assert.equal(record.type, CALL);
   assert.deepEqual(record.data.agent, { id: "child-1", name: "tester" });
@@ -101,7 +101,7 @@ try {
 
   // a partial line waits for its newline; a Session that is not live gets its records later
   h.live.delete("child-1");
-  appendFileSync(vars.DSH_LAYERFS_TRACE, trace("a-2", "sandbox.exec", "end").slice(20));
+  appendFileSync(vars.DSH_LAYERFS_TRACE, trace("a-2", "workspace.exec", "end").slice(20));
   h.collector.afterEvent("child-1");
   await tick();
   assert.equal(child.records.length, 1);
@@ -109,7 +109,7 @@ try {
   h.live.set("child-1", child);
   h.collector.observe(child, { type: "turn/start", data: {} });
   await tick();
-  assert.deepEqual(child.records.map((r) => r.data.line.method), ["sandbox.create", "sandbox.exec"]);
+  assert.deepEqual(child.records.map((r) => r.data.line.method), ["workspace.mount", "workspace.exec"]);
 
   // a new Host loads earlier lines for the views without recording them again
   const again = host();
@@ -122,7 +122,7 @@ try {
 
   // finished lines outlive the temporary trace files through the journal
   rmSync(h.spec.traceDir, { recursive: true, force: true });
-  assert.deepEqual(host().collector.snapshot("session-root").lines.map((l) => l.method), ["sandbox.create", "sandbox.exec"]);
+  assert.deepEqual(host().collector.snapshot("session-root").lines.map((l) => l.method), ["workspace.mount", "workspace.exec"]);
 
   // Files reads (reads.js) on a fake client: a folder page, a file window, a binary
   // file's size (the SDK refuses its text), changed paths and one file's diff
@@ -145,7 +145,7 @@ try {
   // the root each Commit's diff answer reports: "f…" and "g…" are Commits of retired Branches, not in the snapshot
   const rootOf = { ["a".repeat(64)]: "r1", ["b".repeat(64)]: "r0", ["f".repeat(64)]: "r7", ["0".repeat(64)]: "r6" };
   const fakeBranch = { async diff_commits(from, to, size, position, options) { diffed.push([size, position, options]); return { from: { root: rootOf[from] }, to: { root: rootOf[to] }, items: [{ path: "/src/a.js", kind: "Modified", type: "file", hunks: [] }], hasMore: true, nextPagePos: 1000 }; } };
-  const trees = new TreeReader(h.spec, async () => ({ layerfs: { fs: fakeFs, branch: fakeBranch, sandboxes: new Set(["_service.p", "sb_other"]), sandbox: { close: async (id) => closed.push(id) }, close: async () => closed.push("store") },
+  const trees = new TreeReader(h.spec, async () => ({ layerfs: { fs: fakeFs, branch: fakeBranch, close: async () => closed.push("store") },
     operator: { inspect: { snapshot: async () => ({ commits: [{ id: "a".repeat(64), root: "r1" }, { id: "b".repeat(64), root: "r0" }], layers: [{ id: "c".repeat(64), root: "r1" }, { id: "d".repeat(64), root: "r9" }, { id: "e".repeat(64), root: "r7", sourceCommit: "f".repeat(64) }, { id: "9".repeat(64), root: "r8", sourceCommit: "0".repeat(64) }] }) } } }));
 
   // the route answers only requests Connection accepts
@@ -197,42 +197,30 @@ try {
   for (const q of ["list?ref=nope", `read?ref=${REF}&path=/a/../b`, `read?ref=${REF}&path=/a&line=0`, `changes?from=${B}`])
     assert.deepEqual([(await files(q)).status, (await files(q)).body.code], [400, "invalid-input"], q);
   await trees.dispose();
-  assert.deepEqual(closed, ["sb_other", "store"], "the shared service Sandbox stays open");
+  assert.deepEqual(closed, ["store"], "releasing a client closes its Store; Sandboxes close themselves when idle");
 
   // state reads go through the same per-project client: one client, not one per read
   let opened = 0;
   const empty = { project: "p", branches: [], commits: [], layers: [], sandboxes: [], store: {} };
-  const shared = new TreeReader(h.spec, async () => { opened++; return { layerfs: { fs: fakeFs, sandboxes: new Set(), sandbox: { close: async () => {} }, close: async () => {} }, operator: { inspect: { snapshot: async () => empty } } }; });
+  const shared = new TreeReader(h.spec, async () => { opened++; return { layerfs: { fs: fakeFs, close: async () => {} }, operator: { inspect: { snapshot: async () => empty } } }; });
   const P = { name: "p" };
-  const [stateA, stateB] = await Promise.all([shared.state(P, []), shared.state(P, []), shared.files(P, "list", new URLSearchParams({ ref: REF }))]);
+  const [stateA, stateB] = await Promise.all([shared.state(P), shared.state(P), shared.files(P, "list", new URLSearchParams({ ref: REF }))]);
   assert.deepEqual([opened, typeof stateA.s, typeof stateB.labels], [1, "object", "object"]);
   await shared.dispose();
-  // a read starts no Sandbox; a service Sandbox the snapshot finds gone (container
-  // removed, or stopped when Docker quit) is closed once to free its name, and
-  // the read still shows the project
-  const closings = [];
-  const goneOf = (detail) => ({ ...empty, gone: [{ id: "_service.p", detail }] });
-  const lost = { sandbox: "_service.p", container: "c".repeat(64), containerGone: true };
-  for (const detail of [lost, { ...lost, containerStopped: true }]) {
-    let built = 0, reads = 0;
-    const orphan = new TreeReader(h.spec, async () => { built++; return { layerfs: { sandboxes: new Set(), sandbox: { close: async (id) => closings.push(id) }, close: async () => {} }, operator: { inspect: { snapshot: async () => (reads++ ? empty : goneOf(detail)) } } }; });
-    assert.equal(typeof (await orphan.state(P, [])).s, "object");
-    assert.equal(typeof (await orphan.state(P, [])).s, "object");
-    assert.equal(built, 1, "the same client keeps reading");
-    await orphan.dispose();
-  }
-  assert.deepEqual(closings, ["_service.p", "_service.p"], "one close per gone service Sandbox");
-  // a gone agent Sandbox, or one with no gone container, is left alone
-  const others = new TreeReader(h.spec, async () => ({ layerfs: { sandboxes: new Set(), sandbox: { close: async (id) => closings.push(id) }, close: async () => {} }, operator: { inspect: { snapshot: async () => ({ ...empty, gone: [{ id: "sb_agent", detail: lost }, { id: "_service.p", detail: null }] }) } } }));
-  assert.equal(typeof (await others.state(P, [])).s, "object");
-  await others.dispose();
-  assert.equal(closings.length, 2);
-  // forgetting a project closes its service Sandbox, which reads never opened in this client
+  // the project's running Sandboxes are drawn under their container names; one
+  // the snapshot found gone after the listing (#373: idle close) is drawn closed
+  const placed = { ...empty, sandboxes: [{ id: "1", name: "layerfs-p-1", workspaces: [{ directory: "/workspaces/1", mounted: true, branch: "f", base: null, baseLayer: null, root: null }] }], gone: [{ id: "2", name: "layerfs-p-2", detail: { containerGone: true } }] };
+  const drawn = new TreeReader(h.spec, async () => ({ layerfs: { close: async () => {} }, operator: { inspect: { snapshot: async () => placed } } }));
+  const shown = (await drawn.state(P)).s;
+  assert.deepEqual(shown.sandboxOrder.map((id) => [id, shown.sandboxes[id].closed]), [["layerfs-p-1", false], ["layerfs-p-2", true]]);
+  assert.deepEqual(shown.sandboxes["layerfs-p-1"].wsOrder, ["/workspaces/1"]);
+  await drawn.dispose();
+  // forgetting a project releases its client now
   const forgotten = [];
-  const owner = new TreeReader(h.spec, async () => ({ layerfs: { sandboxes: new Set(["sb_mine"]), sandbox: { close: async (id) => forgotten.push(id) }, close: async () => {} }, operator: { sandbox: { service: async () => "_service.p" }, inspect: { snapshot: async () => empty } } }));
-  await owner.state(P, []);
+  const owner = new TreeReader(h.spec, async () => ({ layerfs: { close: async () => forgotten.push("store") }, operator: { inspect: { snapshot: async () => empty } } }));
+  await owner.state(P);
   await owner.forget("p");
-  assert.deepEqual(forgotten, ["sb_mine", "_service.p"]);
+  assert.deepEqual(forgotten, ["store"]);
 
   // storage: Store totals and Init apart; every Branch's Commits once, newest first; main lists none
   const C = (id, time) => ({ id, time, message: id, via: "fs", logical: 10, newCanonical: 5, newStored: 3, newMetadata: 1 });
@@ -240,7 +228,7 @@ try {
   const listed = [];
   const stores = new TreeReader(h.spec, async () => ({
     layerfs: {
-      sandboxes: new Set(), sandbox: { close: async () => {} }, close: async () => {},
+      close: async () => {},
       project: { list_branches: async () => ({ items: ["main", "feature", "fix"].map((name) => ({ name })), hasMore: false }) },
       branch: { list_commits: async (b) => (listed.push(b), { items: commitsOf[b], hasMore: false }) },
     },
@@ -349,7 +337,7 @@ try {
   // a demo's Replay asks to stop the running Sandboxes instead of refusing
   h.bindings.addProject(FOLDER, { name: "website", source: FOLDER, volume: "dsh-layerfs-website-2", created: 2 });
   ran.length = 0;
-  // its Sandbox records go too: the service Sandbox's (an empty claim, as a stopped call leaves it) and each naming its volume
+  // its Sandbox records of the older layout go too: the service Sandbox's (an empty claim, as a stopped call leaves it) and each naming its volume
   const records = join(h.spec.home, "_sandboxes");
   for (const [entry, volume] of [["_service.website", null], ["website-a", "dsh-layerfs-website-2"], ["other-b", "dsh-layerfs-other-1"]]) {
     mkdirSync(join(records, entry), { recursive: true });
@@ -370,7 +358,7 @@ try {
       operator: { inspect: { snapshot: async () => ({ project: "website", commits: all.slice(0, 3), more: { feature: "cursor" }, layers: [{ id: L0, parent: null, root: "b".repeat(64) }], branches: [{ name: "main", base: L0, head: null }, { name: "feature", base: L0, head: id(4) }], workspaces: [] }) } },
       layerfs: { branch: { list_commits: async (branch, size, pos) => { pages.push([branch, pos]); return pos === 0 ? { items: all.slice(0, 2), hasMore: true, nextPagePos: 2 } : { items: all.slice(2), hasMore: false, nextPagePos: null }; } } },
     };
-    const state = await stateOf(client, []);
+    const state = await stateOf(client);
     assert.deepEqual(pages, [["feature", 0], ["feature", 2]]);
     assert.equal(Object.keys(state.s.commits).length, 4, "the cut-off Commit is listed");
     assert.equal(state.s.commits[state.labels[id(2)]].parent, state.labels[id(1)], "and is its child's parent");

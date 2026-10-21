@@ -1,4 +1,4 @@
-// header: fork header from main, write app/header.tsx with fs, then test the Branch in a Sandbox.
+// header: fork header from main, write app/header.tsx with fs, then test the Branch in a Workspace.
 const { LayerFS, isRefusal } = await import(process.env.DSH_LAYERFS_SDK);
 const project = process.env.DSH_LAYERFS_PROJECT;
 const lf = new LayerFS(project);
@@ -12,28 +12,20 @@ const settle = async (call) => {
     }
   }
 };
-const run = async (sb, path, command) => {
-  const r = await lf.sandbox.exec(sb, path, command);
+const run = async (ws, command) => {
+  const r = await lf.workspace.exec(ws, command);
   console.log(`$ ${command}  → ${r.kind}\n${r.stdout}${r.stderr}`.trimEnd());
   return r;
-};
-// A close that answered Busy may already have happened: report what LayerFS says and go on.
-const close = async (sb) => {
-  try { show("close the Sandbox", await settle(() => lf.sandbox.close(sb))); } catch (error) {
-    console.log(`close the Sandbox → ${error.code ?? "error"}: ${error.message}`);
-  }
 };
 try {
   show("fork header", await settle(() => lf.branch.fork("header")));
   show("write app/header.tsx", await lf.fs.write("header", "/app/header.tsx", "export const Header = () => <header>LayerFS</header>;\n", "add app/header.tsx"));
-  const sb = await settle(() => lf.sandbox.create(`${project}-header`, project, process.env.DSH_LAYERFS_IMAGE));
-  const ws = await lf.sandbox.mount(sb, "header");
-  console.log(`mount header → ${ws}`);
-  await run(sb, ws, "sh test.sh && ls app");
-  show("unmount", await lf.sandbox.unmount(sb, ws));
-  await close(sb);
+  const ws = await lf.workspace.mount("header");
+  console.log(`mount header → Sandbox ${ws.sandbox} ${ws.path}`);
+  await run(ws, "sh test.sh && ls app");
+  show("unmount", await lf.workspace.unmount(ws));
   const [head] = (await lf.branch.list_commits("header")).items;
   console.log(`ready: Branch header at Commit ${head.id.slice(0, 12)}`);
 } finally {
-  if (lf.serviceSandbox) await lf.serviceSandbox.then((id) => settle(() => lf.sandbox.close(id))).catch(() => {});
+  await lf.close();
 }

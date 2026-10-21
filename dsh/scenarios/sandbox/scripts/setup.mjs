@@ -1,4 +1,4 @@
-// Two Branches, one Sandbox, two Workspaces: docs at /workspaces/1, site at /workspaces/2.
+// Two Branches, two Workspaces: LayerFS places both in one Sandbox, which has room for 16.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 // notes between this agent's bash calls, outside the workspace folder (Init would import them)
@@ -19,22 +19,21 @@ const settle = async (call) => {
     }
   }
 };
-const run = async (sb, path, command) => {
-  const r = await lf.sandbox.exec(sb, path, command);
+const run = async (ws, command) => {
+  const r = await lf.workspace.exec(ws, command);
   console.log(`$ ${command}  → ${r.kind}\n${r.stdout}${r.stderr}`.trimEnd());
   return r;
 };
 try {
   show("fork docs", await settle(() => lf.branch.fork("docs")));
   show("fork site", await settle(() => lf.branch.fork("site")));
-  const sb = await settle(() => lf.sandbox.create(`${project}-docs-site`, project, process.env.DSH_LAYERFS_IMAGE));
-  const docs = await lf.sandbox.mount(sb, "docs");
-  const site = await lf.sandbox.mount(sb, "site");
-  console.log(`Sandbox ${sb}: docs at ${docs}, site at ${site}`);
-  keep({ sb, docs: docs, site: site });
-  await run(sb, docs, "mkdir -p docs && cp README.md docs/guide.md && sed -i 's/Website/Guide/' docs/guide.md && cat docs/guide.md");
-  await run(sb, site, "sh install.sh");
-  await run(sb, site, "test -f docs/guide.md && echo 'site sees docs/guide.md' || echo 'site cannot see docs/guide.md: separate overlays'");
+  const docs = await lf.workspace.mount("docs");
+  const site = await lf.workspace.mount("site");
+  console.log(`docs at Sandbox ${docs.sandbox} ${docs.path}, site at Sandbox ${site.sandbox} ${site.path}`);
+  keep({ docs, site });
+  await run(docs, "mkdir -p docs && cp README.md docs/guide.md && sed -i 's/Website/Guide/' docs/guide.md && cat docs/guide.md");
+  await run(site, "sh install.sh");
+  await run(site, "test -f docs/guide.md && echo 'site sees docs/guide.md' || echo 'site cannot see docs/guide.md: separate overlays'");
 } finally {
-  if (lf.serviceSandbox) await lf.serviceSandbox.then((id) => settle(() => lf.sandbox.close(id))).catch(() => {});
+  await lf.close();
 }

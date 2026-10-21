@@ -4,6 +4,8 @@
 // the real binding's (`{ value }` or `{ refused }`, in the shapes it gives),
 // ids in LayerFS's formats; the decisions are the model's. Store sizes are
 // estimates from file text. One attempt per call; nothing is retried.
+// Sandboxes are numbered and placed as the real binding places them (#373);
+// a simulated Sandbox does not close when idle.
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { Project, Refusal, fileViews, model, readTree, simDir } from "./state.js";
@@ -11,7 +13,8 @@ import { runCommand, startCommand, stopCommand } from "./shell.js";
 
 const DEFAULT_MESSAGE = "Apply filesystem changes";
 const VIA = { fs: "fs", workspace: "exec", merge: "merge" };
-const NAME = /^[a-z0-9](?:[a-z0-9_.-]{0,61}[a-z0-9])?$/;
+/** Workspaces one Sandbox holds, as the real binding's. */
+const WORKSPACES = 16;
 const sha = (text) => createHash("sha256").update(text).digest("hex");
 const size = (text) => Buffer.byteLength(text ?? "");
 const bytes = (tree) => Object.values(tree).reduce((n, e) => n + (e.type === "file" ? size(e.content) : 0), 0);
@@ -118,7 +121,6 @@ const WORDS = {
   "sandbox.commit": (code, d) => code !== "Conflict" ? null : d.markers ? `${files(d.conflicts.length)} still contain conflict markers; nothing committed`
     : `the head moved and ${files(d.conflicts.length)} conflict with this Workspace; markers are written and nothing was committed`,
   "sandbox.unmount": (code, d) => (code === "Dirty" ? `${d.changed.length} uncommitted change(s); unmount with discard to drop them` : null),
-  "sandbox.close": (code, d, a) => (code === "MountsActive" ? `${a.sandbox} still has mounted Workspaces` : null),
   "branch.merge": (code, d, a) => (code === "Conflict" ? `${a.branch} + ${a.with} conflict in ${files(d.conflicts.length)}; nothing was created` : null),
 };
 const words = (op, a) => (code, d) => WORDS[op](code, d, a);
@@ -132,15 +134,23 @@ function markerIds(c, ws) {
 
 // ---------------------------------------------------------------- operations
 
-function openSandbox(c, id, service) {
-  const known = c.s.sandboxes[id];
-  if (known && !known.closed && !service) throw new Refusal("Exists", `a Sandbox named ${id} exists`, { sandbox: id });
-  if (!known || known.closed) {
-    c.s.sandboxes[id] = { id, closed: false, nextWs: 1, workspaces: {}, wsOrder: [], processes: {}, procOrder: [] };
-    if (!c.s.sandboxOrder.includes(id)) c.s.sandboxOrder.push(id);
-  }
-  return { kind: "Ready", id, container: sha(`${c.project.name}/${id}/${c.s.sandboxOrder.length}`) };
+/** The project's open numbered Sandboxes, lowest first. */
+const numbered = (c) => c.s.sandboxOrder.filter((id) => /^\d+$/.test(id) && !c.s.sandboxes[id].closed).sort((x, y) => x - y);
+const nameOf = (c, id) => `layerfs-${c.project.name}-${id}`;
+
+/** The Sandbox for a new Workspace: the lowest-numbered open one with a free slot, else the next number, started. */
+function place(c) {
+  const free = numbered(c).find((id) => Object.values(c.s.sandboxes[id].workspaces).filter((w) => w.mounted).length < WORKSPACES);
+  if (free) return free;
+  let n = 1;
+  while (c.s.sandboxes[n] && !c.s.sandboxes[n].closed) n++;
+  const id = String(n);
+  c.s.sandboxes[id] = { id, closed: false, nextWs: 1, workspaces: {}, wsOrder: [], processes: {}, procOrder: [] };
+  if (!c.s.sandboxOrder.includes(id)) c.s.sandboxOrder.push(id);
+  return id;
 }
+/** The Sandbox a process id names (`proc_<sandbox>_<hex>`). */
+const sandboxOfProcess = (id) => /^proc_(\d+)_/.exec(String(id))?.[1] ?? null;
 
 function changed(c, r) {
   if (r.kind !== "Committed") return { kind: r.kind, branch: r.branch, head: c.hex(r.head ?? null) };
@@ -193,25 +203,15 @@ const CALLS = {
   "project.init": initProject,
   "project.list_branches": (p, a) => p.with((c) => paged(branchList(c).sort((x, y) => x.name.localeCompare(y.name)), a)),
 
-  "sandbox.service": (p) => p.with((c) => openSandbox(c, `_service.${p.name}`, true)),
-  "sandbox.create": (p, a) => {
-    if (typeof a.name !== "string" || !NAME.test(a.name)) throw new Refusal("InvalidInput", "a Sandbox name is 1-63 lowercase letters, digits, _ . - and starts and ends alphanumeric", { name: a.name });
-    return p.with((c) => openSandbox(c, a.name, false));
-  },
-  "sandbox.close": (p, a) => p.with((c) => {
-    c.run("sandbox.close", { sandbox: a.sandbox }, undefined, words("sandbox.close", a));
-    for (const proc of Object.values(c.s.sandboxes[a.sandbox].processes)) if (proc.status === "running") { stopCommand(proc.pid); proc.status = "stopped"; }
-    return { kind: "Closed", id: a.sandbox };
-  }),
-  "sandbox.mount": (p, a) => p.with((c) => {
-    const r = c.run("sandbox.mount", { sandbox: a.sandbox, branch: a.branch }), ws = c.s.sandboxes[a.sandbox].workspaces[r.path];
+  "workspace.mount": (p, a) => p.with((c) => {
+    const sandbox = place(c), r = c.run("sandbox.mount", { sandbox, branch: a.branch }), ws = c.s.sandboxes[sandbox].workspaces[r.path];
     return {
-      kind: "Mounted", path: r.path, workspace: sha(`${p.name}/${a.sandbox}/${r.path}/${ws.slot}`), namespace: Number(r.path.slice(r.path.lastIndexOf("/") + 1)),
-      branch: r.branch, base: c.hex(ws.baseCommit ?? null), baseLayer: c.hex(ws.baseLayer), root: c.hex(ws.baseRoot), sandbox: a.sandbox,
+      kind: "Mounted", path: r.path, workspace: sha(`${p.name}/${sandbox}/${r.path}/${ws.slot}`), namespace: Number(r.path.slice(r.path.lastIndexOf("/") + 1)),
+      branch: r.branch, base: c.hex(ws.baseCommit ?? null), baseLayer: c.hex(ws.baseLayer), root: c.hex(ws.baseRoot), sandbox, container: nameOf(c, sandbox),
     };
   }),
-  "sandbox.exec": exec,
-  "sandbox.status": (p, a) => p.with((c) => {
+  "workspace.exec": exec,
+  "workspace.status": (p, a) => p.with((c) => {
     const ws = c.sim.workspace(a.sandbox, a.path), sb = c.s.sandboxes[a.sandbox];
     const running = Object.values(sb.processes).some((x) => x.status === "running" && x.path === a.path);
     return {
@@ -219,7 +219,7 @@ const CALLS = {
       headMovedSinceMount: moved(c, ws), activity: running ? "Running" : "Idle", overlay: overlay(c, ws), branch: ws.branch,
     };
   }),
-  "sandbox.commit": (p, a) => p.with((c) => {
+  "workspace.commit": (p, a) => p.with((c) => {
     const ws = c.sim.workspace(a.sandbox, a.path);
     let r;
     try { r = c.run("sandbox.commit", { sandbox: a.sandbox, path: a.path, message: a.message, force: !!a.force }, commitConflict, words("sandbox.commit", a)); }
@@ -230,7 +230,7 @@ const CALLS = {
     if (r.displacedHead) c.s.commits[r.head].displaced = r.displacedHead;
     return { kind: "Committed", head: c.hex(r.head), commit: commitRecord(c, r.head), displacedHead: c.hex(r.displacedHead), merged, lww, lwwTruncated: false };
   }),
-  "sandbox.unmount": (p, a) => p.with((c) => {
+  "workspace.unmount": (p, a) => p.with((c) => {
     c.run("sandbox.unmount", { sandbox: a.sandbox, path: a.path, discard: !!a.discard }, (d) => (d.changed ? { changed: d.changed, pendingMerge: false, truncated: false } : d), words("sandbox.unmount", a));
     return { kind: "Unmounted" };
   }),
@@ -312,22 +312,25 @@ const OPERATOR = {
   "operator.inspect.snapshot": (p, a) => p.with((c) => snapshot(c, a.sandbox)),
   "operator.workspace.overlay": (p, a) => p.with((c) => overlay(c, c.sim.workspace(a.sandbox, a.path))),
   "operator.store.stats": (p) => p.with((c) => storeStats(c)),
+  "operator.sandbox.list": (p) => p.with((c) => ({ kind: "ok", items: numbered(c).map((id) => ({ id, name: nameOf(c, id) })) })),
   "operator.process.start": (p, a) => p.with((c) => {
     c.sim.workspace(a.sandbox, a.path);
-    const id = `proc_${randomBytes(12).toString("hex")}`, sb = c.s.sandboxes[a.sandbox];
+    const id = `proc_${a.sandbox}_${randomBytes(12).toString("hex")}`, sb = c.s.sandboxes[a.sandbox];
     const pid = startCommand(p.wsDir(a.sandbox, a.path), a.command, p.procFile(id, "log"), p.procFile(id, "code"));
     sb.processes[id] = { id, path: a.path, command: a.command, status: "running", pid };
     sb.procOrder.push(id);
     return { kind: "running", process: id, command: a.command };
   }),
-  "operator.process.list": (p, a) => p.with((c) => {
-    const sb = c.sandbox(a.sandbox);
-    return { kind: "ok", items: sb.procOrder.map((id) => { const x = sb.processes[id]; return { id, path: x.path, command: x.command, status: x.status }; }) };
-  }),
+  "operator.process.list": (p) => p.with((c) => ({
+    kind: "ok",
+    items: numbered(c).flatMap((sandbox) => { const sb = c.s.sandboxes[sandbox]; return sb.procOrder.map((id) => { const x = sb.processes[id]; return { id, sandbox, path: x.path, command: x.command, status: x.status }; }); }),
+  })),
   "operator.process.cancel": (p, a) => p.with((c) => {
-    const proc = c.sandbox(a.sandbox).processes[a.process];
+    const sandbox = sandboxOfProcess(a.process);
+    if (!sandbox || !c.s.sandboxes[sandbox]) throw new Refusal("NoSuchProcess", `${a.process} is not a process id`, { process: a.process });
+    const proc = c.sandbox(sandbox).processes[a.process];
     if (proc?.status === "running") stopCommand(proc.pid);
-    const r = c.run("process.cancel", { sandbox: a.sandbox, process: a.process });
+    const r = c.run("process.cancel", { sandbox, process: a.process });
     return { kind: "Stopped", process: r.process, status: r.status };
   }),
 };
@@ -354,17 +357,14 @@ const STORE = { open: async () => null, close: async () => null };
 export const storeOpen = (args) => answer(STORE, "open", args);
 export const storeClose = (args) => answer(STORE, "close", args);
 
-/**
- * The SDK's `inspect.snapshot` over every open Sandbox of the project, for
- * the Host's views (the Host's own client owns no Sandbox but the service).
- */
+/** The SDK's `inspect.snapshot` over every open Sandbox of the project, for the Host's views. */
 export function snapshotAll(home, name) {
   return new Project(home, name).with((c) => {
     const ids = c.s.sandboxOrder.filter((id) => !c.s.sandboxes[id].closed);
     const { workspaces, ...history } = snapshot(c, null);
     return {
       ...history,
-      sandboxes: ids.map((id) => ({ id, status: "Ready", workspaces: snapshot(c, id).workspaces.map((w) => ({ ...w, path: w.directory, overlay: overlay(c, c.s.sandboxes[id].workspaces[w.directory]) })) })),
+      sandboxes: ids.map((id) => ({ id, name: nameOf(c, id), status: "Ready", workspaces: snapshot(c, id).workspaces.map((w) => ({ ...w, path: w.directory, overlay: overlay(c, c.s.sandboxes[id].workspaces[w.directory]) })) })),
     };
   });
 }

@@ -1,6 +1,6 @@
 // Plays a scenario headlessly against Live LayerFS, without dsh web or the mock
 // model, for development runs (issue #347):
-//   node dsh/tools/run-scenario.mjs <scenario> --out <dir> [--pace] [--keep]
+//   node dsh/tools/run-scenario.mjs <scenario> --out <dir> [--pace] [--keep] [--wait <s>]
 // It Inits a new project from the scenario's seed (else the demo workspace),
 // then runs every agent's steps as the mock model would hand them to dsh: a
 // bash step runs its command with the environment the Host gives a bound
@@ -8,7 +8,8 @@
 // `send_message` starts the child's next turn; a reply with `until` waits for
 // those children's turns to end. Agents run at the same time. Pauses are
 // skipped unless --pace: order comes only from those waits, never from time.
-// The first failed bash call stops the run. Then the gates run (lib/gates.mjs)
+// The first failed bash call stops the run. Then the gates run (checks/gates.mjs;
+// closed waits up to --wait seconds, default 150, for the Sandboxes to close)
 // and <out>/<run>/receipt.json records everything. The project and its volume
 // are removed afterwards unless --keep.
 import { spawn } from "node:child_process";
@@ -23,8 +24,8 @@ import { expectedOutcomes, finalTreeFailures, openContainers, orderFailures } fr
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
 const option = (name) => { const i = args.indexOf(name); return i < 0 ? null : args[i + 1]; };
-const id = args[0], outDir = option("--out");
-if (!id || !outDir) { console.error("usage: run-scenario.mjs <scenario> --out <dir> [--pace] [--keep]"); process.exit(2); }
+const id = args[0], outDir = option("--out"), waitS = Number(option("--wait") ?? 150);
+if (!id || !outDir) { console.error("usage: run-scenario.mjs <scenario> --out <dir> [--pace] [--keep] [--wait <s>]"); process.exit(2); }
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
 const scenarioDir = fileURLToPath(new URL(`../scenarios/${id}`, import.meta.url));
@@ -139,21 +140,22 @@ const gate = (name, failures, extra = {}) => {
 gate("finished", failed ? [failed] : [...agents.values()].filter((a) => a.index < scenario.agents[a.name].length).map((a) => `${a.name} stopped at ${a.index} of ${scenario.agents[a.name].length}`));
 const expected = expectedOutcomes(scenario, lines);
 gate("expected", expected.failures, { notes: expected.notes });
-gate("closed", openContainers(volume).map((c) => `${c} still uses ${volume}`));
 const finalFile = join(scenarioDir, "final.json");
 if (existsSync(finalFile)) {
   const final = JSON.parse(readFileSync(finalFile, "utf8"));
-  // read through a Sandbox of its own, as check-demo does
-  const check = await new LayerFS(project).sandbox.create(`${project}-check`.slice(0, 63), project, deploy.IMAGE);
-  const lf = new LayerFS(project, { sandbox: check });
+  const lf = new LayerFS(project);
   try {
     gate("order", await orderFailures(final, lf, new LayerFSOperator(lf)));
-    const tree = await finalTreeFailures(final, lf, check);
+    const tree = await finalTreeFailures(final, lf);
     gate("final tree", tree.failures, { files: tree.files, varies: tree.varies });
   } finally {
-    await lf.sandbox.close(check);
+    await lf.close();
   }
 }
+// readiness wait: each Sandbox closes itself two minutes after its last Workspace is unmounted
+let open = openContainers(volume);
+for (const until = Date.now() + waitS * 1000; open.length && Date.now() < until; open = openContainers(volume)) await sleep(2000);
+gate("closed", open.map((c) => `${c} still uses ${volume}`));
 receipt.ended = new Date().toISOString();
 receipt.pass = Object.values(receipt.gates).every((g) => g.pass);
 save();

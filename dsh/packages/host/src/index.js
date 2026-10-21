@@ -11,6 +11,7 @@
 //                    LayerFS project (where a system prompt is assembled)
 import { BindingStore } from "./binding.js";
 import { ensureBox } from "./box.js";
+import { migrate } from "./migrate.js";
 import { Collector } from "./collector.js";
 import z from "@deepseek-ai/schemastery";
 import { resolveConfig } from "./config.js";
@@ -24,7 +25,8 @@ export const inject = ["shellEnv", "sessions"];
 export const Config = z.object({
   image: z.string().description("LayerFS runtime image digest (sha256:…) that Sandboxes run"),
   daemon: z.string().description("Host path of the built Linux layerfs-daemon"),
-  bundle: z.string().description("Folder of a sealed Linux LayerFS build; on macOS, Live SDK calls run it in the LayerFS box"),
+  bundle: z.string().description("Folder of a sealed Linux LayerFS build; on macOS, Live SDK calls run it in the Store container"),
+  containerPrefix: z.string().description("Prefix of this home's container names (default layerfs-): Sandboxes <prefix><project>-<n>, the Store container <prefix>store"),
   docker: z.string().description("Local Docker Engine Unix socket"),
   home: z.string().description("LayerFS home for discovery records (default: <temp>/dsh-layerfs/home)"),
   stateDir: z.string().description("Project bindings and agent names (default: <profile>/dsh-layerfs)"),
@@ -40,9 +42,10 @@ export function apply(ctx, config) {
   const spec = resolveConfig(config, ctx.get("profileContext"));
   if (spec.box) {
     // the Host's own clients use the ported SDK too (port/sdk.js)
-    Object.assign(process.env, { DSH_LAYERFS_BOX: spec.box, DSH_LAYERFS_BUNDLE: spec.bundle });
-    ensureBox(spec).catch((error) => ctx.logger?.warn?.(`layerfs: the LayerFS box did not start: ${error.message}`));
+    Object.assign(process.env, { DSH_LAYERFS_STORE_CONTAINER: spec.box, DSH_LAYERFS_BUNDLE: spec.bundle });
+    ensureBox(spec).catch((error) => ctx.logger?.warn?.(`layerfs: the Store container did not start: ${error.message}`));
   }
+  migrate(spec).catch((error) => ctx.logger?.warn?.(`layerfs: moving to the #373 layout: ${error.message}`));
   const bindings = new BindingStore(spec.stateDir);
   const collector = new Collector(ctx, spec, bindings);
   ctx.effect(() => ctx.shellEnv.register(contributor(ctx, spec, bindings, collector)), "layerfs-host: bash environment");

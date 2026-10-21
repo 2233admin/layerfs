@@ -332,10 +332,10 @@ export function createView(root, o) {
       ...wss.map(({ p, w, view }) => `${p} → ${w.branch}${w.baseCommit ? ` @ ${w.baseCommit}` : ""}${view ? ` · ${view.agent}` : ""}${w.dirty ? ` · ${w.dirty} dirty` : ""}${w.stale ? " · head moved since mount" : ""}${w.pendingMerge ? " · merge pending" : ""}`),
       ...procs.map((p) => `● ${p.command} (${p.path})`)].filter(Boolean).join("\n");
   }
-  /** A Sandbox as a chip; the project's prefix gives way first ("demo-ag…checkout"). */
+  /** A Sandbox as a chip; the project's prefix gives way first ("layerfs-shop-1", "demo-ag…checkout"). */
   function sbChip(id, extra, bare) {
     const s = v.W.engine.s, sb = s.sandboxes[id], project = s.project ? s.project.name : "";
-    const pre = project && id.startsWith(project + "-") && id.length > project.length + 1 ? project + "-" : "";
+    const pre = (project ? [`layerfs-${project}-`, `${project}-`] : []).find((p) => id.startsWith(p) && id.length > p.length) ?? "";
     return `<span class="sbc${sb.closed ? " closed" : ""}" data-sbid="${esc(id)}" data-sbhl="${esc(id)}"${bare ? "" : ` title="${esc(sbHint(id))}"`}>${BOXICON}${pre ? `<span class="pre">${esc(pre)}</span>` : ""}<b>${esc(id.slice(pre.length))}</b>${extra || ""}</span>`;
   }
   /** The header count's card: every Sandbox, open first, with its record. */
@@ -343,7 +343,7 @@ export function createView(root, o) {
     const W = v.W, s = W.engine.s, at = W.sbAt || {}, by = W.sbBy || {};
     const ids = s.sandboxOrder.filter((id) => !s.sandboxes[id].closed || (at[id]?.closed != null && W.clock - at[id].closed <= X.RETIRE_S))
       .sort((x, y) => (s.sandboxes[x].closed - s.sandboxes[y].closed) || ((at[y]?.last ?? 0) - (at[x]?.last ?? 0)));
-    if (!ids.length) return `<div class="sbli">no Sandbox open · an agent creates one to mount a Branch</div>`;
+    if (!ids.length) return `<div class="sbli">no Sandbox open · LayerFS starts one when a Workspace is mounted</div>`;
     const pl = (k, one) => `${k} ${one}${k === 1 ? "" : "s"}`;
     return ids.map((id) => {
       const sb = s.sandboxes[id], a = at[id] || {}, who = by[id] || {};

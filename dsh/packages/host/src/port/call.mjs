@@ -1,4 +1,4 @@
-// One binding call of a ported Live project, made in Linux by the box's
+// One binding call of a ported Live project, made in Linux by the Store container's
 // worker (worker.mjs) or by Init's own process (run.mjs). A spooled exec's
 // output is read here and returned whole, then released, so no spool is left
 // for the Mac to read.
@@ -10,7 +10,7 @@ export const storeOf = (args) => ({ project: args.project, home: args.home, stor
 /** Makes the call once: its answer, `{ value }` or `{ refused }`. */
 export async function made(binding, fn, op, args) {
   const answer = await binding[fn](op, args);
-  return fn === "call" && op === "sandbox.exec" && answer.value?.output !== undefined ? whole(binding, answer, args.spool) : answer;
+  return fn === "call" && op === "workspace.exec" && answer.value?.output !== undefined ? whole(binding, answer, args.spool) : answer;
 }
 
 /** A spooled exec's streams as text (bytes for sinks, `spool`), released after. */
@@ -34,7 +34,7 @@ async function whole(binding, answer, spool) {
       value[name] = spool ? bytes : bytes.toString("utf8");
     }
   } finally {
-    await binding.call("sandbox.exec_release", { output });
+    await binding.call("workspace.exec_release", { output });
   }
   return { ...answer, value };
 }

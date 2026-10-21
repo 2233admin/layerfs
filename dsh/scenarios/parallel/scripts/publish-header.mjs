@@ -15,5 +15,5 @@ try {
   const p = await settle(() => lf.branch.publish("header"));
   console.log(`publish header → ${p.kind}: main is at ${p.publishedLayer.id.slice(0, 12)}`);
 } finally {
-  if (lf.serviceSandbox) await lf.serviceSandbox.then((id) => settle(() => lf.sandbox.close(id))).catch(() => {});
+  await lf.close();
 }

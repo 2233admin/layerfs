@@ -16,5 +16,5 @@ try {
   const files = (await lf.fs.list("main", "/app")).items.map((i) => i.path.split("/").pop());
   console.log(`main /app: ${files.join(" ")}`);
 } finally {
-  if (lf.serviceSandbox) await lf.serviceSandbox.then((id) => settle(() => lf.sandbox.close(id))).catch(() => {});
+  await lf.close();
 }

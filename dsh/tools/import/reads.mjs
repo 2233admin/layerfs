@@ -59,19 +59,15 @@ export async function storeReads(store, cacheDir, open) {
   });
   /** A tracked file's text at a Commit, or the reader's problem with it. */
   const text = (id, path) => cached(`text ${id} ${path}`, async () => readAll(sdk().lf, id, path));
-  /** main's tracked files by their bytes' SHA-256, hashed in a Sandbox of the reader's own. */
-  const final = () => cached("final", async () => {
-    const { lf } = sdk(), { LayerFS } = await import(store.sdk);
-    const hasher = await lf.sandbox.create(`${store.project}-import`.slice(0, 63), store.project, store.env.LAYERFS_IMAGE);
-    try { return await trackedHashes(new LayerFS(store.project, { sandbox: hasher }), hasher); } finally { await lf.sandbox.close(hasher); }
-  });
+  /** main's tracked files by their bytes' SHA-256, hashed in a Workspace of the reader's own. */
+  const final = () => cached("final", async () => trackedHashes(sdk().lf));
   const save = () => {
     if (!file || !dirty) return;
     mkdirSync(cacheDir, { recursive: true });
     writeFileSync(`${file}.tmp`, JSON.stringify(data));
     renameSync(`${file}.tmp`, file);
   };
-  return { history, commits, tracked, text, final, save, close: async () => { if (client) for (const s of [...client.lf.sandboxes]) await client.lf.sandbox.close(s); } };
+  return { history, commits, tracked, text, final, save, close: async () => { if (client) await client.lf.close(); } };
 }
 
 async function pages(read) {

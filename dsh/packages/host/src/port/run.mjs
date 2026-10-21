@@ -1,5 +1,5 @@
 // Init of a ported Live project, in a container of its own with the source
-// folder mounted read-only (binding.js); every other call goes to the box's
+// folder mounted read-only (binding.js); every other call goes to the Store container's
 // worker. stdin: the call, v8-serialized { fn, op, args, open }; stdout: its
 // answer, v8-serialized, and nothing else. LAYERFS_NATIVE is the Linux
 // binding. With `open`, the project's Store is opened before the call and

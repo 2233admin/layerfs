@@ -2,18 +2,19 @@
 // which terminal prints it and the command line it prints there.
 //
 // Terminals
-//   project    one per project: the project, its Branches and its Sandboxes'
-//              lives (init, fork, merge, publish, history reads, create, close)
+//   project    one per project: the project and its Branches (init, fork,
+//              merge, publish, history reads; an older trace's Sandbox
+//              create and close)
 //   fs         one per Branch: every fs.* call on that Branch
 //   workspace  one pane per mounted Workspace (sandbox:path): mount, the
 //              commands run in it, status, commit, unmount, process control
-//   null       not drawn: the client's own service calls and operator reads
+//   null       not drawn: operator reads (and an older client's service lookup)
 //
 // CLI form: `<group> <method> <required args…> [--optional value…]`
 //   - group and method are the SDK's own names (`branch list_commits`).
 //   - A terminal hides the group it implies: the fs terminal prints
 //     `read /a.txt`, a Workspace pane `commit -m "…"`. The project terminal
-//     prints every group (`branch merge …`, `sandbox create …`).
+//     prints every group (`branch merge …`).
 //   - Required arguments are positional, in SDK order. Optional ones are
 //     `--kebab-name value` and print only when they differ from the SDK
 //     default; a true boolean is a bare `--force` / `--discard`.
@@ -80,23 +81,28 @@ export const CLI = {
   "fs.cp": { at: "fs", cli: (a) => line("fs cp", [a.from, a.to], [], a.message) },
   "fs.mv": { at: "fs", cli: (a) => line("fs mv", [a.from, a.to], [], a.message) },
 
-  // ------------------------------------------------------------- sandbox
+  // ------------------------------------------------------------- workspace
+  // LayerFS places a Workspace in one of the project's Sandboxes (#373)
+  "workspace.mount": { at: "workspace", dim: true, cli: (a) => line("workspace mount", [a.branch]) },
+  "workspace.exec": { at: "workspace", cli: (a, sh) => (sh ?? a.command) + (a.background && !/&\s*$/.test(sh ?? a.command) ? " &" : "") },
+  "workspace.status": { at: "workspace", dim: true, cli: () => "workspace status" },
+  "workspace.commit": { at: "workspace", cli: (a) => line("workspace commit", [], [["force", a.force]], a.message) },
+  "workspace.unmount": { at: "workspace", cli: (a) => line("workspace unmount", [], [["discard", a.discard]]) },
+  // The simulator, the scenarios and older traces name these calls by the
+  // older SDK's names; they print as the Workspace calls. Sandbox create and
+  // close have no successor: LayerFS starts and closes Sandboxes itself.
   "sandbox.create": { at: "project", cli: (a) => line("sandbox create", [a.name, a.project, a.image && shortImage(a.image)]) },
   "sandbox.close": { at: "project", cli: (a) => line("sandbox close", [a.sandbox]) },
-  "sandbox.mount": { at: "workspace", dim: true, cli: (a) => line("sandbox mount", [a.branch]) },
-  "sandbox.exec": { at: "workspace", cli: (a, sh) => (sh ?? a.command) + (a.background && !/&\s*$/.test(sh ?? a.command) ? " &" : "") },
-  "sandbox.status": { at: "workspace", dim: true, cli: () => "sandbox status" },
-  "sandbox.commit": { at: "workspace", cli: (a) => line("sandbox commit", [], [["force", a.force]], a.message) },
-  "sandbox.unmount": { at: "workspace", cli: (a) => line("sandbox unmount", [], [["discard", a.discard]]) },
 
   // ------------------------------------------------------------- operator
   // process start and cancel are the only operator calls drawn; the rest are reads
-  "process.start": { at: "workspace", cli: (a, sh) => CLI["sandbox.exec"].cli({ ...a, background: true }, sh) },
+  "process.start": { at: "workspace", cli: (a, sh) => CLI["workspace.exec"].cli({ ...a, background: true }, sh) },
   "process.cancel": { at: "workspace", cli: (a) => line("process cancel", [a.process]) },
   // the simulator's names for a Sandbox's process list and the Layer snapshot
   "sandbox.list_processes": { at: "project", dim: true, cli: (a) => line("process list", [a.sandbox]) },
   "main.list_layers": { at: "project", dim: true, cli: () => "inspect snapshot" },
   "sandbox.service": { at: null },
+  "sandbox.list": { at: null },
   "project.progress": { at: null },
   "store.stats": { at: null },
   "store.commits": { at: null },
@@ -109,11 +115,13 @@ export const CLI = {
   "process.list": { at: null },
 };
 
+for (const name of ["mount", "exec", "status", "commit", "unmount"]) CLI[`sandbox.${name}`] = CLI[`workspace.${name}`];
+
 /** The route of `call`; a call missing from the table prints its own name, dimmed, in the project terminal. */
 export const routeOf = (call) => CLI[call] ?? { at: "project", dim: true, cli: () => call };
 
 /** The group each terminal implies, hidden from its lines. */
-const IMPLIED = { fs: "fs ", workspace: "sandbox " };
+const IMPLIED = { fs: "fs ", workspace: "workspace " };
 
 /** The full command line of `call` with `args` (and, for a Workspace command, its shell text `sh`). */
 export const commandOf = (call, args = {}, sh) => routeOf(call).cli?.(args, sh) ?? call;

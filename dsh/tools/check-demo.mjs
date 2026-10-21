@@ -8,13 +8,13 @@
 //                ("Committed"), method:code ("sandbox.commit:Committed") or
 //                alternatives ("sandbox.commit:Committed|UpToDate").
 // For a scenario with final.json (a replayed run), also:
-//   closed       no container uses the project's volume (every Sandbox of the
-//                run is closed, the service Sandbox included, so no Workspace
-//                is mounted); the Host releases its own reading Sandbox after a
-//                quiet minute, so this waits up to --wait seconds (default 120)
 //   order        each Branch's Commits, forks, merges and publishes as recorded
 //   final tree   main's tracked files have the recorded SHA-256s
-// The last two read the project through a Sandbox of their own, closed after.
+//   closed       no container uses the project's volume: each Sandbox closes
+//                itself two minutes after its last Workspace is unmounted
+//                (#373), so none is left mounted; this waits up to --wait
+//                seconds (default 150)
+// The final tree is read through Workspaces of the check's own, unmounted after.
 //   node dsh/tools/check-demo.mjs '<dsh web URL with ?token=…>' <session id> <scenario> [--wait <s>]
 // Exit status 0 when every check holds; each failure is printed.
 import { existsSync, readFileSync } from "node:fs";
@@ -24,7 +24,7 @@ import { loadScenarios } from "../packages/mock/src/scenario.js";
 import { expectedOutcomes, finalTreeFailures, openContainers, orderFailures } from "./checks/gates.mjs";
 
 const [address, sessionId, name] = process.argv.slice(2);
-const waitAt = process.argv.indexOf("--wait"), waitS = waitAt > 0 ? Number(process.argv[waitAt + 1]) : 120;
+const waitAt = process.argv.indexOf("--wait"), waitS = waitAt > 0 ? Number(process.argv[waitAt + 1]) : 150;
 const dir = fileURLToPath(new URL("../scenarios/", import.meta.url));
 const scenario = loadScenarios(dir).get(name ?? "");
 if (!address || !sessionId || !scenario) {
@@ -61,28 +61,25 @@ if (existsSync(finalFile) && view.project) {
   const status = await get("/status");
   const project = view.project;
   console.log(`project ${project.name} · volume ${project.volume} · image ${project.image ?? status.image}`);
-  // readiness wait for the Host's own reading Sandbox to be released
-  let open = openContainers(project.volume, status.docker);
-  for (const until = Date.now() + waitS * 1000; open.length && Date.now() < until; open = openContainers(project.volume, status.docker)) {
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-  report("closed", open.map((c) => `${c} still uses ${project.volume}`), ": no Sandbox of the run is open");
-
   // the Host's own settings for the project (on macOS, its ported SDK's too)
   const deploy = deploymentEnv(status, project);
   for (const [k, v] of Object.entries(deploy)) process.env[`LAYERFS_${k}`] = v;
   const { LayerFS } = await import(status.sdk);
   const { LayerFSOperator } = await import(status.operator ?? new URL("../operator/index.js", status.sdk).href);
-  const creator = new LayerFS(project.name);
-  const check = await creator.sandbox.create(`${project.name}-check`.slice(0, 63), project.name, deploy.IMAGE);
-  const lf = new LayerFS(project.name, { sandbox: check });
+  const lf = new LayerFS(project.name);
   try {
     report("order", await orderFailures(final, lf, new LayerFSOperator(lf)), ": every Branch's Commits, forks, merges and publishes as recorded");
-    const tree = await finalTreeFailures(final, lf, check);
+    const tree = await finalTreeFailures(final, lf);
     report("final tree", tree.failures, `: ${tree.files} tracked files on main as recorded (${tree.varies.stamped} by stamped name, ${tree.varies.content} by presence)`);
   } finally {
-    await lf.sandbox.close(check);
+    await lf.close();
   }
+  // readiness wait: each Sandbox closes itself two minutes after its last Workspace is unmounted
+  let open = openContainers(project.volume, status.docker);
+  for (const until = Date.now() + waitS * 1000; open.length && Date.now() < until; open = openContainers(project.volume, status.docker)) {
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  report("closed", open.map((c) => `${c} still uses ${project.volume}`), ": every Sandbox of the run closed itself");
 }
 if (failed) process.exit(1);
 console.log(`PASS ${scenario.title}`);

@@ -110,14 +110,14 @@ const quote = (text) => `'${text.replaceAll("'", "'\\''")}'`;
  * The SHA-256 of each of `paths` on `branch`, from its bytes.
  * @returns {Promise<Record<string, string>>}
  */
-export async function byteHashes(lf, sandbox, branch, paths) {
+export async function byteHashes(lf, branch, paths) {
   const hashes = {};
   if (!paths.length) return hashes;
-  const ws = await lf.sandbox.mount(sandbox, branch);
+  const ws = await lf.workspace.mount(branch);
   try {
     for (let i = 0; i < paths.length; i += 200) {
       const chunk = paths.slice(i, i + 200);
-      const r = await lf.sandbox.exec(sandbox, ws, `timeout 100 sha256sum -- ${chunk.map((p) => quote(`.${p}`)).join(" ")}`);
+      const r = await lf.workspace.exec(ws, `timeout 100 sha256sum -- ${chunk.map((p) => quote(`.${p}`)).join(" ")}`);
       if (r.exitCode !== 0) throw new Error(`sha256sum exited ${r.exitCode}: ${String(r.stderr ?? "").slice(0, 400)}`);
       const lines = String(r.stdout).split("\n").filter(Boolean);
       if (lines.length !== chunk.length) throw new Error(`sha256sum listed ${lines.length} of ${chunk.length} files`);
@@ -128,7 +128,7 @@ export async function byteHashes(lf, sandbox, branch, paths) {
       });
     }
   } finally {
-    await lf.sandbox.unmount(sandbox, ws, true);
+    await lf.workspace.unmount(ws, true);
   }
   return hashes;
 }
@@ -137,13 +137,13 @@ export async function byteHashes(lf, sandbox, branch, paths) {
  * The tracked files of main with their SHA-256 (symlinks: "symlink").
  * @returns {Promise<{ files: Record<string, string> }>}
  */
-export async function trackedHashes(lf, sandbox) {
+export async function trackedHashes(lf) {
   const tree = await trackedTree(lf, "main"), files = {};
   const regular = [...tree].filter(([, type]) => type === "file").map(([path]) => path);
   if (regular.length) {
     const branch = `${CHECK_PREFIX}${Date.now().toString(36)}`;
     await lf.branch.fork(branch);
-    Object.assign(files, await byteHashes(lf, sandbox, branch, regular));
+    Object.assign(files, await byteHashes(lf, branch, regular));
   }
   for (const [path, type] of tree) if (type === "symlink") files[path] = "symlink";
   return { files: sortKeys(files) };

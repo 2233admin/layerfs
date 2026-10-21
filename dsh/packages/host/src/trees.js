@@ -1,10 +1,9 @@
 // The Host's reads of a project, through one SDK client per project: the
 // project's state (inspect.snapshot), its storage (storage.js) and the Files
-// pane's reads of saved ids (reads.js). One client means one service Sandbox
-// start, so the Host takes the project's discovery lock (which the SDK
-// refuses as Busy while another client holds it) once, not per read. The
-// client is released after a quiet minute; the service Sandbox, shared with
-// the agents' scripts, stays open. Saved ids never change, so a Files read is
+// pane's reads of saved ids (reads.js). One client keeps the project's Store
+// and its daemon connections open across reads; it is released after a quiet
+// minute. Reads start no Sandbox, and open connections do not keep an idle
+// Sandbox from closing (#373). Saved ids never change, so a Files read is
 // kept (the newest KEEP_READS of them).
 import { clientFor, release, stateOf } from "./layerfs-client.js";
 import { READS } from "./reads.js";
@@ -38,8 +37,8 @@ export class TreeReader {
   }
 
   /** The project's state as the views draw it; see stateOf. */
-  state(project, sandboxes) {
-    return this.use(project, (client) => stateOf(client, sandboxes));
+  state(project) {
+    return this.use(project, stateOf);
   }
 
   /** What the project's Store holds and what made it; see storageOf. */
@@ -79,7 +78,7 @@ export class TreeReader {
     if (!entry) return;
     this.clients.delete(name);
     clearTimeout(entry.timer);
-    await entry.client.then((client) => release(client, { service: true })).catch(() => {});
+    await entry.client.then(release).catch(() => {});
   }
 
   /** Releases every client; runs with the plugin fiber. */

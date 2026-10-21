@@ -42,39 +42,29 @@ async function all(first, next) {
 }
 
 /**
- * One Bash call in a new Workspace of the project's service Sandbox: mount,
- * exec, Commit, unmount. The Sandbox is shared by the project's calls and
- * stays for the next one; the first call that needs it starts it. A call that
- * fails before its unmount discards its Workspace (one unmount either way). A
- * service Sandbox whose container is gone or stopped is closed, so the next
- * call starts a new one.
+ * One Bash call in a new Workspace of the Branch: mount, exec, Commit,
+ * unmount. LayerFS places the Workspace in one of the project's Sandboxes,
+ * starting one when none has room; a Sandbox closes itself when idle. A call
+ * that fails before its unmount discards its Workspace (one unmount either
+ * way).
  */
 async function run(branch, command, message) {
-  const sb = await lf.service();
-  let path;
-  try {
-    path = await lf.sandbox.mount(sb, branch);
-  } catch (error) {
-    if (error?.code === "NoSuchSandbox" && error.detail?.containerGone) {
-      await lf.sandbox.close(sb).catch((e) => console.error(`lfs: could not close ${sb}: ${e.message}`));
-    }
-    throw error;
-  }
+  const ws = await lf.workspace.mount(branch);
   let unmounting = false;
   try {
-    const r = await lf.sandbox.exec(sb, path, command);
+    const r = await lf.workspace.exec(ws, command);
     process.stdout.write(r.stdout);
     process.stderr.write(r.stderr);
     if (r.truncated) console.error("lfs: output was cut at 1 MiB per stream");
     code = r.exitCode;
     if (!discard) {
-      const c = await lf.sandbox.commit(sb, path, message || `run: ${command.split("\n")[0].slice(0, 200)}`);
+      const c = await lf.workspace.commit(ws, message || `run: ${command.split("\n")[0].slice(0, 200)}`);
       console.error(`lfs: exit ${r.exitCode}; ${c.kind} ${short(c.head)} on ${branch}`);
     }
     unmounting = true;
-    await lf.sandbox.unmount(sb, path, discard);
+    await lf.workspace.unmount(ws, discard);
   } finally {
-    if (!unmounting) await lf.sandbox.unmount(sb, path, true).catch((e) => console.error(`lfs: could not unmount ${path}: ${e.message}`));
+    if (!unmounting) await lf.workspace.unmount(ws, true).catch((e) => console.error(`lfs: could not unmount ${ws.path}: ${e.message}`));
   }
 }
 

@@ -98,7 +98,8 @@ export function prepareInit(spec, bindings, { folder, source = folder, name, bac
   const taken = new Set([...bindings.allNames(), ...pending]);
   const project = { name: name ?? (empty ? randomName(taken, spec.home) : freeName(nameFrom(source), taken, spec.home)), source, volume: "", created: Date.now() };
   if (taken.has(project.name) || existsSync(join(spec.home, project.name))) throw refuse("name-taken", `a LayerFS project named ${project.name} exists`);
-  project.volume = `dsh-layerfs-${project.name}-${project.created.toString(36)}`;
+  // a project made before #373 keeps its `dsh-layerfs-…` volume, recorded in its binding
+  project.volume = `${spec.prefix}${project.name}-store-${project.created.toString(36)}`;
   if (image) project.image = image;
   if (backend === "sim") Object.assign(project, { backend, volume: `sim-${project.name}` });
   if (empty) Object.assign(project, { source: mkdtempSync(join(tmpdir(), "dsh-layerfs-empty-")), empty: true });
@@ -112,7 +113,7 @@ export function prepareInit(spec, bindings, { folder, source = folder, name, bac
  * makes it `folder`'s default. `report` sees each step (scan, volume,
  * import) and, while LayerFS imports in this process, its counts as
  * `imported`. On macOS the import runs in its own container beside the
- * LayerFS box (box.js), where no counts are read. One attempt; a failure
+ * Store container (box.js), where no counts are read. One attempt; a failure
  * leaves no project, and the volume and project entry it made are removed.
  */
 export async function runInit(spec, bindings, { folder, project }, report = () => {}) {
