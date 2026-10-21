@@ -142,6 +142,22 @@ try {
   assert.equal(typeof storage.store.dedupe, "number");
   assert.equal(storage.commits.length, 3);
 
+  // `lfs run`: each call mounts a Workspace in the project's service Sandbox and
+  // unmounts it, creating no Sandbox; the service stays for the next call.
+  const cli = fileURLToPath(new URL("../src/lfs.js", import.meta.url));
+  const lfs = (...args) => execFileSync(process.execPath, [cli, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, DSH_LAYERFS_PROJECT: NAME, DSH_LAYERFS_SDK: spec.simSdk } });
+  const before = readFileSync(trace, "utf8").trim().split("\n").length;
+  assert.equal(lfs("run", "feature", "echo hi > note.txt && cat note.txt", "note"), "hi\n");
+  assert.equal(lfs("run", "feature", "cat note.txt", "--discard"), "hi\n");
+  const runs = readFileSync(trace, "utf8").trim().split("\n").slice(before).map((l) => JSON.parse(l));
+  const service = `_service.${NAME}`;
+  assert.deepEqual(runs.filter((l) => l.method === "sandbox.create" || l.method === "sandbox.close"), []);
+  assert.deepEqual(runs.filter((l) => l.method === "sandbox.service").map((l) => l.sandbox), [service, service]);
+  assert.deepEqual(runs.filter((l) => ["sandbox.mount", "sandbox.unmount"].includes(l.method)).map((l) => [l.method, l.ok]), [["sandbox.mount", true], ["sandbox.unmount", true], ["sandbox.mount", true], ["sandbox.unmount", true]]);
+  const kept = JSON.parse(readFileSync(join(home, NAME, "sim", "state.json"), "utf8")).sim.sandboxes[service];
+  assert.equal(kept.closed, false, "the service Sandbox stays for the next call");
+  assert.deepEqual(Object.values(kept.workspaces).filter((w) => w.mounted), [], "no Workspace is left mounted");
+
   // Removal stops the project's background processes and deletes its home entry.
   const sb2 = await lf.sandbox.create(`${NAME}-b`, NAME, "sim");
   const ws2 = await lf.sandbox.mount(sb2, "feature");

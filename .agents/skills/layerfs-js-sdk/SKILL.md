@@ -31,8 +31,9 @@ If `echo $DSH_LAYERFS_PROJECT` prints a name, dsh has set everything up. Skip
   `project.*` and `branch.*` for versioning, as you would use git.
 - `node "$DSH_LAYERFS_CLI" status` lists the Branches. The same CLI does `log`, `ls`, `cat`,
   `grep`, `diff`, `fork` and `write` (content from stdin), and `run <branch> "<bash>"`. That
-  runs a command in a new Workspace and Commits what it changed. Use the CLI for single
-  steps and an SDK script for anything more.
+  runs a command in a new Workspace of the project's service Sandbox, Commits what it
+  changed and unmounts it. Use the CLI for single steps and an SDK script for anything
+  more.
 - **Always unmount.** Put every `sandbox.unmount` in a `finally` block. Forgotten
   Workspaces fill the Sandbox's daemon (16 Workspaces) and every later mount there fails
   with `Failed` / `Capacity`, for every agent sharing it. To clear idle, clean leftovers,

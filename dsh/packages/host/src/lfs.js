@@ -41,11 +41,27 @@ async function all(first, next) {
   }
 }
 
-/** One Bash call in its own Workspace: create, mount, exec, Commit, unmount, close. */
+/**
+ * One Bash call in a new Workspace of the project's service Sandbox: mount,
+ * exec, Commit, unmount. The Sandbox is shared by the project's calls and
+ * stays for the next one; the first call that needs it starts it. A call that
+ * fails before its unmount discards its Workspace (one unmount either way). A
+ * service Sandbox whose container is gone or stopped is closed, so the next
+ * call starts a new one.
+ */
 async function run(branch, command, message) {
-  const sb = await lf.sandbox.create(`lfs-${process.pid}-${Date.now().toString(36)}`, project, process.env.DSH_LAYERFS_IMAGE);
+  const sb = await lf.service();
+  let path;
   try {
-    const path = await lf.sandbox.mount(sb, branch);
+    path = await lf.sandbox.mount(sb, branch);
+  } catch (error) {
+    if (error?.code === "NoSuchSandbox" && error.detail?.containerGone) {
+      await lf.sandbox.close(sb).catch((e) => console.error(`lfs: could not close ${sb}: ${e.message}`));
+    }
+    throw error;
+  }
+  let unmounting = false;
+  try {
     const r = await lf.sandbox.exec(sb, path, command);
     process.stdout.write(r.stdout);
     process.stderr.write(r.stderr);
@@ -55,9 +71,10 @@ async function run(branch, command, message) {
       const c = await lf.sandbox.commit(sb, path, message || `run: ${command.split("\n")[0].slice(0, 200)}`);
       console.error(`lfs: exit ${r.exitCode}; ${c.kind} ${short(c.head)} on ${branch}`);
     }
+    unmounting = true;
     await lf.sandbox.unmount(sb, path, discard);
   } finally {
-    await lf.sandbox.close(sb);
+    if (!unmounting) await lf.sandbox.unmount(sb, path, true).catch((e) => console.error(`lfs: could not unmount ${path}: ${e.message}`));
   }
 }
 
