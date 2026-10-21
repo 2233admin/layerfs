@@ -38,7 +38,7 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
 | Agent preset `layerfs-dsh-minimalist` | `dsh-layerfs` (`presets/`) | "LayerFS × DSH minimalist" in the preset menu |
 | View model | `@dsh-layerfs/model` | used by the client and the Host |
 | Renderer | `@dsh-layerfs/view` | used by the client |
-| Mock model `layerfs-mock` (demo bundle `dsh-layerfs-demo`) | `@dsh-layerfs/mock` | "LayerFS mock · …" models in the model picker |
+| Mock model `layerfs-mock` (demo bundle `dsh-layerfs-demo`) | `@dsh-layerfs/mock` | disabled permanently (owner, 2026-10-21): not installed or released |
 
 The LayerFS tab is the only LayerFS UI. The standalone HTML pages that used to live in the root `sdk_sim/` (the terminal UI page and its design preview) and their live server are removed; do not build or revive a standalone HTML or TUI page. What remains, the simulation engine, lives in [`sim/`](sim/): `simulation_engine/model.js` and `files.js`, which the client and the Host import, the terminal engine (`terminal.js`, `backend/sim.js`) and demo stories (`demo.js`) that the demos were written from, and the avatars (`avatars/`).
 
@@ -136,6 +136,8 @@ Run the preset's sessions in Workspace Write mode; subagents inherit it.
 
 ### 🎬 Mock model and demos
 
+> **Disabled permanently** (owner, 2026-10-21). The `dsh-layerfs-demo` bundle loads nothing (its `cordis.patch.yml` is empty), is not part of the release, and the install guide below does not add it. This section describes the code that stays in the repository.
+
 The `dsh-layerfs-demo` bundle adds the LayerFS mock model: an LLM provider that is explicitly not a language model. Each scenario in `scenarios/` becomes one model, "LayerFS mock · <title>". It replies with scripted calls to the preset's own tools: bash, subagent, send_message, list_agents and the job tools. dsh runs those calls for real, against a real LayerFS project, and subagents inherit the mock model, so they run their own part of the script. No API key is needed.
 
 | Demo | Agents | Shows |
@@ -211,7 +213,7 @@ Known limits:
 
 These steps take a fresh clone of this repository to LayerFS × DSH in dsh web: first LayerFS itself, then the dsh bundle. Only dsh web is supported. dsh desktop serves the same web client but was not tested. The headless profile composes no preset registry, so it offers no preset; the Host and the bash environment still load there.
 
-Sim projects run on the simulator and need only steps 2, 3, 5 and 6. Live projects run on real LayerFS and need steps 1 and 4 too.
+Live projects run on real LayerFS and need every step. Sim projects run on the simulator and need only steps 2, 3, 5 and 6.
 
 ### You need
 
@@ -295,21 +297,18 @@ Choose a `DSH_HOME` of your own, so your usual `~/.dsh` is not touched, and use 
 
 ```sh
 export DSH_HOME=$HOME/dsh-layerfs        # any empty folder
-pnpm --dir "$DSH" dsh plugin --profile web add \
-  "link:$LAYERFS/dsh/packages/dsh-layerfs" \
-  "link:$LAYERFS/dsh/packages/dsh-layerfs-demo"
+pnpm --dir "$DSH" dsh plugin --profile web add "link:$LAYERFS/dsh/packages/dsh-layerfs"
 ```
 
-`dsh-layerfs-demo` is optional: it adds the mock model and the demo workspace (see Mock model and demos). Leave it out for real agents only.
+Install `dsh-layerfs` only. The demo bundle `dsh-layerfs-demo` is disabled permanently and loads nothing.
 
 The profile is `$DSH_HOME/profiles/web/`. Its `package.json` should now read:
 
 ```json
 "dependencies": {
-  "dsh-layerfs": "link:…/dsh/packages/dsh-layerfs",
-  "dsh-layerfs-demo": "link:…/dsh/packages/dsh-layerfs-demo"
+  "dsh-layerfs": "link:…/dsh/packages/dsh-layerfs"
 },
-"dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-layerfs", "dsh-layerfs-demo"] } }
+"dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-layerfs"] } }
 ```
 
 Making the profile by hand is the same: that `package.json`, then `pnpm install` in the profile folder. Keep the `pnpm-workspace.yaml` dsh writes there (`nodeLinker: hoisted`), so the bundle shares dsh's own packages.
@@ -367,9 +366,7 @@ What you see:
 - A session on a project has two more tabs beside Chat and Trajectory: **Work** (the agents' terminals, Branches and Sandboxes) and **History** (File, History, Storage and Sandboxes: the project's Sandboxes tab, as on the LayerFS page).
 - The sidebar's **LayerFS** page shows one project at a time, with a switcher of every project: its Files, History and Storage, a New session action, and Refresh and Remove.
 
-A **Sim project** needs no Docker, image or build, but the chip's Import makes Live projects. Get one either way:
-- With `dsh-layerfs-demo`, open a session of the DEMO workspace, choose Sim on the strip above the composer, and press Play. The demo's project is `demo-<id>-sim`. `shop`, `depot` and `crew` are Live only.
-- Ask the Host directly. The `?token=` link sets the cookie the route needs:
+A **Sim project** needs no Docker, image or build, but the chip's Import makes Live projects. Ask the Host for one directly. The `?token=` link sets the cookie the route needs:
 
   ```sh
   curl -s -c jar.txt -o /dev/null 'http://127.0.0.1:3090/?token=…'
@@ -387,7 +384,7 @@ cd "$LAYERFS/dsh" && pnpm test
 node tools/check-session.mjs 'http://127.0.0.1:3090/?token=…' <session id>
 ```
 
-`pnpm test` runs the Host, simulator, model, mock, playback and history tests. `check-session.mjs` checks that a finished session's tabs draw what LayerFS reports; for a demo session, `tools/check-demo.mjs` (same arguments plus the demo's id) also checks its expected outcomes. The page's URL does not carry the session id: a session is the folder `$DSH_HOME/sessions/<workspace>/session-<uuid>`, whose name is the id, and each demo's current session is in `$DSH_HOME/profiles/web/dsh-layerfs-demo/sessions.json`.
+`pnpm test` runs the Host, simulator, model, mock, playback and history tests. `check-session.mjs` checks that a finished session's tabs draw what LayerFS reports. The page's URL does not carry the session id: a session is the folder `$DSH_HOME/sessions/<workspace>/session-<uuid>`, whose name is the id.
 
 ## 🧰 Develop
 

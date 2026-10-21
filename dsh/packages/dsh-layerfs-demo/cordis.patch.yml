@@ -1,7 +1,5 @@
-# LayerFS × DSH demos. The mock model ("LayerFS mock · <scenario>") answers
-# from the scenarios folder; dsh's agent loop and tools run every call, so a
-# demo on a real LayerFS project changes that project. Use with dsh-layerfs,
-# in a demo profile only.
-- insert:
-    - id: layerfs-mock
-      name: '@dsh-layerfs/mock'
+# LayerFS × DSH demos: DISABLED permanently (owner, 2026-10-21). The bundle
+# loads nothing, even where it is still installed: the mock model
+# (@dsh-layerfs/mock) and its demo workspace stay in this repository as code
+# only, not part of the release, and no install guide adds them.
+[]

@@ -1,7 +1,7 @@
 {
   "name": "dsh-layerfs-demo",
   "version": "0.1.0",
-  "description": "LayerFS × DSH demos: the LayerFS mock model, whose scenarios run real bash and subagents on a LayerFS project. Install beside dsh-layerfs in a demo profile only.",
+  "description": "Disabled permanently (owner, 2026-10-21): loads nothing. Was the LayerFS × DSH demos bundle (the LayerFS mock model). Do not install.",
   "type": "module",
   "main": "index.js",
   "exports": {

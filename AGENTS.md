@@ -26,7 +26,9 @@ simplification.
 
 **The LayerFS UI is the dsh LayerFS plugin** (owner, 2026-10-19): the LayerFS tab in
 DeepSeek Harness, served by `dsh/packages`; see [dsh/README.md](dsh/README.md).
-Do not build or revive standalone HTML or TUI pages.
+Do not build or revive standalone HTML or TUI pages. **The `dsh-layerfs-demo`
+bundle (the LayerFS mock model and its demo workspace) is disabled permanently**
+(owner, 2026-10-21): it loads nothing, is not released and no guide installs it.
 
 Cluster names are workstreams. C1/C2/C5 in older component documents mean
 content/storage/history. Check [core/Cargo.toml](core/Cargo.toml) for active
