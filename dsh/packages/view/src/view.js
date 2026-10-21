@@ -49,6 +49,7 @@ const FILEICON = TABICON("M3.5 1.5h4.5l2.5 2.5v8.5h-7z M8 1.5V4h2.5");
 const HISTICON = TABICON("M4 2v10 M4 7c0-2 6-1 6-4 M10 3a1 1 0 1 0 0-.01 M4 12.5a1 1 0 1 0 0-.01");
 const SIDEICON = TABICON("M1.5 2.5h11v9h-11z M5 2.5v9");
 const DBICON = TABICON("M2.5 3.5c0-1.1 2-2 4.5-2s4.5.9 4.5 2-2 2-4.5 2-4.5-.9-4.5-2z M2.5 3.5v7c0 1.1 2 2 4.5 2s4.5-.9 4.5-2v-7 M2.5 7c0 1.1 2 2 4.5 2s4.5-.9 4.5-2");
+const BOXICON = TABICON("M2 4.5l5-2.5 5 2.5v5l-5 2.5-5-2.5z M2 4.5l5 2.5 5-2.5 M7 7v5");
 
 export function createView(root, o) {
   const FM = o.files, LEAD = o.lead || "main";
@@ -560,12 +561,14 @@ export function createView(root, o) {
     side.innerHTML = files.sideHtml(tab);
     restore(side, ".ftree", sideTop);
     const name = p.path ? p.path.slice(p.path.lastIndexOf("/") + 1) : "File";
-    const tabs = [["file", name, FILEICON], ["history", "History", HISTICON], ["storage", "Storage", DBICON]];
+    // Sandboxes: the page's own panel (W.engine.sandboxes), when it gives one, with its level as a dot
+    const sbx = W.engine.sandboxes?.();
+    const tabs = [["file", name, FILEICON], ["history", "History", HISTICON], ["storage", "Storage", DBICON], ...(sbx ? [["sandboxes", "Sandboxes", BOXICON]] : [])];
     // the sidebar folds away (a per-viewer preference) from a toggle before the tabs
     const hide = !!prefs.sideHidden;
     ide.classList.toggle("side-hidden", hide);
     const toggle = `<button class="ide-toggle" data-ideside="1" aria-pressed="${!hide}" title="${hide ? "Show the file tree" : "Hide the file tree"}" aria-label="${hide ? "Show the file tree" : "Hide the file tree"}">${SIDEICON}</button>`;
-    tabsEl.innerHTML = toggle + tabs.map(([k, l, i]) => `<button role="tab" data-ide="${k}" aria-selected="${show === k}" title="${k === "file" && p.path ? esc(p.path) : l}">${i}<span>${esc(l)}</span></button>`).join("");
+    tabsEl.innerHTML = toggle + tabs.map(([k, l, i]) => `<button role="tab" data-ide="${k}" aria-selected="${show === k}" title="${k === "file" && p.path ? esc(p.path) : l}">${i}<span>${esc(l)}</span>${k === "sandboxes" && sbx.level !== "ok" ? `<i class="ide-dot ${sbx.level}" aria-label="${sbx.level}"></i>` : ""}</button>`).join("");
     // History plays only while it is shown: another tab ends the replay, and History comes back at now
     v.rightMode[tab] = show === "history" ? "history" : "files";
     if (show !== "history") hist.stop();
@@ -577,6 +580,9 @@ export function createView(root, o) {
       const top = keep(pane, ".fview");
       pane.innerHTML = files.pageHtml(tab);
       restore(pane, ".fview", top);
+    } else if (show === "sandboxes" && sbx) {
+      // the page's own element, kept across draws so what it draws in it stays
+      if (pane.firstElementChild !== sbx.el) pane.replaceChildren(sbx.el);
     } else {
       // the storage panel's figures (engine.storage), as a page
       const z = W.engine.storage();
@@ -806,7 +812,7 @@ export function createView(root, o) {
     },
     /** Shows History or Files in the left panel for a tab. */
     setRight(tab, mode) { v.rightMode[tab] = mode; v.ide = mode === "files" ? "file" : mode === "history" ? "history" : v.ide; },
-    /** A project's tab: "file", "history" or "storage". */
+    /** A project's tab: "file", "history", "storage" or "sandboxes" (when the page gives engine.sandboxes). */
     get ide() { return v.ide; },
     set ide(tab) { v.ide = tab; render(); },
     avatar, render, animate, files,

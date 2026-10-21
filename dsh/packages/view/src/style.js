@@ -50,6 +50,8 @@ ${HEROES_CSS}
 .lfs-ide .ide-tabs button svg { flex: none; }
 .lfs-ide .ide-tabs button:hover { color: var(--text); }
 .lfs-ide .ide-tabs button[aria-selected="true"] { background: var(--card); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+.lfs-ide .ide-tabs .ide-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); }
+.lfs-ide .ide-tabs .ide-dot.down { background: var(--red); }
 .lfs-ide .ide-tabs button[data-ide="file"] span { font-family: var(--mono); font-size: 12px; }
 .lfs-ide .ide-tabs .ide-toggle { padding: 0 11px; color: var(--text-3); }
 .lfs-ide .ide-tabs .ide-toggle[aria-pressed="true"] { color: var(--accent); }

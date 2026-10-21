@@ -29,6 +29,30 @@ export interface Storage {
   branches: number
   partial: boolean
 }
+/** ok, degraded (worth a look) or down; a part's level is its worst part's (Host runtime.js). */
+export type Level = 'ok' | 'degraded' | 'down'
+/** One mounted Workspace of a project Sandbox: who mounted it and what it holds now. */
+export interface RuntimeWorkspace {
+  path: string, branch: string | null, activity: string | null, uncommitted: number, stale: boolean, pendingMerge: boolean
+  agent: string | null, mountedAt: number | null, idleMs: number | null, busy: boolean
+  processes: { id: string, command: string, status: string }[], level: Level
+}
+/** A project's Sandboxes for its Sandboxes tab (GET /project/<name>/runtime). */
+export interface ProjectRuntime {
+  project: string, simulated: boolean, level: Level
+  sandboxes: { id: string, name: string | null, capacity: number, workspaces: RuntimeWorkspace[], level: Level }[]
+  gone: { id: string, name: string | null }[]
+}
+/** Every project's Sandboxes and the shared parts (GET /runtime). */
+export interface Overview {
+  level: Level
+  engine: { level: Level, version?: string, error?: string }
+  store: { level: Level, state: 'running' | 'stopped' | 'missing' | 'unknown', name: string, build?: string, expected?: string, startedAt?: string, answering?: boolean } | null
+  disk: { host: number | null, vm: number | null }
+  projects: { name: string, simulated: boolean, containers: number, sandboxes: { id: string, name: string | null, used: number, capacity: number, level: Level }[], workspaces: number, level: Level, note: string | null }[]
+  leftovers: { name: string, project: string, running: boolean, status: string }[]
+  totals: { projects: number, sandboxes: number, workspaces: number }
+}
 export interface Counts { entries: number, files: number, bytes: number }
 /** A running or ended Init on the Host (jobs.js). */
 export interface InitJob {
@@ -91,4 +115,11 @@ export const api = {
   /** stopSandboxes: stop the project's running Sandboxes instead of refusing (a demo's own project) */
   remove: (name: string, stopSandboxes = false) => call<{ removed: string, volume: string }>('POST', `/project/${encodeURIComponent(name)}/remove`, { confirm: name, stopSandboxes }),
   files: (id: string, kind: string, query: Record<string, string | number>) => call<any>('GET', `/session/${sid(id)}/${kind}?${filesQuery(query)}`),
+  overview: () => call<Overview>('GET', '/runtime'),
+  startStore: () => call<Overview['store']>('POST', '/runtime/store'),
+  cleanLeftovers: (names: string[]) => call<{ results: { name: string, ok: boolean, message?: string }[] }>('POST', '/runtime/leftovers', { names }),
+  projectRuntime: (name: string) => call<ProjectRuntime>('GET', `/project/${encodeURIComponent(name)}/runtime`),
+  /** unmount (nothing uncommitted), discard (confirm: the path) or stop a process */
+  runtimeAction: (name: string, body: { action: 'unmount' | 'discard' | 'stop', sandbox?: string, path?: string, process?: string, confirm?: string }) =>
+    call<unknown>('POST', `/project/${encodeURIComponent(name)}/runtime`, body),
 }

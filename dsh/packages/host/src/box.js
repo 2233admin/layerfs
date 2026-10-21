@@ -51,7 +51,7 @@ export const storeFile = (home) => join(home, ".layerfs-store.json");
 const OLD_FILE = ".dsh-layerfs-box.json";
 
 /** A short id of a build folder, as the Store container's label. */
-const buildOf = (bundle) => createHash("sha256").update(bundle).digest("hex").slice(0, 12);
+export const buildOf = (bundle) => createHash("sha256").update(bundle).digest("hex").slice(0, 12);
 
 /** The worker's code, as the Store container's label: a changed worker replaces it. */
 const workerVersion = () => {

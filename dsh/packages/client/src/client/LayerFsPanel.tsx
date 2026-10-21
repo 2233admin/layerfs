@@ -1,15 +1,19 @@
 // The LayerFS sidebar page: one project at a time, like an editor. A slim
-// title bar names it, and the name is a switcher: every LayerFS project, then
-// "Import into a workspace" (InitDialog). Then its one action, New session (in
+// title bar names it, and the name is a switcher: All projects · Sandboxes
+// (AllSandboxes: every project's Sandboxes and what they run on, whose cards
+// open a project on its Sandboxes tab), every LayerFS project, then "Import
+// into a workspace" (InitDialog). Then its one action, New session (in
 // a workspace picked from its menu, which then uses the project by default),
 // and a menu for Refresh and Remove (RemoveDialog). The project (ProjectBoard)
-// fills the rest: Files' tree in a sidebar, File, History and Storage tabs,
+// fills the rest: Files' tree in a sidebar, File, History, Storage and
+// Sandboxes tabs,
 // and a status bar with where main is, Branches, Commits, the last publish
 // and the Store's size. ellen_joe shows full size where there is nothing else.
 // Colours, borders and radii are dsh's own tokens (--dsw-*, tokens.ts).
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { Button, IconChevronDownOutlineRegular, IconEllipsisOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular, IconTrashOutlineRegular, Menu, type MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import ellen from '../../../../sim/avatars/ellen_joe.gif'
+import { AllSandboxes } from './AllSandboxes.tsx'
 import { api, type Project, type ProjectState, type Status } from './api.ts'
 import { InitDialog } from './InitDialog.tsx'
 import { ProjectBoard } from './ProjectBoard.tsx'
@@ -28,6 +32,7 @@ const NO_ITEMS = { items: [] as readonly Workspace[] }
 const NOT_LISTED = { getSnapshot: () => NO_ITEMS, subscribe: () => () => {} }
 
 const ROWS = `.lfs-switch, .lfs-chip { background: transparent; cursor: pointer; } .lfs-switch:hover, .lfs-switch[aria-expanded='true'], .lfs-chip:hover, .lfs-chip[aria-expanded='true'] { background: ${T.hover}; }
+.lfs-card:hover { box-shadow: inset 0 0 0 999px ${T.hover}; }
 .lfs-bone { border-radius: 4px; background: ${T.well}; animation: lfs-bone 1.2s ease-in-out infinite alternate; } @keyframes lfs-bone { to { opacity: .45; } }`
 
 /** The LayerFS mark (docs/assets/readme/layerfs-mark.svg) in the text colour: the A at 45%, its three nodes solid. */
@@ -120,11 +125,14 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
   const [removing, setRemoving] = useState(false)
   const [menu, setMenu] = useState<'project' | 'import' | 'session' | null>(null)
   const [menuSwitch, setMenuSwitch] = useState(false)
+  // the All projects page instead of a project, and the tab a project opens with when one of its cards was clicked
+  const [all, setAll] = useState(false)
+  const [openTab, setOpenTab] = useState<'sandboxes' | undefined>(undefined)
 
   const loadProjects = useCallback(() => api.projects().then(({ projects, defaults }) => { setProjects(projects); setDefaults(defaults ?? {}); return projects }), [])
   useEffect(() => {
     api.status().then(setStatus, (e: Error) => setError(e.message))
-    loadProjects().then((all) => setSelected((current) => current ?? all[0]?.name ?? null), (e: Error) => setError(e.message))
+    loadProjects().then((list) => setSelected((current) => current ?? list[0]?.name ?? null), (e: Error) => setError(e.message))
   }, [loadProjects])
   useEffect(() => {
     if (!selected) return
@@ -168,14 +176,17 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
     : [{ type: 'label', id: 'il', text: 'Add a workspace in dsh first' }]
   // the switcher: every project, then importing a new one
   const switchMenu: MenuEntry[] = [
+    { id: 'all', label: 'All projects · Sandboxes', icon: all ? <LayerFsIcon size={16} /> : undefined },
+    { type: 'separator', id: 'as' },
     ...(projects?.length ? [{ type: 'label', id: 'pl', text: 'Projects' } as MenuEntry] : []),
-    ...(projects ?? []).map((p) => ({ id: 'project:' + p.name, label: `${p.name} · ${p.empty ? 'empty' : short(p.source)}`, icon: p.name === selected ? <LayerFsIcon size={16} /> : undefined })),
+    ...(projects ?? []).map((p) => ({ id: 'project:' + p.name, label: `${p.name} · ${p.empty ? 'empty' : short(p.source)}`, icon: !all && p.name === selected ? <LayerFsIcon size={16} /> : undefined })),
     ...(projects?.length ? [{ type: 'separator', id: 'ps' } as MenuEntry] : []),
     ...importMenu,
   ]
   const onSwitch = (id: string) => {
     setMenuSwitch(false)
-    if (id.startsWith('project:')) setSelected(id.slice(8))
+    if (id === 'all') setAll(true)
+    else if (id.startsWith('project:')) { setAll(false); setOpenTab(undefined); setSelected(id.slice(8)) }
     else if (id.startsWith('import:')) { const w = items.find((x) => x.workspaceId === id.slice(7)); if (w) setInitFor(w) }
   }
   const switcher = (anchor: React.ReactElement) => <Menu open={menuSwitch} onClose={() => setMenuSwitch(false)} items={switchMenu} onSelect={onSwitch} align="start" portal anchor={anchor} />
@@ -185,7 +196,7 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
       <style>{ROWS}</style>
       <main style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, minWidth: 0, minHeight: 0, overflowY: 'auto', padding: '12px 16px 16px' }}>
         {status && !status.configured && <div style={{ ...card, padding: '8px 12px', color: T.warn }}>LayerFS isn't set up: layerfs-host is missing {status.missing.join(', ')}.</div>}
-        {projects && projects.length === 0 && (
+        {!all && projects && projects.length === 0 && (
           <Notice title="Start your first project">
             <div style={{ display: 'grid', gap: 8, justifyItems: 'start' }}>
               <span>Import a folder from a workspace: LayerFS keeps a versioned copy that agents fork, test and merge.</span>
@@ -193,17 +204,19 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
             </div>
           </Notice>
         )}
-        {project && (
+        {(all || project) && (
           <>
             <header style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
               <span style={{ display: 'flex', flex: 'none', color: T.text2 }}><LayerFsIcon size={20} /></span>
               {switcher(
                 <button type="button" className="lfs-switch" aria-haspopup="menu" aria-expanded={menuSwitch} onClick={() => setMenuSwitch(!menuSwitch)} title="Switch project or import one"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: 320, padding: '0 6px', border: 0, borderRadius: T.sm, color: 'inherit', font: 'inherit', fontSize: 15, fontWeight: 500, lineHeight: '28px' }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{all || !project ? 'All projects' : project.name}</span>
                   <span style={{ display: 'flex', flex: 'none', color: T.text2 }}><IconChevronDownOutlineRegular size={14} /></span>
                 </button>,
               )}
+              {(all || !project) && <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: T.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Sandboxes · what they run on</span>}
+              {!all && project && <>
               <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: T.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${project.empty ? 'started empty' : project.source} · volume ${project.volume}`}>
                 {project.empty ? 'started empty' : `from ${short(project.source)}`} · {day(project.created)}
               </span>
@@ -213,9 +226,12 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
                   title={items.length ? 'New session on the LayerFS × DSH minimalist preset, in a workspace you pick' : 'Add a workspace in dsh first'}>New session</Button>} />
               <Menu open={menu === 'project'} onClose={() => setMenu(null)} items={projectMenu} onSelect={onProjectMenu} align="end" portal
                 anchor={<Button variant="ghost" size="sm" aria-label="Project actions" icon={<IconEllipsisOutlineRegular size={16} />} disabled={!!busy} onClick={() => setMenu(menu === 'project' ? null : 'project')} />} />
+              </>}
             </header>
             {(busy || error) && <div role="status" style={{ color: error ? T.danger : T.text2 }}>{error ?? busy}</div>}
-            {stateError
+            {all || !project
+              ? <AllSandboxes onOpen={(name) => { setOpenTab('sandboxes'); setSelected(name); setAll(false) }} />
+              : stateError
               ? (() => {
                 const why = problem(stateError)
                 return (
@@ -229,14 +245,14 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
                 )
               })()
               : state
-                ? <ProjectBoard name={project.name} state={state} status={stats(state).map((f) => <FactView key={f.label} f={f} />)} />
+                ? <ProjectBoard name={project.name} state={state} tab={openTab} status={stats(state).map((f) => <FactView key={f.label} f={f} />)} />
                 : <Skeleton />}
           </>
         )}
       </main>
       {removing && project && <RemoveDialog project={project} onClose={() => setRemoving(false)} onDone={() => {
         setRemoving(false)
-        void loadProjects().then((all) => setSelected(all[0]?.name ?? null))
+        void loadProjects().then((list) => setSelected(list[0]?.name ?? null))
       }} />}
       {initFor && <InitDialog folder={initFor.path} directories={uiWorkspace} onClose={() => setInitFor(null)} onDone={(made) => { setInitFor(null); void loadProjects().then(() => setSelected(made.name)) }} />}
     </div>

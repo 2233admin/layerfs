@@ -1,5 +1,5 @@
 // The Host's client of a simulated project: the few calls the Host makes
-// (Init, the views' state and Files reads) sent to the simulator's binding directly. The
+// (Init, the views' state, Files reads and Sandbox management) sent to the simulator's binding directly. The
 // SDK in the Host's process keeps the native binding for live projects.
 import { LayerFSError } from "@layerfs/sdk";
 import { call, operatorCall, snapshotAll } from "./binding.js";
@@ -28,6 +28,7 @@ export function simClient(home, name) {
       blame: (ref, path, fromLine = 1) => send(call, "fs.blame", { branch: ref, path, fromLine }),
       diff_files: (leftRef, leftPath, rightRef, rightPath) => send(call, "fs.diff_files", { branch: leftRef, left: { commit: leftRef, path: leftPath }, right: { commit: rightRef, path: rightPath } }),
     },
+    workspace: { unmount: (ws, discard = false) => send(call, "workspace.unmount", { sandbox: ws.sandbox, path: ws.path, discard }) },
   };
   const operator = {
     inspect: { snapshot: async () => ({ kind: "ok", ...(await snapshotAll(home, name)) }) },
@@ -38,6 +39,10 @@ export function simClient(home, name) {
       },
     },
     project: { progress: () => send(operatorCall, "operator.project.progress", {}) },
+    process: {
+      list: () => send(operatorCall, "operator.process.list", {}),
+      cancel: (process) => send(operatorCall, "operator.process.cancel", { process }),
+    },
   };
   return { layerfs, operator };
 }

@@ -200,22 +200,61 @@ export class Collector {
    * @param {string} project
    */
   nodesOf(project) {
-    const dir = join(this.spec.stateDir, "lines"), authors = {}, times = {}, forks = {}, out = { authors, times, forks };
-    if (!existsSync(dir)) return out;
+    const authors = {}, times = {}, forks = {}, out = { authors, times, forks };
+    for (const line of this.journaled(project)) {
+      if (!line.ok) continue;
+      const made = line.kind === "Committed" ? line.commit : line.method === "branch.publish" ? line.layer : null;
+      if (made && !authors[made]) authors[made] = this.bindings.agent(line.agentId)?.name ?? line.agent;
+      const at = Date.parse(line.start) + (line.ms || 0);
+      if (line.method === "branch.publish" && line.layer) times[line.layer] = at;
+      if ((line.kind === "Forked" || line.kind === "Merged") && line.branch) forks[line.branch] = Math.max(forks[line.branch] ?? 0, at);
+    }
+    return out;
+  }
+
+  /**
+   * The project's Workspaces the agents' traces know, by `${sandbox}\n${path}`:
+   * who mounted it, when, and when a call last used it (the newest mount of a
+   * reused path; an unmount forgets it). Who the daemon has mounted is the
+   * snapshot's answer; this only names the agent and its last use.
+   * @param {string} project
+   */
+  mountsOf(project) {
+    const lines = [...this.journaled(project)].sort((x, y) => Date.parse(x.start) - Date.parse(y.start)), out = {};
+    for (const line of lines) {
+      const sandbox = line.sandbox ?? line.args?.sandbox, path = line.path ?? line.args?.path;
+      if (typeof sandbox !== "string" || typeof path !== "string") continue;
+      const key = `${sandbox}\n${path}`, at = Date.parse(line.start) + (line.ms || 0);
+      if (line.method === "workspace.mount" && line.ok) out[key] = { agent: this.bindings.agent(line.agentId)?.name ?? line.agent, at, lastAt: at };
+      else if (line.method === "workspace.unmount" && line.ok) delete out[key];
+      else if (out[key]) out[key].lastAt = Math.max(out[key].lastAt, at);
+    }
+    return out;
+  }
+
+  /** The project's Workspaces an agent's call is running in now, as `${sandbox}\n${path}`. */
+  busyOf(project) {
+    const out = new Set();
+    for (const view of this.roots.values()) {
+      for (const line of view.running.values()) {
+        if (line.project === project && typeof line.args?.sandbox === "string" && typeof line.args?.path === "string") out.add(`${line.args.sandbox}\n${line.args.path}`);
+      }
+    }
+    return out;
+  }
+
+  /** Every journaled line of `project`, file by file. */
+  *journaled(project) {
+    const dir = join(this.spec.stateDir, "lines");
+    if (!existsSync(dir)) return;
     for (const entry of readdirSync(dir)) {
       if (!entry.endsWith(".jsonl")) continue;
       for (const raw of readFileSync(join(dir, entry), "utf8").split("\n")) {
         let line;
         try { line = raw ? JSON.parse(raw) : null; } catch { continue; /* a torn last line */ }
-        if (!line || line.project !== project || !line.ok) continue;
-        const made = line.kind === "Committed" ? line.commit : line.method === "branch.publish" ? line.layer : null;
-        if (made && !authors[made]) authors[made] = this.bindings.agent(line.agentId)?.name ?? line.agent;
-        const at = Date.parse(line.start) + (line.ms || 0);
-        if (line.method === "branch.publish" && line.layer) times[line.layer] = at;
-        if ((line.kind === "Forked" || line.kind === "Merged") && line.branch) forks[line.branch] = Math.max(forks[line.branch] ?? 0, at);
+        if (line && line.project === project) yield line;
       }
     }
-    return out;
   }
 
   /** Polls on an interval until the returned disposer runs. */
