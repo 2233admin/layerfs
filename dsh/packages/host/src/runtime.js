@@ -86,7 +86,7 @@ export async function overview(spec, bindings, trees, collector) {
   const leftovers = containers.filter((c) => !known.has(c.project) || !c.running).map(({ name, project, running, status }) => ({ name, project, running, status }));
   // older Sandboxes the startup cleanup kept because they may hold work (migrate.js): yours to commit or discard, then remove
   for (const k of spec.migration?.kept ?? [])
-    if (!leftovers.some((l) => l.name === k.container)) leftovers.push({ name: k.container, project: "", running: true, status: `older Sandbox ${k.sandbox}, kept: ${k.reason}` });
+    if (!leftovers.some((l) => l.name === k.container)) leftovers.push({ name: k.sandbox, project: "", running: true, status: `older Sandbox (container ${k.container.slice(0, 12)}), kept: ${k.reason}` });
   const sandboxes = cards.reduce((n, c) => n + c.sandboxes.length, 0), workspaces = cards.reduce((n, c) => n + c.workspaces, 0);
   return {
     level: worst([engine.level, store?.level ?? "ok", leftovers.length ? "degraded" : "ok"]),

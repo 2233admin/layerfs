@@ -1,8 +1,8 @@
 // The LayerFS sidebar page: one project at a time, like an editor. A slim
-// title bar names it, and the name is a switcher: All projects · Sandboxes
-// (AllSandboxes: every project's Sandboxes and what they run on, whose cards
-// open a project on its Sandboxes tab), every LayerFS project, then "Import
-// into a workspace" (InitDialog). Then its one action, New session (in
+// title bar has two tabs: the project, whose name is a switcher (every
+// LayerFS project, then "Import into a workspace", InitDialog), and All
+// projects · Sandboxes (AllSandboxes: every project's Sandboxes and what they
+// run on, whose cards open a project on its Sandboxes tab). Then its one action, New session (in
 // a workspace picked from its menu, which then uses the project by default),
 // and a menu for Refresh and Remove (RemoveDialog). The project (ProjectBoard)
 // fills the rest: Files' tree in a sidebar, File, History, Storage and
@@ -32,6 +32,7 @@ const NO_ITEMS = { items: [] as readonly Workspace[] }
 const NOT_LISTED = { getSnapshot: () => NO_ITEMS, subscribe: () => () => {} }
 
 const ROWS = `.lfs-switch, .lfs-chip { background: transparent; cursor: pointer; } .lfs-switch:hover, .lfs-switch[aria-expanded='true'], .lfs-chip:hover, .lfs-chip[aria-expanded='true'] { background: ${T.hover}; }
+.lfs-tab { border-radius: ${T.sm} ${T.sm} 0 0 !important; } .lfs-tab[aria-selected='true'] { box-shadow: inset 0 -2px 0 ${T.text}; } .lfs-tab[aria-selected='false'] { color: ${T.text2} !important; }
 .lfs-card:hover { box-shadow: inset 0 0 0 999px ${T.hover}; }
 .lfs-bone { border-radius: 4px; background: ${T.well}; animation: lfs-bone 1.2s ease-in-out infinite alternate; } @keyframes lfs-bone { to { opacity: .45; } }`
 
@@ -176,17 +177,14 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
     : [{ type: 'label', id: 'il', text: 'Add a workspace in dsh first' }]
   // the switcher: every project, then importing a new one
   const switchMenu: MenuEntry[] = [
-    { id: 'all', label: 'All projects · Sandboxes', icon: all ? <LayerFsIcon size={16} /> : undefined },
-    { type: 'separator', id: 'as' },
     ...(projects?.length ? [{ type: 'label', id: 'pl', text: 'Projects' } as MenuEntry] : []),
-    ...(projects ?? []).map((p) => ({ id: 'project:' + p.name, label: `${p.name} · ${p.empty ? 'empty' : short(p.source)}`, icon: !all && p.name === selected ? <LayerFsIcon size={16} /> : undefined })),
+    ...(projects ?? []).map((p) => ({ id: 'project:' + p.name, label: `${p.name} · ${p.empty ? 'empty' : short(p.source)}`, icon: p.name === selected ? <LayerFsIcon size={16} /> : undefined })),
     ...(projects?.length ? [{ type: 'separator', id: 'ps' } as MenuEntry] : []),
     ...importMenu,
   ]
   const onSwitch = (id: string) => {
     setMenuSwitch(false)
-    if (id === 'all') setAll(true)
-    else if (id.startsWith('project:')) { setAll(false); setOpenTab(undefined); setSelected(id.slice(8)) }
+    if (id.startsWith('project:')) { setAll(false); setOpenTab(undefined); setSelected(id.slice(8)) }
     else if (id.startsWith('import:')) { const w = items.find((x) => x.workspaceId === id.slice(7)); if (w) setInitFor(w) }
   }
   const switcher = (anchor: React.ReactElement) => <Menu open={menuSwitch} onClose={() => setMenuSwitch(false)} items={switchMenu} onSelect={onSwitch} align="start" portal anchor={anchor} />
@@ -208,14 +206,21 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
           <>
             <header style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
               <span style={{ display: 'flex', flex: 'none', color: T.text2 }}><LayerFsIcon size={20} /></span>
-              {switcher(
-                <button type="button" className="lfs-switch" aria-haspopup="menu" aria-expanded={menuSwitch} onClick={() => setMenuSwitch(!menuSwitch)} title="Switch project or import one"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: 320, padding: '0 6px', border: 0, borderRadius: T.sm, color: 'inherit', font: 'inherit', fontSize: 15, fontWeight: 500, lineHeight: '28px' }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{all || !project ? 'All projects' : project.name}</span>
-                  <span style={{ display: 'flex', flex: 'none', color: T.text2 }}><IconChevronDownOutlineRegular size={14} /></span>
-                </button>,
-              )}
-              {(all || !project) && <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: T.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Sandboxes · what they run on</span>}
+              <span role="tablist" aria-label="LayerFS" style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
+                {project && switcher(
+                  <button type="button" role="tab" aria-selected={!all} className="lfs-switch lfs-tab" aria-haspopup="menu" aria-expanded={menuSwitch}
+                    onClick={() => all ? setAll(false) : setMenuSwitch(!menuSwitch)} title={all ? `Back to ${project.name}` : 'Switch project or import one'}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: 320, padding: '0 6px', border: 0, borderRadius: T.sm, color: 'inherit', font: 'inherit', fontSize: 15, fontWeight: 500, lineHeight: '30px' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</span>
+                    <span style={{ display: 'flex', flex: 'none', color: T.text2 }}><IconChevronDownOutlineRegular size={14} /></span>
+                  </button>,
+                )}
+                <button type="button" role="tab" aria-selected={all || !project} className="lfs-switch lfs-tab" onClick={() => setAll(true)} title="Every project's Sandboxes and what they run on"
+                  style={{ flex: 'none', padding: '0 8px', border: 0, borderRadius: T.sm, color: 'inherit', font: 'inherit', fontSize: 15, fontWeight: 500, lineHeight: '30px', whiteSpace: 'nowrap' }}>
+                  All projects · Sandboxes
+                </button>
+              </span>
+              {(all || !project) && <span style={{ flex: 1 }} />}
               {!all && project && <>
               <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: T.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${project.empty ? 'started empty' : project.source} · volume ${project.volume}`}>
                 {project.empty ? 'started empty' : `from ${short(project.source)}`} · {day(project.created)}

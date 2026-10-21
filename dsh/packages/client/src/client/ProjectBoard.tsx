@@ -29,7 +29,7 @@ export function ProjectBoard({ name, state, status, tab }: { name: string, state
   const [storageError, setStorageError] = useState<string | null>(null)
   // the Sandboxes tab's element: the view shows it as the tab's page and keeps it across draws
   const sbxEl = useRef<HTMLDivElement>(null as unknown as HTMLDivElement)
-  if (!sbxEl.current) { sbxEl.current = document.createElement('div'); sbxEl.current.style.height = '100%' }
+  if (!sbxEl.current) { sbxEl.current = document.createElement('div'); sbxEl.current.className = 'lfs-own'; sbxEl.current.style.height = '100%' }
   const runtimeRef = useRef<ProjectRuntime | null>(null)
   const [runtime, setRuntime] = useState<ProjectRuntime | null>(null)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)

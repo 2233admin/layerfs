@@ -71,7 +71,7 @@ try {
   spec.migration = { kept: [{ sandbox: "shop_service", container: "layerfs-shop_service", workspaces: 1, reason: "1 mounted Workspace" }] };
   const kept = (await overview(spec, bindings, trees, collector)).leftovers;
   assert.equal(kept.length, 1);
-  assert.equal(kept[0].name, "layerfs-shop_service");
+  assert.equal(kept[0].name, "shop_service");
   assert.equal(kept[0].running, true);
   await trees.dispose();
   console.log("runtime: ok");

@@ -6,7 +6,7 @@ import { MAID_CSS } from "./skins/maids/style.js";
 export const CSS = `
 ${HEROES_CSS}
 .lfs, .lfs * { box-sizing: border-box; }
-.lfs button { font: inherit; color: inherit; }
+.lfs button:not(.lfs-own *) { font: inherit; color: inherit; } /* .lfs-own: a page the host draws with its own controls (Sandboxes) */
 /* title bar + tabs: the website's Branch tabs */
 .lfs .tabs { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-end; align-self: stretch; min-width: 0; flex: 1; padding: 8px 0 0; }
 .lfs .tab { min-height: 40px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; color: var(--text); white-space: nowrap; border: 1px solid transparent; border-bottom: 0; background: transparent; position: relative; font: 13px var(--mono); transition: opacity .4s, background .2s; margin-bottom: -1px; }

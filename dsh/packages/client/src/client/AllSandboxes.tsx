@@ -27,7 +27,7 @@ export function AllSandboxes({ onOpen }: { onOpen: (project: string) => void }) 
   const tile = (title: string, level: Overview['level'] | null, body: React.ReactNode, extra?: React.ReactNode) => (
     <div style={{ ...card, padding: '8px 10px', display: 'grid', gap: 2, minWidth: 0 }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.text2 }}>{level && <Dot level={level} />}{title}</span>
-      <span style={{ fontFamily: MONO, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{body}</span>
+      <span style={{ fontFamily: MONO, fontSize: 12.5, wordBreak: 'break-word' }}>{body}</span>
       {extra}
     </div>
   )
@@ -52,7 +52,7 @@ export function AllSandboxes({ onOpen }: { onOpen: (project: string) => void }) 
               (store.state === 'stopped' || store.state === 'missing') && view.engine.level === 'ok'
                 ? <span><Button variant="primary" size="sm" disabled={!!busy} onClick={() => void act('Starting layerfs-store…', api.startStore)}>Start layerfs-store</Button></span>
                 : null)}
-            {tile('Disk free', null, [view.disk.vm !== null ? `${bytes(view.disk.vm)} Docker` : null, view.disk.host !== null ? `${bytes(view.disk.host)} here` : null].filter(Boolean).join(' · ') || 'not read')}
+            {tile('Disk free', null, [view.disk.vm !== null ? `Docker ${bytes(view.disk.vm)}` : null, view.disk.host !== null ? `local ${bytes(view.disk.host)}` : null].filter(Boolean).join(' · ') || 'not read')}
           </div>
         )}
         {view && (
@@ -89,10 +89,12 @@ export function AllSandboxes({ onOpen }: { onOpen: (project: string) => void }) 
             <h4 style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase', color: T.caption }}>Leftovers</h4>
             <div style={{ ...card, display: 'grid' }}>
               {view.leftovers.map((l, i) => (
-                <div key={l.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderTop: i ? `1px solid ${T.border}` : 0 }}>
-                  <Dot level="degraded" />
-                  <span style={{ fontFamily: MONO }}>{l.name}</span>
-                  <span style={{ color: T.text2 }}>· {l.status}{l.project ? ` · project ${l.project}` : ''}</span>
+                <div key={l.name} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '6px 10px', borderTop: i ? `1px solid ${T.border}` : 0 }}>
+                  <span style={{ alignSelf: 'center', display: 'flex' }}><Dot level="degraded" /></span>
+                  <span style={{ minWidth: 0, wordBreak: 'break-word' }}>
+                    <span style={{ fontFamily: MONO }}>{l.name}</span>
+                    <span style={{ color: T.text2 }}> · {l.status}{l.project ? ` · project ${l.project}` : ''}</span>
+                  </span>
                 </div>
               ))}
               {stopped.length > 0 && (
