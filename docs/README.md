@@ -67,6 +67,7 @@
 - [Release policy](general/release-policy.md)
 - [Documentation policy](general/documentation-policy.md)
 - [Development workspace cleanup](general/cleanup.md): ownership checks, verified recovery, evidence retention, and disk-space reporting
+- [Parallel worktree development](general/parallel-worktrees.md): private Cargo resources, prepared dependencies, pinned SDK builds, and per-run Docker E2E state
 
 ## Explore
 
