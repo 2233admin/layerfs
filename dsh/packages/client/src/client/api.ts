@@ -40,16 +40,20 @@ export interface RuntimeWorkspace {
 /** A project's Sandboxes for its Sandboxes tab (GET /project/<name>/runtime). */
 export interface ProjectRuntime {
   project: string, simulated: boolean, level: Level
-  sandboxes: { id: string, name: string | null, capacity: number, workspaces: RuntimeWorkspace[], level: Level }[]
-  gone: { id: string, name: string | null }[]
+  sandboxes: ({ id: string, name: string | null, capacity: number, workspaces: RuntimeWorkspace[], level: Level } & SandboxImage)[]
+  gone: ({ id: string, name: string | null } & SandboxImage)[]
 }
+/** The image a Sandbox runs: its exact digest and first tag (Host runtime.js); one project's Sandboxes may differ. */
+export interface SandboxImage { image: string | null, imageName?: string | null }
+/** A Sandbox's image as shown: its tag, else the digest's first 12 hex digits. */
+export const imageLabel = (s: SandboxImage) => s.imageName ?? (s.image ? s.image.replace(/^sha256:/, '').slice(0, 12) : null)
 /** Every project's Sandboxes and the shared parts (GET /runtime). */
 export interface Overview {
   level: Level
   engine: { level: Level, version?: string, error?: string }
   store: { level: Level, state: 'running' | 'stopped' | 'missing' | 'unknown', name: string, build?: string, expected?: string, startedAt?: string, answering?: boolean } | null
   disk: { host: number | null, vm: number | null }
-  projects: { name: string, simulated: boolean, containers: number, sandboxes: { id: string, name: string | null, used: number, capacity: number, level: Level }[], workspaces: number, level: Level, note: string | null }[]
+  projects: { name: string, simulated: boolean, containers: number, sandboxes: ({ id: string, name: string | null, used: number, capacity: number, level: Level } & SandboxImage)[], workspaces: number, level: Level, note: string | null }[]
   leftovers: { name: string, project: string, running: boolean, status: string }[]
   totals: { projects: number, sandboxes: number, workspaces: number }
 }

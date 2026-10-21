@@ -6,7 +6,7 @@
 // running in that Workspace is disabled; one that loses work asks first.
 import { useState } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { api, type ProjectRuntime, type RuntimeWorkspace } from './api.ts'
+import { api, imageLabel, type ProjectRuntime, type RuntimeWorkspace } from './api.ts'
 import { Dot, Meter, span, wsName } from './runtimeParts.tsx'
 import { card, T } from './tokens.ts'
 
@@ -44,6 +44,7 @@ export function SandboxesTab({ name, runtime, error, reload }: { name: string, r
               <Dot level={sb.level} />
               <b style={{ fontWeight: 600, fontFamily: 'var(--mono, ui-monospace, monospace)' }}>{sb.name ?? `Sandbox ${sb.id}`}</b>
               <span style={{ color: T.text2 }}>{sb.workspaces.length ? 'running' : 'idle · closes by itself'}</span>
+              {sb.image && <span title={sb.image} style={{ color: T.text2, fontFamily: 'var(--mono, ui-monospace, monospace)', fontSize: 11 }}>image {imageLabel(sb)}</span>}
               <span style={{ flex: 1 }} />
               <span style={{ color: T.text2 }}>{sb.workspaces.length}/{sb.capacity}</span>
               <Meter used={sb.workspaces.length} capacity={sb.capacity} />

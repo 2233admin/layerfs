@@ -32,10 +32,10 @@ export async function snapshot(client, since) {
     kind: "ok", version, project: history.project, store: history.store,
     branches: history.branches, moreBranches: history.moreBranches, commits: history.commits, more: history.more,
     layers: history.layers, moreLayers: history.moreLayers,
-    sandboxes: listed.flatMap(({ id, name }, index) => reads[index].answer ? [{
-      id, name, status: "Ready",
+    sandboxes: listed.flatMap(({ id, name, image }, index) => reads[index].answer ? [{
+      id, name, image, status: "Ready",
       workspaces: reads[index].answer.workspaces.map((workspace) => ({ ...workspace, sandbox: id, path: workspace.directory })),
     }] : []),
-    gone: listed.flatMap(({ id, name }, index) => reads[index].answer ? [] : [{ id, name, detail: reads[index].gone }]),
+    gone: listed.flatMap(({ id, name, image }, index) => reads[index].answer ? [] : [{ id, name, image, detail: reads[index].gone }]),
   };
 }

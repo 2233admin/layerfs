@@ -49,9 +49,9 @@ export function projectRuntime(trees, collector, project, now = Date.now()) {
         };
       });
       const full = workspaces.length >= CAPACITY;
-      return { id: sb.id, name: sb.name ?? null, capacity: CAPACITY, workspaces, level: worst([full ? "degraded" : "ok", ...workspaces.map((w) => w.level)]) };
+      return { id: sb.id, name: sb.name ?? null, image: sb.image ?? null, capacity: CAPACITY, workspaces, level: worst([full ? "degraded" : "ok", ...workspaces.map((w) => w.level)]) };
     });
-    const gone = (snap.gone ?? []).map(({ id, name }) => ({ id, name: name ?? null }));
+    const gone = (snap.gone ?? []).map(({ id, name, image }) => ({ id, name: name ?? null, image: image ?? null }));
     return { project: project.name, simulated: isSim(project), sandboxes, gone, level: worst([...sandboxes.map((s) => s.level), gone.length ? "degraded" : "ok"]) };
   });
 }
@@ -70,7 +70,7 @@ export async function overview(spec, bindings, trees, collector) {
     if (!own.some((c) => c.running) && !card.simulated) return card;
     try {
       const r = await projectRuntime(trees, collector, p);
-      card.sandboxes = r.sandboxes.map((s) => ({ id: s.id, name: s.name, used: s.workspaces.length, capacity: s.capacity, level: s.level }));
+      card.sandboxes = r.sandboxes.map((s) => ({ id: s.id, name: s.name, image: s.image, used: s.workspaces.length, capacity: s.capacity, level: s.level }));
       card.workspaces = r.sandboxes.reduce((n, s) => n + s.workspaces.length, 0);
       card.level = r.level;
       const left = r.sandboxes.flatMap((s) => s.workspaces).filter((w) => w.level !== "ok");
@@ -87,6 +87,7 @@ export async function overview(spec, bindings, trees, collector) {
   // older Sandboxes the startup cleanup kept because they may hold work (migrate.js): yours to commit or discard, then remove
   for (const k of spec.migration?.kept ?? [])
     if (!leftovers.some((l) => l.name === k.container)) leftovers.push({ name: k.sandbox, project: "", running: true, status: `older Sandbox (container ${k.container.slice(0, 12)}), kept: ${k.reason}` });
+  if (engine.level === "ok") await nameImages(spec, cards.flatMap((c) => c.sandboxes));
   const sandboxes = cards.reduce((n, c) => n + c.sandboxes.length, 0), workspaces = cards.reduce((n, c) => n + c.workspaces, 0);
   return {
     level: worst([engine.level, store?.level ?? "ok", leftovers.length ? "degraded" : "ok"]),
@@ -138,6 +139,24 @@ export async function cleanLeftovers(spec, bindings, names) {
 
 async function engineState(spec) {
   try { return { level: "ok", version: await docker(spec, "version", "--format", "{{.Server.Version}}") }; } catch (error) { return { level: "down", error: error.stderr?.trim() || error.message }; }
+}
+
+/** Gives each Sandbox (`{ image }`, an exact digest; one project's may differ) its `imageName`: the
+ * image's first tag, else null. One `docker image inspect` for all; an image Docker no longer has stays unnamed. */
+export async function nameImages(spec, sandboxes) {
+  const digests = [...new Set(sandboxes.map((s) => s.image).filter(Boolean))];
+  const names = new Map();
+  if (digests.length) {
+    let out;
+    // a missing image fails the command, yet the found ones are on stdout
+    try { out = await docker(spec, "image", "inspect", "-f", "{{.Id}}\t{{join .RepoTags \",\"}}", ...digests); } catch (error) { out = String(error.stdout ?? ""); }
+    for (const row of out.split("\n").filter(Boolean)) {
+      const [id, tags] = row.split("\t");
+      names.set(id, tags?.split(",").filter(Boolean)[0] ?? null);
+    }
+  }
+  for (const s of sandboxes) s.imageName = names.get(s.image) ?? null;
+  return sandboxes;
 }
 
 /** This home's Sandbox containers (named `<prefix><project>-<n>`), running or not. */

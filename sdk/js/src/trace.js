@@ -55,12 +55,12 @@ function committed(method, value) {
 }
 
 /** Result ids a viewer needs to follow a call: the Branch and head a fork or
- * merge made, the Workspace a mount made (its Sandbox and path), and an
+ * merge made, the Workspace a mount made (its Sandbox, path and image), and an
  * exec's process or exit code. Ids and numbers only, never output text. */
 const RESULT_IDS = {
   "branch.fork": ["branch", "base", "head"],
   "branch.merge": ["branch", "head"],
-  "workspace.mount": ["sandbox", "path", "branch", "base", "baseLayer"],
+  "workspace.mount": ["sandbox", "path", "image", "branch", "base", "baseLayer"],
 };
 
 function results(method, args, value) {

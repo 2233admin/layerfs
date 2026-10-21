@@ -30,7 +30,7 @@ import { prepareInit, runInit } from "./init.js";
 import { InitJobs } from "./jobs.js";
 import { READS } from "./reads.js";
 import { removeProject } from "./remove.js";
-import { cleanLeftovers, overview, projectAction, projectRuntime, startStore } from "./runtime.js";
+import { cleanLeftovers, nameImages, overview, projectAction, projectRuntime, startStore } from "./runtime.js";
 
 const PREFIX = "/layerfs";
 const MAX_BODY = 64 * 1024;
@@ -105,7 +105,11 @@ export function registerRoutes(ctx, { spec, bindings, collector, trees, jobs = n
         if (req.method === "GET" && parts[2] === "state") return send(res, 200, { ...(await trees.state(project)), ...collector.nodesOf(project.name) });
         if (req.method === "GET" && Object.hasOwn(READS, parts[2])) return send(res, 200, await trees.files(project, parts[2], url.searchParams));
         if (req.method === "GET" && parts[2] === "storage") return send(res, 200, await trees.storage(project));
-        if (req.method === "GET" && parts[2] === "runtime") return send(res, 200, await projectRuntime(trees, collector, project));
+        if (req.method === "GET" && parts[2] === "runtime") {
+          const runtime = await projectRuntime(trees, collector, project);
+          await nameImages(spec, [...runtime.sandboxes, ...runtime.gone]);
+          return send(res, 200, runtime);
+        }
         if (req.method === "POST" && parts[2] === "runtime") return send(res, 200, await projectAction(trees, collector, project, await readJson(req)));
         if (req.method === "POST" && parts[2] === "remove") {
           const body = await readJson(req);

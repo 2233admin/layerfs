@@ -5,7 +5,7 @@
 // project owns: start a stopped Store container, remove stopped leftovers.
 import { useState } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { api, type Overview } from './api.ts'
+import { api, imageLabel, type Overview } from './api.ts'
 import { Dot, Meter, POLL_MS, usePoll } from './runtimeParts.tsx'
 import { bytes } from './storage.ts'
 import { card, T } from './tokens.ts'
@@ -75,6 +75,7 @@ export function AllSandboxes({ onOpen }: { onOpen: (project: string) => void }) 
                   {p.sandboxes.map((s) => (
                     <span key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: MONO, fontSize: 11, color: T.text2 }}>
                       <span style={{ minWidth: 26 }}>-{s.id}</span><Meter used={s.used} capacity={s.capacity} /><span>{s.used}/{s.capacity}</span>
+                      {s.image && <span title={s.image} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{imageLabel(s)}</span>}
                     </span>
                   ))}
                   {!p.sandboxes.length && <span style={{ fontSize: 11.5, color: T.caption }}>Idle · starts one on the next mount</span>}

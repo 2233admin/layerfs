@@ -242,8 +242,10 @@ The public `sandbox` group (`create`, `mount`, `exec`, `status`, `commit`,
 `exec(ws, command, message?)`, `status(ws)`, `commit(ws, message?, force?)`,
 `unmount(ws, discard?)`. A Workspace is `{ sandbox, path }`. The binding
 places each mount in the project's numbered Sandboxes under the project's
-placement lock (the lowest-numbered running one with fewer than 16
-Workspaces, else the next number), and a Sandbox's daemon ends itself after
+placement lock (the lowest-numbered running one of the mount's image,
+`deploy.image` or the mount's `{ image }`, with fewer than 16 Workspaces, else
+the next number on that image; one project's Sandboxes may run different
+images, and the mount result and `operator.sandbox.list` give each `image`), and a Sandbox's daemon ends itself after
 two idle minutes; the next mount or `operator.sandbox.list` reclaims it.
 There is no service Sandbox and no `operator.sandbox.service`; Import starts
 no Sandbox. Operator `process.start(ws, command)`, project-wide

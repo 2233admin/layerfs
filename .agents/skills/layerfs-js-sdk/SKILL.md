@@ -99,8 +99,10 @@ Commit, so for one small read or edit prefer `fs.*`.
   pass it to `exec`, `status`, `commit` and `unmount`. Two mounts of one Branch are two
   separate Workspaces, and a Workspace is never valid after its unmount.
 - **LayerFS places Workspaces.** A project's Sandboxes are numbered `1`, `2`, …, each a
-  container holding up to 16 Workspaces. A mount takes the lowest-numbered running
-  Sandbox with room and starts the next one when every one is full. A Sandbox closes
+  container holding up to 16 Workspaces on one image (`LAYERFS_IMAGE`, or a mount's
+  `{ image }`; one project's Sandboxes may differ). A mount takes the lowest-numbered
+  running Sandbox of its image with room and starts the next one when every such one
+  is full. A Sandbox closes
   itself two minutes after its last Workspace is unmounted. You never create, pick or
   close a Sandbox.
 - **Inside a command, use relative paths.** `exec` starts in the Workspace root, so

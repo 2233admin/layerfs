@@ -18,8 +18,10 @@ a mounted Workspace of the Branch `"work"`, as `mount` returned it.
   path there. It persists: any later process with the same `LAYERFS_HOME` can use it.
 - **LayerFS places Workspaces.** A project's Sandboxes are numbered `1`, `2`, …; each is
   a container with one LayerFS daemon and holds up to 16 Workspaces, of any Branches of
-  the project. `mount` takes the lowest-numbered running Sandbox with room and starts
-  the next one when every one is full. You never create, pick or close a Sandbox.
+  the project. Each runs one image, and one project's Sandboxes may run different
+  images. `mount` takes the lowest-numbered running Sandbox of the mount's image with
+  room and starts the next one, on that image, when every such one is full. You never
+  create, pick or close a Sandbox.
 - **A Sandbox closes itself when idle:** its daemon ends two minutes after its last
   Workspace is unmounted, with no call in flight. The next mount or
   `operator.sandbox.list()` reclaims it, and its number is used again.
@@ -62,7 +64,7 @@ try {
 }
 ```
 
-## `workspace.mount(branch)`
+## `workspace.mount(branch, options?)`
 
 Mounts a Workspace showing the Branch head at this moment, in a Sandbox LayerFS
 places it in. Doesn't scan or copy the tree.
@@ -70,9 +72,10 @@ places it in. Doesn't scan or copy the tree.
 | Arg | Type | Required | Meaning |
 | --- | --- | --- | --- |
 | `branch` | string | yes | Branch to mount. Not `main`: fork a Branch from it |
+| `options.image` | string | no | The Sandbox image, an exact local digest `sha256:<64 hex>`; default `LAYERFS_IMAGE`. Only a Sandbox of this image is used |
 
-**Returns:** the Workspace, `{ sandbox, path }`, such as
-`{ sandbox: "1", path: "/workspaces/1" }`. Pass it to `exec`, `status`, `commit` and
+**Returns:** the Workspace, `{ sandbox, path, image }`, such as
+`{ sandbox: "1", path: "/workspaces/1", image: "sha256:…" }`. Pass it to `exec`, `status`, `commit` and
 `unmount`; `status` tells which Commit it shows.
 
 **Refusals**
