@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Builds the dsh LayerFS tab's agent avatars from the sharky_maid assets.
 
-Usage: python3 sdk_sim/avatars/build.py [path/to/dsh/assets/sharky_maid]
+Usage: python3 dsh/sim/avatars/build.py [path/to/dsh/assets/sharky_maid]
 
 Reads the 512x512 transparent PNGs (one folder per character) and writes,
 next to this script:

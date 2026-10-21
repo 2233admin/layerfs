@@ -5,8 +5,8 @@
 // reads here. Under it the status bar: the project's facts, when the page
 // gives them, and the Store's size, which opens Storage.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import FM from '../../../../../sdk_sim/simulation_engine/files.js'
-import M from '../../../../../sdk_sim/simulation_engine/model.js'
+import FM from '../../../../sim/simulation_engine/files.js'
+import M from '../../../../sim/simulation_engine/model.js'
 import { createFilesSource, createView, injectStyle } from '../../../view/src/index.js'
 import { api, type ProjectState, type Storage } from './api.ts'
 import { CASTS, MAID_AVATARS } from './avatars.ts'

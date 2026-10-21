@@ -85,7 +85,7 @@ export async function runCall(W, st, env) {
 }
 
 // ------------------------------------------------------------------ demo stories
-// A demo story (sdk_sim/demo.js) plays through the simulation engine's
+// A demo story (dsh/sim/demo.js) plays through the simulation engine's
 // terminal (terminal.js Engine), so its outcomes are the engine's.
 // dsh adds which agent made each call. An agent step is one Bash tool call:
 // mount a Workspace in the Branch's shared Sandbox, run, commit, unmount.

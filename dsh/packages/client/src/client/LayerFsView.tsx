@@ -4,8 +4,8 @@
 // at its own time, a moment behind the run (playback.ts). A demo's speed is
 // set on its demo strip (DemoStrip.tsx), not here.
 import { useEffect, useRef, useState } from 'react'
-import FM from '../../../../../sdk_sim/simulation_engine/files.js'
-import M from '../../../../../sdk_sim/simulation_engine/model.js'
+import FM from '../../../../sim/simulation_engine/files.js'
+import M from '../../../../sim/simulation_engine/model.js'
 import * as X from '../../../model/src/index.js'
 import { createFilesSource, createView, injectStyle } from '../../../view/src/index.js'
 import { api, type ProjectState, type SessionView } from './api.ts'

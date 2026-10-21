@@ -9,7 +9,7 @@
 // Colours, borders and radii are dsh's own tokens (--dsw-*, tokens.ts).
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { Button, IconChevronDownOutlineRegular, IconEllipsisOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular, IconTrashOutlineRegular, Menu, type MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
-import ellen from '../../../../../sdk_sim/avatars/ellen_joe.gif'
+import ellen from '../../../../sim/avatars/ellen_joe.gif'
 import { api, type Project, type ProjectState, type Status } from './api.ts'
 import { InitDialog } from './InitDialog.tsx'
 import { ProjectBoard } from './ProjectBoard.tsx'

@@ -40,7 +40,7 @@ With the bundle, agents in a dsh session work on a LayerFS project from bash, th
 | Renderer | `@dsh-layerfs/view` | used by the client |
 | Mock model `layerfs-mock` (demo bundle `dsh-layerfs-demo`) | `@dsh-layerfs/mock` | "LayerFS mock · …" models in the model picker |
 
-The LayerFS tab is the only LayerFS UI. The standalone HTML pages that used to live in `sdk_sim/` (the terminal UI page and its design preview) and their live server are removed; do not build or revive a standalone HTML or TUI page. `sdk_sim/` keeps only the simulation engine: `simulation_engine/model.js` and `files.js`, which the client and the Host import, the terminal engine (`terminal.js`, `backend/sim.js`) and demo stories (`demo.js`) that the demos were written from, and the avatars (`avatars/`).
+The LayerFS tab is the only LayerFS UI. The standalone HTML pages that used to live in the root `sdk_sim/` (the terminal UI page and its design preview) and their live server are removed; do not build or revive a standalone HTML or TUI page. What remains, the simulation engine, lives in [`sim/`](sim/): `simulation_engine/model.js` and `files.js`, which the client and the Host import, the terminal engine (`terminal.js`, `backend/sim.js`) and demo stories (`demo.js`) that the demos were written from, and the avatars (`avatars/`).
 
 ### 🔌 Host plugin
 
@@ -168,7 +168,7 @@ A root step may carry `checkpoint: { label, verdict?, note?, restore? }` (#352):
 
 `@name` in an argument is a subagent or job started earlier. A subagent's `description` is its name in the scenario. `order` places the demo in lists and `speed` sets how fast the mock runs it at first. Every scenario's `fixture` is `demo-workspace/`, the shared website; its install, build, test and serve are small shell scripts, not npm: test checks each page's heading and that every `@/…` import resolves, and serve answers each page's heading on localhost:3000 (with python3). The sandbox demo's scripts keep their notes between bash calls under `<temp>/dsh-layerfs/demo-notes/<project>/`, outside the workspace folder, because Init imports everything in it.
 
-The tour, conflicts, merge and agents demos are the simulation engine's demo stories ([`sdk_sim/demo.js`](../sdk_sim/demo.js)) step for step: each step is one bash call of [`scenarios/shared/terminal.mjs`](scenarios/shared/terminal.mjs), which makes the same SDK calls as that step's terminal line and prints what the terminal printed (`npm ci`, `npm run build`, `npm test` and `npm run start` become the shell scripts). An agent's call mounts a Workspace of its own in its Branch's shared Sandbox, runs, commits and unmounts; after a Conflict the Workspace is kept for the agent's next call, and a trailing `&` keeps it for the server. The lead wakes the agents of each step with send_message and waits for them; each agent's pause is the story's thinking time, and the call takes its typing and running time, so a burst's calls overlap and commit in the same order as in the story's schedule. The calls keep their notes (a terminal's Workspace, an agent's kept one, the C<n> labels) under the project's LayerFS home entry, which is removed with the project.
+The tour, conflicts, merge and agents demos are the simulation engine's demo stories ([`sim/demo.js`](sim/demo.js)) step for step: each step is one bash call of [`scenarios/shared/terminal.mjs`](scenarios/shared/terminal.mjs), which makes the same SDK calls as that step's terminal line and prints what the terminal printed (`npm ci`, `npm run build`, `npm test` and `npm run start` become the shell scripts). An agent's call mounts a Workspace of its own in its Branch's shared Sandbox, runs, commits and unmounts; after a Conflict the Workspace is kept for the agent's next call, and a trailing `&` keeps it for the server. The lead wakes the agents of each step with send_message and waits for them; each agent's pause is the story's thinking time, and the call takes its typing and running time, so a burst's calls overlap and commit in the same order as in the story's schedule. The calls keep their notes (a terminal's Workspace, an agent's kept one, the C<n> labels) under the project's LayerFS home entry, which is removed with the project.
 
 #### The demo workspace
 
@@ -195,7 +195,7 @@ The Host side is the mock plugin's `/layerfs-demo` route. It serves the workspac
 
 Sim needs no Docker, image or daemon. `POST /layerfs/init` with `backend: "sim"` imports the folder into the simulator (`packages/host/src/sim/`) instead of a Store. A simulated project's bash calls get the SDK on the simulator as `DSH_LAYERFS_SDK`, so the same scripts run on both:
 - `sim/sdk.js` is the SDK itself with `LAYERFS_NATIVE` set to `sim/binding.js`, a native binding in JavaScript. The SDK's argument checks, refusals and trace lines are unchanged.
-- The binding's decisions (Commits, stale Workspaces, merges, conflict markers, `.lww`, publish) are `sdk_sim`'s model. Its answers have the real binding's shapes and LayerFS's id formats, so the views and checks read both alike.
+- The binding's decisions (Commits, stale Workspaces, merges, conflict markers, `.lww`, publish) are the simulation engine's model (`sim/`). Its answers have the real binding's shapes and LayerFS's id formats, so the views and checks read both alike.
 - The state is `<LayerFS home>/<project>/sim/state.json`, changed by one call at a time under a lock file.
 - A mounted Workspace is a folder, `sim/ws/<sandbox>/<n>`. Commands run there with `/bin/sh`, and each call reads the folder back. On macOS a GNU-compatible `sed` (`sim/sed.js`) comes first on the command's PATH.
 - Background processes run detached and leave their exit code in `sim/proc/`. Removing the project stops them.
@@ -204,7 +204,7 @@ The Host's own reads of a simulated project (Init, state, trees, storage) go to 
 
 Known limits:
 - dsh's sidebar orders sessions by last activity by default, so the demo played last moves to the top. The manual order keeps each demo's place.
-- Sim imports the `sdk_sim` model from this repository, so the Host package needs the repository beside it to Init or read a simulated project.
+- Sim imports the simulation engine's model from `dsh/sim/`, so the Host package needs this `dsh/` tree beside it to Init or read a simulated project.
 - `demo-workspace` is inside this repository. A turn's "Edited" card lists every change made in the repository during the turn, including other work in the checkout.
 
 ## 📦 Install into a dsh profile

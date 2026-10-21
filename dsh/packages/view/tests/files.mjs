@@ -9,8 +9,8 @@ import { createFiles } from "../src/files.js";
 import { createFilesSource } from "../src/filesource.js";
 
 const require = createRequire(import.meta.url);
-const FM = require("../../../../sdk_sim/simulation_engine/files.js");
-const M = require("../../../../sdk_sim/simulation_engine/model.js");
+const FM = require("../../../sim/simulation_engine/files.js");
+const M = require("../../../sim/simulation_engine/model.js");
 
 const L0 = "a".repeat(64), C1 = "12" + "1".repeat(64), C2 = "12" + "2".repeat(64);
 // the Host's answers by kind and query; anything else is a test failure
