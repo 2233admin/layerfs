@@ -35,6 +35,26 @@ impl Sandbox {
         Ok(owner)
     }
 
+    /// An exact saved container that [`Self::reopen`] observed stopped
+    /// ([`WireFailure::container_stopped`]): only its one Delete is admitted.
+    /// The Engine refuses that Delete if the container runs again meanwhile.
+    pub fn stopped(docker: super::Docker, id: ContainerId, request: super::SandboxRequest) -> Self {
+        Self {
+            docker,
+            id,
+            request,
+            upload_attempted: true,
+            uploaded: true,
+            start_attempted: true,
+            started: true,
+            listen_attempted: true,
+            stop_attempted: true,
+            stopped: true,
+            delete_attempted: false,
+            deleted: false,
+        }
+    }
+
     /// Observes one exact running container and its single expected loopback port mapping.
     /// Neither port allocation nor Running is filesystem Ready.
     pub fn endpoint(&self) -> Result<SocketAddr, Box<WireFailure>> {
@@ -193,6 +213,16 @@ impl Sandbox {
                 Ok(())
             })?;
             j.finish()?;
+            // the exact recorded container, intact but not running: its daemon
+            // and every mount in it are gone (Docker restarted, for instance)
+            if observed == Some(self.id)
+                && fields == 127
+                && image
+                && topology
+                && running == Some(false)
+            {
+                return Err(RuntimeError::Protocol(crate::types::STOPPED));
+            }
             if observed != Some(self.id)
                 || fields != 127
                 || !image

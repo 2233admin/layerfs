@@ -62,41 +62,65 @@ fn home() -> PathBuf {
 
 /// The Engine at `home/docker.sock`, answering one request with `status` and `body`.
 fn engine(home: &Path, status: u16, body: &str) -> JoinHandle<String> {
+    let engine = engines(home, vec![(status, body.to_owned())]);
+    thread::spawn(move || engine.join().unwrap().remove(0))
+}
+
+/// The Engine at `home/docker.sock`, answering each request, one connection
+/// each, with the next `(status, body)`; it returns their request heads.
+fn engines(home: &Path, responses: Vec<(u16, String)>) -> JoinHandle<Vec<String>> {
     let listener = UnixListener::bind(home.join("docker.sock")).unwrap();
     listener.set_nonblocking(true).unwrap();
-    let response = format!(
-        "HTTP/1.1 {status} test\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
-        body.len()
-    );
     thread::spawn(move || {
         let deadline = Instant::now() + Duration::from_secs(3);
-        let stream = loop {
-            match listener.accept() {
-                Ok((stream, _)) => break stream,
-                Err(e)
-                    if e.kind() == std::io::ErrorKind::WouldBlock && Instant::now() < deadline =>
-                {
-                    thread::sleep(Duration::from_millis(2))
+        let mut requests = Vec::new();
+        for (status, body) in responses {
+            let response = format!(
+                "HTTP/1.1 {status} test\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            );
+            let stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(e)
+                        if e.kind() == std::io::ErrorKind::WouldBlock
+                            && Instant::now() < deadline =>
+                    {
+                        thread::sleep(Duration::from_millis(2))
+                    }
+                    Err(e) => panic!("bounded engine admission: {e}"),
                 }
-                Err(e) => panic!("bounded engine admission: {e}"),
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut request = String::new();
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap() == 0 || line == "\r\n" {
+                    break;
+                }
+                request.push_str(&line);
             }
-        };
-        stream.set_nonblocking(false).unwrap();
-        stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
-            .unwrap();
-        let mut reader = BufReader::new(stream.try_clone().unwrap());
-        let mut request = String::new();
-        loop {
-            let mut line = String::new();
-            if reader.read_line(&mut line).unwrap() == 0 || line == "\r\n" {
-                break;
-            }
-            request.push_str(&line);
+            (&stream).write_all(response.as_bytes()).unwrap();
+            requests.push(request);
         }
-        (&stream).write_all(response.as_bytes()).unwrap();
-        request
+        requests
     })
+}
+
+/// The container's system-call filter as the Engine carries it inside a JSON string.
+const SECCOMP: &str = r#"seccomp={\"defaultAction\":\"SCMP_ACT_ALLOW\",\"syscalls\":[{\"names\":[\"unshare\",\"clone\"],\"action\":\"SCMP_ACT_ERRNO\",\"errnoRet\":1,\"args\":[{\"index\":0,\"value\":268435456,\"valueTwo\":268435456,\"op\":\"SCMP_CMP_MASKED_EQ\"}]},{\"names\":[\"clone3\"],\"action\":\"SCMP_ACT_ERRNO\",\"errnoRet\":38}]}"#;
+
+/// The Engine's inspection of CID after its process exited (Docker
+/// restarted): the recorded deployment, intact, not running, no port published.
+fn exited() -> String {
+    let image = format!("sha256:{}", "a".repeat(64));
+    format!(
+        r#"{{"Id":"{CID}","Image":"{image}","State":{{"Running":false,"Paused":false,"Restarting":false,"Dead":false}},"Config":{{"User":"0:0","Tty":false,"Entrypoint":["/usr/local/bin/layerfs-daemon"],"Cmd":["--config","/layerfs-local/config/daemon.setup"]}},"HostConfig":{{"Init":true,"Privileged":false,"CapAdd":["CAP_SYS_ADMIN"],"Devices":[{{"PathOnHost":"/dev/fuse","PathInContainer":"/dev/fuse","CgroupPermissions":"rwm"}}],"SecurityOpt":["no-new-privileges=true","apparmor=unconfined","{SECCOMP}"],"RestartPolicy":{{"Name":"no"}},"LogConfig":{{"Type":"json-file"}}}},"Mounts":[{{"Type":"volume","Name":"lfs-test-borrowed","Destination":"/layerfs-store","RW":true,"Driver":"local"}}],"NetworkSettings":{{"Ports":{{}}}}}}"#
+    )
 }
 
 fn args(home: &Path) -> SdkValue {
@@ -149,8 +173,62 @@ fn another_404_is_a_failure_that_removes_nothing() {
 fn a_name_created_again_with_another_container_is_left_alone() {
     let home = home();
     let other = "c".repeat(64);
-    let refusal = close_gone(&args(&home), &other).unwrap_err();
+    let refusal = close_gone(&args(&home), &other, false).unwrap_err();
     assert_eq!(refusal.code, "Busy");
+    assert!(home
+        .join("_sandboxes")
+        .join(ID)
+        .join("sandbox.record")
+        .exists());
+    assert!(home.join("proj").join("service.record").exists());
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+#[test]
+fn a_stopped_container_is_refused_as_gone_then_closed_by_deleting_it() {
+    let home = home();
+    let engine = engine(&home, 200, &exited());
+    let refusal = crate::discovery::reopen(&args(&home)).err().unwrap();
+    engine.join().unwrap();
+    assert_eq!(refusal.code, "NoSuchSandbox");
+    assert!(matches!(
+        refusal.detail.get("containerGone"),
+        Some(SdkValue::Bool(true))
+    ));
+    assert!(matches!(
+        refusal.detail.get("containerStopped"),
+        Some(SdkValue::Bool(true))
+    ));
+    assert_eq!(
+        crate::discovery::gone_container(&refusal),
+        Some((CID, true))
+    );
+
+    std::fs::remove_file(home.join("docker.sock")).unwrap();
+    let engine = engines(&home, vec![(200, exited()), (204, String::new())]);
+    let closed = close(&args(&home)).unwrap();
+    assert_eq!(closed.get_text("kind"), Some("Closed"));
+    let requests = engine.join().unwrap();
+    assert!(requests[0].starts_with(&format!("GET /v1.54/containers/{CID}/json")));
+    assert!(requests[1].starts_with(&format!(
+        "DELETE /v1.54/containers/{CID}?force=false&v=false"
+    )));
+    assert!(
+        !home.join("_sandboxes").join(ID).exists(),
+        "its name is free again"
+    );
+    assert!(!home.join("proj").join("service.record").exists());
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+#[test]
+fn a_stopped_container_the_engine_will_not_delete_keeps_its_records() {
+    let home = home();
+    let running = r#"{"message":"cannot remove container: container is running"}"#;
+    let engine = engines(&home, vec![(200, exited()), (409, running.to_owned())]);
+    let refusal = close(&args(&home)).unwrap_err();
+    assert_eq!(refusal.code, "Failed");
+    assert_eq!(engine.join().unwrap().len(), 2);
     assert!(home
         .join("_sandboxes")
         .join(ID)

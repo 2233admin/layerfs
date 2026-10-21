@@ -385,10 +385,11 @@ fn abandon(directory: &Path, id: &str, mut failure: Box<SandboxFailure>) -> SdkR
 /// `sandbox.close(sandbox)`: refused while Workspaces are mounted or an
 /// operation still holds the Sandbox; then stop and delete the container. A
 /// container the Engine no longer has is already gone: its records go alone.
+/// A stopped one (its daemon exited, and every mount with it) is deleted first.
 pub(crate) fn close(args: &SdkValue) -> Outcome {
     let state = match sandbox_refreshed(args) {
         Err(refusal) => match crate::discovery::gone_container(&refusal) {
-            Some(container) => return close_gone(args, container),
+            Some((container, stopped)) => return close_gone(args, container, stopped),
             None => return Err(refusal),
         },
         Ok(state) => state,
@@ -432,11 +433,13 @@ pub(crate) fn close(args: &SdkValue) -> Outcome {
     forget(&owned.directory, &id, project)
 }
 
-/// Closes a Sandbox whose container the Engine no longer has (reopen refused
-/// it as gone): nothing runs it, so only its records go, under the same locks
-/// as any close. The record is read again under them: a Sandbox created again
-/// under the name meanwhile has another container and is left alone.
-fn close_gone(args: &SdkValue, container: &str) -> Outcome {
+/// Closes a Sandbox whose container no longer runs it (reopen refused it as
+/// gone or stopped): its records go, under the same locks as any close, after
+/// one unforced Delete of a stopped container. The record is read again under
+/// them: a Sandbox created again under the name meanwhile has another
+/// container and is left alone. A Delete the Engine refuses (the container
+/// runs again) removes nothing.
+fn close_gone(args: &SdkValue, container: &str, stopped: bool) -> Outcome {
     let id = text(args, "sandbox")?;
     let directory = crate::discovery::sandbox_dir(args, id)?;
     let _guard = crate::discovery::guard(&directory)?;
@@ -452,6 +455,14 @@ fn close_gone(args: &SdkValue, container: &str) -> Outcome {
         ));
     }
     let project = project_guard(args, id, text(&value, "project")?)?;
+    if stopped {
+        let (docker, selector, request) = crate::discovery::runtime(&value)?;
+        match layerfs_sandbox::backend::docker::Sandbox::stopped(docker, selector, request).delete()
+        {
+            Err(failure) if !failure.container_gone() => return Err(failed(failure)),
+            _ => {}
+        }
+    }
     forget(&directory, id, project)
 }
 

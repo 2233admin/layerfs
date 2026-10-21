@@ -372,6 +372,15 @@ project and its history are unaffected.
 
 **Refusals:** `MountsActive` (unmount every Workspace first), `Busy`, `NoSuchSandbox`.
 
+A Sandbox whose container no longer runs it refuses every call, close aside, as
+`NoSuchSandbox` with `detail.containerGone: true`: Docker no longer has the
+container (removed outside LayerFS), or has it stopped (`detail.containerStopped:
+true`, after Docker restarted, for instance). A stopped container's daemon has
+exited and taken every mount with it, so it is never used again. `sandbox.close`
+still frees the name: it deletes a stopped container (unforced, once; refused
+`Failed` and nothing removed if the container runs again) and removes the records.
+The failing call is not resent; call it again after close (or a new `create`).
+
 When `LAYERFS_TRACE` is set, preserve the daemon log **before** this call: on the
 host, save `docker logs <container-id> > <run>/daemon-<container-id>.log 2>&1`,
 where `<container-id>` is `$(cat $LAYERFS_HOME/_sandboxes/<id>/container)` and `<run>`

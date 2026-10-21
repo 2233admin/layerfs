@@ -114,9 +114,13 @@ by that path. Close removes the Sandbox's record directory, so its name can be
 created again. Close takes its locks before it removes anything: a named
 Sandbox needs only its own, the service Sandbox also its project's. A close
 refused as `Busy` has removed nothing, so closing again later completes it.
-A Sandbox whose container Docker no longer has (removed outside LayerFS)
-refuses its calls as `NoSuchSandbox` with `detail.containerGone`; its records
-still hold its name until a close removes them, which needs no container.
+A Sandbox whose container no longer runs it refuses its calls as
+`NoSuchSandbox` with `detail.containerGone`: Docker no longer has the
+container (removed outside LayerFS), or has it stopped
+(`detail.containerStopped`, after Docker restarted, for instance), which lost
+its daemon and every mount in it. Its records still hold its name until a
+close removes them; that close deletes a stopped container first (unforced,
+once) and needs no running one.
 
 The same authorized home permits a fresh Node process to use a Sandbox name and
 mount path directly. Reopening validates the full container id, deployment,

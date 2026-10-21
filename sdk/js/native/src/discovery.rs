@@ -367,27 +367,49 @@ pub(crate) fn save_sandbox(
         ]),
     )
 }
-/// A Sandbox whose container the Engine no longer has: nothing runs it, and
-/// only its records hold its name, which `sandbox.close` frees.
-fn gone(id: &str, container: &str) -> SdkRefusal {
+/// A Sandbox whose container no longer runs it: the Engine no longer has the
+/// container, or has it stopped (Docker restarted, for instance), which lost
+/// its daemon and every mount in it. Only its records, and a stopped
+/// container, hold its name; `sandbox.close` frees it.
+fn gone(id: &str, container: &str, stopped: bool) -> SdkRefusal {
+    let state = if stopped { "stopped" } else { "gone" };
     SdkRefusal {
         code: "NoSuchSandbox".to_owned(),
-        message: format!("the container of Sandbox {id} is gone; close it to free its name"),
+        message: format!("the container of Sandbox {id} is {state}; close it to free its name"),
         detail: SdkValue::map([
             ("sandbox", SdkValue::text(id)),
             ("container", SdkValue::text(container)),
             ("containerGone", SdkValue::Bool(true)),
+            ("containerStopped", SdkValue::Bool(stopped)),
         ]),
     }
 }
-/// The container of a refusal from [`gone`].
-pub(crate) fn gone_container(refusal: &SdkRefusal) -> Option<&str> {
+/// The container of a refusal from [`gone`], and whether the Engine still has it stopped.
+pub(crate) fn gone_container(refusal: &SdkRefusal) -> Option<(&str, bool)> {
     match refusal.detail.get("containerGone") {
-        Some(SdkValue::Bool(true)) if refusal.code == "NoSuchSandbox" => {
-            refusal.detail.get_text("container")
-        }
+        Some(SdkValue::Bool(true)) if refusal.code == "NoSuchSandbox" => Some((
+            refusal.detail.get_text("container")?,
+            matches!(
+                refusal.detail.get("containerStopped"),
+                Some(SdkValue::Bool(true))
+            ),
+        )),
         _ => None,
     }
+}
+/// The Engine, container and deployment a Sandbox record names.
+pub(crate) fn runtime(value: &SdkValue) -> Result<(Docker, ContainerId, SandboxRequest)> {
+    let docker =
+        Docker::new(registry::text(value, "docker")?, Duration::from_secs(30)).map_err(failed)?;
+    let request = SandboxRequest {
+        image: registry::text(value, "image")?.to_owned(),
+        store_volume: registry::text(value, "volume")?.to_owned(),
+        port: 30421,
+        // a record written before read-only volumes has none
+        volumes: crate::sandbox::read_only_volumes(value)?,
+    };
+    let container = ContainerId::parse(registry::text(value, "container")?).map_err(failed)?;
+    Ok((docker, container, request))
 }
 pub(crate) fn reopen(args: &SdkValue) -> Result<Arc<SandboxState>> {
     let id = registry::text(args, "sandbox")?;
@@ -401,23 +423,14 @@ pub(crate) fn reopen(args: &SdkValue) -> Result<Arc<SandboxState>> {
         return Err(refused("Unauthorized", "Sandbox record mismatch"));
     }
     let project = registry::text(&value, "project")?;
-    let docker =
-        Docker::new(registry::text(&value, "docker")?, Duration::from_secs(30)).map_err(failed)?;
     let container = registry::text(&value, "container")?;
-    let runtime = Sandbox::reopen(
-        docker,
-        ContainerId::parse(container).map_err(failed)?,
-        SandboxRequest {
-            image: registry::text(&value, "image")?.to_owned(),
-            store_volume: registry::text(&value, "volume")?.to_owned(),
-            port: 30421,
-            // a record written before read-only volumes has none
-            volumes: crate::sandbox::read_only_volumes(&value)?,
-        },
-    )
-    .map_err(|failure| match failure.container_gone() {
-        true => gone(id, container),
-        false => failed(failure),
+    let (docker, selector, request) = runtime(&value)?;
+    let runtime = Sandbox::reopen(docker, selector, request).map_err(|failure| {
+        if failure.container_gone() || failure.container_stopped() {
+            gone(id, container, failure.container_stopped())
+        } else {
+            failed(failure)
+        }
     })?;
     let dial = crate::pool::Dial {
         endpoint: runtime.endpoint().map_err(failed)?,

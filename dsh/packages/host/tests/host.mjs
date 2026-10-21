@@ -225,10 +225,18 @@ try {
   assert.equal(typeof (await orphan.state(P, [])).s, "object");
   assert.deepEqual([built, closings], [2, ["_service.p"]], "one close, then a new client");
   await orphan.dispose();
+  // so is one whose container is stopped (Docker restarted): the SDK reports it gone too
+  const stopped = Object.assign(new Error("NoSuchSandbox: the container of Sandbox _service.p is stopped; close it to free its name"), { code: "NoSuchSandbox", detail: { sandbox: "_service.p", container: "c".repeat(64), containerGone: true, containerStopped: true } });
+  let rebuilt = 0;
+  const restarted = new TreeReader(h.spec, async () => { rebuilt++; return { layerfs: { sandboxes: new Set(), sandbox: { close: async (id) => closings.push(id) }, close: async () => {} }, operator: { inspect: { snapshot: async () => { if (rebuilt === 1) throw stopped; return empty; } } } }; });
+  await assert.rejects(restarted.state(P, []), /container of Sandbox _service\.p is stopped/);
+  assert.equal(typeof (await restarted.state(P, [])).s, "object");
+  assert.deepEqual([rebuilt, closings], [2, ["_service.p", "_service.p"]], "one close, then a new client");
+  await restarted.dispose();
   // a plain NoSuchSandbox (another client closed it) closes nothing
   const plain = new TreeReader(h.spec, async () => ({ layerfs: { sandboxes: new Set(), sandbox: { close: async (id) => closings.push(id) }, close: async () => {} }, operator: { inspect: { snapshot: async () => { throw gone; } } } }));
   await assert.rejects(plain.state(P, []), /NoSuchSandbox/);
-  assert.equal(closings.length, 1);
+  assert.equal(closings.length, 2);
   await plain.dispose();
 
   // storage: Store totals and Init apart; every Branch's Commits once, newest first; main lists none

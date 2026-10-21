@@ -48,7 +48,13 @@ fn binary(label: &str) -> (std::path::PathBuf, File) {
 /// string: user-namespace creation denied, everything else allowed.
 const SECCOMP: &str = r#"seccomp={\"defaultAction\":\"SCMP_ACT_ALLOW\",\"syscalls\":[{\"names\":[\"unshare\",\"clone\"],\"action\":\"SCMP_ACT_ERRNO\",\"errnoRet\":1,\"args\":[{\"index\":0,\"value\":268435456,\"valueTwo\":268435456,\"op\":\"SCMP_CMP_MASKED_EQ\"}]},{\"names\":[\"clone3\"],\"action\":\"SCMP_ACT_ERRNO\",\"errnoRet\":38}]}"#;
 fn endpoint() -> Vec<u8> {
-    fixed(200,format!(r#"{{"Id":"{CID}","Image":"{IMAGE}","State":{{"Running":true,"Paused":false,"Restarting":false,"Dead":false}},"Config":{{"User":"0:0","Tty":false,"Entrypoint":["/usr/local/bin/layerfs-daemon"],"Cmd":["--config","/layerfs-local/config/daemon.setup"]}},"HostConfig":{{"Init":true,"Privileged":false,"CapAdd":["CAP_SYS_ADMIN"],"Devices":[{{"PathOnHost":"/dev/fuse","PathInContainer":"/dev/fuse","CgroupPermissions":"rwm"}}],"SecurityOpt":["no-new-privileges=true","apparmor=unconfined","{SECCOMP}"],"RestartPolicy":{{"Name":"no"}},"LogConfig":{{"Type":"json-file"}}}},"Mounts":[{{"Type":"volume","Name":"lfs-test-borrowed","Destination":"/layerfs-store","RW":true,"Driver":"local"}}],"NetworkSettings":{{"Ports":{{"30421/tcp":[{{"HostIp":"127.0.0.1","HostPort":"54321"}}]}}}}}}"#).as_bytes())
+    fixed(200, inspect().as_bytes())
+}
+/// The Engine's inspection of the running Sandbox container CID.
+fn inspect() -> String {
+    format!(
+        r#"{{"Id":"{CID}","Image":"{IMAGE}","State":{{"Running":true,"Paused":false,"Restarting":false,"Dead":false}},"Config":{{"User":"0:0","Tty":false,"Entrypoint":["/usr/local/bin/layerfs-daemon"],"Cmd":["--config","/layerfs-local/config/daemon.setup"]}},"HostConfig":{{"Init":true,"Privileged":false,"CapAdd":["CAP_SYS_ADMIN"],"Devices":[{{"PathOnHost":"/dev/fuse","PathInContainer":"/dev/fuse","CgroupPermissions":"rwm"}}],"SecurityOpt":["no-new-privileges=true","apparmor=unconfined","{SECCOMP}"],"RestartPolicy":{{"Name":"no"}},"LogConfig":{{"Type":"json-file"}}}},"Mounts":[{{"Type":"volume","Name":"lfs-test-borrowed","Destination":"/layerfs-store","RW":true,"Driver":"local"}}],"NetworkSettings":{{"Ports":{{"30421/tcp":[{{"HostIp":"127.0.0.1","HostPort":"54321"}}]}}}}}}"#
+    )
 }
 #[test]
 fn streamed_private_archive_exact_marker_endpoint_and_borrowed_cleanup() {
@@ -370,4 +376,65 @@ fn a_stop_the_engine_answers_with_no_such_container_is_a_gone_container() {
     assert!(!sandbox.disposition().stopped);
     let calls = peer.finish();
     assert!(String::from_utf8_lossy(&calls[1]).contains("/stop?t=1"));
+}
+
+/// CID as the Engine shows it after its process exited (Docker restarted):
+/// intact, not running, its port no longer published.
+fn exited() -> String {
+    inspect()
+        .replace(r#""Running":true"#, r#""Running":false"#)
+        .replace(
+            r#""30421/tcp":[{"HostIp":"127.0.0.1","HostPort":"54321"}]"#,
+            "",
+        )
+}
+
+/// Reopening a saved Sandbox whose container the Engine inspects as `body`.
+fn reopened_from(body: &str) -> Box<layerfs_sandbox::WireFailure> {
+    let (docker, peer) = Peer::new(vec![fixed(200, body.as_bytes())], 64);
+    let id = layerfs_sandbox::ContainerId::parse(CID).unwrap();
+    let Err(failure) = layerfs_sandbox::backend::docker::Sandbox::reopen(docker, id, request())
+    else {
+        panic!("reopen of a container that does not run fails");
+    };
+    peer.finish();
+    failure
+}
+
+#[test]
+fn only_the_exact_intact_container_not_running_is_a_stopped_container() {
+    let stopped = reopened_from(&exited());
+    assert!(stopped.container_stopped());
+    assert!(!stopped.container_gone());
+    let other = "c".repeat(64);
+    assert!(!reopened_from(&exited().replace(CID, &other)).container_stopped());
+    let dead = exited().replace(r#""Dead":false"#, r#""Dead":true"#);
+    assert!(!reopened_from(&dead).container_stopped());
+    let image = exited().replace(IMAGE, &format!("sha256:{}", "d".repeat(64)));
+    assert!(!reopened_from(&image).container_stopped());
+}
+
+#[test]
+fn a_stopped_container_is_deleted_once_and_never_forced() {
+    let id = layerfs_sandbox::ContainerId::parse(CID).unwrap();
+    let (docker, peer) = Peer::new(vec![fixed(204, b"")], 64);
+    let mut sandbox = layerfs_sandbox::backend::docker::Sandbox::stopped(docker, id, request());
+    assert!(
+        sandbox.endpoint().is_err(),
+        "a stopped Sandbox has no endpoint"
+    );
+    sandbox.delete().unwrap();
+    assert!(sandbox.disposition().deleted);
+    let calls = peer.finish();
+    assert_eq!(calls.len(), 1);
+    assert!(String::from_utf8_lossy(&calls[0]).starts_with(&format!(
+        "DELETE /v1.54/containers/{CID}?force=false&v=false"
+    )));
+    // running again meanwhile: the Engine refuses the unforced Delete
+    let running = br#"{"message":"cannot remove container: container is running"}"#;
+    let (docker, peer) = Peer::new(vec![fixed(409, running)], 64);
+    let mut sandbox = layerfs_sandbox::backend::docker::Sandbox::stopped(docker, id, request());
+    assert!(sandbox.delete().is_err());
+    assert!(!sandbox.disposition().deleted);
+    peer.finish();
 }

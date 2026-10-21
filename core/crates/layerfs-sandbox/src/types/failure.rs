@@ -50,7 +50,17 @@ pub struct WireFailure {
     /// Original error-body prefix/count/completion, never claimed as full command output.
     pub error_body: Option<ErrorDiagnostic>,
 }
+/// The cause [`WireFailure::container_stopped`] reports.
+pub(crate) const STOPPED: &str = "exact stopped container observation";
 impl WireFailure {
+    /// The Engine still has the exact requested container, intact, but it is
+    /// not running: its daemon exited, so nothing it held survives.
+    pub fn container_stopped(&self) -> bool {
+        self.requested_container.is_some()
+            && self.observed_container == self.requested_container
+            && matches!(self.cause, RuntimeError::Protocol(STOPPED))
+    }
+
     /// The Engine answered that the requested container does not exist: a 404
     /// whose error body says so ("No such container"), not any other 404.
     pub fn container_gone(&self) -> bool {

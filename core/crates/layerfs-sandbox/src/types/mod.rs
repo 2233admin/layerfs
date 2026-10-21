@@ -4,6 +4,7 @@ mod failure;
 mod identity;
 mod transfer;
 pub use execution::{CommandIdentity, ExecInspection};
+pub(crate) use failure::STOPPED;
 pub use failure::{ErrorDiagnostic, RuntimeError, WireFailure};
 pub use identity::{ContainerId, ExecId};
 pub use transfer::PendingRequest;
