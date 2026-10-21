@@ -33,7 +33,7 @@ try {
   await lf.workspace.exec(ws, "echo new > note.txt");
 
   const busy = new Set(), mountedAt = Date.now() - LEFT_MS - 1000;
-  const collector = { busyOf: () => busy, mountsOf: () => ({ [`${ws.sandbox}\n${ws.path}`]: { agent: "agent-a", at: mountedAt, lastAt: mountedAt } }) };
+  const collector = { busyOf: () => busy, runningCalls: () => busy.size, mountsOf: () => ({ [`${ws.sandbox}\n${ws.path}`]: { agent: "agent-a", at: mountedAt, lastAt: mountedAt } }) };
   const trees = new TreeReader(spec);
 
   // the Workspace, with who mounted it, its uncommitted change and how long it sat
@@ -67,6 +67,12 @@ try {
   assert.equal(all.projects[0].name, NAME);
   assert.equal(all.projects[0].simulated, true);
   assert.deepEqual(all.leftovers, []);
+  assert.equal(all.calls, 0);
+  // a restart needs the confirm word, and a Host without a Store container has none to restart
+  const { restartStore } = await import("../src/runtime.js");
+  await assert.rejects(restartStore({ ...spec, box: "layerfs-store" }, {}), { code: "not-confirmed" });
+  await assert.rejects(restartStore({ ...spec, box: "layerfs-store" }, { confirm: "restart" }), { code: "no-docker" });
+  await assert.rejects(restartStore({ ...spec, box: null }, { confirm: "restart" }), { code: "no-store" });
   // an older Sandbox the startup cleanup kept shows as a running leftover
   spec.migration = { kept: [{ sandbox: "shop_service", container: "layerfs-shop_service", workspaces: 1, reason: "1 mounted Workspace" }] };
   const kept = (await overview(spec, bindings, trees, collector)).leftovers;

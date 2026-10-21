@@ -232,6 +232,13 @@ export class Collector {
     return out;
   }
 
+  /** How many LayerFS calls of agents are running now, in any project. */
+  runningCalls() {
+    let n = 0;
+    for (const view of this.roots.values()) for (const line of view.running.values()) if (line.project) n++;
+    return n;
+  }
+
   /** The project's Workspaces an agent's call is running in now, as `${sandbox}\n${path}`. */
   busyOf(project) {
     const out = new Set();

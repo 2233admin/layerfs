@@ -17,16 +17,17 @@ export function AllSandboxes({ onOpen }: { onOpen: (project: string) => void }) 
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [asking, setAsking] = useState(false)
+  const [restarting, setRestarting] = useState(false)
   const read = () => api.overview().then((v) => { setView(v); setError(null) }, (e: Error) => setError(e.message))
   usePoll(read, POLL_MS, [])
   const act = async (label: string, run: () => Promise<unknown>) => {
     setBusy(label); setError(null)
-    try { await run(); setAsking(false); await read() } catch (e) { setError((e as Error).message) } finally { setBusy(null) }
+    try { await run(); setAsking(false); setRestarting(false); await read() } catch (e) { setError((e as Error).message) } finally { setBusy(null) }
   }
 
-  const tile = (title: string, level: Overview['level'] | null, body: React.ReactNode, extra?: React.ReactNode) => (
+  const tile = (title: string, level: Overview['level'] | null, body: React.ReactNode, extra?: React.ReactNode, actions?: React.ReactNode) => (
     <div style={{ ...card, padding: '8px 10px', display: 'grid', gap: 2, minWidth: 0 }}>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.text2 }}>{level && <Dot level={level} />}{title}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.text2, whiteSpace: 'nowrap' }}>{level && <Dot level={level} />}{title}{actions && <><span style={{ flex: 1 }} /><span style={{ display: 'flex', gap: 4 }}>{actions}</span></>}</span>
       <span style={{ fontFamily: MONO, fontSize: 12.5, wordBreak: 'break-word' }}>{body}</span>
       {extra}
     </div>
@@ -49,9 +50,21 @@ export function AllSandboxes({ onOpen }: { onOpen: (project: string) => void }) 
             {tile('Docker', view.engine.level, view.engine.level === 'ok' ? `running · ${view.engine.version}` : 'not answering')}
             {store && tile('layerfs-store', store.level,
               store.state === 'running' ? `${store.answering ? 'ready' : 'not answering'}${store.build && store.build !== store.expected ? ' · older build' : ''}` : store.state,
-              (store.state === 'stopped' || store.state === 'missing') && view.engine.level === 'ok'
-                ? <span><Button variant="primary" size="sm" disabled={!!busy} onClick={() => void act('Starting layerfs-store…', api.startStore)}>Start layerfs-store</Button></span>
-                : null)}
+              restarting
+                ? <span role="alertdialog" style={{ display: 'grid', gap: 6, marginTop: 4, padding: '6px 8px', borderRadius: T.sm, background: 'var(--dsw-alias-state-error-bg, rgba(210,69,94,.1))', fontSize: 12 }}>
+                  <span>Restart layerfs-store? Every project's Store calls stop for a few seconds{view.calls ? `; ${view.calls} agent call${view.calls === 1 ? ' is' : 's are'} running and may fail` : ''}.</span>
+                  <span style={{ display: 'flex', gap: 6 }}>
+                    <Button variant="primary" size="sm" disabled={!!busy} onClick={() => void act('Restarting layerfs-store…', api.restartStore)}>Restart</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setRestarting(false)}>Cancel</Button>
+                  </span>
+                </span>
+                : null,
+              view.engine.level === 'ok' && <>
+                <Button variant={store.state === 'running' ? 'ghost' : 'primary'} size="sm" disabled={!!busy || store.state === 'running'}
+                  title={store.state === 'running' ? 'It is running' : 'Start the Store container'} onClick={() => void act('Starting layerfs-store…', api.startStore)}>Start</Button>
+                <Button variant={store.level === 'ok' ? 'ghost' : 'outline'} size="sm" disabled={!!busy || store.state !== 'running'}
+                  title={store.state === 'running' ? 'Stop and start it again: every Store call waits a few seconds' : 'It is not running; start it'} onClick={() => setRestarting(true)}>Restart…</Button>
+              </>)}
             {tile('Disk free', null, [view.disk.vm !== null ? `Docker ${bytes(view.disk.vm)}` : null, view.disk.host !== null ? `local ${bytes(view.disk.host)}` : null].filter(Boolean).join(' · ') || 'not read')}
           </div>
         )}

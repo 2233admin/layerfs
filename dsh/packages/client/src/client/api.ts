@@ -48,6 +48,8 @@ export interface Overview {
   level: Level
   engine: { level: Level, version?: string, error?: string }
   store: { level: Level, state: 'running' | 'stopped' | 'missing' | 'unknown', name: string, build?: string, expected?: string, startedAt?: string, answering?: boolean } | null
+  /** agents' LayerFS calls running now, in any project: a Store restart cuts them off */
+  calls: number
   disk: { host: number | null, vm: number | null }
   projects: { name: string, simulated: boolean, containers: number, sandboxes: { id: string, name: string | null, used: number, capacity: number, level: Level }[], workspaces: number, level: Level, note: string | null }[]
   leftovers: { name: string, project: string, running: boolean, status: string }[]
@@ -117,6 +119,7 @@ export const api = {
   files: (id: string, kind: string, query: Record<string, string | number>) => call<any>('GET', `/session/${sid(id)}/${kind}?${filesQuery(query)}`),
   overview: () => call<Overview>('GET', '/runtime'),
   startStore: () => call<Overview['store']>('POST', '/runtime/store'),
+  restartStore: () => call<Overview['store']>('POST', '/runtime/store/restart', { confirm: 'restart' }),
   cleanLeftovers: (names: string[]) => call<{ results: { name: string, ok: boolean, message?: string }[] }>('POST', '/runtime/leftovers', { names }),
   projectRuntime: (name: string) => call<ProjectRuntime>('GET', `/project/${encodeURIComponent(name)}/runtime`),
   /** unmount (nothing uncommitted), discard (confirm: the path) or stop a process */

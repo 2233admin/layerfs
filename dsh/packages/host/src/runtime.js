@@ -20,7 +20,7 @@ const run = promisify(execFile);
 export const CAPACITY = 16;
 /** A Workspace with uncommitted changes and no call for this long is flagged. */
 export const LEFT_MS = 10 * 60_000;
-const DOCKER_MS = 5_000, PING_MS = 1_000;
+const DOCKER_MS = 5_000, PING_MS = 1_000, RESTART_MS = 20_000;
 const RANK = { down: 0, degraded: 1, ok: 2 };
 
 const docker = (spec, ...args) => run("docker", ["-H", `unix://${spec.docker}`, ...args], { timeout: DOCKER_MS }).then((r) => r.stdout.trim());
@@ -90,7 +90,8 @@ export async function overview(spec, bindings, trees, collector) {
   const sandboxes = cards.reduce((n, c) => n + c.sandboxes.length, 0), workspaces = cards.reduce((n, c) => n + c.workspaces, 0);
   return {
     level: worst([engine.level, store?.level ?? "ok", leftovers.length ? "degraded" : "ok"]),
-    engine, store, disk, projects: cards, leftovers, totals: { projects: cards.length, sandboxes, workspaces },
+    // agents' calls running now in any project: a Store restart cuts them off
+    engine, store, calls: collector.runningCalls(), disk, projects: cards, leftovers, totals: { projects: cards.length, sandboxes, workspaces },
   };
 }
 
@@ -115,8 +116,25 @@ export async function projectAction(trees, collector, project, body) {
 export async function startStore(spec) {
   if (!spec.box) throw refuse(409, "no-store", "this Host runs no Store container (Linux runs Store calls in-process)");
   const state = await storeState(spec, await engineState(spec));
-  if (state.state === "running") throw refuse(409, "running", state.answering ? "layerfs-store is running and answering" : "layerfs-store runs but does not answer; restarting it is not offered yet");
+  if (state.state === "running") throw refuse(409, "running", state.answering ? "layerfs-store is running and answering" : "layerfs-store runs but does not answer; restart it instead");
   if (state.state === "unknown") throw refuse(409, "no-docker", "Docker does not answer; start Docker first");
+  await ensureBox(spec);
+  return storeState(spec, await engineState(spec));
+}
+
+/**
+ * Restarts a running Store container: one `docker restart`, then the Host
+ * reads its new port and waits for its worker (ensureBox). Every project's
+ * Store calls fail while it restarts, so `confirm` must be "restart".
+ */
+export async function restartStore(spec, body) {
+  if (!spec.box) throw refuse(409, "no-store", "this Host runs no Store container (Linux runs Store calls in-process)");
+  if (body?.confirm !== "restart") throw refuse(409, "not-confirmed", "a restart cuts off every project's Store calls; confirm it");
+  const state = await storeState(spec, await engineState(spec));
+  if (state.state === "unknown") throw refuse(409, "no-docker", "Docker does not answer; start Docker first");
+  if (state.state !== "running") throw refuse(409, state.state, `layerfs-store is ${state.state}; start it instead`);
+  // up to 5 s for the worker to stop, then its start: longer than other Docker calls
+  await run("docker", ["-H", `unix://${spec.docker}`, "restart", "-t", "5", spec.box], { timeout: RESTART_MS });
   await ensureBox(spec);
   return storeState(spec, await engineState(spec));
 }

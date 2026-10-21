@@ -20,6 +20,7 @@
 //   GET  /layerfs/project/<name>/storage      Store totals, what Init recorded, recent Commits' costs (storage.js)
 //   GET  /layerfs/runtime                     Docker, the Store container, disk and every project's Sandboxes (runtime.js)
 //   POST /layerfs/runtime/store               start the Store container when it is stopped or missing
+//   POST /layerfs/runtime/store/restart {confirm: "restart"}  restart a running Store container
 //   POST /layerfs/runtime/leftovers {names}   remove stopped leftover Sandbox containers
 //   GET  /layerfs/project/<name>/runtime      the project's Sandboxes, Workspaces and processes
 //   POST /layerfs/project/<name>/runtime {action, sandbox?, path?, process?, confirm?}  unmount, discard or stop
@@ -30,7 +31,7 @@ import { prepareInit, runInit } from "./init.js";
 import { InitJobs } from "./jobs.js";
 import { READS } from "./reads.js";
 import { removeProject } from "./remove.js";
-import { cleanLeftovers, overview, projectAction, projectRuntime, startStore } from "./runtime.js";
+import { cleanLeftovers, overview, projectAction, projectRuntime, restartStore, startStore } from "./runtime.js";
 
 const PREFIX = "/layerfs";
 const MAX_BODY = 64 * 1024;
@@ -93,6 +94,8 @@ export function registerRoutes(ctx, { spec, bindings, collector, trees, jobs = n
         const job = jobs.get(decodeURIComponent(parts[1]));
         return job ? send(res, 200, { job }) : send(res, 404, { code: "not-found", message: "no such Init job" });
       }
+      if (req.method === "POST" && parts[0] === "runtime" && parts[1] === "store" && parts[2] === "restart" && parts.length === 3)
+        return send(res, 200, await restartStore(spec, await readJson(req)));
       if (parts[0] === "runtime" && parts.length <= 2) {
         if (req.method === "GET" && parts.length === 1) return send(res, 200, await overview(spec, bindings, trees, collector));
         if (req.method === "POST" && parts[1] === "store") return send(res, 200, await startStore(spec));
