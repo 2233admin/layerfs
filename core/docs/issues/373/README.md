@@ -316,12 +316,17 @@ historical receipts.
 |---|---|---|
 | 0 | Commit the local `lfs run` change (shared Sandbox, no per-call container) | — |
 | 1 | In-process Store install for Import; drop the Import Sandbox | — |
-| 2 | Per-project numbered Sandboxes, placement, names, labels, prefix | — |
-| 3 | Workspace-first SDK API; drop `create`, `service`, `close` | 2 |
+| 2 | Container names `<prefix><project>-<Sandbox>` (default prefix `layerfs-`), labels, read-only volumes dropped | — |
+| 3 | Per-project numbered Sandboxes and their records, placement, Workspace-first SDK API; drop `create`, `service`, `close` | 2 |
 | 4 | Idle close | 2 |
 | 5 | dsh Host, model, view and simulator on the new API; `layerfs-store` naming | 3 |
 | 6 | Docs and skills | 3, 5 |
 | 7 | Live check on dsh web (3080): Import starts no Sandbox; `lfs run` × 17 starts a second Sandbox; idle close; names and labels in `docker ps` | 1–6 |
+
+Numbering, records and placement moved from step 2 to step 3 during the
+work: placement is what `workspace.mount(branch)` does, and caller-named
+Sandboxes cannot be numbered while `sandbox.create(name)` exists, so doing
+them with the API keeps every commit working.
 
 Each step is one commit, with the production LOC comparison and its tests.
 Disposable Store profile only; every test command under 120 s.

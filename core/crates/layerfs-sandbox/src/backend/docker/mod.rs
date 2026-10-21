@@ -17,7 +17,7 @@ mod strings;
 mod topology;
 pub use archive::{UploadFailure, UploadWork};
 pub use container_types::{
-    CreatePhase, ReadOnlyVolume, Sandbox, SandboxCreateFailure, SandboxDisposition, SandboxRequest,
+    CreatePhase, Sandbox, SandboxCreateFailure, SandboxDisposition, SandboxRequest,
 };
 pub use http::Docker;
 pub use listener::{ListenerFailure, ListenerObservation};

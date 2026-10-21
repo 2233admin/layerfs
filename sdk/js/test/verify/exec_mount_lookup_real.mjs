@@ -12,10 +12,11 @@
 // the one the child removed (after one read of the shared records), and still
 // execs in the others. The child's remount after its unmount gets a new
 // directory: the daemon never reuses one, so a stale path can't name a new
-// Workspace. One attempt per
-// step; nothing retried.
+// Workspace. The Sandbox's container is named `<prefix><project>-<name>` and
+// carries its labels (#373). One attempt per step; nothing retried.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { get } from "node:http";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,6 +24,15 @@ import { fileURLToPath } from "node:url";
 import { docker, inRuntime, REPO, STORE_PATH } from "./container.mjs";
 
 const MOUNTS = 4;
+
+/** One Engine read over the Docker socket, its JSON body. */
+const engine = (path) => new Promise((resolve, reject) => {
+  get({ socketPath: process.env.LAYERFS_DOCKER, path }, (response) => {
+    const parts = [];
+    response.on("data", (part) => parts.push(part));
+    response.on("end", () => resolve(JSON.parse(Buffer.concat(parts).toString("utf8"))));
+  }).on("error", reject);
+});
 
 async function inner([phase]) {
   const { LayerFS } = await import("../../src/index.js");
@@ -46,6 +56,12 @@ async function inner([phase]) {
   await layerfs.project.init(source);
   rmSync(source, { recursive: true, force: true });
   await layerfs.sandbox.create("box", "site", process.env.LAYERFS_IMAGE);
+  const container = readFileSync(join(home, "_sandboxes", "box", "container"), "utf8").trim();
+  const seen = await engine(`/v1.54/containers/${container}/json`);
+  assert.equal(seen.Name, `/${process.env.LAYERFS_CONTAINER_PREFIX}site-box`, "the container's name says whose and which");
+  for (const [key, value] of [["layerfs.role", "sandbox"], ["layerfs.project", "site"], ["layerfs.sandbox", "box"]]) {
+    assert.equal(seen.Config.Labels[key], value, `label ${key}`);
+  }
   await layerfs.branch.fork("work", "main");
   const paths = [];
   for (let i = 0; i < MOUNTS; i++) paths.push(await layerfs.sandbox.mount("box", "work"));

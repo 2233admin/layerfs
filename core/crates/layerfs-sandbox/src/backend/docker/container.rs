@@ -19,20 +19,22 @@ impl SandboxRequest {
     fn encode(&self, w: &mut dyn Write) -> io::Result<()> {
         w.write_all(b"{\"Image\":")?;
         quoted(w, &self.image)?;
-        w.write_all(b",\"User\":\"0:0\",\"Entrypoint\":[\"/usr/local/bin/layerfs-daemon\"],\"Cmd\":[\"--config\",\"/layerfs-local/config/daemon.setup\"],\"Tty\":false,\"ExposedPorts\":{")?;
+        w.write_all(b",\"Labels\":{")?;
+        for (i, (key, value)) in self.labels.iter().enumerate() {
+            if i > 0 {
+                w.write_all(b",")?;
+            }
+            quoted(w, key)?;
+            w.write_all(b":")?;
+            quoted(w, value)?;
+        }
+        w.write_all(b"},\"User\":\"0:0\",\"Entrypoint\":[\"/usr/local/bin/layerfs-daemon\"],\"Cmd\":[\"--config\",\"/layerfs-local/config/daemon.setup\"],\"Tty\":false,\"ExposedPorts\":{")?;
         quoted(w, &format!("{}/tcp", self.port))?;
         w.write_all(b":{}},\"HostConfig\":{\"Init\":true,\"RestartPolicy\":{\"Name\":\"no\"},\"LogConfig\":{\"Type\":\"json-file\"},\"Privileged\":false,\"CapAdd\":[\"CAP_SYS_ADMIN\"],\"Devices\":[{\"PathOnHost\":\"/dev/fuse\",\"PathInContainer\":\"/dev/fuse\",\"CgroupPermissions\":\"rwm\"}],\"SecurityOpt\":[\"no-new-privileges=true\",\"apparmor=unconfined\",")?;
         quoted(w, SECCOMP)?;
         w.write_all(b"],\"Mounts\":[{\"Type\":\"volume\",\"Source\":")?;
         quoted(w, &self.store_volume)?;
         w.write_all(b",\"Target\":\"/layerfs-store\",\"ReadOnly\":false,\"VolumeOptions\":{\"NoCopy\":true}}")?;
-        for v in &self.volumes {
-            w.write_all(b",{\"Type\":\"volume\",\"Source\":")?;
-            quoted(w, &v.volume)?;
-            w.write_all(b",\"Target\":")?;
-            quoted(w, &v.target)?;
-            w.write_all(b",\"ReadOnly\":true,\"VolumeOptions\":{\"NoCopy\":true}}")?;
-        }
         w.write_all(b"],\"PortBindings\":{")?;
         quoted(w, &format!("{}/tcp", self.port))?;
         w.write_all(b":[{\"HostIp\":\"127.0.0.1\",\"HostPort\":\"\"}]}}}")
@@ -86,7 +88,7 @@ impl Docker {
         result.map_err(|e| response.fail(e, None))?;
         Ok(())
     }
-    /// Reads each borrowed volume once, then creates one actual stopped container.
+    /// Reads the borrowed Store volume once, then creates one actual stopped container.
     pub fn create_sandbox(
         &self,
         request: SandboxRequest,
@@ -98,9 +100,6 @@ impl Docker {
                 .map_err(|e| super::http::failure(false, 0, None, e, None))?;
             phase = CreatePhase::Volume;
             self.plain_volume(&request.store_volume)?;
-            for v in &request.volumes {
-                self.plain_volume(&v.volume)?;
-            }
             phase = CreatePhase::Create;
             // `naming` admitted only characters that need no URL escape.
             let path = match &self.container_name {

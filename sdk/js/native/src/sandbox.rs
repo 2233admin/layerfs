@@ -23,7 +23,7 @@ use layerfs_bridge::control::{CommitControl, SdkRefusal, SdkValue};
 use layerfs_bridge::daemon_setup::{DaemonLimits, DaemonSetup};
 use layerfs_bridge::provision::StoreManifest;
 use layerfs_history::WorkspaceId;
-use layerfs_sandbox::backend::docker::{CreatePhase, Docker, ReadOnlyVolume, SandboxRequest};
+use layerfs_sandbox::backend::docker::{CreatePhase, Docker, SandboxRequest};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -74,9 +74,9 @@ fn setup(private: [u8; 32], peer: [u8; 32]) -> DaemonSetup {
     }
 }
 
-/// The binding op `sandbox.create`: args `name`, `project`, `image`, `home`,
-/// optional `volumes` and `deploy` (docker, volume, daemon) from the JS
-/// `create(name, project, image, { volumes })`.
+/// The binding op `sandbox.create`: args `name`, `project`, `image`, `home`
+/// and `deploy` (docker, volume, daemon) from the JS
+/// `create(name, project, image)`.
 pub(crate) fn create(args: &SdkValue) -> Outcome {
     create_selected(args, false)
 }
@@ -191,24 +191,30 @@ fn create_selected(args: &SdkValue, service: bool) -> Outcome {
     made
 }
 
-/// The optional `volumes` arg, `[{ volume, target }]`: existing volumes the
-/// Sandbox mounts read-only (the runtime checks names and targets); also a
-/// saved record's, so a reopened Sandbox's inspection expects the same mounts.
-pub(crate) fn read_only_volumes(args: &SdkValue) -> Result<Vec<ReadOnlyVolume>, SdkRefusal> {
-    let items = match args.get("volumes") {
-        None | Some(SdkValue::Null) => return Ok(Vec::new()),
-        Some(SdkValue::List(items)) => items,
-        Some(_) => return Err(refused("InvalidInput", "`volumes` is a list")),
-    };
-    items
-        .iter()
-        .map(|item| {
-            Ok(ReadOnlyVolume {
-                volume: text(item, "volume")?.to_owned(),
-                target: text(item, "target")?.to_owned(),
-            })
-        })
-        .collect()
+/// A container name prefix when the deployment sets none (#373).
+const PREFIX: &str = "layerfs-";
+
+/// The Sandbox's short name in its project: `service` for the service
+/// Sandbox, else the caller's name.
+fn short(id: &str) -> &str {
+    if id.starts_with(crate::discovery::SERVICE) {
+        "service"
+    } else {
+        id
+    }
+}
+
+/// The container labels of Sandbox `id` of `project`: what it is, whose,
+/// and which. Saved in its record, so a reopen expects the same.
+pub(crate) fn labels(project: &str, id: &str) -> Vec<(String, String)> {
+    [
+        ("layerfs.role", "sandbox"),
+        ("layerfs.project", project),
+        ("layerfs.sandbox", short(id)),
+    ]
+    .into_iter()
+    .map(|(key, value)| (key.to_owned(), value.to_owned()))
+    .collect()
 }
 
 /// Creates the claimed Sandbox `id`: container, daemon on the installed
@@ -223,30 +229,25 @@ fn create_claimed(
     service: bool,
 ) -> Outcome {
     let name = text(args, "project")?;
-    let volumes = if service {
-        Vec::new()
-    } else {
-        read_only_volumes(args)?
-    };
     let controller = layerfs_bridge::duplex::generate_keypair().map_err(failed)?;
     let daemon = layerfs_bridge::duplex::generate_keypair().map_err(failed)?;
     let mut daemon_setup = setup(daemon.private, controller.public);
     let mut existing = project.manifest.clone();
     existing.daemon_sqlite = installed.daemon_sqlite;
     daemon_setup.existing_store = Some(existing);
-    let mut docker = Docker::new(docker, ENGINE).map_err(failed)?;
-    // A deployment's container prefix names the container `<prefix><id>`
-    // (the service Sandbox without its leading `_`), so a run can tell its
-    // own containers from any other.
-    if let Some(prefix) = args
+    // The container is `<prefix><project>-<Sandbox>`: the deployment's
+    // prefix (`layerfs-` by default; another LayerFS home on the same Engine
+    // sets its own), so `docker ps` says what each one is and whose.
+    let prefix = args
         .get("deploy")
         .and_then(|d| d.get_text("containerPrefix"))
-    {
-        let name = format!("{prefix}{}", id.trim_start_matches('_'));
-        docker = docker
-            .naming(&name)
-            .map_err(|_| refused("InvalidInput", format!("container name {name}")))?;
-    }
+        .filter(|prefix| !prefix.is_empty())
+        .unwrap_or(PREFIX);
+    let container_name = format!("{prefix}{name}-{}", short(id));
+    let docker = Docker::new(docker, ENGINE)
+        .map_err(failed)?
+        .naming(&container_name)
+        .map_err(|_| refused("InvalidInput", format!("container name {container_name}")))?;
     // Read only if this process ends before the intent is resolved.
     crate::discovery::save(
         &directory.join("create.intent"),
@@ -258,7 +259,7 @@ fn create_claimed(
                 image,
                 store_volume,
                 port: PORT,
-                volumes,
+                labels: labels(name, id),
             },
             setup: daemon_setup,
             executable,
@@ -320,9 +321,11 @@ fn create_claimed(
 /// Whether a failed create's every effect is known: nothing reached the
 /// Store volume, and any container it made is acknowledged by identity.
 fn settled(failure: &SandboxFailure) -> bool {
+    // A Create the Engine refused (409: the container name is taken) made no container.
     let unknown_container = matches!(
         &failure.cause,
         SandboxCause::Create(create) if create.phase == CreatePhase::Create
+            && !matches!(create.transfer.cause, layerfs_sandbox::RuntimeError::Http(409))
     );
     failure.phase != SandboxPhase::Install && failure.installed.is_none() && !unknown_container
 }

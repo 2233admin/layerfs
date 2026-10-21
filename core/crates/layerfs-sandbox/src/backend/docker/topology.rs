@@ -19,11 +19,30 @@ pub(super) const SECCOMP: &str = concat!(
     r#""args":[{"index":0,"value":268435456,"valueTwo":268435456,"op":"SCMP_CMP_MASKED_EQ"}]},"#,
     r#"{"names":["clone3"],"action":"SCMP_ACT_ERRNO","errnoRet":38}]}"#
 );
-pub(super) fn config<R: Read>(j: &mut Json<R>) -> Result<bool, RuntimeError> {
+/// The daemon's identity and command, and every requested label with its
+/// value (the image may add other labels).
+pub(super) fn config<R: Read>(
+    j: &mut Json<R>,
+    labels: &[(String, String)],
+) -> Result<bool, RuntimeError> {
     let mut bits = 0;
     let mut valid = true;
+    let mut labelled = labels.is_empty();
     j.object(|j, key| {
-        if key.equals("User") {
+        if key.equals("Labels") && !labels.is_empty() {
+            let mut seen = vec![false; labels.len()];
+            j.object(|j, key| {
+                match labels.iter().position(|(k, _)| key.equals(k)) {
+                    Some(i) => {
+                        seen[i] = true;
+                        valid &= j.string_equals(&labels[i].1)?;
+                    }
+                    None => j.skip(3)?,
+                }
+                Ok(())
+            })?;
+            labelled = seen.iter().all(|s| *s);
+        } else if key.equals("User") {
             once(&mut bits, 1)?;
             valid &= j.string_equals("0:0")?;
         } else if key.equals("Tty") {
@@ -40,7 +59,7 @@ pub(super) fn config<R: Read>(j: &mut Json<R>) -> Result<bool, RuntimeError> {
         }
         Ok(())
     })?;
-    Ok(bits == 15 && valid)
+    Ok(bits == 15 && valid && labelled)
 }
 pub(super) fn host<R: Read>(j: &mut Json<R>) -> Result<bool, RuntimeError> {
     let mut bits = 0;
@@ -125,32 +144,29 @@ fn fuse_device<R: Read>(j: &mut Json<R>) -> Result<bool, RuntimeError> {
     })?;
     Ok(count == 1 && valid)
 }
-/// The Store mount read-write at `/layerfs-store` and each requested read-only
-/// volume at its target, matched by name and destination in any order; any
-/// other, missing or repeated mount is a topology mismatch.
+/// Exactly the Store mount, read-write at `/layerfs-store`; any other,
+/// missing or repeated mount is a topology mismatch.
 pub(super) fn mounts<R: Read>(
     j: &mut Json<R>,
     request: &SandboxRequest,
 ) -> Result<bool, RuntimeError> {
     let mut count = 0;
     let mut valid = true;
-    let mut store = false;
-    let mut seen = vec![false; request.volumes.len()];
     j.array(|j| {
         count += 1;
         let mut bits = 0;
         let (mut volume, mut name, mut destination, mut rw, mut local) =
-            (false, None, None, false, false);
+            (false, false, false, false, false);
         j.object(|j, key| {
             if key.equals("Type") {
                 once(&mut bits, 1)?;
                 volume = j.string_equals("volume")?;
             } else if key.equals("Name") {
                 once(&mut bits, 2)?;
-                name = Some(j.string(true)?);
+                name = j.string_equals(&request.store_volume)?;
             } else if key.equals("Destination") {
                 once(&mut bits, 4)?;
-                destination = Some(j.string(true)?);
+                destination = j.string_equals("/layerfs-store")?;
             } else if key.equals("RW") {
                 once(&mut bits, 8)?;
                 rw = j.boolean()?;
@@ -162,27 +178,10 @@ pub(super) fn mounts<R: Read>(
             }
             Ok(())
         })?;
-        let (Some(name), Some(destination)) = (name, destination) else {
-            valid = false;
-            return Ok(());
-        };
-        valid &= bits == 31 && volume && local;
-        if name.equals(&request.store_volume) && destination.equals("/layerfs-store") {
-            valid &= rw && !store;
-            store = true;
-        } else if let Some(i) = request
-            .volumes
-            .iter()
-            .position(|v| name.equals(&v.volume) && destination.equals(&v.target))
-        {
-            valid &= !rw && !seen[i];
-            seen[i] = true;
-        } else {
-            valid = false;
-        }
+        valid &= bits == 31 && volume && name && destination && rw && local;
         Ok(())
     })?;
-    Ok(valid && store && count == 1 + request.volumes.len() && seen.iter().all(|s| *s))
+    Ok(valid && count == 1)
 }
 fn strings<R: Read>(j: &mut Json<R>, expected: &[&str]) -> Result<bool, RuntimeError> {
     let mut index = 0;

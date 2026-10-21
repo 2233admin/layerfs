@@ -94,7 +94,7 @@ impl Sandbox {
                     image = j.string_equals(&self.request.image)?;
                 } else if key.equals("Config") {
                     once(&mut fields, 16)?;
-                    topology &= super::topology::config(j)?;
+                    topology &= super::topology::config(j, &self.request.labels)?;
                 } else if key.equals("HostConfig") {
                     once(&mut fields, 32)?;
                     topology &= super::topology::host(j)?;

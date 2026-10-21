@@ -198,7 +198,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     image: args[2].clone(),
                     store_volume: args[3].clone(),
                     port: 30421,
-                    volumes: vec![],
+                    labels: vec![],
                 },
                 setup: setup(daemon.private, keys.public),
                 executable: PathBuf::from(&args[4]),

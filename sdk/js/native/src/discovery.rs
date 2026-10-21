@@ -349,13 +349,13 @@ pub(crate) fn save_sandbox(
                 SdkValue::text(&state.runtime.request().store_volume),
             ),
             (
-                "volumes",
+                "labels",
                 SdkValue::List(
-                    (state.runtime.request().volumes.iter())
-                        .map(|v| {
+                    (state.runtime.request().labels.iter())
+                        .map(|(key, value)| {
                             SdkValue::map([
-                                ("volume", SdkValue::text(&v.volume)),
-                                ("target", SdkValue::text(&v.target)),
+                                ("key", SdkValue::text(key)),
+                                ("value", SdkValue::text(value)),
                             ])
                         })
                         .collect(),
@@ -405,8 +405,19 @@ pub(crate) fn runtime(value: &SdkValue) -> Result<(Docker, ContainerId, SandboxR
         image: registry::text(value, "image")?.to_owned(),
         store_volume: registry::text(value, "volume")?.to_owned(),
         port: 30421,
-        // a record written before read-only volumes has none
-        volumes: crate::sandbox::read_only_volumes(value)?,
+        // a record written before #373 has no labels, nor has its container
+        labels: match value.get("labels") {
+            Some(SdkValue::List(items)) => items
+                .iter()
+                .map(|item| {
+                    Ok((
+                        registry::text(item, "key")?.to_owned(),
+                        registry::text(item, "value")?.to_owned(),
+                    ))
+                })
+                .collect::<Result<_>>()?,
+            _ => Vec::new(),
+        },
     };
     let container = ContainerId::parse(registry::text(value, "container")?).map_err(failed)?;
     Ok((docker, container, request))

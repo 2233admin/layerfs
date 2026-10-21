@@ -1,21 +1,15 @@
 //! Owned container lifecycle; borrowed shared Store volume is never cleanup-owned.
 use super::Docker;
 use crate::{ContainerId, RuntimeError, WireFailure};
-/// Explicit immutable image, existing VM volume and daemon TCP port.
+/// Explicit immutable image, existing VM volume, daemon TCP port and labels.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SandboxRequest {
     pub image: String,
     pub store_volume: String,
     pub port: u16,
-    /// Further existing volumes, each mounted read-only outside every
-    /// Workspace and LayerFS path (a shared package store, for instance).
-    pub volumes: Vec<ReadOnlyVolume>,
-}
-/// An existing plain local volume mounted read-only at an absolute `target`.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ReadOnlyVolume {
-    pub volume: String,
-    pub target: String,
+    /// Container labels (`layerfs.project`, for instance): each key once.
+    /// A reopened container must carry every one; the image may add more.
+    pub labels: Vec<(String, String)>,
 }
 /// A Docker volume name, short enough for the inspection to compare it whole.
 fn volume_name(name: &str) -> bool {
@@ -26,20 +20,13 @@ fn volume_name(name: &str) -> bool {
             .enumerate()
             .all(|(i, b)| b.is_ascii_alphanumeric() || (i != 0 && matches!(b, b'_' | b'-' | b'.')))
 }
-/// An absolute normalised path outside the root, Workspaces, LayerFS, kernel and scratch trees.
-fn volume_target(target: &str) -> bool {
-    let under = |root: &str| target == root || target.starts_with(&format!("{root}/"));
-    target.len() <= 128
-        && target.len() > 1
-        && target.starts_with('/')
-        && !target.ends_with('/')
-        && target[1..]
-            .split('/')
-            .all(|part| !part.is_empty() && part != "." && part != "..")
-        && !target.starts_with("/layerfs-")
-        && !["/workspaces", "/proc", "/sys", "/dev", "/tmp"]
-            .into_iter()
-            .any(under)
+/// A label key or value of plain characters that need no JSON escape.
+fn label_text(text: &str) -> bool {
+    !text.is_empty()
+        && text.len() <= 128
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
 }
 impl SandboxRequest {
     pub(super) fn check(&self) -> Result<(), RuntimeError> {
@@ -58,12 +45,12 @@ impl SandboxRequest {
         if !volume_name(&self.store_volume) {
             return Err(RuntimeError::Protocol("existing named VM volume"));
         }
-        for (i, v) in self.volumes.iter().enumerate() {
-            if !volume_name(&v.volume) || v.volume == self.store_volume {
-                return Err(RuntimeError::Protocol("read-only volume name"));
-            }
-            if !volume_target(&v.target) || self.volumes[..i].iter().any(|w| w.target == v.target) {
-                return Err(RuntimeError::Protocol("read-only volume target"));
+        for (i, (key, value)) in self.labels.iter().enumerate() {
+            if !label_text(key)
+                || !label_text(value)
+                || self.labels[..i].iter().any(|(k, _)| k == key)
+            {
+                return Err(RuntimeError::Protocol("container label"));
             }
         }
         Ok(())

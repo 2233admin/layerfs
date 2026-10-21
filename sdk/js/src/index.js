@@ -33,8 +33,9 @@ export class LayerFS {
    * then DSH_LAYERFS_TRACE); `options.traceStep` labels its lines
    * (overrides LAYERFS_TRACE_STEP, then DSH_LAYERFS_TRACE_STEP). Deployment
    * settings read LAYERFS_HOME, _DOCKER, _IMAGE, _VOLUME and _DAEMON, each
-   * else its DSH_LAYERFS_ twin; LAYERFS_CONTAINER_PREFIX, when set, names
-   * every container this client creates `<prefix><Sandbox id>`.
+   * else its DSH_LAYERFS_ twin; LAYERFS_CONTAINER_PREFIX (default
+   * `layerfs-`) names every container this client creates
+   * `<prefix><project>-<Sandbox>`.
    * `options.daemonHost` (else LAYERFS_DAEMON_HOST) is the host this process
    * dials for a daemon's port, published on the Docker host's 127.0.0.1 only;
    * set it when the client runs in a container (`host.docker.internal` on

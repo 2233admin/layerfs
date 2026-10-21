@@ -101,7 +101,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             image: args[2].clone(),
             store_volume: args[3].clone(),
             port: 30421,
-            volumes: vec![],
+            labels: vec![],
         },
         setup,
         executable: PathBuf::from(&args[4]),
