@@ -20,7 +20,7 @@ simplification.
 
 | Workstream | Current scope | Entry point |
 | --- | --- | --- |
-| Cluster one | Implemented content, storage, history, persistence, project Init and telemetry libraries | [Cluster-one handbook](cluster_one_handbook.md), [CAS/CDC/delta handbook](cas_cdc_deltaencoding_handbook.md) |
+| Cluster one | Implemented content, storage, history, persistence, project Init and telemetry libraries | [Cluster-one handbook](docs/general/cluster_one_handbook.md), [CAS/CDC/delta handbook](docs/general/cas_cdc_deltaencoding_handbook.md) |
 | Cluster two | Workspace, FUSE, daemon, execution and Commit/runtime integration design and implementation | [Current design index](core/docs/issues/303/README.md) and its seven primary contracts |
 | Legacy reference | v0.1.6, retired from `main` by R9c; read at the recovery tag only | [R9c record](core/docs/issues/307/R9C-COMPLETION-20261010.md) |
 
@@ -180,7 +180,7 @@ For documentation/release work, read the
 [release policy](docs/general/release-policy.md).
 For measurements, read the [agent measurement workflow](docs/general/agent-measurement-policy.md),
 [benchmark rules](docs/general/benchmark_rules.md),
-[report template](benchmark_agent_report.md) and owning harness/family contract.
+[report template](docs/general/benchmark_agent_report.md) and owning harness/family contract.
 Core routing is [benchmark/fs-bench-pro/AGENTS.md](benchmark/fs-bench-pro/AGENTS.md).
 **fs-bench-pro is frozen and left broken (owner, 2026-10-18).** Do not edit,
 build, run or repair it, and leave it out of workspace builds and checks. Its
