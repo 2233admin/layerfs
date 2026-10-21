@@ -199,7 +199,7 @@ try {
   await trees.dispose();
   assert.deepEqual(closed, ["sb_other", "store"], "the shared service Sandbox stays open");
 
-  // state reads go through the same per-project client: one service Sandbox start, not one per read
+  // state reads go through the same per-project client: one client, not one per read
   let opened = 0;
   const empty = { project: "p", branches: [], commits: [], layers: [], sandboxes: [], store: {} };
   const shared = new TreeReader(h.spec, async () => { opened++; return { layerfs: { fs: fakeFs, sandboxes: new Set(), sandbox: { close: async () => {} }, close: async () => {} }, operator: { inspect: { snapshot: async () => empty } } }; });
@@ -207,37 +207,32 @@ try {
   const [stateA, stateB] = await Promise.all([shared.state(P, []), shared.state(P, []), shared.files(P, "list", new URLSearchParams({ ref: REF }))]);
   assert.deepEqual([opened, typeof stateA.s, typeof stateB.labels], [1, "object", "object"]);
   await shared.dispose();
-  // a client whose service Sandbox another client closed is dropped, so the next read opens a new one
-  let made = 0;
-  const gone = Object.assign(new Error("NoSuchSandbox: no Sandbox named _service.p"), { code: "NoSuchSandbox" });
-  const stale = new TreeReader(h.spec, async () => { made++; return { layerfs: { sandboxes: new Set(), sandbox: { close: async () => {} }, close: async () => {} }, operator: { inspect: { snapshot: async () => { if (made === 1) throw gone; return empty; } } } }; });
-  await assert.rejects(stale.state(P, []), /NoSuchSandbox/);
-  assert.equal(typeof (await stale.state(P, [])).s, "object");
-  assert.equal(made, 2);
-  await stale.dispose();
-  // a service Sandbox whose container is gone is closed, once, to free its name; the read still fails
-  const lost = Object.assign(new Error("NoSuchSandbox: the container of Sandbox _service.p is gone; close it to free its name"), { code: "NoSuchSandbox", detail: { sandbox: "_service.p", container: "c".repeat(64), containerGone: true } });
+  // a read starts no Sandbox; a service Sandbox the snapshot finds gone (container
+  // removed, or stopped when Docker quit) is closed once to free its name, and
+  // the read still shows the project
   const closings = [];
-  let built = 0;
-  const orphan = new TreeReader(h.spec, async () => { built++; return { layerfs: { sandboxes: new Set(), sandbox: { close: async (id) => closings.push(id) }, close: async () => {} }, operator: { inspect: { snapshot: async () => { if (built === 1) throw lost; return empty; } } } }; });
-  await assert.rejects(orphan.state(P, []), /container of Sandbox _service\.p is gone/);
-  assert.deepEqual(closings, ["_service.p"]);
-  assert.equal(typeof (await orphan.state(P, [])).s, "object");
-  assert.deepEqual([built, closings], [2, ["_service.p"]], "one close, then a new client");
-  await orphan.dispose();
-  // so is one whose container is stopped (Docker restarted): the SDK reports it gone too
-  const stopped = Object.assign(new Error("NoSuchSandbox: the container of Sandbox _service.p is stopped; close it to free its name"), { code: "NoSuchSandbox", detail: { sandbox: "_service.p", container: "c".repeat(64), containerGone: true, containerStopped: true } });
-  let rebuilt = 0;
-  const restarted = new TreeReader(h.spec, async () => { rebuilt++; return { layerfs: { sandboxes: new Set(), sandbox: { close: async (id) => closings.push(id) }, close: async () => {} }, operator: { inspect: { snapshot: async () => { if (rebuilt === 1) throw stopped; return empty; } } } }; });
-  await assert.rejects(restarted.state(P, []), /container of Sandbox _service\.p is stopped/);
-  assert.equal(typeof (await restarted.state(P, [])).s, "object");
-  assert.deepEqual([rebuilt, closings], [2, ["_service.p", "_service.p"]], "one close, then a new client");
-  await restarted.dispose();
-  // a plain NoSuchSandbox (another client closed it) closes nothing
-  const plain = new TreeReader(h.spec, async () => ({ layerfs: { sandboxes: new Set(), sandbox: { close: async (id) => closings.push(id) }, close: async () => {} }, operator: { inspect: { snapshot: async () => { throw gone; } } } }));
-  await assert.rejects(plain.state(P, []), /NoSuchSandbox/);
+  const goneOf = (detail) => ({ ...empty, gone: [{ id: "_service.p", detail }] });
+  const lost = { sandbox: "_service.p", container: "c".repeat(64), containerGone: true };
+  for (const detail of [lost, { ...lost, containerStopped: true }]) {
+    let built = 0, reads = 0;
+    const orphan = new TreeReader(h.spec, async () => { built++; return { layerfs: { sandboxes: new Set(), sandbox: { close: async (id) => closings.push(id) }, close: async () => {} }, operator: { inspect: { snapshot: async () => (reads++ ? empty : goneOf(detail)) } } }; });
+    assert.equal(typeof (await orphan.state(P, [])).s, "object");
+    assert.equal(typeof (await orphan.state(P, [])).s, "object");
+    assert.equal(built, 1, "the same client keeps reading");
+    await orphan.dispose();
+  }
+  assert.deepEqual(closings, ["_service.p", "_service.p"], "one close per gone service Sandbox");
+  // a gone agent Sandbox, or one with no gone container, is left alone
+  const others = new TreeReader(h.spec, async () => ({ layerfs: { sandboxes: new Set(), sandbox: { close: async (id) => closings.push(id) }, close: async () => {} }, operator: { inspect: { snapshot: async () => ({ ...empty, gone: [{ id: "sb_agent", detail: lost }, { id: "_service.p", detail: null }] }) } } }));
+  assert.equal(typeof (await others.state(P, [])).s, "object");
+  await others.dispose();
   assert.equal(closings.length, 2);
-  await plain.dispose();
+  // forgetting a project closes its service Sandbox, which reads never opened in this client
+  const forgotten = [];
+  const owner = new TreeReader(h.spec, async () => ({ layerfs: { sandboxes: new Set(["sb_mine"]), sandbox: { close: async (id) => forgotten.push(id) }, close: async () => {} }, operator: { sandbox: { service: async () => "_service.p" }, inspect: { snapshot: async () => empty } } }));
+  await owner.state(P, []);
+  await owner.forget("p");
+  assert.deepEqual(forgotten, ["sb_mine", "_service.p"]);
 
   // storage: Store totals and Init apart; every Branch's Commits once, newest first; main lists none
   const C = (id, time) => ({ id, time, message: id, via: "fs", logical: 10, newCanonical: 5, newStored: 3, newMetadata: 1 });

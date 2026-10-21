@@ -104,10 +104,15 @@ and can use an ID and mount path without Init, reinstall or attach replay.
 Nonblocking OS locks and persisted create intent prevent guessing after an
 uncertain create. Restart recovery and failed-operation replay are excluded.
 
-`operator.inspect.snapshot` joins the client's service and known Sandboxes,
-including each mounted Workspace's real overlay data. The bounded daemon answer
-discloses moreBranches/more/moreLayers. Its version includes local publication
-revision as well as history/binding facts; JS combines daemon versions. The demo
+`operator.inspect.snapshot` reads history with `operator.inspect.history`, the
+same bounded answer with no Workspaces, from the Store in the calling process,
+and joins the Workspaces of the client's known Sandboxes that are running,
+including each mounted Workspace's real overlay data. It finds an existing
+service Sandbox with `operator.sandbox.service`, which reads the project's record
+and creates nothing, so a snapshot starts no Sandbox; a known Sandbox refused as
+`NoSuchSandbox` is listed in `gone` with its detail. The bounded answer discloses
+moreBranches/more/moreLayers. Its version includes local publication revision as
+well as history/binding facts; JS combines the history and daemon versions. The demo
 may poll; it has no event-stream or reconstructed marker authority. Individual
 operator Workspace reads are observations and are not an atomic global snapshot.
 

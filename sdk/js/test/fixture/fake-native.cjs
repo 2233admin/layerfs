@@ -1,7 +1,8 @@
 // A stand-in native binding for trace checks: no Docker, Store or daemon.
 // Store calls name the client's storePath; Sandbox calls their Sandbox.
 // Every call resolves like the real binding; a path "/missing" is refused, and
-// so are the next `busyServices` service Sandbox creations (Busy).
+// so are the next `busyServices` service Sandbox creations (Busy). `service`
+// is the project's existing service Sandbox (null for none).
 const commit = { id: "c0ffee", logical: 120, newCanonical: 40, newStored: 30, newMetadata: 8 };
 const answer = (op, args) => {
   if (op === "sandbox.service" && exports.busyServices > 0) {
@@ -19,6 +20,8 @@ const answer = (op, args) => {
   if (op === "branch.publish") return { value: { kind: "Added", source: { branch: "feature", commit: "pub1" }, publishedLayer: { id: "lay1" } } };
   if (op === "branch.fork") return { value: { kind: "Forked", branch: args.name, base: "lay0", head: "not-a-publication" } };
   if (/^fs\.(write|edit|apply|mkdir|cp|mv)$/.test(op)) return { value: { commit } };
+  if (op === "operator.sandbox.service") return { value: exports.service ? { id: exports.service } : null };
+  if (op === "operator.inspect.history") return { value: { kind: "ok", version: "h1", project: "website", branches: [], commits: [], more: {}, layers: [], workspaces: [] } };
   if (op === "operator.inspect.snapshot") return { value: { version: "1", workspaces: [] } };
   if (op === "operator.store.stats") return { value: { dedupe: "2", compression: null } };
   return { value: { items: [], hasMore: false } };
@@ -37,6 +40,7 @@ exports.observed = [];
 exports.deploys = [];
 exports.args = [];
 exports.busyServices = 0;
+exports.service = "sb_fake";
 const traced = (op, args) => {
   exports.calls.push(op);
   exports.observed.push(args.observe ?? null);

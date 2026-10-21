@@ -1,7 +1,9 @@
 //! `operator.inspect.snapshot({ project, since? })`: the operator read model.
 //!
 //! One answer holds the project's Branches, its newest Commits and Layers, and
-//! this daemon's Workspaces on the project. It is not agent-facing. Commits
+//! this daemon's Workspaces on the project. `operator.inspect.history` is the
+//! same answer with no Workspaces, read from the Store with no daemon, so a
+//! reader starts no Sandbox to show history. It is not agent-facing. Commits
 //! and Layers are newest first within one control record; `more` gives the
 //! cursor `branch.list_commits` continues each Branch from, and `moreLayers`
 //! says older Layers were left out. `version` is a digest of the answer, so a

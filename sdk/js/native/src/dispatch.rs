@@ -103,7 +103,9 @@ pub(crate) fn operator_call(op: String, args: JsUnknown) -> napi::Result<AsyncTa
             "operator.process.list" => exec::processes(&args),
             "operator.process.cancel" => exec::cancel(&args),
             "operator.project.progress" => crate::project::progress(&args),
-            "operator.store.stats"
+            "operator.sandbox.service" => crate::sandbox::service_existing(&args),
+            "operator.inspect.history"
+            | "operator.store.stats"
             | "operator.store.commits"
             | "operator.store.overwritten"
             | "operator.files.stats"

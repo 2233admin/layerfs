@@ -179,7 +179,7 @@ try {
     process.env.DSH_LAYERFS_TRACE_STEP = "call_7";
     const results = await script(new LayerFS("website"));
     const lines = read(file);
-    assert.equal(lines.length, results.length + 1, "one line per call plus the service Sandbox of the read model");
+    assert.equal(lines.length, results.length + 2, "one line per call; the read model makes three: history, the service Sandbox lookup and its Workspaces");
     assert.ok(lines.every((line) => line.step === "call_7" && line.phase === "end"));
     // The LAYERFS_ names win over their DSH_ twins.
     const own = join(dir, "own.jsonl");
@@ -207,7 +207,7 @@ try {
     process.env.LAYERFS_TRACE_STEP = "with starts";
     const results = await script(new LayerFS("website"));
     const lines = read(file);
-    assert.equal(lines.length, 2 * (results.length + 1));
+    assert.equal(lines.length, 2 * (results.length + 2));
     const starts = lines.filter((line) => line.phase === "start");
     const ends = lines.filter((line) => line.phase === "end");
     assert.equal(starts.length, ends.length);
@@ -228,7 +228,7 @@ try {
     await script(new LayerFS("website"));
     const lines = read(file);
     const of = (method) => lines.find((line) => line.method === method);
-    assert.equal(of("sandbox.service").sandbox, "sb_fake");
+    assert.equal(of("sandbox.service"), undefined, "a snapshot starts no Sandbox");
     assert.deepEqual(pick(of("branch.fork"), ["branch", "base", "head"]), { branch: "feature", base: "lay0", head: "not-a-publication" });
     assert.deepEqual(pick(of("branch.merge"), ["branch", "head", "commit"]), { branch: "merged", head: "m3rge", commit: "m3rge" });
     assert.equal(of("sandbox.create").sandbox, "sb_fake");
@@ -275,6 +275,15 @@ try {
     assert.deepEqual(native.args.at(-1).policy, { wholeFileDepth: 8, chunkDepth: 4 });
     await new LayerFS("website3").project.init("/src/website");
     assert.equal("policy" in native.args.at(-1), false);
+    // A snapshot reads history from the Store in this process and starts no
+    // Sandbox: with none running it asks no daemon.
+    native.service = null;
+    const reader = new LayerFS("website");
+    const before = native.calls.length;
+    const snap = await new LayerFSOperator(reader).inspect.snapshot();
+    assert.deepEqual(native.calls.slice(before), ["operator.inspect.history", "operator.sandbox.service"]);
+    assert.equal(native.args[before].storePath, "/fake/store.sqlite");
+    assert.deepEqual([snap.kind, snap.sandboxes, snap.gone], ["ok", [], []]);
   } else if (selected === "daemon-host") {
     // A client in a container dials its daemonHost on every call that names
     // a Sandbox, operator calls included: the binding reopens the Sandbox

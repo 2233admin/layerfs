@@ -12,8 +12,8 @@ const operator = new LayerFSOperator(layerfs);
 ```
 
 The public SDK refuses every `operator.*` name; only this entry point reaches them.
-Store and file methods go through the client's service Sandbox. Workspace and process
-methods take a Sandbox id and a mount path.
+Store and file methods, and the history half of `inspect.snapshot`, read the Store in
+this process. Workspace and process methods take a Sandbox id and a mount path.
 
 ## `operator.store.stats()`
 
@@ -97,6 +97,12 @@ markers.
 The read model the terminal UI draws: Branches, Workspaces, Sandboxes and Store
 statistics, with a `version`. Pass the last `version` as `since` to get
 `{ kind: "unchanged", version }` when nothing changed.
+
+It starts no Sandbox. History comes from the Store in this process; Workspaces come
+only from the client's Sandboxes that are running, including the project's service
+Sandbox if one exists (`operator.sandbox.service()` returns its id, or `null`).
+A known Sandbox whose container is gone or stopped is left out of `sandboxes` and
+listed in `gone` as `{ id, detail }`.
 
 ## `operator.process.start(id, path, command)`
 

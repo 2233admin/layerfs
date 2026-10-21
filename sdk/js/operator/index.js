@@ -1,5 +1,5 @@
 // Internal operator surface; public dispatch cannot admit these names.
-import { snapshot } from "./inspect/snapshot.js";
+import { serviceOf, snapshot } from "./inspect/snapshot.js";
 import { invokeOperator, sandboxArgs, page } from "../src/client.js";
 export class LayerFSOperator {
   constructor(client) {
@@ -23,6 +23,8 @@ export class LayerFSOperator {
       changes: (sandbox,path,pageSize,pagePos) => call("workspace.changes", { path,...page(pageSize,pagePos) },sandbox),
     };
     this.inspect = { snapshot: (since) => snapshot(client,since) };
+    // the project's service Sandbox id if one exists, else null; it starts none
+    this.sandbox = { service: () => serviceOf(client) };
     // the running Init of this project, read while project.init runs (no Sandbox): { step, entries, files, bytes } or null
     this.project = { progress: () => invokeOperator("operator.project.progress", { project: client.projectName }, client.options) };
     this.process = {

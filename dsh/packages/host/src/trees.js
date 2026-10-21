@@ -58,23 +58,6 @@ export class TreeReader {
     entry.users++;
     try {
       return await fn(await entry.client);
-    } catch (error) {
-      // the project's service Sandbox is shared, and any client may close it: this
-      // client can't use it again, so the next read starts a new one
-      if (error?.code === "NoSuchSandbox" && /_service\./.test(error.message ?? "") && this.clients.get(project.name) === entry) {
-        this.clients.delete(project.name);
-        clearTimeout(entry.timer);
-        // its container no longer runs it: removed outside LayerFS, or stopped
-        // (Docker quit and restarted), which lost its daemon and its mounts.
-        // Nothing can be using it, so closing it (which deletes a stopped
-        // container) frees its name. This read still fails; the next one
-        // starts a new service Sandbox.
-        if (error.detail?.containerGone) {
-          const { layerfs } = await entry.client;
-          await layerfs.sandbox.close(error.detail.sandbox).catch((closing) => console.warn(`LayerFS: could not close ${error.detail.sandbox}, whose container is gone: ${closing.message}`));
-        }
-      }
-      throw error;
     } finally {
       if (--entry.users === 0 && this.clients.get(project.name) === entry) {
         entry.timer = setTimeout(() => this.drop(project.name, entry), IDLE_MS);

@@ -76,7 +76,7 @@ The LayerFS tab is the only LayerFS UI. The standalone HTML pages that used to l
 
   Removal deletes the project's Docker volume and LayerFS home entry, and drops it from the bindings; sessions on it become unbound. It is refused while any container still uses the volume. Workspace files and transcripts stay. A LayerFS project is its home entry, so a removed name can be initialized again at once.
 
-  The Host reads each project (state and trees) through one shared SDK client, so it starts the project's service Sandbox once and releases it after a quiet minute. The SDK takes a project's discovery lock while a client starts or attaches that Sandbox and refuses a second client at the same moment as `Busy` (no retry); the page then says so and asks for Refresh.
+  The Host reads each project (state and trees) through one shared SDK client, released after a quiet minute. Reading starts no Sandbox: history comes from the project's Store in the box, and Workspaces only from Sandboxes already running, so a project nobody works on shows its history with no container. A service Sandbox whose container is gone or stopped (Docker quit) is closed once to free its name; the next agent call starts a new one. Removing a project closes its service Sandbox too.
 
   Trees are bounded: 4000 entries, 128 KB per file, 8 MB in all. `node_modules`, `.git`, `.next`, `dist` and `build` are listed but not opened.
 

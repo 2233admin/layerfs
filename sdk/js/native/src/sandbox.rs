@@ -82,6 +82,19 @@ pub(crate) fn create(args: &SdkValue) -> Outcome {
 pub(crate) fn service(args: &SdkValue) -> Outcome {
     create_selected(args, true)
 }
+/// The operator op `operator.sandbox.service`: the id of the project's service
+/// Sandbox when one was created before, else null. It reads the project's
+/// record and starts nothing, so a read can find the Sandbox without making one.
+pub(crate) fn service_existing(args: &SdkValue) -> Outcome {
+    let directory = crate::discovery::project_dir(args)?;
+    let _guard = crate::discovery::guard(&directory)?;
+    let record = directory.join("service.record");
+    if !record.exists() {
+        return Ok(SdkValue::Null);
+    }
+    let saved = crate::discovery::load(&record)?;
+    Ok(SdkValue::map([("id", SdkValue::text(text(&saved, "id")?))]))
+}
 fn create_selected(args: &SdkValue, service: bool) -> Outcome {
     let name = text(args, "project")?;
     let deploy = args

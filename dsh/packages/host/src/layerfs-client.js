@@ -50,20 +50,25 @@ export async function clientFor(spec, project) {
  * script, so it stays open unless `service` is set: for a removal or a failed
  * Init, whose volume must have no running container.
  */
-export async function release({ layerfs }, { service = false } = {}) {
-  for (const id of [...layerfs.sandboxes]) if (service || !id.startsWith("_service.")) await layerfs.sandbox.close(id);
+export async function release({ layerfs, operator }, { service = false } = {}) {
+  const ids = new Set(layerfs.sandboxes);
+  // reads start no service Sandbox, so this client may not hold the one agents started
+  if (service) { const found = await operator?.sandbox?.service(); if (found) ids.add(found); }
+  for (const id of ids) if (service || !id.startsWith("_service.")) await layerfs.sandbox.close(id);
   await layerfs.close?.();
 }
 
 /**
  * The project as the views draw it: the mirror of one inspect.snapshot, with
- * the Sandboxes the traced calls created (ids from the trace lines). Read
- * through the Host's shared client for the project (TreeReader.use), so the
- * Host does not start and close a service Sandbox per read.
+ * the Sandboxes the traced calls created (ids from the trace lines). History
+ * comes from the Store and Workspaces from the Sandboxes already running, so
+ * reading starts no Sandbox. Read through the Host's shared client for the
+ * project (TreeReader.use).
  * @param {object} client a project's client @param {string[]} sandboxes real Sandbox ids
  */
 export async function stateOf(client, sandboxes) {
   const snap = await olderCommits(client.layerfs, await client.operator.inspect.snapshot());
+  await closeGone(client, snap.gone);
   const m = new Mirror(), boxes = [];
   for (const real of sandboxes) {
     const listed = (snap.sandboxes || []).find((x) => x.id === real);
@@ -71,6 +76,20 @@ export async function stateOf(client, sandboxes) {
   }
   m.absorb(snap, boxes);
   return { s: { ...m.s, roots: {} }, labels: Object.fromEntries(m.toLabel) };
+}
+
+/**
+ * A service Sandbox the snapshot found gone: its container no longer runs it
+ * (removed outside LayerFS, or stopped when Docker quit), so its daemon and
+ * mounts are lost and nothing can be using it. Closing it (which deletes a
+ * stopped container) frees its name; the next call that needs it starts a
+ * new one. An agent's own Sandbox is left to that agent.
+ */
+async function closeGone({ layerfs }, gone = []) {
+  for (const { id, detail } of gone) {
+    if (!id.startsWith("_service.") || !detail?.containerGone) continue;
+    await layerfs.sandbox.close(id).catch((error) => console.warn(`LayerFS: could not close ${id}, whose container is gone: ${error.message}`));
+  }
 }
 
 /**

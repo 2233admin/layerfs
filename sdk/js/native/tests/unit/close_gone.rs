@@ -1,7 +1,7 @@
 //! `sandbox.close` of a Sandbox whose container the Engine no longer has: its
 //! records go under its locks, and nothing else counts as gone. Included by
 //! sandbox.rs, so it reaches the private close paths.
-use super::{close, close_gone};
+use super::{close, close_gone, service_existing};
 use layerfs_bridge::control::SdkValue;
 use std::{
     io::{BufRead, BufReader, Write},
@@ -235,5 +235,19 @@ fn a_stopped_container_the_engine_will_not_delete_keeps_its_records() {
         .join("sandbox.record")
         .exists());
     assert!(home.join("proj").join("service.record").exists());
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+#[test]
+fn the_service_lookup_reads_the_record_and_starts_nothing() {
+    let home = home();
+    let project = SdkValue::map([
+        ("project", SdkValue::text("proj")),
+        ("home", SdkValue::text(home.to_str().unwrap())),
+    ]);
+    let found = service_existing(&project).unwrap();
+    assert_eq!(found.get_text("id"), Some(ID));
+    std::fs::remove_file(home.join("proj").join("service.record")).unwrap();
+    assert_eq!(service_existing(&project).unwrap(), SdkValue::Null);
     std::fs::remove_dir_all(home).unwrap();
 }
