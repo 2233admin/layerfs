@@ -4,9 +4,12 @@
 //                 each mounted Workspace with its Branch, uncommitted changes,
 //                 background processes, and who mounted it (the agents' traces)
 //   all projects  Docker, the Store container, free disk, and each project's
-//                 Sandbox containers from one `docker ps`
+//                 Sandbox containers from one `docker ps`, each daemon pinged
+//                 (a TCP connect) and its Workspaces from the agents' traces:
+//                 no daemon is asked for its state (quickSandboxes)
 // A read starts nothing, and waits for a project's Sandboxes only
-// trees.sandboxMs: one that does not answer is reported, not waited on. An
+// trees.sandboxMs: after that the tab shows the quick view (`pending`) while
+// the daemons' answer is read on. An
 // action is one SDK or Docker call, never repeated;
 // one that would cut off an agent's call running in that Workspace is refused.
 import { execFile } from "node:child_process";
@@ -30,11 +33,18 @@ const key = (sandbox, path) => `${sandbox}\n${path}`;
 const worst = (levels) => levels.reduce((a, b) => (RANK[b] < RANK[a] ? b : a), "ok");
 const refuse = (status, code, message) => Object.assign(new Error(message), { status, code });
 
-/** One project's Sandboxes, as its Sandboxes tab draws them. */
+/**
+ * One project's Sandboxes, as its Sandboxes tab draws them: each daemon's
+ * Workspaces and processes. When the daemons take longer than
+ * trees.sandboxMs, the quick view (`pending: true`) is drawn and the read runs on.
+ */
 export async function projectRuntime(trees, collector, project, now = Date.now()) {
   {
     const [read, listed] = await Promise.all([within(trees.snapshot(project), trees.sandboxMs), within(trees.processes(project), trees.sandboxMs)]);
-    if (read.late || listed.late) throw refuse(504, "sandbox-late", `its Sandboxes did not answer in ${trees.sandboxMs / 1000} s; a call may be stuck in one`);
+    if (read.late || listed.late) {
+      const sandboxes = isSim(project) ? [] : await quickSandboxes(collector, project, await containersOf(trees.spec), now);
+      return { project: project.name, simulated: isSim(project), sandboxes, gone: [], pending: true, level: worst(sandboxes.map((s) => s.level)) };
+    }
     const snap = read.value, processes = listed.value.items ?? [];
     const busy = collector.busyOf(project.name), mounts = collector.mountsOf(project.name);
     const sandboxes = (snap.sandboxes ?? []).map((sb) => {
@@ -59,6 +69,28 @@ export async function projectRuntime(trees, collector, project, now = Date.now()
   }
 }
 
+/**
+ * A project's running Sandbox containers (`containers`, from containersOf),
+ * each daemon pinged (it accepts a connection within PING_MS), with the
+ * Workspaces the agents' traces mounted there. No daemon is asked anything,
+ * so a busy or stuck one cannot hold the read; uncommitted changes and
+ * processes are not known here.
+ */
+export async function quickSandboxes(collector, project, containers, now = Date.now()) {
+  const mounts = collector.mountsOf(project.name), busy = collector.busyOf(project.name);
+  return Promise.all(containers.filter((c) => c.project === project.name && c.running).map(async (c) => {
+    const answers = c.port ? await reachable(c.port) : false;
+    const workspaces = Object.entries(mounts).filter(([k]) => k.split("\n")[0] === c.sandbox).map(([k, by]) => {
+      const inUse = busy.has(k);
+      return {
+        path: k.split("\n")[1], branch: null, activity: null, uncommitted: 0, stale: false, pendingMerge: false,
+        agent: by.agent ?? null, mountedAt: by.at, idleMs: inUse ? null : Math.max(0, now - by.lastAt), busy: inUse, processes: [], level: "ok",
+      };
+    });
+    return { id: c.sandbox, name: c.name, image: c.image || null, capacity: CAPACITY, workspaces, answers, level: answers ? "ok" : "down" };
+  }));
+}
+
 /** Every project's Sandboxes and the shared parts, as the All projects page draws them. */
 export async function overview(spec, bindings, trees, collector) {
   const engine = await engineState(spec);
@@ -71,17 +103,18 @@ export async function overview(spec, bindings, trees, collector) {
     const card = { name: p.name, simulated: isSim(p), containers: own.length, sandboxes: [], workspaces: 0, level: "ok", note: null };
     // a project with nothing running is read from Docker alone: no client, no Store opened
     if (!own.some((c) => c.running) && !card.simulated) return card;
+    // the simulator's Sandboxes are its own state, read at once; a real project's from Docker and pings
+    let sandboxes;
     try {
-      const r = await projectRuntime(trees, collector, p);
-      card.sandboxes = r.sandboxes.map((s) => ({ id: s.id, name: s.name, image: s.image, used: s.workspaces.length, capacity: s.capacity, level: s.level }));
-      card.workspaces = r.sandboxes.reduce((n, s) => n + s.workspaces.length, 0);
-      card.level = r.level;
-      const left = r.sandboxes.flatMap((s) => s.workspaces).filter((w) => w.level !== "ok");
-      card.note = r.gone.length ? `${r.gone.length} Sandbox${r.gone.length === 1 ? "" : "es"} gone` : left.length ? `${left.length} Workspace${left.length === 1 ? "" : "s"} left with uncommitted changes` : null;
+      sandboxes = card.simulated ? (await projectRuntime(trees, collector, p)).sandboxes : await quickSandboxes(collector, p, own);
     } catch (error) {
-      card.level = "down";
-      card.note = error.message;
+      return { ...card, level: "down", note: error.message };
     }
+    card.sandboxes = sandboxes.map((s) => ({ id: s.id, name: s.name, image: s.image, used: s.workspaces.length, capacity: s.capacity, level: s.level }));
+    card.workspaces = sandboxes.reduce((n, s) => n + s.workspaces.length, 0);
+    card.level = worst(sandboxes.map((s) => (s.level === "ok" && s.workspaces.length >= CAPACITY ? "degraded" : s.level)));
+    const silent = sandboxes.filter((s) => s.answers === false);
+    card.note = silent.length ? `${silent.map((s) => s.name).join(", ")} does not accept a connection` : null;
     return card;
   }));
   cards.sort((a, b) => RANK[a.level] - RANK[b.level] || b.workspaces - a.workspaces || a.name.localeCompare(b.name));
@@ -182,10 +215,12 @@ export async function nameImages(spec, sandboxes) {
 
 /** This home's Sandbox containers (named `<prefix><project>-<n>`), running or not. */
 async function containersOf(spec) {
-  const out = await docker(spec, "ps", "-a", "--filter", "label=layerfs.role=sandbox", "--format", "{{.Names}}\t{{.State}}\t{{.Status}}\t{{.Label \"layerfs.project\"}}\t{{.Label \"layerfs.sandbox\"}}");
+  const out = await docker(spec, "ps", "-a", "--no-trunc", "--filter", "label=layerfs.role=sandbox", "--format", "{{.Names}}\t{{.State}}\t{{.Status}}\t{{.Label \"layerfs.project\"}}\t{{.Label \"layerfs.sandbox\"}}\t{{.Image}}\t{{.Ports}}");
   return out.split("\n").filter(Boolean).map((row) => {
-    const [name, state, status, project, sandbox] = row.split("\t");
-    return { name, running: state === "running", status, project, sandbox };
+    const [name, state, status, project, sandbox, image, ports] = row.split("\t");
+    // the daemon's port, published on the host's loopback
+    const port = Number(/127\.0\.0\.1:(\d+)->/.exec(ports ?? "")?.[1]) || null;
+    return { name, running: state === "running", status, project, sandbox, image, port };
   }).filter((c) => c.name.startsWith(spec.prefix));
 }
 
@@ -210,6 +245,17 @@ function ping(home) {
     readFrames(socket, (value) => { if (value?.id === 1) done(value.answer?.value === "ready"); }, () => done(false));
     socket.on("error", () => done(false));
     socket.on("close", () => done(false));
+  });
+}
+
+/** Whether something accepts a TCP connection on the host's loopback `port` within PING_MS. */
+export function reachable(port, ms = PING_MS) {
+  return new Promise((resolve) => {
+    const socket = connect({ host: "127.0.0.1", port });
+    const done = (value) => { clearTimeout(timer); socket.destroy(); resolve(value); };
+    const timer = setTimeout(() => done(false), ms);
+    socket.on("connect", () => done(true));
+    socket.on("error", () => done(false));
   });
 }
 

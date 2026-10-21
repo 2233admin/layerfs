@@ -35,6 +35,7 @@ export function SandboxesTab({ name, runtime, error, reload }: { name: string, r
       <div style={{ display: 'grid', gap: 10, padding: '12px 14px 16px', alignContent: 'start' }}>
         {(error || failed) && <div role="status" style={{ color: T.danger, wordBreak: 'break-word' }}>{failed ?? error}</div>}
         {busy && <div role="status" style={{ color: T.text2 }}>{busy}</div>}
+        {runtime?.pending && <div role="status" style={{ color: T.text2 }}>Still reading the Sandboxes' Workspaces; shown meanwhile from Docker and the agents' calls, without changes, Branches or processes.</div>}
         {runtime && !sandboxes.length && (
           <div style={{ color: T.text2 }}>No Sandbox runs. LayerFS starts one when an agent mounts a Workspace and closes it once it sits idle; reading this page starts none.</div>
         )}
@@ -50,7 +51,7 @@ export function SandboxesTab({ name, runtime, error, reload }: { name: string, r
               <Meter used={sb.workspaces.length} capacity={sb.capacity} />
             </header>
             {sb.workspaces.map((w) => (
-              <WorkspaceRow key={w.path} w={w} disabled={!!busy}
+              <WorkspaceRow key={w.path} w={w} disabled={!!busy || !!runtime?.pending}
                 onUnmount={() => act(`Unmounting ${wsName(w.path)}…`, { action: 'unmount', sandbox: sb.id, path: w.path })}
                 onDiscard={() => setAsk({ kind: 'discard', sandbox: sb.id, path: w.path })}
                 onStop={(p) => setAsk({ kind: 'stop', sandbox: sb.id, path: w.path, process: p.id, command: p.command })}

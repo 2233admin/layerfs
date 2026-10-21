@@ -42,6 +42,8 @@ export interface ProjectRuntime {
   project: string, simulated: boolean, level: Level
   sandboxes: ({ id: string, name: string | null, capacity: number, workspaces: RuntimeWorkspace[], level: Level } & SandboxImage)[]
   gone: ({ id: string, name: string | null } & SandboxImage)[]
+  /** the daemons have not answered yet: Sandboxes from Docker and a ping, Workspaces from the agents' traces */
+  pending?: boolean
 }
 /** The image a Sandbox runs: its exact digest and first tag (Host runtime.js); one project's Sandboxes may differ. */
 export interface SandboxImage { image: string | null, imageName?: string | null }

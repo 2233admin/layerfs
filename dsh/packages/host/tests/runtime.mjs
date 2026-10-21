@@ -81,18 +81,35 @@ try {
   assert.equal(kept[0].running, true);
   await trees.dispose();
 
-  // a project whose Sandbox does not answer: its read gives up after sandboxMs
-  // (sandbox-late) and the overview shows the card as down instead of waiting
+  // a project whose Sandbox does not answer: its tab gets the quick view
+  // (pending) after sandboxMs while the read runs on, never asked twice
   {
     let asked = 0;
     const stuck = new TreeReader(spec, async () => ({ layerfs: { close: async () => {} }, operator: { inspect: { snapshot: () => (asked++, new Promise(() => {})) }, process: { list: async () => ({ items: [] }) } } }));
     stuck.sandboxMs = 50;
-    await assert.rejects(projectRuntime(stuck, collector, project), { code: "sandbox-late" });
-    await assert.rejects(projectRuntime(stuck, collector, project), { code: "sandbox-late" });
+    const first = await projectRuntime(stuck, collector, project), second = await projectRuntime(stuck, collector, project);
+    assert.deepEqual([first.pending, second.pending, first.level], [true, true, "ok"]);
     assert.equal(asked, 1, "the stuck snapshot is not asked again");
-    const card = (await overview(spec, bindings, stuck, collector)).projects[0];
-    assert.deepEqual([card.level, /did not answer/.test(card.note)], ["down", true]);
-    assert.equal(asked, 1);
+  }
+  // the All projects cards: each Sandbox container pinged, Workspaces from the
+  // traces; no daemon asked, so a closed port shows down within the ping
+  {
+    const { quickSandboxes, reachable } = await import("../src/runtime.js");
+    const { createServer } = await import("node:net");
+    const server = createServer((socket) => socket.destroy());
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const open = server.address().port, closed = await new Promise((resolve) => { const s = createServer(); s.listen(0, "127.0.0.1", () => { const p = s.address().port; s.close(() => resolve(p)); }); });
+    assert.deepEqual([await reachable(open), await reachable(closed)], [true, false]);
+    const box = (sandbox, port) => ({ name: `layerfs-p-${sandbox}`, running: true, project: "p", sandbox, image: "img:1", port });
+    const traces = { busyOf: () => new Set(), mountsOf: () => ({ "1\n/workspaces/1": { agent: "a", at: 1, lastAt: 2 } }) };
+    const started = Date.now();
+    const quick = await quickSandboxes(traces, { name: "p" }, [box("1", open), box("2", closed), { ...box("3", open), project: "q" }], 10);
+    server.close();
+    assert.deepEqual(quick.map((q) => [q.name, q.level, q.workspaces.map((w) => [w.path, w.agent, w.idleMs])]), [
+      ["layerfs-p-1", "ok", [["/workspaces/1", "a", 8]]],
+      ["layerfs-p-2", "down", []],
+    ]);
+    assert.ok(Date.now() - started < 1500, "a ping, not a state read");
   }
   console.log("runtime: ok");
 } finally {
