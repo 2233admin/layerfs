@@ -23,7 +23,7 @@ const { TreeReader } = await import("../src/trees.js");
 const { removeProject } = await import("../src/remove.js");
 const { migrate } = await import("../src/migrate.js");
 const { UNREACHABLE } = await import("../src/port/binding.js");
-const { prepareInit, randomName, scanSource, watching } = await import("../src/init.js");
+const { hostAccess, prepareInit, randomName, scanSource, watching } = await import("../src/init.js");
 const { InitJobs } = await import("../src/jobs.js");
 const { CALL, PROJECT } = await import("@dsh-layerfs/model/sources/records.js");
 
@@ -36,7 +36,8 @@ function session(id, cwd, parentSession) {
 }
 
 function host() {
-  const spec = resolveConfig({ image: "sha256:img", daemon: "/d/layerfs-daemon", bundle: "/b", home: join(dir, "home"), traceDir: join(dir, "traces") }, { dir: join(dir, "profile") });
+  const spec = resolveConfig({ image: "sha256:img", daemon: "/d/layerfs-daemon", bundle: "/b", home: join(dir, "home"), traceDir: join(dir, "traces"), volumes: join(dir, "volumes") }, { dir: join(dir, "profile") });
+  mkdirSync(spec.volumes, { recursive: true });
   const live = new Map();
   const ctx = { sessions: { get: (id) => live.get(id) } };
   const bindings = new BindingStore(spec.stateDir);
@@ -345,6 +346,16 @@ try {
   assert.deepEqual(ran, ["ps -a --filter volume=dsh-layerfs-website-1 --format {{.ID}} {{.State}}", "rm layerfs-website-1 layerfs-website-2 new", "volume rm dsh-layerfs-website-1"]);
   assert.deepEqual(forgot, ["website", "website"]);
   mkdirSync(join(dir, "website"), { recursive: true });
+  // Linux: a Host that cannot write Docker's volumes directory, or does not own the LayerFS home, is refused before a volume is made
+  const uid = process.getuid?.() ?? 1000;
+  assert.equal(hostAccess(h.spec, { platform: "linux", uid }), null);
+  assert.equal(hostAccess({ ...h.spec, volumes: join(dir, "no-volumes") }, { platform: "linux", uid }), null, "an engine without that directory is not checked");
+  assert.equal(hostAccess({ ...h.spec, volumes: "/nowhere" }, { platform: "darwin", uid }), null, "macOS imports in the Store container");
+  writeFileSync(join(dir, "volumes-file"), "");
+  assert.match(hostAccess({ ...h.spec, volumes: join(dir, "volumes-file", "x") }, { platform: "linux", uid }), /cannot write Docker's volumes directory .* \(ENOTDIR\)/);
+  assert.match(hostAccess(h.spec, { platform: "linux", uid: uid + 1 }), /belongs to uid \d+, not this Host's uid/);
+  if (process.platform === "linux") assert.throws(() => prepareInit({ ...h.spec, volumes: join(dir, "volumes-file", "x") }, h.bindings, { folder: dir }), { code: "host-access" });
+  assert.equal(prepareInit({ ...h.spec, volumes: "/nowhere-file/x" }, h.bindings, { folder: dir, backend: "sim" }).project.backend, "sim", "a simulated project needs no Docker");
   assert.equal(prepareInit(h.spec, h.bindings, { folder: dir, source: join(dir, "website") }).project.name, "website", "a removed name is free again at once");
   assert.equal(prepareInit(h.spec, h.bindings, { folder: dir, name: "website" }).project.name, "website");
   // a new empty project: a random adjective-noun name, an empty folder of its own (runInit removes it)
