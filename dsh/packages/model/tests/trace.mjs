@@ -56,6 +56,22 @@ end("workspace.commit", { ...WS, message: "tests" }, { kind: "Committed", commit
 assert.equal(R.m.real(R.s.branches.d.head), C2);
 end("workspace.unmount", { ...WS }, { kind: "Unmounted" });
 assert.equal(R.s.sandboxes["layerfs-p-1"].workspaces["/workspaces/1"].mounted, false);
+// A chat's History starts from the project's history (seeded): replaying the
+// chat's older calls never moves a Branch head or main back; a new call moves them.
+const L1 = "d".repeat(64), C3 = "12" + "e".repeat(64);
+end("branch.publish", { branch: "d" }, { commit: C2, layer: L1 });
+const S = new X.ReplayEngine({ project: "p" });
+S.m.s = structuredClone(R.s); S.m.toLabel = new Map(R.m.toLabel); S.m.toReal = new Map(R.m.toReal);
+S.m.next = { ...R.m.next }; S.m.slot = R.m.slot; S.seeded = true;
+const old = (method, args, rest) => S.apply({ method, args, ok: true, phase: "end", ...rest });
+const [dHead, mainHead] = [S.s.branches.d.head, S.s.main.head];
+old("branch.fork", { name: "d", from: "c" }, { branch: "d", base: L0, head: C1 });
+old("fs.write", { branch: "d", path: "x" }, { commit: C2, kind: "Committed" });
+old("branch.publish", { branch: "c" }, { commit: C1, layer: L0 });
+assert.deepEqual([S.s.branches.d.head, S.s.main.head], [dHead, mainHead]);
+old("fs.write", { branch: "d", path: "y" }, { commit: C3, kind: "Committed" });
+assert.equal(S.m.real(S.s.branches.d.head), C3);
+assert.equal(S.s.commits[S.s.branches.d.head].parent, dHead);
 // and as an agent's steps: the mount opens the Workspace's pane under the Sandbox's label
 const V = X.createView(new X.ReplayEngine({ project: "q" }), { lead: "main" });
 X.derive(V);

@@ -220,6 +220,9 @@ try {
     const first = await slow.state(P), second = await slow.state(P);
     assert.deepEqual([first.late, second.late, asked], [true, true, 1], "drawn without Workspaces; the stuck snapshot is not asked again");
     assert.deepEqual(first.s.sandboxOrder, []);
+    // the History-only read (a chat's History) asks no Sandbox and does not wait for one
+    const started = Date.now(), only = await slow.history(P);
+    assert.deepEqual([typeof only.labels, only.late, asked, Date.now() - started < 50], ["object", undefined, 1, true]);
     answer(empty);
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal((await slow.state(P)).late, undefined, "once it answers, the next read is a new snapshot");

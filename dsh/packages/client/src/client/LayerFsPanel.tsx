@@ -14,7 +14,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { Button, IconEllipsisOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular, IconTrashOutlineRegular, Menu, type MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import ellen from '../../../../sim/avatars/ellen_joe.gif'
 import { AllSandboxes } from './AllSandboxes.tsx'
-import { api, type Project, type ProjectState, type Status } from './api.ts'
+import { api, readProject, type Project, type ProjectState, type Status } from './api.ts'
 import { InitDialog } from './InitDialog.tsx'
 import { ProjectBoard } from './ProjectBoard.tsx'
 import { RemoveDialog } from './RemoveDialog.tsx'
@@ -137,10 +137,9 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
   }, [loadProjects])
   useEffect(() => {
     if (!selected) return
-    let stopped = false
     setState(null); setStateError(null)
-    api.projectState(selected).then((s) => { if (!stopped) setState(s) }, (e: Error) => { if (!stopped) setStateError(e.message) })
-    return () => { stopped = true }
+    // History draws as soon as the Store answers; Workspaces follow with the full state
+    return readProject(selected, setState, setStateError)
   }, [selected, reads])
 
   const act = (label: string, run: () => Promise<unknown>) => async () => {

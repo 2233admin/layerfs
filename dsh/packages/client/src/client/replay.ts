@@ -13,17 +13,40 @@ export type FilesSource = ReturnType<typeof createFilesSource>
  */
 export function projectModel(state: ProjectState, files: FilesSource, onchange: () => void) {
   const engine: any = new X.ReplayEngine({ project: state.s.project?.name ?? 'project', files })
-  engine.m.s = { ...state.s, roots: {} }
-  for (const [real, label] of Object.entries(state.labels)) { engine.m.toLabel.set(real, label); engine.m.toReal.set(label, real) }
-  for (const node of [...Object.values(engine.s.commits), ...Object.values(engine.s.layers)] as any[]) node.root = node.id
-  chronological(engine.s, state)
+  seedEngine(engine, state)
   engine.onchange = onchange
-  const W: any = X.storyView(engine, { lead: 'main' })
-  for (const [real, agent] of Object.entries(state.authors)) {
+  return X.derive(attribute(X.storyView(engine, { lead: 'main' }), state))
+}
+
+/**
+ * Starts a replay engine from the project's state: every Branch, Commit and
+ * Layer under the Host's labels, in the order they happened. A session's
+ * calls then replay on top (LayerFsView): a node the state already has keeps
+ * its label, and a new one is labelled after the state's. `workspaces: false`
+ * leaves Sandboxes to the calls.
+ */
+export function seedEngine(engine: any, state: ProjectState, { workspaces = true } = {}) {
+  const m = engine.m
+  m.s = { ...structuredClone(state.s), roots: {}, ...(workspaces ? {} : { sandboxes: {}, sandboxOrder: [] }) }
+  for (const [real, label] of Object.entries(state.labels)) {
+    m.toLabel.set(real, label); m.toReal.set(label, real)
+    const n = /^([CLR])(\d+)$/.exec(label)
+    if (n) m.next[n[1]] = Math.max(m.next[n[1]], Number(n[2]) + 1)
+  }
+  for (const node of [...Object.values(m.s.commits), ...Object.values(m.s.layers)] as any[]) node.root = node.id
+  chronological(m.s, state)
+  const slots = [...Object.values(m.s.commits), ...Object.values(m.s.layers), ...Object.values(m.s.branches)].map((x: any) => x.slot ?? 0)
+  m.slot = Math.max(m.slot, ...slots, -1) + 1
+  engine.seeded = true
+}
+
+/** Who made each node of the state, on the view (History's avatars). */
+export function attribute(W: any, state: ProjectState) {
+  for (const [real, agent] of Object.entries(state.authors ?? {})) {
     const label = state.labels[real]
     if (label) W.attrib[label] = agent
   }
-  return X.derive(W)
+  return W
 }
 
 /**

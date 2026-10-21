@@ -44,6 +44,9 @@ export class ReplayEngine {
     this.replay = true;
     this.published = false;
     this.initAlias = null;
+    /** Set when the engine starts from the project's history (the chat's History):
+     * a call naming a node it already holds never moves a pointer back. */
+    this.seeded = false;
     this.onchange = null;
     this.files = files;
   }
@@ -103,8 +106,15 @@ export class ReplayEngine {
       const b = s.branches[branch];
       s.commits[id] = { id, parent: b ? b.head : null, root: this.rootOf(id), branch, slot: this.m.slot++, ...fields };
     }
-    if (s.branches[branch]) s.branches[branch].head = id;
+    if (s.branches[branch]) this.advance(s.branches[branch], "head", id);
     return id;
+  }
+  /** Moves `holder[key]` to node `id`, unless a seeded engine already holds a later node there. */
+  advance(holder, key, id) { if (this.forward(holder[key], id)) holder[key] = id; }
+  forward(now, next) {
+    const s = this.s, slotOf = (x) => (s.commits[x] ?? s.layers[x])?.slot;
+    const a = slotOf(now), b = slotOf(next);
+    return !this.seeded || a === undefined || b === undefined || b >= a;
   }
   workspace(sb, path) { const box = this.s.sandboxes[sb]; return box && box.workspaces[path]; }
 
@@ -126,6 +136,7 @@ export class ReplayEngine {
       }
       case "branch.fork": {
         const base = this.layer(line.base), head = this.commit(line.head);
+        if (this.seeded && s.branches[line.branch]) return ok("Forked", { kind: "Forked", branch: line.branch, base, head });
         const from = a.from && a.from !== "main" && s.branches[a.from] ? s.branches[a.from].head || "fork:" + a.from : head || base;
         this.branch(line.branch, { base, head, from });
         return ok("Forked", { kind: "Forked", branch: line.branch, base, head });
@@ -139,15 +150,15 @@ export class ReplayEngine {
           this.branch(line.branch, { base: onto || (left ? left.base : null), head: null, from: "fork:" + a.branch });
           return ok("Merged", { kind: "Merged", branch: line.branch, head: null, fastForward: false });
         }
-        this.branch(line.branch, { base: left ? left.base : null, from: left ? left.head || "fork:" + a.branch : null });
+        if (!(this.seeded && s.branches[line.branch])) this.branch(line.branch, { base: left ? left.base : null, from: left ? left.head || "fork:" + a.branch : null });
         const head = known ? known.id : this.addCommit(line.head, line.branch, { parent: left ? left.head : null, mergedFrom: right ? right.head : null, message: a.message || `merge ${a.branch} ${a.with}`, via: "merge" });
-        s.branches[line.branch].head = head;
+        this.advance(s.branches[line.branch], "head", head);
         return ok("Merged", { kind: "Merged", branch: line.branch, head, fastForward: !!known });
       }
       case "branch.publish": {
         const commit = this.commit(line.commit), id = this.m.label("L", line.layer);
         s.layers[id] ||= { id, parent: s.main ? s.main.head : null, root: this.rootOf(id), sourceBranch: a.branch, sourceCommit: commit, slot: this.m.slot++ };
-        s.main = { head: id };
+        if (!s.main || this.forward(s.main.head, id)) s.main = { head: id };
         this.published = true;
         return ok("Added", { kind: "Added", source: { branch: a.branch, commit }, publishedLayer: { id } });
       }

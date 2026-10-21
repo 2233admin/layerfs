@@ -60,8 +60,13 @@ export function ProjectBoard({ name, state, status, tab }: { name: string, state
     b.render()
   }, [name, state])
 
-  // the Store's figures, read again with the state (a Refresh)
+  // the Store's figures, read again with the state (a Refresh), but not again when
+  // the full state follows the History it was read with
+  const storageFor = useRef<ProjectState | null>(null)
   useEffect(() => {
+    const before = storageFor.current
+    storageFor.current = state
+    if (before?.historyOnly && before.s.project?.name === state.s.project?.name) return
     let stopped = false
     setStorage(null); setStorageError(null)
     api.projectStorage(name).then((z) => { if (!stopped) setStorage(z) }, (e: Error) => { if (!stopped) setStorageError(e.message) })

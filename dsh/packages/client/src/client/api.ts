@@ -7,7 +7,7 @@ export interface Project { name: string, source: string, volume: string, created
  * id), with what the session journals add: who made each node, when each
  * Layer was published (by real id) and when each Branch was forked (by name).
  */
-export interface ProjectState { s: any, labels: Record<string, string>, authors: Record<string, string>, times: Record<string, number>, forks: Record<string, number> }
+export interface ProjectState { s: any, labels: Record<string, string>, authors: Record<string, string>, times: Record<string, number>, forks: Record<string, number>, /** History alone (readProject): the full state with its Workspaces follows */ historyOnly?: boolean }
 export interface SessionView {
   session: string
   root: string
@@ -104,6 +104,22 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 }
 
 const sid = (id: string) => encodeURIComponent(id)
+
+/**
+ * Reads a project progressively: its History from the Store first (quick; no
+ * Sandbox asked), then the whole state with its Workspaces, which replaces it.
+ * `fail` runs only when neither read answers. Returns a stop function.
+ */
+export function readProject(name: string, show: (state: ProjectState) => void, fail: (message: string) => void): () => void {
+  let stopped = false, full = false
+  const history = api.projectHistory(name).then((s) => { if (!stopped && !full) show({ ...s, historyOnly: true }) })
+  api.projectState(name).then(
+    (s) => { full = true; if (!stopped) show(s) },
+    (e: Error) => { history.catch(() => { if (!stopped) fail(e.message) }) },
+  )
+  history.catch(() => {})
+  return () => { stopped = true }
+}
 const filesQuery = (query: Record<string, string | number>) => new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)])).toString()
 
 export const api = {
@@ -115,6 +131,8 @@ export const api = {
   projects: () => call<{ projects: Project[], defaults: Record<string, string> }>('GET', '/projects'),
   setDefault: (folder: string, project: string) => call<{ projects: Project[], lastUsed: string | null }>('POST', '/workspace', { folder, project }),
   projectState: (name: string) => call<ProjectState>('GET', `/project/${encodeURIComponent(name)}/state`),
+  /** The project's History alone, from its Store, without waiting on its Sandboxes. */
+  projectHistory: (name: string) => call<ProjectState>('GET', `/project/${encodeURIComponent(name)}/history`),
   projectStorage: (name: string) => call<Storage>('GET', `/project/${encodeURIComponent(name)}/storage`),
   /** One Files read of saved ids (the Host's reads.js): list, read, changes or diff. */
   projectFiles: (name: string, kind: string, query: Record<string, string | number>) => call<any>('GET', `/project/${encodeURIComponent(name)}/${kind}?${filesQuery(query)}`),

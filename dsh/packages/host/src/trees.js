@@ -85,6 +85,15 @@ export class TreeReader {
     });
   }
 
+  /** The project's History alone, from its Store: no Sandbox is asked (a chat's History starts from it). */
+  history(project) {
+    return this.use(project, async (client) => {
+      // the simulator has no Store read of its own; its snapshot answers quickly anyway
+      if (!client.history) return stateOf(client, await client.operator.inspect.snapshot());
+      return stateOf(client, { ...(await client.history()), sandboxes: [], gone: [] });
+    });
+  }
+
   /** What the project's Store holds and what made it; see storageOf. */
   storage(project) {
     return this.use(project, storageOf);

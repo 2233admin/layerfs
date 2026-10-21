@@ -2,7 +2,9 @@
 // view (@dsh-layerfs/view). It follows
 // the Host's /layerfs/session route while it is shown, and plays each call
 // at its own time, a moment behind the run (playback.ts). A demo's speed is
-// set on its demo strip (DemoStrip.tsx), not here. The History pane's tabs
+// set on its demo strip (DemoStrip.tsx), not here. History starts from the
+// project's whole history as the session opens (seedEngine), and the
+// session's own calls play on top. The History pane's tabs
 // end with the project's Sandboxes (SandboxesTab), as on the project page.
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -10,13 +12,13 @@ import FM from '../../../../sim/simulation_engine/files.js'
 import M from '../../../../sim/simulation_engine/model.js'
 import * as X from '../../../model/src/index.js'
 import { createFilesSource, createView, injectStyle } from '../../../view/src/index.js'
-import { api, type ProjectRuntime, type ProjectState, type SessionView } from './api.ts'
+import { api, readProject, type ProjectRuntime, type ProjectState, type SessionView } from './api.ts'
 import { CASTS, MAID_AVATARS } from './avatars.ts'
 import { ProjectBoard } from './ProjectBoard.tsx'
 import { Setup } from './Setup.tsx'
 import type { Directories } from './InitDialog.tsx'
 import { Playback, type Step } from './playback.ts'
-import type { FilesSource } from './replay.ts'
+import { attribute, seedEngine, type FilesSource } from './replay.ts'
 import { POLL_MS as RUNTIME_MS, usePoll } from './runtimeParts.tsx'
 import { SandboxesTab } from './SandboxesTab.tsx'
 import { MESSAGE } from './ui.ts'
@@ -74,9 +76,7 @@ function Before({ view }: { view: SessionView }) {
   const [state, setState] = useState<ProjectState | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    let stopped = false
-    api.projectState(name).then((s) => { if (!stopped) setState(s) }, (e: Error) => { if (!stopped) setError(e.message) })
-    return () => { stopped = true }
+    return readProject(name, setState, setError)
   }, [name])
   const note = view.running.length ? 'a call is running…' : 'no calls in this session yet; they show here as the agents make them'
   return (
@@ -130,14 +130,14 @@ function Board({ sessionId, view, error, pane }: { sessionId: string, view: Sess
   useEffect(() => { setRuntime(null); setRuntimeError(null) }, [name])
   useEffect(() => { runtimeRef.current = runtime; board.current?.rerender?.() }, [runtime])
 
-  // main's Layer when the session began (undefined until the project's state is read).
-  // The board draws from the calls without it, and rebuilds once when it is known.
-  const [start, setStart] = useState<string | null | undefined>(undefined)
-  const reading = useRef(true)
-  reading.current = start === undefined
+  // the project's whole History (undefined until read; null if it could not be read). The
+  // board waits for it, so History never shows the session's calls alone while it loads.
+  const [seed, setSeed] = useState<ProjectState | null | undefined>(undefined)
   useEffect(() => {
     let stopped = false
-    api.projectState(view.project!.name).then((state) => { if (!stopped) setStart(startMain(state, latest.current.lines)) }, () => { if (!stopped) setStart(null) })
+    const name = view.project!.name
+    // a Host without the History-only read answers the full state read
+    api.projectHistory(name).catch(() => api.projectState(name)).then((state) => { if (!stopped) setSeed(state) }, () => { if (!stopped) setSeed(null) })
     return () => { stopped = true }
   }, [sessionId])
 
@@ -164,8 +164,8 @@ function Board({ sessionId, view, error, pane }: { sessionId: string, view: Sess
   // new lines queue on the playback, each for its time; past ones show at once
   useEffect(() => {
     const b = board.current
-    if (!b) return
-    const agents = `${Object.values(view.agents).join(',')}|${start ?? ''}`
+    if (!b || seed === undefined) return
+    const agents = `${Object.values(view.agents).join(',')}|${seed ? 'seeded' : ''}`
     if (!play.current || play.current.agents !== agents) {
       // a rebuild (the tab opened, or an agent was named): labels follow call
       // order; what is past applies at once, so nothing plays twice
@@ -175,8 +175,10 @@ function Board({ sessionId, view, error, pane }: { sessionId: string, view: Sess
         engine.onchange = () => b.rerender()
         engine.storage = () => store.current
         if (pane === 'history') engine.sandboxes = () => ({ el: sbxEl.current, level: runtimeRef.current?.level ?? 'ok' })
-        if (start) engine.layer(start) // the board starts at main as the session found it
-        return X.storyView(engine, { lead: 'main' })
+        // the project's history first; the session's Workspaces come from its calls
+        if (seed) seedEngine(engine, seed, { workspaces: false })
+        const W = X.storyView(engine, { lead: 'main' })
+        return seed ? attribute(W, seed) : W
       }
       const playback: Playback = new Playback(fresh, (W, step) => show(b, W, step, playback))
       play.current = { playback, agents }
@@ -184,8 +186,8 @@ function Board({ sessionId, view, error, pane }: { sessionId: string, view: Sess
     const lines = view.lines.map((line) => ({ ...line, agent: view.agents[line.agentId] ?? line.agent }))
     const playback = play.current.playback
     playback.feed(lines, 'main').catch((e: Error) => { b.note = `The calls could not be replayed: ${e.message}` })
-    if (!playback.waiting && b.W) { b.acting = runningAgents(view); b.note = noteOf(view, playback, reading.current); b.render() }
-  }, [view, sessionId, start])
+    if (!playback.waiting && b.W) { b.acting = runningAgents(view); b.note = noteOf(view, playback); b.render() }
+  }, [view, sessionId, seed])
 
   /** Draws the model after a step (its agent acting, the view following it) or once caught up. */
   function show(b: any, W: any, step: Step | null, playback: Playback) {
@@ -197,7 +199,7 @@ function Board({ sessionId, view, error, pane }: { sessionId: string, view: Sess
     b.W = W
     if (step) { b.acting = [step.a]; b.lastLoc = X.locKey(X.where(W, step.a)) } else b.acting = runningAgents(v)
     if (b.follow && W.lastTab) b.active = W.lastTab
-    b.note = noteOf(v, playback, reading.current)
+    b.note = noteOf(v, playback)
     b.render()
     if (step) b.animate(step.a)
   }
@@ -206,25 +208,15 @@ function Board({ sessionId, view, error, pane }: { sessionId: string, view: Sess
 
   return (
     <>
-      <div ref={host} style={BAND} />
+      <div style={BAND}>
+        <div ref={host} style={{ height: '100%', position: 'relative' }} />
+        {seed === undefined && <div style={{ ...MESSAGE, position: 'absolute', inset: 0, zIndex: 1 }}>Loading {name}'s History…</div>}
+      </div>
       {pane === 'history' && createPortal(<SandboxesTab name={name} runtime={runtime} error={runtimeError} reload={readRuntime} />, sbxEl.current)}
     </>
   )
 }
 
-/**
- * The real id of main's Layer when the session began: the parent of the first
- * Layer the session published, else main's head now.
- */
-function startMain(state: ProjectState, lines: any[]): string | null {
-  const realOf = (label: string | null | undefined) => (label ? Object.keys(state.labels).find((real) => state.labels[real] === label) ?? null : null)
-  const first = lines.find((line) => line.method === 'branch.publish' && line.layer)?.layer
-  const published = first ? state.labels[first] : null
-  if (published) return realOf(state.s.layers?.[published]?.parent)
-  return realOf(state.s.main?.head)
-}
-
 const runningAgents = (view: SessionView) => view.running.map((line) => view.agents[line.agentId] ?? line.agent)
-const noteOf = (view: SessionView, playback: Playback, reading = false) => `${view.project!.name} · ${view.lines.length} calls`
-  + (reading ? ' · reading LayerFS…' : '')
+const noteOf = (view: SessionView, playback: Playback) => `${view.project!.name} · ${view.lines.length} calls`
   + (playback.waiting ? ` · ${playback.waiting} to play` : '') + (view.running.length ? ` · ${view.running.length} running` : '')

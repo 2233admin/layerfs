@@ -16,6 +16,7 @@
 //                                          changes?from&to&position, diff?from&to&path
 //   GET  /layerfs/projects                    every project, and each workspace folder's default
 //   GET  /layerfs/project/<name>/state        the project as LayerFS reports it, with who made each node
+//   GET  /layerfs/project/<name>/history      the same, History alone from the Store (no Sandbox asked)
 //   GET  /layerfs/project/<name>/{list,read,blame,changes,diff}?…  as the session's Files reads
 //   GET  /layerfs/project/<name>/storage      Store totals, what Init recorded, recent Commits' costs (storage.js)
 //   GET  /layerfs/runtime                     Docker, the Store container, disk and every project's Sandboxes (runtime.js)
@@ -106,6 +107,7 @@ export function registerRoutes(ctx, { spec, bindings, collector, trees, jobs = n
         const project = bindings.byName(decodeURIComponent(parts[1]));
         if (!project) return send(res, 404, { code: "not-found", message: `no LayerFS project named ${decodeURIComponent(parts[1])}` });
         if (req.method === "GET" && parts[2] === "state") return send(res, 200, { ...(await trees.state(project)), ...collector.nodesOf(project.name) });
+        if (req.method === "GET" && parts[2] === "history") return send(res, 200, { ...(await trees.history(project)), ...collector.nodesOf(project.name) });
         if (req.method === "GET" && Object.hasOwn(READS, parts[2])) return send(res, 200, await trees.files(project, parts[2], url.searchParams));
         if (req.method === "GET" && parts[2] === "storage") return send(res, 200, await trees.storage(project));
         if (req.method === "GET" && parts[2] === "runtime") {
