@@ -80,6 +80,20 @@ try {
   assert.equal(kept[0].name, "shop_service");
   assert.equal(kept[0].running, true);
   await trees.dispose();
+
+  // a project whose Sandbox does not answer: its read gives up after sandboxMs
+  // (sandbox-late) and the overview shows the card as down instead of waiting
+  {
+    let asked = 0;
+    const stuck = new TreeReader(spec, async () => ({ layerfs: { close: async () => {} }, operator: { inspect: { snapshot: () => (asked++, new Promise(() => {})) }, process: { list: async () => ({ items: [] }) } } }));
+    stuck.sandboxMs = 50;
+    await assert.rejects(projectRuntime(stuck, collector, project), { code: "sandbox-late" });
+    await assert.rejects(projectRuntime(stuck, collector, project), { code: "sandbox-late" });
+    assert.equal(asked, 1, "the stuck snapshot is not asked again");
+    const card = (await overview(spec, bindings, stuck, collector)).projects[0];
+    assert.deepEqual([card.level, /did not answer/.test(card.note)], ["down", true]);
+    assert.equal(asked, 1);
+  }
   console.log("runtime: ok");
 } finally {
   rmSync(dir, { recursive: true, force: true });

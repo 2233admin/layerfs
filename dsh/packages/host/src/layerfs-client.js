@@ -3,6 +3,8 @@
 // SDK captures its deployment from the environment at construction, so the
 // project's settings are set for that synchronous step only. A simulated
 // project (backend "sim") has a client of the simulator instead (sim/).
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { Mirror } from "@dsh-layerfs/model/mirror.js";
 import { DAEMON_HOST, storePathOf } from "./box.js";
 import { simClient } from "./sim/client.js";
@@ -40,7 +42,13 @@ export async function clientFor(spec, project) {
   for (const [name, value] of Object.entries(env)) { saved[name] = process.env[`LAYERFS_${name}`]; process.env[`LAYERFS_${name}`] = value; }
   try {
     const layerfs = new LayerFS(project.name);
-    return { layerfs, operator: new LayerFSOperator(layerfs) };
+    const { invokeOperator } = await import(clientEntryOf(spec));
+    // the project's History from its Store in this process, as inspect.snapshot reads it, asking no Sandbox
+    const history = async () => {
+      await layerfs.store();
+      return invokeOperator("operator.inspect.history", { project: layerfs.projectName, home: layerfs.options.home, storePath: layerfs.options.storePath }, layerfs.options);
+    };
+    return { layerfs, operator: new LayerFSOperator(layerfs), history };
   } finally {
     for (const [name, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[`LAYERFS_${name}`];
@@ -48,6 +56,19 @@ export async function clientFor(spec, project) {
     }
   }
 }
+
+/** How long a reader waits for a project's Sandboxes to answer (their daemons); the read runs on. */
+export const SANDBOX_MS = 4_000;
+
+/** `{ value }` when `promise` settles within `ms`, `{ late: true }` otherwise; a failure within `ms` is thrown. */
+export function within(promise, ms) {
+  let timer;
+  const late = new Promise((resolve) => { timer = setTimeout(() => resolve({ late: true }), ms); });
+  return Promise.race([promise.then((value) => ({ value })), late]).finally(() => clearTimeout(timer));
+}
+
+/** The SDK's call module beside its operator: the ported build's, or the installed package's. */
+const clientEntryOf = (spec) => spec.box ? pathToFileURL(join(spec.bundle, "sdk/js/src/client.js")).href : new URL("../src/client.js", spec.operator).href;
 
 /** Releases a Host client: its Store. The project's Sandboxes close themselves when idle (#373). */
 export async function release({ layerfs }) {
@@ -64,8 +85,8 @@ export async function release({ layerfs }) {
  * project (TreeReader.use).
  * @param {object} client a project's client
  */
-export async function stateOf(client) {
-  const snap = await olderCommits(client.layerfs, await client.operator.inspect.snapshot());
+export async function stateOf(client, snapshot) {
+  const snap = await olderCommits(client.layerfs, snapshot);
   const m = new Mirror();
   m.project = snap.project;
   const boxes = [

@@ -5,14 +5,16 @@
 //                 background processes, and who mounted it (the agents' traces)
 //   all projects  Docker, the Store container, free disk, and each project's
 //                 Sandbox containers from one `docker ps`
-// A read starts nothing. An action is one SDK or Docker call, never repeated;
+// A read starts nothing, and waits for a project's Sandboxes only
+// trees.sandboxMs: one that does not answer is reported, not waited on. An
+// action is one SDK or Docker call, never repeated;
 // one that would cut off an agent's call running in that Workspace is refused.
 import { execFile } from "node:child_process";
 import { readFileSync, statfsSync } from "node:fs";
 import { connect } from "node:net";
 import { promisify } from "node:util";
 import { buildOf, ensureBox, storeFile, VOLUMES } from "./box.js";
-import { isSim } from "./layerfs-client.js";
+import { isSim, within } from "./layerfs-client.js";
 import { frame, readFrames } from "./port/frames.mjs";
 
 const run = promisify(execFile);
@@ -29,10 +31,11 @@ const worst = (levels) => levels.reduce((a, b) => (RANK[b] < RANK[a] ? b : a), "
 const refuse = (status, code, message) => Object.assign(new Error(message), { status, code });
 
 /** One project's Sandboxes, as its Sandboxes tab draws them. */
-export function projectRuntime(trees, collector, project, now = Date.now()) {
-  return trees.use(project, async ({ operator }) => {
-    const snap = await operator.inspect.snapshot();
-    const processes = (await operator.process.list()).items ?? [];
+export async function projectRuntime(trees, collector, project, now = Date.now()) {
+  {
+    const [read, listed] = await Promise.all([within(trees.snapshot(project), trees.sandboxMs), within(trees.processes(project), trees.sandboxMs)]);
+    if (read.late || listed.late) throw refuse(504, "sandbox-late", `its Sandboxes did not answer in ${trees.sandboxMs / 1000} s; a call may be stuck in one`);
+    const snap = read.value, processes = listed.value.items ?? [];
     const busy = collector.busyOf(project.name), mounts = collector.mountsOf(project.name);
     const sandboxes = (snap.sandboxes ?? []).map((sb) => {
       const workspaces = sb.workspaces.filter((w) => w.mounted && w.directory).map((w) => {
@@ -53,7 +56,7 @@ export function projectRuntime(trees, collector, project, now = Date.now()) {
     });
     const gone = (snap.gone ?? []).map(({ id, name, image }) => ({ id, name: name ?? null, image: image ?? null }));
     return { project: project.name, simulated: isSim(project), sandboxes, gone, level: worst([...sandboxes.map((s) => s.level), gone.length ? "degraded" : "ok"]) };
-  });
+  }
 }
 
 /** Every project's Sandboxes and the shared parts, as the All projects page draws them. */

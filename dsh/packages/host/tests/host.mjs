@@ -202,13 +202,30 @@ try {
   assert.deepEqual(closed, ["store"], "releasing a client closes its Store; Sandboxes close themselves when idle");
 
   // state reads go through the same per-project client: one client, not one per read
-  let opened = 0;
+  let opened = 0, snapshots = 0;
   const empty = { project: "p", branches: [], commits: [], layers: [], sandboxes: [], store: {} };
-  const shared = new TreeReader(h.spec, async () => { opened++; return { layerfs: { fs: fakeFs, close: async () => {} }, operator: { inspect: { snapshot: async () => empty } } }; });
+  const shared = new TreeReader(h.spec, async () => { opened++; return { layerfs: { fs: fakeFs, close: async () => {} }, operator: { inspect: { snapshot: async () => (snapshots++, empty) } } }; });
   const P = { name: "p" };
   const [stateA, stateB] = await Promise.all([shared.state(P), shared.state(P), shared.files(P, "list", new URLSearchParams({ ref: REF }))]);
-  assert.deepEqual([opened, typeof stateA.s, typeof stateB.labels], [1, "object", "object"]);
+  assert.deepEqual([opened, snapshots, typeof stateA.s, typeof stateB.labels], [1, 1, "object", "object"], "one client, and one snapshot for reads made while it runs");
   await shared.dispose();
+  // a snapshot whose Sandbox does not answer: History is drawn from the Store
+  // alone after sandboxMs, and later reads share the running snapshot
+  {
+    let asked = 0, answer;
+    const stuck = new Promise((resolve) => { answer = resolve; });
+    const history = { project: "p", branches: [{ name: "main", base: null, head: null }], commits: [], layers: [], more: {} };
+    const slow = new TreeReader(h.spec, async () => ({ layerfs: { close: async () => {} }, history: async () => history, operator: { inspect: { snapshot: () => (asked++, stuck) } } }));
+    slow.sandboxMs = 50;
+    const first = await slow.state(P), second = await slow.state(P);
+    assert.deepEqual([first.late, second.late, asked], [true, true, 1], "drawn without Workspaces; the stuck snapshot is not asked again");
+    assert.deepEqual(first.s.sandboxOrder, []);
+    answer(empty);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal((await slow.state(P)).late, undefined, "once it answers, the next read is a new snapshot");
+    assert.equal(asked, 2);
+    await slow.dispose();
+  }
   // the project's running Sandboxes are drawn under their container names; one
   // the snapshot found gone after the listing (#373: idle close) is drawn closed
   const placed = { ...empty, sandboxes: [{ id: "1", name: "layerfs-p-1", workspaces: [{ directory: "/workspaces/1", mounted: true, branch: "f", base: null, baseLayer: null, root: null }] }], gone: [{ id: "2", name: "layerfs-p-2", detail: { containerGone: true } }] };
@@ -361,7 +378,7 @@ try {
       operator: { inspect: { snapshot: async () => ({ project: "website", commits: all.slice(0, 3), more: { feature: "cursor" }, layers: [{ id: L0, parent: null, root: "b".repeat(64) }], branches: [{ name: "main", base: L0, head: null }, { name: "feature", base: L0, head: id(4) }], workspaces: [] }) } },
       layerfs: { branch: { list_commits: async (branch, size, pos) => { pages.push([branch, pos]); return pos === 0 ? { items: all.slice(0, 2), hasMore: true, nextPagePos: 2 } : { items: all.slice(2), hasMore: false, nextPagePos: null }; } } },
     };
-    const state = await stateOf(client);
+    const state = await stateOf(client, await client.operator.inspect.snapshot());
     assert.deepEqual(pages, [["feature", 0], ["feature", 2]]);
     assert.equal(Object.keys(state.s.commits).length, 4, "the cut-off Commit is listed");
     assert.equal(state.s.commits[state.labels[id(2)]].parent, state.labels[id(1)], "and is its child's parent");
