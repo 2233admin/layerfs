@@ -26,6 +26,8 @@
   <img src="https://img.shields.io/badge/platform-Linux-555.svg" alt="Linux">
 </p>
 
+https://github.com/user-attachments/assets/70c25887-86a1-4d81-bd78-571cf1c09a18
+
 > **Status:** LayerFS 1.0.0, the first official release after the 0.1.x Developer
 > Previews. Until the 1.0.0 tag is cut, build from `main`; the results below ran on
 > `main` at `e5c7aaae05`. The Store runs in its Disposable profile only, with no
@@ -85,7 +87,7 @@
 <p align="center">
   <img src="docs/assets/official_release/page3-demo.gif" alt="The LayerFS demo: agents on several Branches run tool calls in Sandboxes and fs, each call becomes a Commit, and the history tree grows" width="100%">
 </p>
-<p align="center"><sub>Agents fork Branches, work in Workspaces inside Sandboxes, commit, merge and publish to <code>main</code>. The history grows as they go. <a href="https://layerfs.ai/video/layerfs-v1.0.0-release.mp4">Watch the 1.0.0 video</a>.</sub></p>
+<p align="center"><sub>Agents fork Branches, work in Workspaces inside Sandboxes, commit, merge and publish to <code>main</code>. The history grows as they go.</sub></p>
 
 ## Results
 
