@@ -3,16 +3,15 @@ use crate::{
     bootstrap::open_store_observed,
     install_file,
     install_types::{InstallError, InstallFailure, InstallWork, InstalledStore, StoreSettings},
-    store::checked_base,
+    shared_install::{check_initial, InitialCheck},
 };
 use layerfs_bridge::{
     control::{ControlError, InstallPhase, InstallReply, INSTALL_FINISH},
     duplex::Connection,
     provision::{StoreManifest, StoreProfile},
 };
-use layerfs_history::{BranchId, LayerStackId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
-use std::{fs, path::Path, sync::Arc};
+use std::{fs, path::Path};
 
 /// Installs into the explicitly provisioned local destination. No caller-supplied
 /// locator can select another file. Every failure retains partial/output custody.
@@ -74,8 +73,6 @@ fn install_manifest(
                 "provisioned install destination",
             )));
         }
-        let branch = BranchId::from_bytes(manifest.branch).map_err(InstallError::History)?;
-        let stack = LayerStackId::from_bytes(manifest.stack).map_err(InstallError::History)?;
         settings
             .reservations
             .validate()
@@ -151,28 +148,10 @@ fn install_manifest(
             .map_err(InstallError::Store)?,
         );
         let opened = retained.opened.as_ref().expect("opened Store");
-        let snapshot = opened
-            .store
-            .history()
-            .branch_snapshot(branch)
-            .map_err(InstallError::History)?
-            .ok_or(InstallError::Protocol(ControlError(
-                "installed Branch missing",
-            )))?;
-        if snapshot.branch.stack != stack
-            || snapshot.effective_root.to_bytes() != manifest.root
-            || snapshot.branch.head_commit.is_some()
-        {
-            return Err(InstallError::Protocol(ControlError(
-                "installed initial Branch",
-            )));
-        }
-        let ports = opened.store.ports(snapshot.scope);
-        checked_base(ports.client(), &snapshot).map_err(|error| InstallError::Content {
-            error,
-            provider: ports
-                .failure()
-                .unwrap_or_else(|error| Some(Arc::new(error))),
+        check_initial(opened, &manifest).map_err(|check| match check {
+            InitialCheck::History(error) => InstallError::History(error),
+            InitialCheck::Mismatch(what) => InstallError::Protocol(ControlError(what)),
+            InitialCheck::Content { error, provider } => InstallError::Content { error, provider },
         })?;
         manifest.daemon_sqlite = Some(opened.sqlite_version.clone());
         retained.manifest = Some(manifest.clone());

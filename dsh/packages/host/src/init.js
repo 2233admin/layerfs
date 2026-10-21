@@ -107,11 +107,11 @@ export function prepareInit(spec, bindings, { folder, source = folder, name, bac
 
 /**
  * Runs a prepared Init: counts the source, makes the volume, imports the
- * source (LayerFS's Host Init, which seals the Store under the LayerFS home),
- * installs the Store into the volume (a live project's first Sandbox does,
- * and Store calls need it there) and makes it `folder`'s default. `report`
- * sees each step (scan, volume, import, install) and, while LayerFS imports
- * in this process, its counts as `imported`. On macOS the import runs in the
+ * source (LayerFS's Init, which seals the Store under the LayerFS home and
+ * installs it into the volume in the same process, starting no Sandbox) and
+ * makes it `folder`'s default. `report` sees each step (scan, volume,
+ * import) and, while LayerFS imports in this process, its counts as
+ * `imported`. On macOS the import runs in its own container beside the
  * LayerFS box (box.js), where no counts are read. One attempt; a failure
  * leaves no project, and the volume and project entry it made are removed.
  */
@@ -129,20 +129,16 @@ async function initFrom(spec, bindings, { folder, project }, report) {
   const docker = ["-H", `unix://${spec.docker}`];
   if (!isSim(project)) await run("docker", [...docker, "volume", "create", project.volume]);
   report({ step: "import" });
-  let client, made = false;
+  let client;
   try {
     if (spec.box && !isSim(project)) await ensureBox(spec);
     client = await clientFor(spec, project);
     const init = () => client.layerfs.project.init(project.source);
     await (spec.box && !isSim(project) ? init() : watching(client, report, init));
-    made = true;
-    if (!isSim(project)) {
-      report({ step: "install" });
-      await client.layerfs.sandbox.create(`init-${project.created.toString(36)}`, project.name, project.image ?? spec.image);
-    }
   } catch (error) {
-    if (client) await release(client, { service: true }).catch(() => {});
-    if (made && !isSim(project)) rmSync(join(spec.home, project.name), { recursive: true, force: true });
+    if (client) await release(client).catch(() => {});
+    // Init made the project's entry unless another project holds the name
+    if (!isSim(project) && error?.code !== "Exists") rmSync(join(spec.home, project.name), { recursive: true, force: true });
     if (!isSim(project)) await run("docker", [...docker, "volume", "rm", project.volume]).catch(() => {});
     throw error;
   }

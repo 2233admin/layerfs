@@ -19,7 +19,7 @@ use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
 pub(crate) struct Project {
     pub(crate) store: layerfs_persistence::SealedStore,
     pub(crate) manifest: StoreManifest,
-    /// The daemon's manifest once a Sandbox installed the Store.
+    /// The installed manifest once Import installed the Store in the volume.
     pub(crate) installed: Option<StoreManifest>,
 }
 

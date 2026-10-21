@@ -177,14 +177,14 @@ lines use the new method names.
 
 | Topic | Proposal | Open question |
 |---|---|---|
-| Placement | Under the project's `ownership.lock`, pick the lowest-numbered running Sandbox with a free slot; else start Sandbox `<lowest free n>` and mount there | Pack (fewest containers) or spread (isolation)? Proposal: pack |
-| Full Sandbox | A mount never fails `Capacity` while Docker can start another Sandbox | Upper bound on Sandboxes per project? |
-| Idle close | A Sandbox with no Workspaces and no running processes closes after an idle period (proposed 10 min) | Who closes it: the daemon exits itself (proposed; no supervisor needed on Linux), or `layerfs-store` or the Host sweeps |
+| Placement | Under the project's `ownership.lock`, pick the lowest-numbered running Sandbox with a free slot; else start Sandbox `<lowest free n>` and mount there | Answered (owner, 2026-10-21): pack |
+| Full Sandbox | A mount never fails `Capacity` while Docker can start another Sandbox | Answered (owner, 2026-10-21): no cap; only Docker and host limits apply |
+| Idle close | A Sandbox with no Workspaces and no running processes closes after an idle period of 2 minutes | Answered (owner, 2026-10-21): the daemon exits itself; idle period 2 minutes |
 | Closed or gone Sandbox | Its records are cleaned the way the gone/stopped path does today (`782dd709e2`); the next mount starts a fresh one | — |
-| Image | `project.record` holds the runtime image digest, set at Import and changeable later | Changing it: new Sandboxes only, or close idle ones? |
-| Read-only volumes | Project setting, mounted in every Sandbox of the project | Needed beyond today's tests? |
+| Image | `project.record` holds the runtime image digest, set at Import and changeable later | Answered (owner, 2026-10-21): a change applies to new Sandboxes only; running ones keep their image until they close |
+| Read-only volumes | Dropped | Answered (owner, 2026-10-21): drop them and their tests |
 | Isolation | Not offered at first | Later: a mount option that starts a Sandbox for that one Workspace (still the same kind) |
-| Import install | `layerfs-store` (macOS) or the SDK (Linux) installs `sealed.sqlite` into the volume in-process, as the first Sandbox's daemon does today (`existing_store`) | Confirm the install has no daemon-only step |
+| Import install | `project.init` installs `sealed.sqlite` into the volume in its own process (`layerfs_store_service::install::install_local`): on Linux the SDK, on macOS Init's container beside `layerfs-store` | Answered (step 1): no daemon-only step. The daemon's install (claim, copy, rename, open, initial Branch check, SQLite version) now shares its claim and check code with `install_local`. One constraint: a daemon (user `0:0`) opens only a Store file and `global/` directory it owns with no group or other access, so the installer must run as user 0; `install_local` refuses any other user before it writes |
 | Idle Workspaces | Unchanged here; #370 auto-unmount lets idle Sandboxes close sooner | — |
 
 ## 5. What is dropped

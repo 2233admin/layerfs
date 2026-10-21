@@ -20,9 +20,12 @@ export function deploymentEnv(spec, project) {
     IMAGE: project.image ?? spec.image ?? "",
     DAEMON: spec.daemon ?? "",
     VOLUME: project.volume,
-    // macOS: the calls run in the LayerFS box, which sees the volume under
-    // Docker's volume directory and Sandbox daemons at the Docker host
-    ...(spec.box ? { STORE_PATH: storePathOf(project.volume), DAEMON_HOST, BOX: spec.box, BUNDLE: spec.bundle } : {}),
+    // the Store in the volume, under Docker's volume directory: Import
+    // installs it there and Store calls open it
+    STORE_PATH: storePathOf(project.volume),
+    // macOS: the calls run in the LayerFS box, which sees that directory and
+    // Sandbox daemons at the Docker host
+    ...(spec.box ? { DAEMON_HOST, BOX: spec.box, BUNDLE: spec.bundle } : {}),
   };
 }
 

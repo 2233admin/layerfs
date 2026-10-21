@@ -61,10 +61,10 @@ try {
   const vars = h.env.resolve({ agent: { session: child }, callId: "c1", rootCallId: "r1" });
   assert.equal(vars.DSH_LAYERFS_PROJECT, "website");
   assert.equal(vars.DSH_LAYERFS_VOLUME, "dsh-layerfs-website-1");
+  assert.equal(vars.DSH_LAYERFS_STORE_PATH, "/var/lib/docker/volumes/dsh-layerfs-website-1/_data/global/store.sqlite");
   if (process.platform === "darwin") {
     // macOS: the SDK is ported, its calls run in the LayerFS box (src/port/, src/box.js)
     assert.match(vars.DSH_LAYERFS_SDK, /\/port\/sdk\.js$/);
-    assert.equal(vars.DSH_LAYERFS_STORE_PATH, "/var/lib/docker/volumes/dsh-layerfs-website-1/_data/global/store.sqlite");
     assert.equal(vars.DSH_LAYERFS_DAEMON_HOST, "host.docker.internal");
     assert.match(vars.DSH_LAYERFS_BOX, /^dsh-layerfs-box-[0-9a-f]{12}$/);
     assert.equal(vars.DSH_LAYERFS_BUNDLE, "/b");

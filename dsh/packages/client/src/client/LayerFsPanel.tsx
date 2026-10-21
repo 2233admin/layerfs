@@ -72,9 +72,8 @@ function FactView({ f }: { f: Fact }) {
  * what to do, and whether removing and importing it again is the way out.
  */
 function problem(error: string): { title: string, text: string, reimport?: true } {
-  // the SDK refuses a second client while one is starting the project's
-  // service Sandbox (the first one also installs the Store into the volume)
-  if (/^Busy\b/.test(error)) return { title: 'LayerFS is busy with this project', text: "Another client is starting its Sandbox. The first start installs the Store, which takes a while for a big project. Refresh in a moment." }
+  // the SDK refuses a second client while one is starting the project's Sandbox
+  if (/^Busy\b/.test(error)) return { title: 'LayerFS is busy with this project', text: "Another client is starting its Sandbox. Refresh in a moment." }
   // a start that failed earlier left its record, and the SDK will not guess how it ended
   if (/unresolved discovery intent/.test(error)) return { title: "An earlier start of this project failed", reimport: true, text: "LayerFS kept a record of that failed start and won't start the project again until it's cleared. This usually means the project was imported by an older LayerFS, which this one can't open. Remove the project and import its folder again: its saved history goes, the folder's files stay." }
   // the daemon exited before it listened: it refused the Store

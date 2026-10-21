@@ -1,8 +1,11 @@
-//! `project.init(path, { name, home })`: host Project Init into a sealed Store.
+//! `project.init(path, { name, home, storePath })`: host Project Init into a
+//! sealed Store, installed into the project volume.
 //!
-//! The Store is Disposable and sealed under `home/<name>/`; the first Sandbox
-//! of the project installs it into the shared volume. Init's first Branch is
-//! named `main` and the SDK never shows it: `main` is the line of Layers.
+//! The Store is Disposable and sealed under `home/<name>/`, then installed in
+//! this process at `storePath`, the project volume's Store file that every
+//! Sandbox opens (#373: no Sandbox is started to install it). Init's first
+//! Branch is named `main` and the SDK never shows it: `main` is the line of
+//! Layers.
 use crate::job::{failed, refused, Outcome};
 use crate::registry::{lock, random, text, Project, INITS};
 use layerfs_api::{InitCounters, InitRequest, InitStep, ProjectApi};
@@ -31,8 +34,20 @@ pub(crate) fn init(args: &SdkValue) -> Outcome {
     let name = text(args, "name")?;
     let source = PathBuf::from(text(args, "path")?);
     let home = crate::discovery::home(args)?;
-    // checked first: a refused policy leaves no project entry
+    // checked first: a refused policy or missing Store path leaves no project entry
     let policy = policy(args)?;
+    let store_path =
+        match args.get_text("storePath") {
+            Some(path) if !path.is_empty() => PathBuf::from(path),
+            _ => return Err(refused(
+                "InvalidInput",
+                "project.init installs the Store at the client's storePath (LAYERFS_STORE_PATH)",
+            )),
+        };
+    // the Store's directory is made by the install; its volume must carry the Store's locks
+    let global = store_path.parent().unwrap_or(&store_path);
+    layerfs_store_service::kernel_guard::check(global)
+        .map_err(|reason| refused("Unsupported", reason.0))?;
     let directory = home.join(name);
     // The home entry is the project: creating it is the one existence check,
     // so a name whose entry was removed can be initialized again.
@@ -92,11 +107,19 @@ pub(crate) fn init(args: &SdkValue) -> Outcome {
             SdkValue::text(directory.join("sealed.sqlite").display().to_string()),
         ),
     ]);
-    let project = Project {
+    let mut project = Project {
         store: sealed.store,
         manifest: sealed.manifest,
         installed: None,
     };
+    crate::discovery::save_project(&directory, &project)?;
+    let installed = layerfs_store_service::install::install_local(
+        &project.store.path,
+        &project.manifest,
+        &store_path,
+    )
+    .map_err(|failure| refused("Failed", failure.to_string()))?;
+    project.installed = Some(installed);
     crate::discovery::save_project(&directory, &project)?;
     Ok(answer)
 }

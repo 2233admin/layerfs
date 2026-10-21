@@ -2,8 +2,8 @@
 //! commit and unmount.
 //!
 //! `create` starts one named container and its daemon, bound to one project
-//! and running the image it names. The project's first Sandbox
-//! installs the sealed Store into the shared volume; later ones open it.
+//! and running the image it names. Its daemon opens the Store that Import
+//! installed into the project volume (#373); no Sandbox installs one.
 //! A create that failed before anything reached the Store volume removes
 //! the container it made (stop, then delete, each once) and its creation
 //! intent, then reports the failure with its daemon's last log lines, read
@@ -21,6 +21,7 @@ use layerfs_api::{
 };
 use layerfs_bridge::control::{CommitControl, SdkRefusal, SdkValue};
 use layerfs_bridge::daemon_setup::{DaemonLimits, DaemonSetup};
+use layerfs_bridge::provision::StoreManifest;
 use layerfs_history::WorkspaceId;
 use layerfs_sandbox::backend::docker::{CreatePhase, Docker, ReadOnlyVolume, SandboxRequest};
 use std::path::{Path, PathBuf};
@@ -119,8 +120,14 @@ fn create_selected(args: &SdkValue, service: bool) -> Outcome {
     } else {
         text(args, "name")?.to_owned()
     };
-    let mut project = crate::discovery::project(args)?;
+    let project = crate::discovery::project(args)?;
     // Inputs are read first, so a refused request leaves no creation intent.
+    let Some(installed) = project.installed.clone() else {
+        return Err(refused(
+            "NoStore",
+            format!("project {name} has no installed Store: its Import did not finish, so import it again"),
+        ));
+    };
     let docker = text(deploy, "docker")?;
     // A caller's Sandbox runs the image it names; the service Sandbox, the deployment's.
     let image = if service {
@@ -156,17 +163,12 @@ fn create_selected(args: &SdkValue, service: bool) -> Outcome {
             Ok(SdkValue::Text(state)) => state,
             _ => "its record is unreadable".to_owned(),
         };
-        let volume = if project.installed.is_none() {
-            "; the project has no installed Store yet, so use a new volume"
-        } else {
-            ""
-        };
         return Err(refused(
             "Unknown",
             format!(
                 "a prior Sandbox creation has an unresolved discovery intent: {state}. Its outcome \
                  is unknown, so it is neither retried nor taken as done. Remove any container it \
-                 left (docker ps -a --filter volume={store_volume}){volume}, then delete {}",
+                 left (docker ps -a --filter volume={store_volume}), then delete {}",
                 intent.display()
             ),
         ));
@@ -179,7 +181,7 @@ fn create_selected(args: &SdkValue, service: bool) -> Outcome {
         &directory,
         &saved_directory,
         &id,
-        &mut project,
+        (&project, installed),
         (docker, image, store_volume, executable),
         service,
     );
@@ -209,14 +211,14 @@ pub(crate) fn read_only_volumes(args: &SdkValue) -> Result<Vec<ReadOnlyVolume>, 
         .collect()
 }
 
-/// Creates the claimed Sandbox `id`: container, daemon, Store install on a
-/// project's first Sandbox, then its records.
+/// Creates the claimed Sandbox `id`: container, daemon on the installed
+/// Store, then its records.
 fn create_claimed(
     args: &SdkValue,
     directory: &std::path::Path,
     saved_directory: &std::path::Path,
     id: &str,
-    project: &mut crate::registry::Project,
+    (project, installed): (&crate::registry::Project, StoreManifest),
     (docker, image, store_volume, executable): (&str, String, String, PathBuf),
     service: bool,
 ) -> Outcome {
@@ -229,11 +231,9 @@ fn create_claimed(
     let controller = layerfs_bridge::duplex::generate_keypair().map_err(failed)?;
     let daemon = layerfs_bridge::duplex::generate_keypair().map_err(failed)?;
     let mut daemon_setup = setup(daemon.private, controller.public);
-    daemon_setup.existing_store = project.installed.as_ref().map(|installed| {
-        let mut manifest = project.manifest.clone();
-        manifest.daemon_sqlite = installed.daemon_sqlite.clone();
-        manifest
-    });
+    let mut existing = project.manifest.clone();
+    existing.daemon_sqlite = installed.daemon_sqlite;
+    daemon_setup.existing_store = Some(existing);
     let mut docker = Docker::new(docker, ENGINE).map_err(failed)?;
     // A deployment's container prefix names the container `<prefix><id>`
     // (the service Sandbox without its leading `_`), so a run can tell its
@@ -270,10 +270,7 @@ fn create_claimed(
         &project.store,
         &project.manifest,
     );
-    let mut owner = created.map_err(|failure| abandon(directory, id, failure))?;
-    if let Some(installed) = owner.installed.take() {
-        project.installed = Some(installed.manifest);
-    }
+    let owner = created.map_err(|failure| abandon(directory, id, failure))?;
     let container = owner.runtime.identity().to_string();
     let instance = owner.startup.instance;
     let (runtime, control, identity) = split(owner);
@@ -294,7 +291,6 @@ fn create_claimed(
         mounts: Default::default(),
         processes: Default::default(),
     });
-    crate::discovery::save_project(directory, project)?;
     crate::discovery::save_sandbox(
         &state.directory,
         &state,

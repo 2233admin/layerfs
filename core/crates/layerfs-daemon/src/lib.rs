@@ -16,7 +16,7 @@ mod operator;
 mod service;
 pub use service::{request as mount_request, Mounted};
 pub mod telemetry;
-pub use layerfs_store_service::{bootstrap, store};
+pub use layerfs_store_service::{bootstrap, install as shared_install, store};
 
 pub use layerfs_store_service::{
     JobWork, OriginalInput, Owner, OwnerClient, OwnerConfig, OwnerError, OwnerStart, OwnerWork,

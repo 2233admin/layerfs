@@ -1,8 +1,9 @@
 // The ported SDK of Live projects on macOS (src/port/, src/box.js), with real
 // Docker and a sealed Linux LayerFS build:
 //   node packages/host/tests/port_real.mjs <bundle folder> <image digest>
-// A plain Mac script uses the ported SDK as an agent would: Init, the Store
-// install (a first Sandbox), Store calls (fork, write, read, list, publish),
+// A plain Mac script uses the ported SDK as an agent would: Init (which
+// installs the Store, starting no Sandbox), Store calls (fork, write, read,
+// list, publish), a Sandbox,
 // Workspace calls (mount, exec, commit, unmount), a refusal and an exec whose
 // output is spooled. Each SDK call goes to the box's long-lived worker, which
 // keeps the project's Store open between calls; Init runs in its own
@@ -55,13 +56,14 @@ try {
   for (const name of ["IMAGE", "DAEMON_HOST"]) delete process.env[`LAYERFS_${name}`];
   const init = await timed("project.init", () => layerfs.project.init(source));
   assert.equal(init.kind, "Initialized");
-  const sb = await timed("sandbox.create (install)", () => layerfs.sandbox.create("hello", "shop", image));
   const forked = await timed("branch.fork", () => layerfs.branch.fork("work"));
   assert.equal(forked.branch, "work");
   await timed("fs.write", () => layerfs.fs.write("work", "/hello.js", "console.log('hello, shop');\n", "add hello.js"));
   assert.equal((await timed("fs.read", () => layerfs.fs.read("work", "/hello.js"))).text, "console.log('hello, shop');\n");
   const refused = await timed("fs.read (missing)", () => layerfs.fs.read("work", "/nope.js").catch((e) => e));
   assert.ok(isRefusal(refused, "NoSuchPath"), `a refusal arrives as the SDK's own: ${refused}`);
+  assert.equal(docker("ps", "-aq", "--filter", `volume=${volume}`), "", "Init and Store calls start no Sandbox");
+  const sb = await timed("sandbox.create", () => layerfs.sandbox.create("hello", "shop", image));
   // the operator's Sandbox calls carry no deployment, yet reach the daemon
   const snap = await timed("operator inspect.snapshot", () => operator.inspect.snapshot());
   assert.equal(snap.kind, "ok");

@@ -36,7 +36,7 @@ export interface InitJob {
   name: string
   source: string
   started: number
-  step: 'scan' | 'volume' | 'import' | 'install' | 'done' | 'failed'
+  step: 'scan' | 'volume' | 'import' | 'done' | 'failed'
   scanned: Counts | null
   totals: Counts | null
   /** LayerFS's own counts while it imports (SDK operator project.progress). */

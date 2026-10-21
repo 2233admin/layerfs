@@ -14,6 +14,7 @@
 
 pub mod bootstrap;
 pub mod history;
+pub mod install;
 pub mod kernel_guard;
 pub mod operator;
 pub mod overlay;
