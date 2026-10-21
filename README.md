@@ -13,28 +13,45 @@
 </p>
 
 <p align="center">
+  <a href="#get-started"><b>Get started</b></a> ·
   <a href="https://layerfs.ai/"><b>Website</b></a> ·
   <a href="https://layerfs.ai/docs/"><b>Docs</b></a> ·
   <a href="https://layerfs.ai/benchmarks/"><b>Benchmarks</b></a> ·
   <a href="https://layerfs.ai/video/layerfs-v1.0.0-release.mp4"><b>Video</b></a> ·
-  <a href="dsh/README.md"><b>DSH plugin</b></a> ·
+  <a href="dsh/README.md"><b>LayerFS × DSH</b></a> ·
   <a href="#community"><b>Community</b></a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
-  <a href="docs/roadmap/1.0/README.md"><img src="https://img.shields.io/badge/version-1.0.0-2f6fde.svg" alt="1.0.0"></a>
-  <img src="https://img.shields.io/badge/platform-Linux-555.svg" alt="Linux">
+  <a href="https://github.com/Ephemeral-AI-Lab/layerfs/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/version-1.0.0-2f6fde.svg" alt="1.0.0"></a>
+  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20via%20DSH-555.svg" alt="Linux, and macOS through DSH">
   <a href="https://discord.gg/8mmAMCDc2"><img src="https://img.shields.io/badge/Discord-join-5865F2.svg?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 https://github.com/user-attachments/assets/70c25887-86a1-4d81-bd78-571cf1c09a18
 
-> **Status:** LayerFS 1.0.0, the first official release after the 0.1.x Developer
-> Previews. Until the 1.0.0 tag is cut, build from `main`; the results below ran on
-> `main` at `e5c7aaae05`. The Store runs in its Disposable profile only, with no
+> **Status:** [LayerFS 1.0.0](https://github.com/Ephemeral-AI-Lab/layerfs/releases/tag/v1.0.0),
+> the first official release after the 0.1.x Developer Previews, released as source.
+> The results below ran on `main` at `e5c7aaae05`. The Store runs in its Disposable profile only, with no
 > crash or power-loss durability: use LayerFS for agent work and its history, not
 > as the only copy of data you cannot rebuild.
+
+<a id="get-started"></a>
+## Try it with LayerFS × DSH
+
+<p align="center">
+  <a href="dsh/README.md"><img src="docs/assets/readme/layerfs-x-dsh.svg" alt="LayerFS × DSH: the LayerFS logo and the DeepSeek Harness logo" width="240"></a>
+</p>
+
+LayerFS runs today through **LayerFS × DSH**, the `dsh-layerfs` plugin for
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). Agents in a dsh
+session fork Branches, test them in Sandboxes, merge and publish, and the **Work** and
+**History** tabs show every agent's Branch, live.
+
+<p align="center">
+  <a href="dsh/README.md"><img src="https://img.shields.io/badge/Try%20LayerFS%20%C3%97%20DSH-install%20guide%20%E2%86%92-7C3AED.svg?style=for-the-badge" alt="Try LayerFS × DSH: install guide"></a>
+</p>
 
 ## Core ideas
 
@@ -134,39 +151,11 @@ agent tool call
 - **Conflict.** Two Commits that change the same file are refused with
   `Conflict`, unless a `.lww` rule says the newest edit wins.
 
-## Get started
-
-**You need:** a Linux host, Docker Engine, Node 20 or newer, and a local ext4, xfs
-or btrfs filesystem for the Store.
-
-Paste this into your coding agent. It sets LayerFS up and works on a Branch of its own:
-
-```text
-Set up LayerFS for this project and start using it for your work.
-
-1. Read the setup guide in https://github.com/Ephemeral-AI-Lab/layerfs: sdk/js/README.md explains the JavaScript SDK, its native binding, the Linux daemon and the environment it reads (LAYERFS_HOME, LAYERFS_DOCKER, LAYERFS_IMAGE, LAYERFS_VOLUME, LAYERFS_DAEMON).
-2. Check the requirements before you start: a Linux host, Docker Engine, Node 20 or newer, and a local ext4, xfs or btrfs filesystem for the Store. If one is missing, stop and tell me which.
-3. Build what the guide says to build and set those variables.
-4. Run project.init once on this repository. It captures the whole tree, ignored files included, as main @ L0.
-5. Fork a Branch for your work. From now on, use sdk.fs for file reads and edits, and for each Bash command mount a Workspace on your Branch, exec, commit, then unmount.
-6. Check it worked: write a file on your Branch and confirm list_commits shows the Commit.
-
-Report what you ran and what each step returned. If a step fails, stop and give me the exact error; don't retry it on your own.
-```
-
-To set it up by hand, follow the [JavaScript SDK guide](sdk/js/README.md).
-
-## Works with
-
-- **LayerFS × [DSH](dsh/README.md)** (preview): agents in a DeepSeek Harness session fork, test, merge and
-  publish from bash, and a LayerFS tab draws what each one did.
-- **LayerFS × Pi**: planned.
-
 ## Learn more
 
 | | |
 | --- | --- |
-| Docs | [layerfs.ai/docs](https://layerfs.ai/docs/) · [Core ideas](https://layerfs.ai/docs/core-ideas/) · [JavaScript SDK guide](sdk/js/README.md) |
+| Docs | [LayerFS × DSH guide](dsh/README.md) · [layerfs.ai/docs](https://layerfs.ai/docs/) · [Core ideas](https://layerfs.ai/docs/core-ideas/) · [JavaScript SDK guide](sdk/js/README.md) |
 | Concepts | [Core concepts](docs/general/concepts.md) · [Documentation index](docs/README.md) |
 | Benchmarks | [layerfs.ai/benchmarks](https://layerfs.ai/benchmarks/) |
 | Release | [1.0.0 plan](docs/roadmap/1.0/README.md) · Previous: [0.1.7 release record](docs/release-notes/0.1.7/README.md) and its [manual](docs/versioned/0.1.7/README.md) |
