@@ -14,12 +14,15 @@
 </p>
 
 <p align="center">
-  <img src="../docs/assets/official_release/page3-demo.gif" alt="The LayerFS demo: agents on several Branches run tool calls in Sandboxes and fs, each call becomes a Commit, and the history tree grows" width="860">
+  <a href="https://layerfs.ai/docs/integrations/dsh/"><img src="media/layerfs-dsh.gif" alt="A recorded dsh run at 2× speed: the Work tab shows an agent's fs terminal and Workspaces, then the History tab grows as a lead and five agents commit, merge and publish" width="860"></a>
+  <br><sub>A recorded run: a lead and five agents build one application on Branches of their own (2× speed). <a href="https://layerfs.ai/docs/integrations/dsh/">Full video on layerfs.ai</a></sub>
 </p>
 
 <p align="center">
+  <a href="#-install">Install</a> ·
+  <a href="#-two-real-runs">Two real runs</a> ·
+  <a href="#-your-first-session">Your first session</a> ·
   <a href="#-what-it-adds">What it adds</a> ·
-  <a href="#-install-into-a-dsh-profile">Install</a> ·
   <a href="#-develop">Develop</a> ·
   <a href="../README.md">LayerFS</a>
 </p>
@@ -27,189 +30,48 @@
 
 `dsh-layerfs` is a plugin bundle for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh). It changes no dsh code.
 
-With the bundle, agents in a dsh session work on a LayerFS project from bash, through short Node scripts that use the LayerFS JavaScript SDK. They fork Branches, test them in Sandboxes, and merge and publish. The conversation gets a **LayerFS** tab that draws what each agent did, subagents included. The design is in issue #346.
+With the bundle, agents in a dsh session work on a LayerFS project from bash, through short Node scripts that use the LayerFS JavaScript SDK. They fork Branches, test them in Sandboxes, and merge and publish, and you watch every agent's Branch grow, live. The conversation gets **Work** and **History** tabs that draw what each agent did, subagents included. The design is in issue #346.
 
-## ✨ What it adds
+## 📦 Install
 
-| Piece | Package | Where it shows |
-|---|---|---|
-| Host plugin `layerfs-host` | `@dsh-layerfs/host` | bash environment, session records, the `/layerfs` web route |
-| Client plugin `layerfs-client` | `@dsh-layerfs/client` | LayerFS tab, project picker, LayerFS panel (dsh web) |
-| Agent preset `layerfs-dsh-minimalist` | `dsh-layerfs` (`presets/`) | "LayerFS × DSH minimalist" in the preset menu |
-| View model | `@dsh-layerfs/model` | used by the client and the Host |
-| Renderer | `@dsh-layerfs/view` | used by the client |
-| Mock model `layerfs-mock` (demo bundle `dsh-layerfs-demo`) | `@dsh-layerfs/mock` | disabled permanently (owner, 2026-10-21): not installed or released |
+The quickest way is to let a coding agent do it. Paste this into one running on the machine where dsh web will run, in a folder holding a clone of this repository:
 
-The LayerFS tab is the only LayerFS UI. The standalone HTML pages that used to live in the root `sdk_sim/` (the terminal UI page and its design preview) and their live server are removed; do not build or revive a standalone HTML or TUI page. What remains, the simulation engine, lives in [`sim/`](sim/): `simulation_engine/model.js` and `files.js`, which the client and the Host import, the terminal engine (`terminal.js`, `backend/sim.js`) and demo stories (`demo.js`) that the demos were written from, and the avatars (`avatars/`).
+```text
+Set up LayerFS × DSH for me: the dsh-layerfs plugin bundle in DeepSeek Harness (dsh) web, on
+real LayerFS.
 
-### 🔌 Host plugin
+1. Read dsh/README.md in https://github.com/Ephemeral-AI-Lab/layerfs, the "Install" section
+   and its "Install step by step" steps. It is the guide: follow its steps in order and for
+   this machine's OS (macOS or Linux).
+2. Check what it needs first: Node 22.19 or newer, pnpm, Docker (Docker Desktop on macOS),
+   network access, and a built deepseek-harness checkout
+   (https://github.com/deepseek-ai/deepseek-harness) beside the layerfs repository; if there
+   is none, clone it there and run pnpm install && pnpm run build in it. If something is
+   missing that you cannot install, stop and tell me which.
+3. Step 1, Install LayerFS: build layerfs-daemon and the SDK's native addon in the
+   rust:1.85.1-bookworm image, gather them into the bundle folder, build the runtime image
+   and note its image ID.
+4. Step 2: in dsh/, run pnpm install and pnpm run build, with DSH_SOURCE set to the
+   deepseek-harness checkout's absolute path.
+5. Step 3: make a fresh profile with its own DSH_HOME (not ~/.dsh) and add only dsh-layerfs
+   with dsh's plugin command. Do not add dsh-layerfs-demo.
+6. Step 4: write layerfs-host's settings into the profile's cordis.patch.yml: the image ID,
+   plus the bundle folder on macOS or the daemon path on Linux.
+7. Step 5: start dsh web with that DSH_HOME and give me the printed
+   http://127.0.0.1:…/?token=… link.
+8. Step 6: run pnpm test in dsh/, and check that GET /layerfs/status reports no missing
+   settings.
 
-- **Bash environment.** A bash call in a session bound to a project gets:
-  - `DSH_LAYERFS_PROJECT` and the deployment settings;
-  - `DSH_LAYERFS_SDK` and `DSH_LAYERFS_OPERATOR` (file URLs of the SDK);
-  - a trace file per agent (`DSH_LAYERFS_TRACE`) and the bash call id as the trace step.
+Report what you ran and what each step returned. A long cargo build may be run again until
+it prints Finished, as the guide says; if anything else fails, stop and give me the exact
+error, and don't retry it on your own.
+```
 
-  The SDK reads the `DSH_LAYERFS_*` names as fallbacks for its own `LAYERFS_*` settings.
-- **Records.** Each finished SDK call becomes a `plugin:layerfs/call` record in the calling agent's own session. The root session gets one `plugin:layerfs/project` record.
-- **Journal.** Finished lines are also journaled per root session under the state folder, because trace files live in temporary storage.
-- **Projects.** Each project is attached to at most one workspace folder, or detached; a folder can have several. Init imports a source folder (the workspace folder unless another is chosen) and attaches the new project to the workspace folder. A session uses the folder's only (or last used) project unless it picks another or none. The choice is fixed at the first bash call that uses it.
-- **Agent names.** Subagents are named by the label their parent gave them.
-- **Web route.** `/layerfs` sits behind dsh's own connection checks:
+It follows the six steps below and asks before anything it cannot do. Expect a few minutes for the first LayerFS build.
 
-  | Request | Answer |
-  |---|---|
-  | `GET /layerfs/status` | configuration |
-  | `GET /layerfs/workspace?folder=` | a folder's projects |
-  | `POST /layerfs/init {folder, source?, name?}` | check the request and start Init; answers its job at once |
-  | `GET /layerfs/init/<job>` | the Init's step (`scan`, `volume`, `import`, `done` or `failed`), the source's file and byte counts, then its project or error |
-  | `GET /layerfs/session/<id>` | project, agents and trace lines of the session's root |
-  | `POST /layerfs/session/<id>/project {project}` | choose a project, or `null` for none |
-  | `GET /layerfs/session/<id>/state` | the project as `inspect.snapshot` reports it |
-  | `GET /layerfs/session/<id>/tree?ref=<saved id>` | a Commit's or Layer's files |
-  | `GET /layerfs/projects` | every project and the workspace folder it is attached to |
-  | `GET /layerfs/project/<name>/state` | the project as `inspect.snapshot` reports it, plus who made each node and when Layers and forks happened, from the journals |
-  | `GET /layerfs/project/<name>/tree?ref=<saved id>` | as the session's tree route |
-  | `POST /layerfs/project/<name>/attach {folder}` | attach to a workspace folder, or `null` to detach |
-  | `POST /layerfs/project/<name>/remove {confirm}` | remove the project; `confirm` must repeat its name |
-
-  Init first counts the source (every entry, links not followed, as LayerFS reads it), then makes the volume, then runs LayerFS Init (on macOS in a container of its own), which scans, imports and installs the Store into the volume in one process; it starts no Sandbox. While LayerFS imports, the Host reads its counts every 250 ms (the SDK operator's `project.progress()`: step, entries scanned, files and bytes built) into the job's `imported`. The page reads the job every 300 ms and fills the bar from those counts over the Host's totals: scan 0–15%, files 15–95% (bytes plus 4 KB per file), then tree, publish and seal.
-
-  Removal deletes the project's Docker volume and LayerFS home entry, and drops it from the bindings; sessions on it become unbound. It is refused while any container still uses the volume. Workspace files and transcripts stay. A LayerFS project is its home entry, so a removed name can be initialized again at once.
-
-  The Host reads each project (state and trees) through one shared SDK client, released after a quiet minute. Reading starts no Sandbox: history comes from the project's Store (on macOS, in the Store container), and Workspaces only from Sandboxes already running, so a project nobody works on shows its history with no container. LayerFS places agents' Workspaces in the project's numbered Sandboxes, `layerfs-<project>-<n>`, 16 to a Sandbox; each Sandbox closes itself two minutes after its last Workspace is unmounted, and the tab then draws it closed.
-
-  Trees are bounded: 4000 entries, 128 KB per file, 8 MB in all. `node_modules`, `.git`, `.next`, `dist` and `build` are listed but not opened.
-
-### 🖥️ Client plugin
-
-- **The LayerFS tab** (beside Chat and Trajectory) replays the root session's lines while it is shown and draws:
-  - the project terminal with agent tags;
-  - Branches and Sandboxes;
-  - History and Files;
-  - the agents' avatars.
-
-  An unbound session shows Setup: pick one of the folder's projects, or Init.
-
-  **Playback.** The tab plays calls in step with the run, for real agents and demos alike ([`playback.ts`](packages/client/src/client/playback.ts)):
-  - each call shows 2 s after it ended, so the gaps on screen are the run's own gaps and the tab never falls behind. The 2 s are longer than the Host poll (1.5 s), so a call is usually here before its time;
-  - calls whose time has passed (the tab opened, a rebuild when an agent is named, a late poll) appear at once, drawn once. Nothing plays twice;
-  - a bash call that mounts, runs, commits and unmounts a Workspace within a second shows each step at its time, and the Workspace's pane then fades out over 1.2 s ("unmounted"), a trail kept by the view only ([`view.js`](packages/view/src/view.js)).
-
-  **Demo speed.** A demo's strip, above the composer, has a speed control beside Sim and Live: 1×, 2×, 4× and Max. It sets how fast the mock runs the demo, not how fast the tab animates it: the speed divides the scenario's pauses and the typing between streamed words, and Max leaves them out ([`pace.js`](packages/mock/src/pace.js), `POST /layerfs-demo/<id>/speed`). A pause under way follows a change at once. Commands, LayerFS calls and waits on other agents take their own time at any speed. A demo starts at its scenario's `speed`, 1× for every demo. Where a scenario's pauses order two agents' commits (5 agents: ben's `--lint` lands before cy's `--profile`, which then conflicts), a faster speed narrows that margin while the commands keep their time, so a planned Conflict may not happen; check-demo then fails it. It applies to a run under way too; the LayerFS tab has no speed control.
-
-  **Terminals and their command lines.** Every SDK call an agent makes prints one command line in one terminal. The single table for both is [`packages/model/src/cli.js`](packages/model/src/cli.js); `node packages/model/tests/cli.mjs` fails when an SDK or operator method has no row there.
-
-  | Terminal | Prints | Calls |
-  | --- | --- | --- |
-  | project (one per project) | the project and its Branches | `project.*`, `branch.*`, and a mount that failed (it has no pane); an older trace's `sandbox.create` and `sandbox.close` |
-  | fs (one per Branch) | Store reads and writes on that Branch | `fs.*` |
-  | workspace (one pane per mounted Workspace) | the Workspace's life and the commands run in it | `workspace.mount`, `workspace.exec`, `workspace.status`, `workspace.commit`, `workspace.unmount` (an older trace's `sandbox.*` forms too), operator `process.start` and `process.cancel` |
-  | none | the client's own calls and operator reads | `operator.sandbox.list`, the other operator methods |
-
-  A command line is `<group> <method> <required args> [--optional value] [-m "message"]`, using the SDK's own group and method names: `branch merge feature try-ui release -m "join"`, `fs read /app/page.tsx --start-line 5`, `workspace commit -m "add hero" --force`.
-  - Required arguments are positional, in SDK order. Optional ones are `--kebab-case` flags shown only when they differ from the SDK default; a true boolean is a bare flag (`--force`, `--discard`).
-  - An image is shortened to `sha256:` and 12 hex digits. File content is never printed, and `fs apply` shows its change count.
-  - A line does not repeat what its terminal names. The fs terminal hides the `fs` group and the Branch (`read /app/page.tsx`); a workspace pane hides the `workspace` group, the Sandbox and the path (`commit -m "add hero"`, `unmount --discard`), but keeps the operator's `process cancel`. The project terminal prints every group. `fs diff_files` prints both of its refs.
-  - A command run in a Workspace prints as the shell command itself, and a background start ends with ` &`.
-  - Reads (`list_*`, `diff_*`, `fs read/list/stat/grep/glob/blame/diff_files`, `workspace status`) and `workspace mount` are dimmed.
-  - A call with no row prints its own name, dimmed, in the project terminal.
-
-  The composer is hidden while the tab shows; switch to Chat to send a message.
-- **The project chip** sits in the New Session row beside the preset chip, drawn like dsh's own chips. Its menu lists the folder's projects and "No LayerFS", with "Import project…" pinned below. Like "Add workspace…", Import opens the directory picker (Finder in dsh web on a Mac); the chosen folder becomes a new project attached to the workspace folder and is chosen for the session. While it imports, a card under the chip shows the percentage, the step with its counts ("Importing 12,000 of 30,000 files · 40 MB of 90 MB") and the elapsed time over a bar. The bar moves without a fraction while the Host counts the source; the Init dialog shows the same.
-- **The LayerFS page** (sidebar) has one tab per project. Each shows:
-  - ellen_joe, with a line on where `main` is and what was published last;
-  - the workspace the project is attached to, which you can change or detach (a session already on the project keeps it);
-  - History and Files side by side, where clicking a History node shows Files at that point;
-  - "New LayerFS session" in the attached workspace, on the preset;
-  - "Remove project…", which asks for the project's name before removing it.
-
-  Workspaces without a project offer Init.
-- **The Init dialog** (Setup and the page) imports the workspace folder by default. "Choose folder…" browses for another source: in the page where dsh offers it, otherwise with the native picker. The project is attached to the workspace folder either way. The name is optional and defaults to the source folder's.
-
-### 🎛️ Preset
-
-The preset has bash with background jobs, subagents (spawn) with their control tools, and compaction. It has no read, write or edit tools. Its persona carries:
-- an SDK cheat-sheet with a stdin script template;
-- the working rules: one Workspace per agent, merge conflicts belong to whoever merged, only the main agent publishes, run again on `Busy`, unmount every Workspace.
-
-Run the preset's sessions in Workspace Write mode; subagents inherit it.
-
-### 🎬 Mock model and demos
-
-> **Disabled permanently** (owner, 2026-10-21). The `dsh-layerfs-demo` bundle loads nothing (its `cordis.patch.yml` is empty), is not part of the release, and the install guide below does not add it. This section describes the code that stays in the repository.
-
-The `dsh-layerfs-demo` bundle adds the LayerFS mock model: an LLM provider that is explicitly not a language model. Each scenario in `scenarios/` becomes one model, "LayerFS mock · <title>". It replies with scripted calls to the preset's own tools: bash, subagent, send_message, list_agents and the job tools. dsh runs those calls for real, against a real LayerFS project, and subagents inherit the mock model, so they run their own part of the script. No API key is needed.
-
-| Demo | Agents | Shows |
-|---|---|---|
-| `tour` | root | the Tour story, 24 steps: fs Commits, a Sandbox terminal that installs, fails lint, builds and serves (unmount Busy), a stale Workspace that merges on commit, a second Workspace, a fork from a Commit, two publishes |
-| `parallel` | root, header, footer | two subagents on their own Branches; the root publishes one, then asks the other to merge main in first |
-| `conflicts` | root | the Conflicts story, 15 steps: a commit Conflict resolved in the Workspace, a merge Conflict resolved by making the Branches agree |
-| `merge` | root | the Commit & merge story, 21 steps: a clean stale commit, a commit Conflict, merge into a new Branch, a merge Conflict, publish |
-| `sandbox` | root | two Workspaces placed in one Sandbox, a background build job, and the Busy and Dirty refusals |
-| `agents` | root and five | the 5 agents story, 52 steps (62 bash calls): a Workspace per call, stale merges, `.lww`, a same-line Conflict fixed in the kept Workspace, a dev server and curl, a try on a fork, merge, publish and blame |
-| `shop` | root | Live only. #334's Builder 2 replayed, 19 steps: a small web shop built over six milestones, 12 recorded commands (npm, esbuild, node tests, a server smoke) run again |
-| `depot` | root | Live only. #337's Builder 2 replayed, 103 steps: a Rust inventory service and its browser client, 82 recorded commands (cargo fetch and builds from crates.io, cargo and Python tests, Chromium) run again in Workspaces that stay mounted across steps |
-| `crew` | root + 5 | Live only. #340's Builder 2 r3 replayed, 1,550 steps: a lead and 17 agents playing as 6 roles build one application on Branches of their own; 304 recorded commands, of which the 147 that only verify and belong to a browser proof are disabled (their run files say `"verification": "no-browser"`) and the other 157 run; the roles run at the same time and wait for each other only where they touched the same Branch |
-| `checkpoints` | root, a01, a02 | #352's checkpoints, small: four ranges in which two agents write on lanes of their own and the lead merges, publishes and verifies; each range ends at a checkpoint once its (fake) gates pass. The strip shows the checkpoint timeline; Play or Replay first asks where to start: from the beginning or after a checkpoint the last run passed, whose ranges are then restored by the lib's `restore` (standing in for #352 P2's Store snapshots), not replayed |
-
-#### Replayed runs
-
-`shop`, `depot` and `crew` (see [#347](../core/docs/issues/347/SPEC.md)) replay a recorded application run on Live LayerFS. Each scenario sets `"live": true`, so the strip offers only Live and the Host refuses a Sim Init of its project; `image` names the runtime image its Sandboxes use, and `seed.json` is the folder the original Init imported, which Play writes out once under `<profile>/dsh-layerfs-demo/seeds/` and Inits from. Each bash step is `step(<NNN>)` of [`scenarios/shared/replay.mjs`](scenarios/shared/replay.mjs), which makes the recorded SDK calls of `run/NNN.json` in order: recorded writes are applied as they were, recorded commands run again in a Workspace of the same Branch (except, where the run file says `"verification": "off"`, those that only verify: their step says so and runs nothing), and each reply must be the recorded one (a command's exit code included), or the step exits 1 and the run stops. `final.json` holds each tracked file's SHA-256 on the recorded final `main` and each Branch's recorded history, for check-demo; its `varies` names what a replay cannot reproduce byte for byte (a clock reading in a name, SQLite databases, bytecode, server logs), decided from the record.
-
-`tools/import-run.mjs` generates these folders from a run's records and a restored copy of its stopped Store (`tools/restore-store.mjs`). It keeps steps that write, run a command or change history and drops reads; pauses are `clamp(gap × k, 400, 3000)` ms with `k` set so they add up to the demo's target thinking time.
-
-dsh's bash tool reports a command that exits non-zero as an ordinary result ending in `[exit code: N]`; the mock stops the run on that marker (and on a signal or timeout marker) as it does on an error result.
-
-A scenario is `scenario.json` (format `layerfs-mock-scenario` version 2), with its `scripts/` or a shared `lib`. Each agent has a list of steps:
-- a call step: one preset tool and its arguments. A bash step names a `script` (sent as `node --input-type=module <<'JS'`), a `run` (calls of the scenario's `lib`, imported and awaited in such a script) or a `command`. `expect` lists the LayerFS outcomes its trace should show, `retry` reruns it on matching output, and `as` names a background job;
-- a reply step: the turn's closing text. `until` makes the agent wait for those subagents to report first;
-- a pause step: milliseconds before the next step.
-
-A root step may carry `checkpoint: { label, verdict?, note?, restore? }` (#352): when the root agent finishes it, the run has reached that checkpoint. `verdict` is pass, watch, optimize or stop; watch is a pass with a note, and optimize or stop halt the run there. `restore` is a `run` that brings the project to the checkpoint at once: a run can start after a passed checkpoint that has one, and its first message then ends " from after <label>."; the root runs `restore`, starts the subagents that had already started, each at its next turn, and plays on. The mock keeps each demo's reached checkpoints in `<profile>/dsh-layerfs-demo/checkpoints/<demo>.json`, so they outlive a dsh web restart (the run then reads as interrupted), and the strip draws them as a timeline: green when passed, red where the run stopped, striped ↺ when restored. With more than 12 the segments carry no labels, and the start picker lists them in a scrolling, filtered box.
-
-`@name` in an argument is a subagent or job started earlier. A subagent's `description` is its name in the scenario. `order` places the demo in lists and `speed` sets how fast the mock runs it at first. Every scenario's `fixture` is `demo-workspace/`, the shared website; its install, build, test and serve are small shell scripts, not npm: test checks each page's heading and that every `@/…` import resolves, and serve answers each page's heading on localhost:3000 (with python3). The sandbox demo's scripts keep their notes between bash calls under `<temp>/dsh-layerfs/demo-notes/<project>/`, outside the workspace folder, because Init imports everything in it.
-
-The tour, conflicts, merge and agents demos are the simulation engine's demo stories ([`sim/demo.js`](sim/demo.js)) step for step: each step is one bash call of [`scenarios/shared/terminal.mjs`](scenarios/shared/terminal.mjs), which makes the same SDK calls as that step's terminal line and prints what the terminal printed (`npm ci`, `npm run build`, `npm test` and `npm run start` become the shell scripts). An agent's call mounts a Workspace of its own in its Branch's shared Sandbox, runs, commits and unmounts; after a Conflict the Workspace is kept for the agent's next call, and a trailing `&` keeps it for the server. The lead wakes the agents of each step with send_message and waits for them; each agent's pause is the story's thinking time, and the call takes its typing and running time, so a burst's calls overlap and commit in the same order as in the story's schedule. The calls keep their notes (a terminal's Workspace, an agent's kept one, the C<n> labels) under the project's LayerFS home entry, which is removed with the project.
-
-#### The demo workspace
-
-With the bundle installed, dsh web gets a workspace for `dsh/demo-workspace` with one session per demo, in scenario order. The client registers the workspace and makes any missing session when it loads. Each session opens with "What does this demo show?", which the mock answers with the demo's blurb and agents; dsh's sidebar lists no session before its first turn.
-
-The demo sessions belong to their demos, so the client hides dsh's controls that would add, fork, archive, pin, rename or move one: the workspace row's New session and menu, each session row's menu, Archive and Pin, rename by double-click, dragging, the chat's Branch button, and the fork, archive and rename shortcuts while a demo session is open. The workspace's folder row has a violet gradient and a DEMO badge. dsh has no per-workspace setting for these: a stylesheet keyed to the sidebar's row keys and the chat's session attribute hides them, and the client's key listener runs before dsh's.
-
-Above the composer of a demo session, one strip shows:
-- a progress bar: the steps every agent has finished out of all the scenario's steps, from the mock's own replies, with the root agent's phase and the elapsed time;
-- Sim or Live: the simulator or real LayerFS. The choice is kept in the browser;
-- Play, or Replay after a run.
-
-Play (Replay after a run, also allowed while one goes) runs the demo in a new session that takes the old one's place; dsh cannot empty a session. In order:
-1. A session is made in the demo workspace at the old one's place, with the preset, the demo's title and its mock model. The sidebar lists it only from its first message.
-2. The old session is archived, with its turn, subagents and jobs stopped.
-3. The demo's projects are removed, and its project for the mode (`demo-<id>`, or `demo-<id>-sim` on Sim) is Inited again from `demo-workspace/`, with the Init's progress on the bar. Removal stops the Sandboxes a stopped run left open (only Play asks for that; removing other projects still refuses while a Sandbox runs) and clears their records in the LayerFS home.
-4. The new session becomes the demo's, the project is chosen, "Run the demo." is sent, and the new session opens.
-
-Each step is attempted once. A failure before step 4 unarchives the old session, which stays the demo's, archives the unused new one, and shows the message on the strip. The strip reads the demo again as soon as Play ends. A run stops on the strip when a request of it is aborted, or, for a stop between requests, which the mock does not see, once dsh says the root session is not running and no step has finished for 4 seconds. When the client loads, a demo whose session is gone or archived gets a new one, opened with the intro question.
-
-The Host side is the mock plugin's `/layerfs-demo` route. It serves the workspace folder, the demos, each demo's session (kept in `<profile>/dsh-layerfs-demo/sessions.json`) and each demo's latest run.
-
-#### Simulated projects
-
-Sim needs no Docker, image or daemon. `POST /layerfs/init` with `backend: "sim"` imports the folder into the simulator (`packages/host/src/sim/`) instead of a Store. A simulated project's bash calls get the SDK on the simulator as `DSH_LAYERFS_SDK`, so the same scripts run on both:
-- `sim/sdk.js` is the SDK itself with `LAYERFS_NATIVE` set to `sim/binding.js`, a native binding in JavaScript. The SDK's argument checks, refusals and trace lines are unchanged.
-- The binding's decisions (Commits, stale Workspaces, merges, conflict markers, `.lww`, publish) are the simulation engine's model (`sim/`). Its answers have the real binding's shapes and LayerFS's id formats, so the views and checks read both alike.
-- The state is `<LayerFS home>/<project>/sim/state.json`, changed by one call at a time under a lock file.
-- A mounted Workspace is a folder, `sim/ws/<sandbox>/<n>`. Commands run there with `/bin/sh`, and each call reads the folder back. On macOS a GNU-compatible `sed` (`sim/sed.js`) comes first on the command's PATH.
-- Background processes run detached and leave their exit code in `sim/proc/`. Removing the project stops them.
-
-The Host's own reads of a simulated project (Init, state, trees, storage) go to the binding directly. Store sizes are estimates from file text. Sim runs commands on the Host without a container.
-
-Known limits:
-- dsh's sidebar orders sessions by last activity by default, so the demo played last moves to the top. The manual order keeps each demo's place.
-- Sim imports the simulation engine's model from `dsh/sim/`, so the Host package needs this `dsh/` tree beside it to Init or read a simulated project.
-- `demo-workspace` is inside this repository. A turn's "Edited" card lists every change made in the repository during the turn, including other work in the checkout.
-
-## 📦 Install into a dsh profile
+<a id="-install-into-a-dsh-profile"></a>
+<details>
+<summary><b>Install step by step: six steps, without an agent</b></summary>
 
 These steps take a fresh clone of this repository to LayerFS × DSH in dsh web: first LayerFS itself, then the dsh bundle. Only dsh web is supported. dsh desktop serves the same web client but was not tested. The headless profile composes no preset registry, so it offers no preset; the Host and the bash environment still load there.
 
@@ -386,6 +248,211 @@ node tools/check-session.mjs 'http://127.0.0.1:3090/?token=…' <session id>
 
 `pnpm test` runs the Host, simulator, model, mock, playback and history tests. `check-session.mjs` checks that a finished session's tabs draw what LayerFS reports. The page's URL does not carry the session id: a session is the folder `$DSH_HOME/sessions/<workspace>/session-<uuid>`, whose name is the id.
 
+</details>
+
+## 🏁 Two real runs
+
+On 2026-10-20, one dsh main agent and seven worker subagents on `deepseek-flash` took an empty LayerFS project to a published, verified `main`, twice: a small app in under an hour and a hard one in an afternoon. Every change went through the SDK as Branches, Commits, merges and publishes.
+
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="demo/wayfare/README.md"><img src="demo/wayfare/assets/history-sideways.png" alt="Wayfare's History at the end of the run: main at L12 after 147 Commits"></a></td>
+    <td width="50%" valign="top"><a href="demo/quarry/README.md"><img src="demo/quarry/assets/work-store-stats.png" alt="Quarry's storage at the end of the run: 8.90 GB on disk for 4.93 TB of history"></a></td>
+  </tr>
+  <tr>
+    <td valign="top"><b><a href="demo/wayfare/README.md">Wayfare</a></b>: a collaborative trip planner in Node 24, with no third-party dependencies.</td>
+    <td valign="top"><b><a href="demo/quarry/README.md">Quarry</a></b>: a SQL database in Rust, checked row by row against SQLite, with every build's <code>target/</code> committed.</td>
+  </tr>
+</table>
+
+| | Wayfare | Quarry |
+|---|---|---|
+| Time | 56 min, 8 agents | 4 h 16 min, 8 agents |
+| History | 147 Commits, 31 Branches, 13 Layers | 913 Commits, 56 Branches, 9 Layers |
+| Checks | 334/334 tests, A01–A12 pass | 891 tests, 800/800 sqllogictest, Q01–Q12 pass |
+| Store | 1.21 MB on disk for 91.5 MB of snapshots, 27× dedupe | 8.90 GB on disk for 4.93 TB of snapshots, 166× dedupe: less than one copy of `main` (13.5 GB) |
+
+Each record has the task, the spec, the system prompt, the progress ledger, the published build report and every number above. The screenshots are from the end of each run, taken with an earlier version of the tab, before it split into Work and History.
+
+## 🚀 Your first session
+
+**1. Start a session on a project.** In dsh web, start a new session. Its row has the preset chip, which reads **LayerFS × DSH minimalist**, and beside it the **project chip**. Open the project chip and pick **New empty project**, or **Import project…** to choose a folder and import it as a new project; a card under the chip shows the import's progress. The session's project is fixed at its first bash call that uses it.
+
+**2. Switch to Workspace Write.** Set the session's mode to **Workspace Write**. Bash calls then run in dsh's sandbox, which lets LayerFS write its home and traces; subagents inherit the mode.
+
+**3. Give it a task.** The preset already knows the SDK and its rules, so ask for work as you would any agent. Work that splits across subagents shows the most. For example:
+
+```text
+Build a small two-page website in this project: a home page and an about page that link to
+each other, plus a check script (node check.mjs) that fails if either page is missing or a
+link is broken.
+
+Give each page to its own subagent, each on its own Branch forked from main. Each subagent
+runs node check.mjs in a Workspace before it commits. When both are done, merge their
+Branches into one, fix any Conflict, run the check once more, and publish to main.
+```
+
+**4. Watch the Work tab.** **Work** sits beside Chat and Trajectory. Its chips are `main` and the Branches. On `main` you see the Store's size and the project terminal, which prints every Branch call (fork, merge, publish) with the agent that made it. A Branch's chip shows its `fs` terminal, the Store reads and writes on that Branch, and one pane per Workspace mounted on it, with the commands run there. Calls appear in step with the run, and **Follow** keeps up with the newest.
+
+<table>
+  <tr>
+    <td width="50%" valign="top"><img src="media/work-main.webp" alt="The Work tab on main: storage, 7.51 MB on disk for 2.57 GB of history, the Branches list, and the project terminal"><br><sub><code>main</code>: the Store's size and the project terminal.</sub></td>
+    <td width="50%" valign="top"><img src="media/work-branch.webp" alt="The Work tab on a Branch: the fs terminal with one Commit per apply, and two agents' Workspace panes"><br><sub>A Branch: its <code>fs</code> terminal and each agent's Workspace.</sub></td>
+  </tr>
+</table>
+
+**5. Watch History grow.** **History** draws every Branch and Commit, which agent made it, and the Layers on `main`, one per publish. It grows as the agents work; **Play** replays it from the start. **File** shows the files at any point and **Storage** what the Store holds.
+
+<p align="center"><img src="media/history.webp" alt="The History tab: main with Layers L6 to L10, and agents' Branches forking, committing and merging around it" width="860"><br><sub>History: 110 Commits on a dozen Branches, <code>main</code> at L10.</sub></p>
+
+**6. Come back to it later.** The sidebar's **LayerFS** page has one tab per project: where `main` is and what was published last, History and Files side by side (click a History node to see the files at that point), **New LayerFS session** to start another session on the project, and **Remove project…**, which asks for the project's name first.
+
+## ✨ What it adds
+
+| Piece | Package | Where it shows |
+|---|---|---|
+| Host plugin `layerfs-host` | `@dsh-layerfs/host` | bash environment, session records, the `/layerfs` web route |
+| Client plugin `layerfs-client` | `@dsh-layerfs/client` | Work and History tabs, project chip, LayerFS page (dsh web) |
+| Agent preset `layerfs-dsh-minimalist` | `dsh-layerfs` (`presets/`) | "LayerFS × DSH minimalist" in the preset menu |
+| View model | `@dsh-layerfs/model` | used by the client and the Host |
+| Renderer | `@dsh-layerfs/view` | used by the client |
+| Mock model `layerfs-mock` (demo bundle `dsh-layerfs-demo`) | `@dsh-layerfs/mock` | disabled permanently (owner, 2026-10-21): not installed or released |
+
+The Work and History tabs and the LayerFS page are the only LayerFS UI. The standalone HTML pages that used to live in the root `sdk_sim/` (the terminal UI page and its design preview) and their live server are removed; do not build or revive a standalone HTML or TUI page. What remains, the simulation engine, lives in [`sim/`](sim/): `simulation_engine/model.js` and `files.js`, which the client and the Host import, the terminal engine (`terminal.js`, `backend/sim.js`) and demo stories (`demo.js`) that the demos were written from, and the avatars (`avatars/`).
+
+## ⚙️ How it works
+
+dsh session (agents, subagents, bash) → `layerfs-host` (bash environment, records) → LayerFS JS SDK (short Node scripts) → Store and Sandboxes.
+
+A bash call in a session bound to a project gets the project, the SDK and a trace file per agent (`DSH_LAYERFS_*`). Each finished SDK call becomes a `plugin:layerfs/call` record in the calling agent's own session, and the client plugin reads those records back to draw the tabs. On Linux, the Host and the agents' scripts open the Store in their own process. On macOS the Mac runs no Store call itself: the Host starts one long-lived Linux container, `layerfs-store`, and every SDK call runs there. Agents' Workspaces are placed in the project's numbered Sandboxes, 16 to a Sandbox, and each Sandbox closes itself two minutes after its last Workspace is unmounted.
+
+## 📖 Reference
+
+<details>
+<summary><b>🔌 Host plugin: bash environment, records, projects, the /layerfs route</b></summary>
+
+- **Bash environment.** A bash call in a session bound to a project gets:
+  - `DSH_LAYERFS_PROJECT` and the deployment settings;
+  - `DSH_LAYERFS_SDK` and `DSH_LAYERFS_OPERATOR` (file URLs of the SDK);
+  - a trace file per agent (`DSH_LAYERFS_TRACE`) and the bash call id as the trace step.
+
+  The SDK reads the `DSH_LAYERFS_*` names as fallbacks for its own `LAYERFS_*` settings.
+- **Records.** Each finished SDK call becomes a `plugin:layerfs/call` record in the calling agent's own session. The root session gets one `plugin:layerfs/project` record.
+- **Journal.** Finished lines are also journaled per root session under the state folder, because trace files live in temporary storage.
+- **Projects.** Each project is attached to at most one workspace folder, or detached; a folder can have several. Init imports a source folder (the workspace folder unless another is chosen) and attaches the new project to the workspace folder. A session uses the folder's only (or last used) project unless it picks another or none. The choice is fixed at the first bash call that uses it.
+- **Agent names.** Subagents are named by the label their parent gave them.
+- **Web route.** `/layerfs` sits behind dsh's own connection checks:
+
+  | Request | Answer |
+  |---|---|
+  | `GET /layerfs/status` | configuration |
+  | `GET /layerfs/workspace?folder=` | a folder's projects |
+  | `POST /layerfs/init {folder, source?, name?}` | check the request and start Init; answers its job at once |
+  | `GET /layerfs/init/<job>` | the Init's step (`scan`, `volume`, `import`, `done` or `failed`), the source's file and byte counts, then its project or error |
+  | `GET /layerfs/session/<id>` | project, agents and trace lines of the session's root |
+  | `POST /layerfs/session/<id>/project {project}` | choose a project, or `null` for none |
+  | `GET /layerfs/session/<id>/state` | the project as `inspect.snapshot` reports it |
+  | `GET /layerfs/session/<id>/tree?ref=<saved id>` | a Commit's or Layer's files |
+  | `GET /layerfs/projects` | every project and the workspace folder it is attached to |
+  | `GET /layerfs/project/<name>/state` | the project as `inspect.snapshot` reports it, plus who made each node and when Layers and forks happened, from the journals |
+  | `GET /layerfs/project/<name>/tree?ref=<saved id>` | as the session's tree route |
+  | `POST /layerfs/project/<name>/attach {folder}` | attach to a workspace folder, or `null` to detach |
+  | `POST /layerfs/project/<name>/remove {confirm}` | remove the project; `confirm` must repeat its name |
+
+  Init first counts the source (every entry, links not followed, as LayerFS reads it), then makes the volume, then runs LayerFS Init (on macOS in a container of its own), which scans, imports and installs the Store into the volume in one process; it starts no Sandbox. While LayerFS imports, the Host reads its counts every 250 ms (the SDK operator's `project.progress()`: step, entries scanned, files and bytes built) into the job's `imported`. The page reads the job every 300 ms and fills the bar from those counts over the Host's totals: scan 0–15%, files 15–95% (bytes plus 4 KB per file), then tree, publish and seal.
+
+  Removal deletes the project's Docker volume and LayerFS home entry, and drops it from the bindings; sessions on it become unbound. It is refused while any container still uses the volume. Workspace files and transcripts stay. A LayerFS project is its home entry, so a removed name can be initialized again at once.
+
+  The Host reads each project (state and trees) through one shared SDK client, released after a quiet minute. Reading starts no Sandbox: history comes from the project's Store (on macOS, in the Store container), and Workspaces only from Sandboxes already running, so a project nobody works on shows its history with no container. LayerFS places agents' Workspaces in the project's numbered Sandboxes, `layerfs-<project>-<n>`, 16 to a Sandbox; each Sandbox closes itself two minutes after its last Workspace is unmounted, and the tab then draws it closed.
+
+  The Files pane reads only what is on screen, one SDK call each ([`reads.js`](packages/host/src/reads.js)): a folder a page of up to 1,000 names at a time, a file a window of at most 2,000 lines or 48 KiB. A read costs the same in a small project and a huge one. `node_modules`, `.git` and `.next` start collapsed.
+
+</details>
+
+<details>
+<summary><b>🖥️ Client plugin: Work and History tabs, project chip, LayerFS page</b></summary>
+
+- **The Work and History tabs** (beside Chat and Trajectory) replay the root session's lines while one is shown:
+  - Work: the project terminal with agent tags, the Branches and Sandboxes, and the agents' avatars;
+  - History: File, History, Storage and the project's Sandboxes.
+
+  An unbound session shows Setup: pick one of the folder's projects, or Init.
+
+  **Playback.** The tab plays calls in step with the run, for real agents and demos alike ([`playback.ts`](packages/client/src/client/playback.ts)):
+  - each call shows 2 s after it ended, so the gaps on screen are the run's own gaps and the tab never falls behind. The 2 s are longer than the Host poll (1.5 s), so a call is usually here before its time;
+  - calls whose time has passed (the tab opened, a rebuild when an agent is named, a late poll) appear at once, drawn once. Nothing plays twice;
+  - a bash call that mounts, runs, commits and unmounts a Workspace within a second shows each step at its time, and the Workspace's pane then fades out over 1.2 s ("unmounted"), a trail kept by the view only ([`view.js`](packages/view/src/view.js)).
+
+  **Demo speed.** A demo's strip, above the composer, has a speed control beside Sim and Live: 1×, 2×, 4× and Max. It sets how fast the mock runs the demo, not how fast the tab animates it: the speed divides the scenario's pauses and the typing between streamed words, and Max leaves them out ([`pace.js`](packages/mock/src/pace.js), `POST /layerfs-demo/<id>/speed`). A pause under way follows a change at once. Commands, LayerFS calls and waits on other agents take their own time at any speed. A demo starts at its scenario's `speed`, 1× for every demo. Where a scenario's pauses order two agents' commits (5 agents: ben's `--lint` lands before cy's `--profile`, which then conflicts), a faster speed narrows that margin while the commands keep their time, so a planned Conflict may not happen; check-demo then fails it. It applies to a run under way too; the LayerFS tab has no speed control.
+
+  **Terminals and their command lines.** Every SDK call an agent makes prints one command line in one terminal. The single table for both is [`packages/model/src/cli.js`](packages/model/src/cli.js); `node packages/model/tests/cli.mjs` fails when an SDK or operator method has no row there.
+
+  | Terminal | Prints | Calls |
+  | --- | --- | --- |
+  | project (one per project) | the project and its Branches | `project.*`, `branch.*`, and a mount that failed (it has no pane); an older trace's `sandbox.create` and `sandbox.close` |
+  | fs (one per Branch) | Store reads and writes on that Branch | `fs.*` |
+  | workspace (one pane per mounted Workspace) | the Workspace's life and the commands run in it | `workspace.mount`, `workspace.exec`, `workspace.status`, `workspace.commit`, `workspace.unmount` (an older trace's `sandbox.*` forms too), operator `process.start` and `process.cancel` |
+  | none | the client's own calls and operator reads | `operator.sandbox.list`, the other operator methods |
+
+  A command line is `<group> <method> <required args> [--optional value] [-m "message"]`, using the SDK's own group and method names: `branch merge feature try-ui release -m "join"`, `fs read /app/page.tsx --start-line 5`, `workspace commit -m "add hero" --force`.
+  - Required arguments are positional, in SDK order. Optional ones are `--kebab-case` flags shown only when they differ from the SDK default; a true boolean is a bare flag (`--force`, `--discard`).
+  - An image is shortened to `sha256:` and 12 hex digits. File content is never printed, and `fs apply` shows its change count.
+  - A line does not repeat what its terminal names. The fs terminal hides the `fs` group and the Branch (`read /app/page.tsx`); a workspace pane hides the `workspace` group, the Sandbox and the path (`commit -m "add hero"`, `unmount --discard`), but keeps the operator's `process cancel`. The project terminal prints every group. `fs diff_files` prints both of its refs.
+  - A command run in a Workspace prints as the shell command itself, and a background start ends with ` &`.
+  - Reads (`list_*`, `diff_*`, `fs read/list/stat/grep/glob/blame/diff_files`, `workspace status`) and `workspace mount` are dimmed.
+  - A call with no row prints its own name, dimmed, in the project terminal.
+
+  The composer is hidden while the tab shows; switch to Chat to send a message.
+- **The project chip** sits in the New Session row beside the preset chip, drawn like dsh's own chips. Its menu lists the folder's projects and "No LayerFS", with "Import project…" pinned below. Like "Add workspace…", Import opens the directory picker (Finder in dsh web on a Mac); the chosen folder becomes a new project attached to the workspace folder and is chosen for the session. While it imports, a card under the chip shows the percentage, the step with its counts ("Importing 12,000 of 30,000 files · 40 MB of 90 MB") and the elapsed time over a bar. The bar moves without a fraction while the Host counts the source; the Init dialog shows the same.
+- **The LayerFS page** (sidebar) has one tab per project. Each shows:
+  - ellen_joe, with a line on where `main` is and what was published last;
+  - the workspace the project is attached to, which you can change or detach (a session already on the project keeps it);
+  - History and Files side by side, where clicking a History node shows Files at that point;
+  - "New LayerFS session" in the attached workspace, on the preset;
+  - "Remove project…", which asks for the project's name before removing it.
+
+  Workspaces without a project offer Init.
+- **The Init dialog** (Setup and the page) imports the workspace folder by default. "Choose folder…" browses for another source: in the page where dsh offers it, otherwise with the native picker. The project is attached to the workspace folder either way. The name is optional and defaults to the source folder's.
+
+</details>
+
+<details>
+<summary><b>🎛️ Preset</b></summary>
+
+The preset has bash with background jobs, subagents (spawn) with their control tools, and compaction. It has no read, write or edit tools. Its persona carries:
+- an SDK cheat-sheet with a stdin script template;
+- the working rules: one Workspace per agent, merge conflicts belong to whoever merged, only the main agent publishes, run again on `Busy`, unmount every Workspace.
+
+Run the preset's sessions in Workspace Write mode; subagents inherit it.
+
+</details>
+
+<details>
+<summary><b>🧪 Simulated projects</b></summary>
+
+Sim needs no Docker, image or daemon. `POST /layerfs/init` with `backend: "sim"` imports the folder into the simulator (`packages/host/src/sim/`) instead of a Store. A simulated project's bash calls get the SDK on the simulator as `DSH_LAYERFS_SDK`, so the same scripts run on both:
+- `sim/sdk.js` is the SDK itself with `LAYERFS_NATIVE` set to `sim/binding.js`, a native binding in JavaScript. The SDK's argument checks, refusals and trace lines are unchanged.
+- The binding's decisions (Commits, stale Workspaces, merges, conflict markers, `.lww`, publish) are the simulation engine's model (`sim/`). Its answers have the real binding's shapes and LayerFS's id formats, so the views and checks read both alike.
+- The state is `<LayerFS home>/<project>/sim/state.json`, changed by one call at a time under a lock file.
+- A mounted Workspace is a folder, `sim/ws/<sandbox>/<n>`. Commands run there with `/bin/sh`, and each call reads the folder back. On macOS a GNU-compatible `sed` (`sim/sed.js`) comes first on the command's PATH.
+- Background processes run detached and leave their exit code in `sim/proc/`. Removing the project stops them.
+
+The Host's own reads of a simulated project (Init, state, trees, storage) go to the binding directly. Store sizes are estimates from file text. Sim runs commands on the Host without a container.
+
+Known limits:
+- dsh's sidebar orders sessions by last activity by default, so the demo played last moves to the top. The manual order keeps each demo's place.
+- Sim imports the simulation engine's model from `dsh/sim/`, so the Host package needs this `dsh/` tree beside it to Init or read a simulated project.
+- `demo-workspace` is inside this repository. A turn's "Edited" card lists every change made in the repository during the turn, including other work in the checkout.
+
+</details>
+
+## ⚠️ Limits
+
+- Only dsh web is checked. dsh desktop serves the same web client but was not tested; the headless profile has no preset registry, so the preset is not offered there.
+- A session's project is fixed at its first bash call that uses it.
+- Sessions run in Workspace Write mode, and the Host's `home` and `traceDir` stay in the OS temp area: a mount anywhere else fails `PermissionDenied`.
+- Everything else follows LayerFS's platform limits: Store calls need Linux and a local ext4, xfs or btrfs filesystem, which on macOS the Store container provides.
+
 ## 🧰 Develop
 
 | Command | Does |
@@ -408,3 +475,65 @@ node tools/check-session.mjs 'http://127.0.0.1:3090/?token=…' <session id>
 | `node tools/check-session.mjs '<dsh web URL with ?token=…>' <session id>` | checks that a session's tab draws what LayerFS reports: Branches, heads, `main`, Sandboxes, which agent made each Commit and Layer, and bash-call groups |
 
 `assets/` holds unlicensed character art and is never committed. `lib/` is build output.
+
+<details>
+<summary><b>🎬 Mock model and demos (disabled permanently)</b></summary>
+
+> **Disabled permanently** (owner, 2026-10-21). The `dsh-layerfs-demo` bundle loads nothing (its `cordis.patch.yml` is empty), is not part of the release, and the install guide above does not add it. This section describes the code that stays in the repository.
+
+The `dsh-layerfs-demo` bundle adds the LayerFS mock model: an LLM provider that is explicitly not a language model. Each scenario in `scenarios/` becomes one model, "LayerFS mock · <title>". It replies with scripted calls to the preset's own tools: bash, subagent, send_message, list_agents and the job tools. dsh runs those calls for real, against a real LayerFS project, and subagents inherit the mock model, so they run their own part of the script. No API key is needed.
+
+| Demo | Agents | Shows |
+|---|---|---|
+| `tour` | root | the Tour story, 24 steps: fs Commits, a Sandbox terminal that installs, fails lint, builds and serves (unmount Busy), a stale Workspace that merges on commit, a second Workspace, a fork from a Commit, two publishes |
+| `parallel` | root, header, footer | two subagents on their own Branches; the root publishes one, then asks the other to merge main in first |
+| `conflicts` | root | the Conflicts story, 15 steps: a commit Conflict resolved in the Workspace, a merge Conflict resolved by making the Branches agree |
+| `merge` | root | the Commit & merge story, 21 steps: a clean stale commit, a commit Conflict, merge into a new Branch, a merge Conflict, publish |
+| `sandbox` | root | two Workspaces placed in one Sandbox, a background build job, and the Busy and Dirty refusals |
+| `agents` | root and five | the 5 agents story, 52 steps (62 bash calls): a Workspace per call, stale merges, `.lww`, a same-line Conflict fixed in the kept Workspace, a dev server and curl, a try on a fork, merge, publish and blame |
+| `shop` | root | Live only. #334's Builder 2 replayed, 19 steps: a small web shop built over six milestones, 12 recorded commands (npm, esbuild, node tests, a server smoke) run again |
+| `depot` | root | Live only. #337's Builder 2 replayed, 103 steps: a Rust inventory service and its browser client, 82 recorded commands (cargo fetch and builds from crates.io, cargo and Python tests, Chromium) run again in Workspaces that stay mounted across steps |
+| `crew` | root + 5 | Live only. #340's Builder 2 r3 replayed, 1,550 steps: a lead and 17 agents playing as 6 roles build one application on Branches of their own; 304 recorded commands, of which the 147 that only verify and belong to a browser proof are disabled (their run files say `"verification": "no-browser"`) and the other 157 run; the roles run at the same time and wait for each other only where they touched the same Branch |
+| `checkpoints` | root, a01, a02 | #352's checkpoints, small: four ranges in which two agents write on lanes of their own and the lead merges, publishes and verifies; each range ends at a checkpoint once its (fake) gates pass. The strip shows the checkpoint timeline; Play or Replay first asks where to start: from the beginning or after a checkpoint the last run passed, whose ranges are then restored by the lib's `restore` (standing in for #352 P2's Store snapshots), not replayed |
+
+#### Replayed runs
+
+`shop`, `depot` and `crew` (see [#347](../core/docs/issues/347/SPEC.md)) replay a recorded application run on Live LayerFS. Each scenario sets `"live": true`, so the strip offers only Live and the Host refuses a Sim Init of its project; `image` names the runtime image its Sandboxes use, and `seed.json` is the folder the original Init imported, which Play writes out once under `<profile>/dsh-layerfs-demo/seeds/` and Inits from. Each bash step is `step(<NNN>)` of [`scenarios/shared/replay.mjs`](scenarios/shared/replay.mjs), which makes the recorded SDK calls of `run/NNN.json` in order: recorded writes are applied as they were, recorded commands run again in a Workspace of the same Branch (except, where the run file says `"verification": "off"`, those that only verify: their step says so and runs nothing), and each reply must be the recorded one (a command's exit code included), or the step exits 1 and the run stops. `final.json` holds each tracked file's SHA-256 on the recorded final `main` and each Branch's recorded history, for check-demo; its `varies` names what a replay cannot reproduce byte for byte (a clock reading in a name, SQLite databases, bytecode, server logs), decided from the record.
+
+`tools/import-run.mjs` generates these folders from a run's records and a restored copy of its stopped Store (`tools/restore-store.mjs`). It keeps steps that write, run a command or change history and drops reads; pauses are `clamp(gap × k, 400, 3000)` ms with `k` set so they add up to the demo's target thinking time.
+
+dsh's bash tool reports a command that exits non-zero as an ordinary result ending in `[exit code: N]`; the mock stops the run on that marker (and on a signal or timeout marker) as it does on an error result.
+
+A scenario is `scenario.json` (format `layerfs-mock-scenario` version 2), with its `scripts/` or a shared `lib`. Each agent has a list of steps:
+- a call step: one preset tool and its arguments. A bash step names a `script` (sent as `node --input-type=module <<'JS'`), a `run` (calls of the scenario's `lib`, imported and awaited in such a script) or a `command`. `expect` lists the LayerFS outcomes its trace should show, `retry` reruns it on matching output, and `as` names a background job;
+- a reply step: the turn's closing text. `until` makes the agent wait for those subagents to report first;
+- a pause step: milliseconds before the next step.
+
+A root step may carry `checkpoint: { label, verdict?, note?, restore? }` (#352): when the root agent finishes it, the run has reached that checkpoint. `verdict` is pass, watch, optimize or stop; watch is a pass with a note, and optimize or stop halt the run there. `restore` is a `run` that brings the project to the checkpoint at once: a run can start after a passed checkpoint that has one, and its first message then ends " from after <label>."; the root runs `restore`, starts the subagents that had already started, each at its next turn, and plays on. The mock keeps each demo's reached checkpoints in `<profile>/dsh-layerfs-demo/checkpoints/<demo>.json`, so they outlive a dsh web restart (the run then reads as interrupted), and the strip draws them as a timeline: green when passed, red where the run stopped, striped ↺ when restored. With more than 12 the segments carry no labels, and the start picker lists them in a scrolling, filtered box.
+
+`@name` in an argument is a subagent or job started earlier. A subagent's `description` is its name in the scenario. `order` places the demo in lists and `speed` sets how fast the mock runs it at first. Every scenario's `fixture` is `demo-workspace/`, the shared website; its install, build, test and serve are small shell scripts, not npm: test checks each page's heading and that every `@/…` import resolves, and serve answers each page's heading on localhost:3000 (with python3). The sandbox demo's scripts keep their notes between bash calls under `<temp>/dsh-layerfs/demo-notes/<project>/`, outside the workspace folder, because Init imports everything in it.
+
+The tour, conflicts, merge and agents demos are the simulation engine's demo stories ([`sim/demo.js`](sim/demo.js)) step for step: each step is one bash call of [`scenarios/shared/terminal.mjs`](scenarios/shared/terminal.mjs), which makes the same SDK calls as that step's terminal line and prints what the terminal printed (`npm ci`, `npm run build`, `npm test` and `npm run start` become the shell scripts). An agent's call mounts a Workspace of its own in its Branch's shared Sandbox, runs, commits and unmounts; after a Conflict the Workspace is kept for the agent's next call, and a trailing `&` keeps it for the server. The lead wakes the agents of each step with send_message and waits for them; each agent's pause is the story's thinking time, and the call takes its typing and running time, so a burst's calls overlap and commit in the same order as in the story's schedule. The calls keep their notes (a terminal's Workspace, an agent's kept one, the C<n> labels) under the project's LayerFS home entry, which is removed with the project.
+
+#### The demo workspace
+
+With the bundle installed, dsh web gets a workspace for `dsh/demo-workspace` with one session per demo, in scenario order. The client registers the workspace and makes any missing session when it loads. Each session opens with "What does this demo show?", which the mock answers with the demo's blurb and agents; dsh's sidebar lists no session before its first turn.
+
+The demo sessions belong to their demos, so the client hides dsh's controls that would add, fork, archive, pin, rename or move one: the workspace row's New session and menu, each session row's menu, Archive and Pin, rename by double-click, dragging, the chat's Branch button, and the fork, archive and rename shortcuts while a demo session is open. The workspace's folder row has a violet gradient and a DEMO badge. dsh has no per-workspace setting for these: a stylesheet keyed to the sidebar's row keys and the chat's session attribute hides them, and the client's key listener runs before dsh's.
+
+Above the composer of a demo session, one strip shows:
+- a progress bar: the steps every agent has finished out of all the scenario's steps, from the mock's own replies, with the root agent's phase and the elapsed time;
+- Sim or Live: the simulator or real LayerFS. The choice is kept in the browser;
+- Play, or Replay after a run.
+
+Play (Replay after a run, also allowed while one goes) runs the demo in a new session that takes the old one's place; dsh cannot empty a session. In order:
+1. A session is made in the demo workspace at the old one's place, with the preset, the demo's title and its mock model. The sidebar lists it only from its first message.
+2. The old session is archived, with its turn, subagents and jobs stopped.
+3. The demo's projects are removed, and its project for the mode (`demo-<id>`, or `demo-<id>-sim` on Sim) is Inited again from `demo-workspace/`, with the Init's progress on the bar. Removal stops the Sandboxes a stopped run left open (only Play asks for that; removing other projects still refuses while a Sandbox runs) and clears their records in the LayerFS home.
+4. The new session becomes the demo's, the project is chosen, "Run the demo." is sent, and the new session opens.
+
+Each step is attempted once. A failure before step 4 unarchives the old session, which stays the demo's, archives the unused new one, and shows the message on the strip. The strip reads the demo again as soon as Play ends. A run stops on the strip when a request of it is aborted, or, for a stop between requests, which the mock does not see, once dsh says the root session is not running and no step has finished for 4 seconds. When the client loads, a demo whose session is gone or archived gets a new one, opened with the intro question.
+
+The Host side is the mock plugin's `/layerfs-demo` route. It serves the workspace folder, the demos, each demo's session (kept in `<profile>/dsh-layerfs-demo/sessions.json`) and each demo's latest run.
+
+</details>

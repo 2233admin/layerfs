@@ -12,7 +12,7 @@ each asset was made.
 | --- | --- |
 | `layerfs-intro.mp4` | The intro video: 1920×1080, 30 fps, H.264 (CRF 18), 57.9 s, silent. |
 | `page3-demo.mp4` | The website's page 3 demo filmed in max mode (10×): 1440×900, 30 fps, 75 s (plus a short hold on the last frame). |
-| `page3-demo.gif` | The same film at 3× playback: 960×600, 10 fps, about 26 s. `README.md` and `dsh/README.md` show it. |
+| `page3-demo.gif` | The same film at 3× playback: 960×600, 10 fps, about 26 s. `README.md` shows it. |
 | `idea-0N-*.gif` | Each core-idea scene, one full loop: 1200×440, 10 fps. |
 | `idea-0N-*.png` | One full-content frame of each scene: 1500×550. |
 
