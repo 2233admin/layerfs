@@ -138,14 +138,14 @@ function markerIds(c, ws) {
 const numbered = (c) => c.s.sandboxOrder.filter((id) => /^\d+$/.test(id) && !c.s.sandboxes[id].closed).sort((x, y) => x - y);
 const nameOf = (c, id) => `layerfs-${c.project.name}-${id}`;
 
-/** The Sandbox for a new Workspace: the lowest-numbered open one with a free slot, else the next number, started. */
-function place(c) {
-  const free = numbered(c).find((id) => Object.values(c.s.sandboxes[id].workspaces).filter((w) => w.mounted).length < WORKSPACES);
+/** The Sandbox for a new Workspace: the lowest-numbered open one of `image` (a state saved before images matches any) with a free slot, else the next number, started on it. */
+function place(c, image) {
+  const free = numbered(c).find((id) => (c.s.sandboxes[id].image ?? image) === image && Object.values(c.s.sandboxes[id].workspaces).filter((w) => w.mounted).length < WORKSPACES);
   if (free) return free;
   let n = 1;
   while (c.s.sandboxes[n] && !c.s.sandboxes[n].closed) n++;
   const id = String(n);
-  c.s.sandboxes[id] = { id, closed: false, nextWs: 1, workspaces: {}, wsOrder: [], processes: {}, procOrder: [] };
+  c.s.sandboxes[id] = { id, image, closed: false, nextWs: 1, workspaces: {}, wsOrder: [], processes: {}, procOrder: [] };
   if (!c.s.sandboxOrder.includes(id)) c.s.sandboxOrder.push(id);
   return id;
 }
@@ -204,10 +204,10 @@ const CALLS = {
   "project.list_branches": (p, a) => p.with((c) => paged(branchList(c).sort((x, y) => x.name.localeCompare(y.name)), a)),
 
   "workspace.mount": (p, a) => p.with((c) => {
-    const sandbox = place(c), r = c.run("sandbox.mount", { sandbox, branch: a.branch }), ws = c.s.sandboxes[sandbox].workspaces[r.path];
+    const sandbox = place(c, a.deploy?.image ?? null), r = c.run("sandbox.mount", { sandbox, branch: a.branch }), ws = c.s.sandboxes[sandbox].workspaces[r.path];
     return {
       kind: "Mounted", path: r.path, workspace: sha(`${p.name}/${sandbox}/${r.path}/${ws.slot}`), namespace: Number(r.path.slice(r.path.lastIndexOf("/") + 1)),
-      branch: r.branch, base: c.hex(ws.baseCommit ?? null), baseLayer: c.hex(ws.baseLayer), root: c.hex(ws.baseRoot), sandbox, container: nameOf(c, sandbox),
+      branch: r.branch, base: c.hex(ws.baseCommit ?? null), baseLayer: c.hex(ws.baseLayer), root: c.hex(ws.baseRoot), sandbox, container: nameOf(c, sandbox), image: c.s.sandboxes[sandbox].image ?? null,
     };
   }),
   "workspace.exec": exec,
@@ -312,7 +312,7 @@ const OPERATOR = {
   "operator.inspect.snapshot": (p, a) => p.with((c) => snapshot(c, a.sandbox)),
   "operator.workspace.overlay": (p, a) => p.with((c) => overlay(c, c.sim.workspace(a.sandbox, a.path))),
   "operator.store.stats": (p) => p.with((c) => storeStats(c)),
-  "operator.sandbox.list": (p) => p.with((c) => ({ kind: "ok", items: numbered(c).map((id) => ({ id, name: nameOf(c, id) })) })),
+  "operator.sandbox.list": (p) => p.with((c) => ({ kind: "ok", items: numbered(c).map((id) => ({ id, name: nameOf(c, id), image: c.s.sandboxes[id].image ?? null })) })),
   "operator.process.start": (p, a) => p.with((c) => {
     c.sim.workspace(a.sandbox, a.path);
     const id = `proc_${a.sandbox}_${randomBytes(12).toString("hex")}`, sb = c.s.sandboxes[a.sandbox];

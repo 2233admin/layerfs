@@ -79,7 +79,10 @@ change, every `lfs run` added one more named Sandbox per call.
    default or special one. None runs until a Workspace needs it, and an idle
    one closes.
 3. **LayerFS places Workspaces.** It uses the lowest-numbered running Sandbox
-   with a free slot, and starts the next when all are full.
+   of the mount's image with a free slot, and starts the next, on that image,
+   when all such are full. One project's Sandboxes may run different images
+   (owner, 2026-10-21); the mount result, `operator.sandbox.list` and the dsh
+   Sandbox pages show each one's image.
 4. **Names are per project and say what and whose.** One pattern across the
    API, the records, Docker and the UI.
 5. **Store work never needs a Sandbox.** Views, `fs.*`, `branch.*` and Import's
@@ -176,7 +179,7 @@ lines use the new method names.
 
 | Topic | Proposal | Open question |
 |---|---|---|
-| Placement | Under the project's `ownership.lock`, pick the lowest-numbered running Sandbox with a free slot; else start Sandbox `<lowest free n>` and mount there | Answered (owner, 2026-10-21): pack |
+| Placement | Under the project's `ownership.lock`, pick the lowest-numbered running Sandbox of the mount's image with a free slot; else start Sandbox `<lowest free n>` on that image and mount there | Answered (owner, 2026-10-21): pack; Sandboxes of one project may use different images, each listed with its image |
 | Full Sandbox | A mount never fails `Capacity` while Docker can start another Sandbox | Answered (owner, 2026-10-21): no cap; only Docker and host limits apply |
 | Idle close | A Sandbox with no Workspaces and no running processes closes after an idle period of 2 minutes | Answered (owner, 2026-10-21): the daemon exits itself; idle period 2 minutes |
 | Closed or gone Sandbox | Its records are cleaned the way the gone/stopped path does today (`782dd709e2`); the next mount starts a fresh one | — |

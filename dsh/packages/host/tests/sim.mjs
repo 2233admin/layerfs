@@ -58,7 +58,7 @@ try {
 
   // LayerFS places the Workspace: the project's first Sandbox, numbered 1
   const ws = await lf.workspace.mount("feature");
-  assert.deepEqual(ws, { sandbox: "1", path: "/workspaces/1" });
+  assert.deepEqual(ws, { sandbox: "1", path: "/workspaces/1", image: "sim" });
   const sb = ws.sandbox;
   const built = await lf.workspace.exec(ws, "sh install.sh && sh build.sh");
   assert.equal(built.kind, "exit:0", built.stdout + built.stderr);
@@ -164,6 +164,12 @@ try {
   assert.equal(ws2.sandbox, "2");
   await lf.workspace.unmount(held[3], true);
   assert.equal((await lf.workspace.mount("feature")).sandbox, "1", "the lowest-numbered Sandbox with room");
+  // a mount of another image goes only to a Sandbox of that image: Sandbox 1 has room but runs "sim"
+  await lf.workspace.unmount(held[4], true);
+  const other = await lf.workspace.mount("feature", { image: "sim-other" });
+  assert.deepEqual([other.sandbox, other.image], ["3", "sim-other"]);
+  assert.deepEqual([(await lf.workspace.mount("feature")).sandbox, (await lf.workspace.mount("feature", { image: "sim-other" })).sandbox], ["1", "3"]);
+  assert.deepEqual((await op.sandbox.list()).map(({ id, image }) => [id, image]), [["1", "sim"], ["2", "sim"], ["3", "sim-other"]]);
   await op.process.start(ws2, "sleep 30");
   const running = Object.values(JSON.parse(readFileSync(join(home, NAME, "sim", "state.json"), "utf8")).sim.sandboxes["2"].processes)[0].pid;
   assert.ok(alive(running));

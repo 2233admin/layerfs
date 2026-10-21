@@ -105,8 +105,9 @@ whose container is gone or stopped is left out of `sandboxes` and listed in `gon
 
 ## `operator.sandbox.list()`
 
-**Returns:** the project's running Sandboxes, lowest number first, each `{ id, name }`
-(its number and its container name). It inspects each recorded container once and
+**Returns:** the project's running Sandboxes, lowest number first, each
+`{ id, name, image }` (its number, its container name and the image digest it runs;
+one project's Sandboxes may run different images). It inspects each recorded container once and
 dials no daemon. One found stopped or removed, such as a Sandbox that closed itself
 when idle, is reclaimed (its stopped container deleted, its records removed) and left
 out. It starts nothing.

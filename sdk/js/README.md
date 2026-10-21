@@ -74,9 +74,12 @@ Keep each agent's operations on a Workspace sequential.
 | `DSH_LAYERFS_HOME`, `DSH_LAYERFS_DOCKER`, `DSH_LAYERFS_IMAGE`, `DSH_LAYERFS_VOLUME`, `DSH_LAYERFS_DAEMON`, `DSH_LAYERFS_STORE_PATH`, `DSH_LAYERFS_TRACE`, `DSH_LAYERFS_TRACE_STEP`, `DSH_LAYERFS_TRACE_START` | Each is used when its `LAYERFS_` name is unset or empty. A host that may only set `DSH_*` names in a command's environment (deepseek-harness) configures and traces the SDK through these. |
 
 A Sandbox is a container running one daemon on the project's Store. The
-project has numbered Sandboxes, `1`, `2`, …: `workspace.mount(branch)` takes
-the lowest-numbered running Sandbox with fewer than 16 Workspaces and starts
-the next number when every running one is full. A Workspace is
+project has numbered Sandboxes, `1`, `2`, …, each on one image:
+`workspace.mount(branch, { image }?)` takes the lowest-numbered running
+Sandbox of that image (default `LAYERFS_IMAGE`) with fewer than 16 Workspaces
+and starts the next number, on that image, when every such one is full. One
+project's Sandboxes may run different images; the mount result and
+`operator.sandbox.list()` give each one's `image`. A Workspace is
 `{ sandbox, path }`, its Sandbox's number and its path in that Sandbox
 (`/workspaces/1`, `/workspaces/2`, … numbered per Sandbox); `exec`, `status`,
 `commit` and `unmount` take it. Every Workspace of a project sees the same
