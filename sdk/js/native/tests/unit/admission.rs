@@ -36,7 +36,7 @@ fn daemon(refuse: Option<usize>) -> (Dial, Arc<AtomicUsize>, thread::JoinHandle<
     let count = ended.clone();
     let server = thread::spawn(move || loop {
         let (stream, _) = listener.accept().unwrap();
-        if refuse.map_or(true, |refuse| count.load(Ordering::SeqCst) < refuse) {
+        if refuse.is_none_or(|refuse| count.load(Ordering::SeqCst) < refuse) {
             drop(stream);
             count.fetch_add(1, Ordering::SeqCst);
             continue;
