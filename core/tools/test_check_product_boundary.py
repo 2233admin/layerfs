@@ -122,6 +122,23 @@ class ProductBoundaryTests(unittest.TestCase):
         self.assertTrue(violations(Path("core/crates/layerfs-api/src/project/init.rs"),
                                    'use layerfs_daemon::Owner;'))
 
+    def test_store_service_engine_edges(self):
+        prefix = '[package]\nname="layerfs-store-service"\n[dependencies]\n'
+        for dependency in ("layerfs-persistence", "layerfs-workspace", "layerfs-overlay", "layerfs-bridge"):
+            self.assertFalse(dependency_violations(prefix + f'{dependency}={{path="../{dependency}"}}'))
+        for dependency in ("layerfs-daemon", "layerfs-api", "layerfs-fuse", "layerfs-sandbox"):
+            self.assertTrue(dependency_violations(prefix + f'{dependency}={{path="../{dependency}"}}'))
+        for package in ("layerfs-api", "layerfs-daemon"):
+            source = f'[package]\nname="{package}"\n[dependencies]\nlayerfs-store-service={{path="../layerfs-store-service"}}\n'
+            self.assertFalse(dependency_violations(source))
+        self.assertTrue(violations(Path("core/crates/layerfs-history/src/lib.rs"),
+                                   "use layerfs_store_service::history::MAIN;"))
+        root = Path("core/crates/layerfs-store-service/src/lib.rs")
+        self.assertTrue(unsafe_violations(root, "pub mod store;"))
+        self.assertFalse(unsafe_violations(root, "#![forbid(unsafe_code)]\npub mod store;"))
+        self.assertFalse(dependency_violations(
+            '[package]\nname="layerfs-persistence"\n[dependencies]\nlayerfs-telemetry={path="../layerfs-telemetry"}\n'))
+
     def test_workspace_composition_edges_preserve_domain_and_reverse_boundaries(self):
         for package in ("layerfs-api", "layerfs-daemon"):
             source=f'[package]\nname="{package}"\n[dependencies]\nlayerfs-workspace={{path="../layerfs-workspace"}}\n'
