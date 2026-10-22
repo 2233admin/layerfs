@@ -1,3 +1,2 @@
 *.bin binary
 poc/evidence/**/*.typescript -text
-docs/roadmap/**/evidence/**/*.csv -text
