@@ -118,7 +118,7 @@ fn a_missing_or_different_label_or_another_mount_is_a_topology_mismatch() {
     for (tag, observed, mounts) in [
         ("other-project", other_project.as_str(), vec![STORE]),
         ("missing", missing, vec![STORE]),
-        ("none", "null", vec![STORE]),
+        ("none-mismatch", "null", vec![STORE]),
         ("second-mount", ALL, vec![STORE, OTHER]),
         ("repeated", ALL, vec![STORE, STORE]),
         ("store-ro", ALL, vec![store_read_only.as_str()]),
