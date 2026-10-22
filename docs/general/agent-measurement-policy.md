@@ -162,7 +162,7 @@ exploratory performance-only default below; see
    other, two runs in one worktree still never overlap, and no build may take a
    Cargo target directory outside its own worktree. A build that overlaps a timed
    phase is recorded as declared interference on the row rather than prevented;
-   see [`measurement-isolation.md`](../roadmap/0.1/0.1.7/measurement-isolation.md).
+   see [`measurement-isolation.md`](https://github.com/Ephemeral-AI-Lab/layerfs/blob/792715f00a2dbfcf0cb8435ae84862cce972dc90/docs/roadmap/0.1/0.1.7/measurement-isolation.md).
    Never interrupt another owner's run.
 6. Record it: append to the ledger and receipt location declared by the current
    campaign, with exact numbers, limits, arithmetic, identities, reproduction
@@ -237,5 +237,5 @@ which then showed up as a Commit-phase FAIL against a limit derived from a
 cache-served control. Six identical runs also produced container lifetime peaks
 from 24.6 MB to 189.8 MB, which is why a lifetime cgroup number cannot decide a
 memory gate. See
-[`issue151-experiment-ledger.md`](../roadmap/0.1/0.1.6/evidence/issue151-experiment-ledger.md)
+[`issue151-experiment-ledger.md`](https://github.com/Ephemeral-AI-Lab/layerfs/blob/792715f00a2dbfcf0cb8435ae84862cce972dc90/docs/roadmap/0.1/0.1.6/evidence/issue151-experiment-ledger.md)
 L18.

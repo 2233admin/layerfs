@@ -39,7 +39,7 @@ A release candidate is eligible only when:
   owner decision** — there is no compaction API or binary in this release, and
   previously compacted Stores remain readable through the retained
   authenticated LFCNT1 read path. Canonical identity is preserved. The
-  [v0.1.5 specification](../roadmap/0.1/0.1.5/spec.md) and the
+  [v0.1.5 specification](https://github.com/Ephemeral-AI-Lab/layerfs/blob/792715f00a2dbfcf0cb8435ae84862cce972dc90/docs/roadmap/0.1/0.1.5/spec.md) and the
   [v0.1.5 release contract](../release-notes/0.1.5/release-contract.md)
   define this boundary. Benchmark evidence below is single-sample campaign
   evidence, not a universal speed or storage guarantee.

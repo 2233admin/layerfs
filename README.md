@@ -158,7 +158,7 @@ agent tool call
 | Docs | [LayerFS × DSH guide](dsh/README.md) · [layerfs.ai/docs](https://layerfs.ai/docs/) · [Core ideas](https://layerfs.ai/docs/core-ideas/) · [JavaScript SDK guide](sdk/js/README.md) |
 | Concepts | [Core concepts](docs/general/concepts.md) · [Documentation index](docs/README.md) |
 | Benchmarks | [layerfs.ai/benchmarks](https://layerfs.ai/benchmarks/) |
-| Release | [1.0.0 plan](docs/roadmap/1.0/README.md) · Previous: [0.1.7 release record](docs/release-notes/0.1.7/README.md) and its [manual](docs/versioned/0.1.7/README.md) |
+| Release | [1.0.0 plan](https://github.com/Ephemeral-AI-Lab/layerfs/blob/792715f00a2dbfcf0cb8435ae84862cce972dc90/docs/roadmap/1.0/README.md) · Previous: [0.1.7 release record](docs/release-notes/0.1.7/README.md) and its [manual](docs/versioned/0.1.7/README.md) |
 
 ## Community
 
