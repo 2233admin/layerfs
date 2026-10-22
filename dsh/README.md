@@ -147,7 +147,7 @@ pnpm install
 pnpm run build
 ```
 
-`pnpm run build` bundles the client into `packages/client/lib/` with the checkout's `tsdown`: `$DSH_SOURCE/node_modules/.bin/tsdown`, else `../deepseek-harness` beside the repository. Give `DSH_SOURCE` as an absolute path (`DSH_SOURCE="$DSH" pnpm run build`); without either, the build stops with `tsdown: No such file or directory`. Run it again after changing the client.
+`pnpm run build` bundles the client into `packages/client/lib/` with the checkout's `tsdown`: `$DSH_SOURCE/node_modules/.bin/tsdown`, else `../deepseek-harness` beside the repository. Prefer an absolute `DSH_SOURCE` path (`DSH_SOURCE="$DSH" pnpm run build`). Relative paths resolve from `dsh/packages/client/`, matching the original build command; an empty value uses the default checkout. The launcher passes the resolved absolute path to the client config. If the checkout or its tsdown CLI is missing, the build stops with `tsdown: No such file or directory`. Run it again after changing the client.
 
 ### 3. Make a profile
 
